@@ -23,7 +23,7 @@ import LazyBoundary from '../components/shared/LazyBoundary';
 import PageHeader from '../components/shared/PageHeader';
 import AssetQrModal from '../components/AssetQrModal';
 import { useAuth } from '../core/contexts/AuthContext';
-import { hasManagerAccess } from '../core/lib/permissions';
+import { hasManagerAccess, isAdmin } from '../core/lib/permissions';
 import { normalizeSearchTerm } from '../core/lib/search';
 import { brandService, plantService } from '../core/services';
 import { assetService } from '../core/services/asset.service';
@@ -97,7 +97,7 @@ const AssetList: React.FC = () => {
     const { message } = App.useApp();
 
     const initialSearch = normalizeSearchTerm(searchParams.get('search'));
-    const canManageAssets = hasManagerAccess(role);
+    const canManageAssets = isAdmin(role);
     const [selectedRowKeys, setSelectedRowKeys] = useState<React.Key[]>([]);
     const [isFormModalOpen, setIsFormModalOpen] = useState(false);
     const [isImportModalOpen, setIsImportModalOpen] = useState(false);

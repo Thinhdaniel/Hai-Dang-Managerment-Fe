@@ -7,7 +7,7 @@ import ConfirmAction from '../components/shared/ConfirmAction';
 import LazyBoundary from '../components/shared/LazyBoundary';
 import PageHeader from '../components/shared/PageHeader';
 import { useAuth } from '../core/contexts/AuthContext';
-import { hasManagerAccess } from '../core/lib/permissions';
+import { hasManagerAccess, isAdmin } from '../core/lib/permissions';
 import { normalizeSearchTerm } from '../core/lib/search';
 import { brandService } from '../core/services';
 import type { Brand } from '../core/types';
@@ -22,7 +22,7 @@ const BrandList: React.FC = () => {
     const [searchInput, setSearchInput] = useState('');
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [editingBrand, setEditingBrand] = useState<Brand | null>(null);
-    const canManageBrands = hasManagerAccess(role);
+    const canManageBrands = isAdmin(role);
 
     const { data: brands = [], isLoading } = useQuery({
         queryKey: ['brands', search],

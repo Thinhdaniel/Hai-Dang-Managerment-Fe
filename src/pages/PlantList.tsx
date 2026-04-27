@@ -16,7 +16,7 @@ import LazyBoundary from '../components/shared/LazyBoundary';
 import PageHeader from '../components/shared/PageHeader';
 import StatsCard from '../components/shared/StatsCard';
 import { useAuth } from '../core/contexts/AuthContext';
-import { hasManagerAccess } from '../core/lib/permissions';
+import { hasManagerAccess, isAdmin } from '../core/lib/permissions';
 import { normalizeSearchTerm } from '../core/lib/search';
 import { plantService } from '../core/services';
 import type { Plant } from '../core/types';
@@ -31,7 +31,7 @@ const PlantList: React.FC = () => {
     const [searchInput, setSearchInput] = useState('');
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [editingPlant, setEditingPlant] = useState<Plant | null>(null);
-    const canManagePlants = hasManagerAccess(role);
+    const canManagePlants = isAdmin(role);
 
     const { data: facilitiesResponse, isLoading } = useQuery({
         queryKey: ['plants', 'with-machine-count', search],
