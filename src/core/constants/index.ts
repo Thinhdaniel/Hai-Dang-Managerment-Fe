@@ -1,0 +1,113 @@
+import { AssetStatus, BorrowingStatus, BorrowingType, MaintenanceType, TransferStatus, UserRole } from '../types';
+
+// ===== ASSET STATUS =====
+export const ASSET_STATUS_LABEL: Record<AssetStatus, string> = {
+    [AssetStatus.ACTIVE]: 'Hoạt động',
+    [AssetStatus.MAINTENANCE]: 'Bảo trì',
+    [AssetStatus.BROKEN]: 'Máy lỗi',
+    [AssetStatus.BORROWING]: 'Đang mượn',
+    [AssetStatus.STORAGE]: 'Tồn kho',
+};
+
+export const ASSET_STATUS_COLOR: Record<AssetStatus, string> = {
+    [AssetStatus.ACTIVE]: 'success',
+    [AssetStatus.MAINTENANCE]: 'warning',
+    [AssetStatus.BROKEN]: 'error',
+    [AssetStatus.BORROWING]: 'purple',
+    [AssetStatus.STORAGE]: 'default',
+};
+
+export const ASSET_STATUS_HEX: Record<AssetStatus, string> = {
+    [AssetStatus.ACTIVE]: '#52c41a',
+    [AssetStatus.MAINTENANCE]: '#fa8c16',
+    [AssetStatus.BROKEN]: '#f5222d',
+    [AssetStatus.BORROWING]: '#722ed1',
+    [AssetStatus.STORAGE]: '#8c8c8c',
+};
+
+// Status flow transitions
+export const ASSET_STATUS_TRANSITIONS: Record<AssetStatus, AssetStatus[]> = {
+    [AssetStatus.ACTIVE]: [AssetStatus.MAINTENANCE, AssetStatus.BROKEN, AssetStatus.BORROWING, AssetStatus.STORAGE],
+    [AssetStatus.MAINTENANCE]: [AssetStatus.ACTIVE, AssetStatus.BROKEN],
+    [AssetStatus.BROKEN]: [AssetStatus.MAINTENANCE],
+    [AssetStatus.BORROWING]: [AssetStatus.ACTIVE],
+    [AssetStatus.STORAGE]: [AssetStatus.ACTIVE],
+};
+
+// ===== MAINTENANCE TYPE =====
+export const MAINTENANCE_TYPE_LABEL: Record<MaintenanceType, string> = {
+    [MaintenanceType.PERIODIC]: 'Định kỳ',
+    [MaintenanceType.EMERGENCY]: 'Khẩn cấp',
+    [MaintenanceType.INSPECTION]: 'Kiểm tra',
+};
+
+export const MAINTENANCE_TYPE_COLOR: Record<MaintenanceType, string> = {
+    [MaintenanceType.PERIODIC]: 'warning',
+    [MaintenanceType.EMERGENCY]: 'error',
+    [MaintenanceType.INSPECTION]: 'processing',
+};
+
+// ===== TRANSFER STATUS =====
+export const TRANSFER_STATUS_LABEL: Record<TransferStatus, string> = {
+    [TransferStatus.PENDING]: 'Chờ duyệt',
+    [TransferStatus.APPROVED]: 'Đã duyệt',
+    [TransferStatus.COMPLETED]: 'Hoàn thành',
+    [TransferStatus.REJECTED]: 'Từ chối',
+};
+
+export const TRANSFER_STATUS_COLOR: Record<TransferStatus, string> = {
+    [TransferStatus.PENDING]: 'warning',
+    [TransferStatus.APPROVED]: 'processing',
+    [TransferStatus.COMPLETED]: 'success',
+    [TransferStatus.REJECTED]: 'error',
+};
+
+// ===== BORROWING STATUS =====
+export const BORROWING_STATUS_LABEL: Record<BorrowingStatus, string> = {
+    [BorrowingStatus.ACTIVE]: 'Đang hoạt động',
+    [BorrowingStatus.RETURNED]: 'Đã trả',
+};
+
+export const BORROWING_STATUS_COLOR: Record<BorrowingStatus, string> = {
+    [BorrowingStatus.ACTIVE]: 'processing',
+    [BorrowingStatus.RETURNED]: 'success',
+};
+
+export const BORROWING_TYPE_LABEL: Record<BorrowingType, string> = {
+    [BorrowingType.INTERNAL]: 'Mượn nội bộ',
+    [BorrowingType.EXTERNAL]: 'Mượn ngoài',
+    [BorrowingType.RENTAL]: 'Thuê máy',
+};
+
+// ===== USER ROLE =====
+export const USER_ROLE_LABEL: Record<UserRole, string> = {
+    [UserRole.ADMIN]: 'Quản trị viên',
+    [UserRole.MANAGER]: 'Quản lý',
+    [UserRole.STAFF]: 'Nhân viên',
+};
+
+export const USER_ROLE_COLOR: Record<UserRole, string> = {
+    [UserRole.ADMIN]: 'red',
+    [UserRole.MANAGER]: 'blue',
+    [UserRole.STAFF]: 'green',
+};
+
+// ===== MACHINE TYPES =====
+export const MACHINE_TYPES = [
+    { value: 'cnc', label: 'CNC' },
+    { value: 'laser', label: 'Laser' },
+    { value: 'hydraulic', label: 'Thủy lực' },
+    { value: 'welding', label: 'Hàn' },
+    { value: 'industrial_pump', label: 'Bơm công nghiệp' },
+    { value: 'compressor', label: 'Máy nén khí' },
+    { value: 'conveyor', label: 'Băng tải' },
+    { value: 'other', label: 'Khác' },
+];
+
+// ===== PAGINATION =====
+export const DEFAULT_PAGE_SIZE = 10;
+export const PAGE_SIZE_OPTIONS = ['10', '20', '50', '100'];
+
+// ===== DATE FORMAT =====
+export const DATE_FORMAT = 'DD/MM/YYYY';
+export const DATETIME_FORMAT = 'DD/MM/YYYY HH:mm';
