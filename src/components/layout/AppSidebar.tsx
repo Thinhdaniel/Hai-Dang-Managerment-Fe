@@ -1,4 +1,4 @@
-import { Button, Drawer, Layout, Tooltip, Typography } from 'antd';
+import { Button, Drawer, Layout, Tooltip, Typography, Badge } from 'antd';
 import {
     AppstoreOutlined,
     BuildOutlined,
@@ -11,11 +11,13 @@ import {
     SwapOutlined,
     TagsOutlined,
     TeamOutlined,
+    BellOutlined,
 } from '@ant-design/icons';
 import { useLocation, useNavigate } from 'react-router-dom';
 import type { ReactNode } from 'react';
 import { useAuth } from '../../core/contexts/AuthContext';
 import { hasManagerAccess } from '../../core/lib/permissions';
+import { useNotifications } from '../../core/hooks/useNotifications';
 
 const { Sider } = Layout;
 const { Text } = Typography;
@@ -167,33 +169,37 @@ const SidebarNavButton = ({
     );
 };
 
-const SidebarContent = ({
+const AppSidebar: React.FC<AppSidebarProps> = ({
     collapsed,
-    pathname,
-    onSelect,
-    onToggleCollapse,
-}: {
-    collapsed: boolean;
-    pathname: string;
-    onSelect: (path: string) => void;
-    onToggleCollapse?: () => void;
+    isDesktop,
+    mobileOpen,
+    width,
+    collapsedWidth,
+    headerOffset,
+    onCollapse,
+    onMobileClose,
 }) => {
-    const { role } = useAuth();
-    const visibleSections = navigationSections
-        .map((section) => ({
-            ...section,
-            items: section.items.filter((item) => item.path !== '/users' || hasManagerAccess(role)),
-        }))
-        .filter((section) => section.items.length > 0);
+    const navigate = useNavigate();
+    const location = useLocation();
+    const { unreadCount } = useNotifications();
 
-    return (
+    const handleSelect = (path: string) => {
+        navigate(path);
+
+        if (!isDesktop) {
+            onMobileClose();
+        }
+    };
+
+    // Custom SidebarContent with notification button
+    const SidebarWithNotification = ({ isCollapsed, onToggleCollapse }: { isCollapsed: boolean; onToggleCollapse?: () => void }) => (
         <div className='flex h-full flex-col rounded-r-[28px] border-r border-slate-200/80 bg-[rgba(255,255,255,0.94)] shadow-[14px_0_40px_rgba(15,23,42,0.06)] backdrop-blur-xl'>
-            <div className={`border-b border-slate-100 px-4 py-5 ${collapsed ? 'px-3' : ''}`}>
-                <div className={`flex items-center ${collapsed ? 'justify-center' : 'gap-3'}`}>
+            <div className={`border-b border-slate-100 px-4 py-5 ${isCollapsed ? 'px-3' : ''}`}>
+                <div className={`flex items-center ${isCollapsed ? 'justify-center' : 'gap-3'}`}>
                     <div className='flex h-12 w-12 shrink-0 items-center justify-center rounded-[20px] bg-gradient-to-br from-blue-600 to-sky-400 text-sm font-bold tracking-[0.28em] text-white shadow-[0_16px_30px_rgba(37,99,235,0.26)]'>
                         HD
                     </div>
-                    {!collapsed ? (
+                    {!isCollapsed ? (
                         <div className='min-w-0'>
                             <Text className='mb-0 block text-[15px] font-bold text-slate-900'>Hai Dang Ops</Text>
                             <Text className='block text-xs text-slate-500'>Quản lý vận hành</Text>
@@ -204,9 +210,9 @@ const SidebarContent = ({
 
             <div className='flex-1 overflow-y-auto px-3 py-4'>
                 <div className='space-y-5'>
-                    {visibleSections.map((section) => (
+                    {navigationSections.map((section) => (
                         <section key={section.key} className='space-y-2'>
-                            {!collapsed ? (
+                            {!isCollapsed ? (
                                 <div className='px-2'>
                                     <Text className='text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-400'>
                                         {section.label}
@@ -221,9 +227,9 @@ const SidebarContent = ({
                                     <SidebarNavButton
                                         key={item.path}
                                         item={item}
-                                        collapsed={collapsed}
-                                        active={isActivePath(pathname, item.path)}
-                                        onSelect={() => onSelect(item.path)}
+                                        collapsed={isCollapsed}
+                                        active={isActivePath(location.pathname, item.path)}
+                                        onSelect={() => handleSelect(item.path)}
                                     />
                                 ))}
                             </div>
@@ -232,44 +238,38 @@ const SidebarContent = ({
                 </div>
             </div>
 
-            {onToggleCollapse ? (
-                <div className={`border-t border-slate-100 p-3 ${collapsed ? 'flex justify-center' : ''}`}>
+            {/* Notification button */}
+            <div className={`border-t border-slate-100 p-3 ${isCollapsed ? 'flex justify-center' : ''}`}>
+                <Badge count={unreadCount} size='small' offset={isCollapsed ? [-2, 2] : undefined}>
                     <Button
                         type='text'
-                        icon={collapsed ? <MenuUnfoldOutlined /> : <MenuFoldOutlined />}
-                        onClick={onToggleCollapse}
+                        icon={<BellOutlined />}
+                        onClick={() => navigate('/dashboard')}
                         className={`h-11 rounded-2xl border border-slate-200 bg-white/88 font-semibold text-slate-700 shadow-sm hover:!border-blue-200 hover:!bg-blue-50 hover:!text-blue-700 ${
-                            collapsed ? 'w-11' : 'w-full justify-start px-4'
+                            isCollapsed ? 'w-11' : 'w-full justify-start px-4'
                         }`}
                     >
-                        {collapsed ? null : 'Thu gọn thanh bên'}
+                        {isCollapsed ? null : 'Thông báo'}
+                    </Button>
+                </Badge>
+            </div>
+
+            {onToggleCollapse ? (
+                <div className={`border-t border-slate-100 p-3 ${isCollapsed ? 'flex justify-center' : ''}`}>
+                    <Button
+                        type='text'
+                        icon={isCollapsed ? <MenuUnfoldOutlined /> : <MenuFoldOutlined />}
+                        onClick={onToggleCollapse}
+                        className={`h-11 rounded-2xl border border-slate-200 bg-white/88 font-semibold text-slate-700 shadow-sm hover:!border-blue-200 hover:!bg-blue-50 hover:!text-blue-700 ${
+                            isCollapsed ? 'w-11' : 'w-full justify-start px-4'
+                        }`}
+                    >
+                        {isCollapsed ? null : 'Thu gọn thanh bên'}
                     </Button>
                 </div>
             ) : null}
         </div>
     );
-};
-
-const AppSidebar: React.FC<AppSidebarProps> = ({
-    collapsed,
-    isDesktop,
-    mobileOpen,
-    width,
-    collapsedWidth,
-    headerOffset,
-    onCollapse,
-    onMobileClose,
-}) => {
-    const navigate = useNavigate();
-    const location = useLocation();
-
-    const handleSelect = (path: string) => {
-        navigate(path);
-
-        if (!isDesktop) {
-            onMobileClose();
-        }
-    };
 
     if (!isDesktop) {
         return (
@@ -292,7 +292,7 @@ const AppSidebar: React.FC<AppSidebarProps> = ({
                     },
                 }}
             >
-                <SidebarContent collapsed={false} pathname={location.pathname} onSelect={handleSelect} />
+                <SidebarWithNotification isCollapsed={false} onToggleCollapse={undefined} />
             </Drawer>
         );
     }
@@ -306,12 +306,7 @@ const AppSidebar: React.FC<AppSidebarProps> = ({
             className='!fixed !left-0 !bottom-0 !bg-transparent'
             style={{ top: headerOffset, height: `calc(100vh - ${headerOffset}px)` }}
         >
-            <SidebarContent
-                collapsed={collapsed}
-                pathname={location.pathname}
-                onSelect={handleSelect}
-                onToggleCollapse={() => onCollapse(!collapsed)}
-            />
+            <SidebarWithNotification isCollapsed={collapsed} />
         </Sider>
     );
 };

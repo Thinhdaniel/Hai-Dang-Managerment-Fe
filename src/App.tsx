@@ -3,6 +3,7 @@ import { App as AntdApp, ConfigProvider } from 'antd';
 import { router } from './routes/routes';
 import { RouterProvider } from 'react-router-dom';
 import { AuthProvider } from './core/contexts/AuthContext';
+import { NotificationProvider } from './core/contexts/NotificationContext';
 
 const queryClient = new QueryClient();
 
@@ -35,7 +36,9 @@ function App() {
             <AntdApp>
                 <QueryClientProvider client={queryClient}>
                     <AuthProvider>
-                        <RouterProvider router={router} />
+                        <NotificationProvider>
+                            <RouterProvider router={router} />
+                        </NotificationProvider>
                     </AuthProvider>
                 </QueryClientProvider>
             </AntdApp>

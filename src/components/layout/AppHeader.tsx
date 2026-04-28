@@ -28,6 +28,7 @@ import usePageMeta from '../navigation/usePageMeta';
 import { normalizeSearchTerm } from '../../core/lib/search';
 import { useAuth } from '../../core/contexts/AuthContext';
 import { hasManagerAccess } from '../../core/lib/permissions';
+import { useNotificationContext } from '../../core/contexts/NotificationContext';
 
 const { Header } = Layout;
 const { Text, Title } = Typography;
@@ -41,36 +42,12 @@ interface AppHeaderProps {
     onToggle: () => void;
 }
 
-const mockNotifications = [
-    {
-        id: 'n1',
-        type: 'critical' as const,
-        title: 'Machine alert',
-        message: 'MCH-001 is reporting a motor issue.',
-        time: '5 min ago',
-        href: '/assets',
-    },
-    {
-        id: 'n2',
-        type: 'warning' as const,
-        title: 'Transfer pending',
-        message: 'A transfer request is waiting for approval.',
-        time: '12 min ago',
-        href: '/transfers',
-    },
-    {
-        id: 'n3',
-        type: 'maintenance' as const,
-        title: 'Maintenance due',
-        message: 'Periodic maintenance is due within 3 days.',
-        time: '1 hour ago',
-        href: '/maintenances',
-    },
-];
+
 
 const AppHeader: React.FC<AppHeaderProps> = ({ collapsed, isDesktop, mobileOpen, onToggle }) => {
     const navigate = useNavigate();
     const { role, logout, user } = useAuth();
+    const { notifications, unreadCount, markAsRead } = useNotificationContext();
     const { pathname } = useLocation();
     const [searchParams] = useSearchParams();
     const [searchValue, setSearchValue] = useState('');
@@ -191,38 +168,52 @@ const AppHeader: React.FC<AppHeaderProps> = ({ collapsed, isDesktop, mobileOpen,
                     <div className='text-[11px] text-slate-500'>Important system updates and alerts</div>
                 </div>
                 <span className='rounded-full bg-blue-50 px-2.5 py-1 text-[10px] font-semibold text-blue-700'>
-                    {mockNotifications.length} new
+                    {unreadCount} new
                 </span>
             </div>
 
             <div className='max-h-[300px] overflow-y-auto p-2'>
-                {mockNotifications.map((item) => {
+                {notifications.length === 0 ? (
+                    <div className='py-8 text-center text-sm text-slate-500'>Không có thông báo nào</div>
+                ) : null}
+                {notifications.map((item) => {
                     const itemIcon =
-                        item.type === 'critical' ? (
+                        item.type === 'error' ? (
                             <WarningOutlined className='text-rose-500' />
-                        ) : item.type === 'maintenance' ? (
+                        ) : item.type === 'warning' ? (
                             <ToolOutlined className='text-amber-500' />
                         ) : (
                             <ClockCircleOutlined className='text-blue-500' />
                         );
 
+                    let href = '/dashboard';
+                    if (item.actionType === 'machine' || item.actionType === 'asset') href = `/assets${item.actionId ? `/${item.actionId}` : ''}`;
+                    else if (item.actionType === 'transfer') href = '/transfers';
+                    else if (item.actionType === 'maintenance') href = '/maintenances';
+                    else if (item.actionType === 'borrowing') href = '/borrowings';
+
                     return (
                         <button
-                            key={item.id}
+                            key={item._id}
                             type='button'
-                            onClick={() => {
+                            onClick={async () => {
                                 setNotificationOpen(false);
-                                navigate(item.href);
+                                if (!item.isRead) {
+                                    await markAsRead(item._id);
+                                }
+                                navigate(href);
                             }}
-                            className='flex w-full items-start gap-3 rounded-xl px-3 py-2.5 text-left transition-colors hover:bg-slate-50'
+                            className={`flex w-full items-start gap-3 rounded-xl px-3 py-2.5 text-left transition-colors hover:bg-slate-50 ${item.isRead ? 'opacity-70' : ''}`}
                         >
                             <div className='mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-slate-100'>
                                 {itemIcon}
                             </div>
                             <div className='min-w-0 flex-1'>
                                 <div className='flex items-start justify-between gap-2'>
-                                    <span className='text-[13px] font-semibold text-slate-900'>{item.title}</span>
-                                    <span className='text-[10px] text-slate-400'>{item.time}</span>
+                                    <span className={`text-[13px] text-slate-900 ${item.isRead ? 'font-medium' : 'font-semibold'}`}>{item.title}</span>
+                                    <span className='text-[10px] text-slate-400'>
+                                        {new Date(item.createdAt).toLocaleDateString()}
+                                    </span>
                                 </div>
                                 <p className='mt-1 mb-0 text-[11px] leading-5 text-slate-500'>{item.message}</p>
                             </div>
@@ -332,7 +323,7 @@ const AppHeader: React.FC<AppHeaderProps> = ({ collapsed, isDesktop, mobileOpen,
                         overlayClassName='header-notification-popover'
                         overlayInnerStyle={{ padding: 0, background: 'transparent', boxShadow: 'none' }}
                     >
-                        <Badge count={mockNotifications.length} size='small' offset={[-2, 2]}>
+                        <Badge count={unreadCount} size='small' offset={[-2, 2]}>
                             <Button
                                 type='text'
                                 icon={<BellOutlined />}

@@ -43,7 +43,8 @@ export const useNotifications = () => {
         };
 
         void initializeNotifications();
-    }, [isAuthenticated, store]);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [isAuthenticated]);
 
     // Setup socket listeners
     useEffect(() => {
@@ -71,7 +72,8 @@ export const useNotifications = () => {
             unsubscribeRead();
             unsubscribeCleared();
         };
-    }, [store, isAuthenticated]);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [isAuthenticated]);
 
     // Mark notification as read
     const markAsRead = useCallback(
@@ -83,7 +85,8 @@ export const useNotifications = () => {
                 console.error('[Notifications] Mark as read error:', error);
             }
         },
-        [store]
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+        []
     );
 
     // Mark all notifications as read
@@ -94,7 +97,8 @@ export const useNotifications = () => {
         } catch (error) {
             console.error('[Notifications] Mark all as read error:', error);
         }
-    }, [store]);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
 
     // Delete notification
     const deleteNotification = useCallback(
@@ -111,7 +115,8 @@ export const useNotifications = () => {
                 }
             }
         },
-        [store]
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+        []
     );
 
     // Delete all notifications
@@ -122,7 +127,8 @@ export const useNotifications = () => {
         } catch (error) {
             console.error('[Notifications] Delete all error:', error);
         }
-    }, [store]);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
 
     return {
         notifications: store.notifications,
