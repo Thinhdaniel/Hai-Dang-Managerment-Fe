@@ -1,5 +1,5 @@
 import React, { lazy, useMemo, useState } from 'react';
-import { App, Badge, Button, Card, Descriptions, Empty, Segmented, Space, Spin, Tag, Timeline, Typography } from 'antd';
+import { App, Badge, Button, Card, Descriptions, Empty, Segmented, Space, Spin, Tag, Timeline, Tooltip, Typography } from 'antd';
 import { ArrowLeftOutlined, EditOutlined, RollbackOutlined, SwapOutlined } from '@ant-design/icons';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate, useParams } from 'react-router-dom';
@@ -287,7 +287,16 @@ const AssetDetail: React.FC = () => {
                         </div>
 
                         <div className='flex flex-wrap items-center gap-2'>
-                            <Button icon={<SwapOutlined />} onClick={() => setIsTransferModalOpen(true)} className='ad-btn h-9 rounded-lg'>Điều chuyển</Button>
+                            <Tooltip title={asset.hasOpenTransfer ? 'Thiết bị đang có lệnh điều chuyển chờ xử lý' : ''}>
+                                <Button 
+                                    icon={<SwapOutlined />} 
+                                    onClick={() => !asset.hasOpenTransfer && setIsTransferModalOpen(true)} 
+                                    className='ad-btn h-9 rounded-lg'
+                                    disabled={asset.hasOpenTransfer}
+                                >
+                                    Điều chuyển
+                                </Button>
+                            </Tooltip>
                             <Button icon={<RollbackOutlined />} onClick={() => navigate(`/borrowings/new?assetId=${asset.id}`)} className='ad-btn h-9 rounded-lg'>Tạo giao dịch</Button>
                             {canManageAssets && (
                                 <Button icon={<EditOutlined />} type='primary' onClick={() => setIsFormModalOpen(true)} className='ad-btn h-9 rounded-lg bg-blue-600 hover:!bg-blue-700'>Sửa thông tin</Button>

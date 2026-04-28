@@ -390,12 +390,17 @@ const AssetList: React.FC = () => {
                             />
                         </Tooltip>
                     ) : null}
-                    <Tooltip title='Điều chuyển thiết bị'>
+                    <Tooltip title={record.hasOpenTransfer ? 'Thiết bị đang có lệnh điều chuyển chờ xử lý' : 'Điều chuyển thiết bị'}>
                         <Button
                             type='text'
+                            disabled={record.hasOpenTransfer}
                             icon={<SwapOutlined />}
-                            className='flex h-8 w-8 items-center justify-center rounded-md bg-sky-50 text-sky-600 transition-colors hover:bg-sky-100 hover:text-sky-700'
-                            onClick={() => handleOpenTransfer(record)}
+                            className={`flex h-8 w-8 items-center justify-center rounded-md transition-colors ${
+                                record.hasOpenTransfer 
+                                ? 'bg-slate-50 text-slate-300 cursor-not-allowed' 
+                                : 'bg-sky-50 text-sky-600 hover:bg-sky-100 hover:text-sky-700'
+                            }`}
+                            onClick={() => !record.hasOpenTransfer && handleOpenTransfer(record)}
                         />
                     </Tooltip>
                     {canManageAssets ? (
@@ -532,14 +537,16 @@ const AssetList: React.FC = () => {
                             thiết bị đang chọn
                         </div>
                         <div className='flex gap-2'>
-                            <Button
-                                size='small'
-                                disabled={selectedAssets.length !== 1}
-                                className='rounded-md'
-                                onClick={() => selectedAssets[0] && handleOpenTransfer(selectedAssets[0])}
-                            >
-                                Điều chuyển
-                            </Button>
+                            <Tooltip title={selectedAssets[0]?.hasOpenTransfer ? 'Thiết bị đang có lệnh điều chuyển chờ xử lý' : ''}>
+                                <Button
+                                    size='small'
+                                    disabled={selectedAssets.length !== 1 || selectedAssets[0]?.hasOpenTransfer}
+                                    className='rounded-md'
+                                    onClick={() => selectedAssets[0] && !selectedAssets[0].hasOpenTransfer && handleOpenTransfer(selectedAssets[0])}
+                                >
+                                    Điều chuyển
+                                </Button>
+                            </Tooltip>
                             {canManageAssets ? (
                                 <ConfirmAction
                                     title='Xóa các thiết bị đã chọn'

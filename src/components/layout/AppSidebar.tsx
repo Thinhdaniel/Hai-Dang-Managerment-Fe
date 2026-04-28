@@ -17,7 +17,7 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import type { ReactNode } from 'react';
 import { useAuth } from '../../core/contexts/AuthContext';
 import { hasManagerAccess } from '../../core/lib/permissions';
-import { useNotifications } from '../../core/hooks/useNotifications';
+import { useNotificationContext } from '../../core/contexts/NotificationContext';
 
 const { Sider } = Layout;
 const { Text } = Typography;
@@ -181,7 +181,7 @@ const AppSidebar: React.FC<AppSidebarProps> = ({
 }) => {
     const navigate = useNavigate();
     const location = useLocation();
-    const { unreadCount } = useNotifications();
+    const { unreadCount } = useNotificationContext();
 
     const handleSelect = (path: string) => {
         navigate(path);

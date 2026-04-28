@@ -53,9 +53,15 @@ export const useNotificationStore = create<NotificationStoreState>()(
                 error: null,
 
                 addNotification: (notification: Notification) => {
-                    set((state) => ({
-                        notifications: [notification, ...state.notifications],
-                    }));
+                    set((state) => {
+                        // Prevent duplicates
+                        if (state.notifications.some((n) => n._id === notification._id)) {
+                            return state;
+                        }
+                        return {
+                            notifications: [notification, ...state.notifications],
+                        };
+                    });
                 },
 
                 removeNotification: (id: string) => {

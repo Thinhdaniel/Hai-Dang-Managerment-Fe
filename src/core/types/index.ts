@@ -107,6 +107,7 @@ export interface Asset {
     nextMaintenanceDate?: string;
     createdAt: string;
     updatedAt: string;
+    hasOpenTransfer?: boolean;
 }
 
 export interface AssetFilter extends PaginationParams {
