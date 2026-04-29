@@ -86,7 +86,7 @@ const createDefaultFilters = (search = '') => ({
     search,
     status: undefined as AssetStatus | undefined,
     plantId: undefined as string | undefined,
-    model: undefined as string | undefined,
+    brandId: undefined as string | undefined,
 });
 
 const AssetList: React.FC = () => {
@@ -98,6 +98,7 @@ const AssetList: React.FC = () => {
 
     const initialSearch = normalizeSearchTerm(searchParams.get('search'));
     const canManageAssets = isAdmin(role);
+    const canExportImport = hasManagerAccess(role);
     const [selectedRowKeys, setSelectedRowKeys] = useState<React.Key[]>([]);
     const [isFormModalOpen, setIsFormModalOpen] = useState(false);
     const [isImportModalOpen, setIsImportModalOpen] = useState(false);
@@ -133,9 +134,37 @@ const AssetList: React.FC = () => {
         queryFn: () => brandService.getAll(),
     });
 
-    const { data: models = [] } = useQuery({
-        queryKey: ['asset-models'],
-        queryFn: assetService.getModels,
+    // Stats base — uses committed filters without status/pagination for per-status counts
+    const statsFiltersBase = useMemo(
+        () => ({
+            search: filters.search,
+            plantId: filters.plantId,
+            brandId: filters.brandId,
+            page: 1,
+            limit: 1,
+        }),
+        [filters.search, filters.plantId, filters.brandId]
+    );
+
+    const { data: statActive } = useQuery({
+        queryKey: ['asset-stat', 'active', statsFiltersBase],
+        queryFn: () => assetService.getAll({ ...statsFiltersBase, status: 'active' as AssetStatus }),
+    });
+    const { data: statMaintenance } = useQuery({
+        queryKey: ['asset-stat', 'maintenance', statsFiltersBase],
+        queryFn: () => assetService.getAll({ ...statsFiltersBase, status: 'maintenance' as AssetStatus }),
+    });
+    const { data: statBroken } = useQuery({
+        queryKey: ['asset-stat', 'broken', statsFiltersBase],
+        queryFn: () => assetService.getAll({ ...statsFiltersBase, status: 'broken' as AssetStatus }),
+    });
+    const { data: statBorrowing } = useQuery({
+        queryKey: ['asset-stat', 'borrowing', statsFiltersBase],
+        queryFn: () => assetService.getAll({ ...statsFiltersBase, status: 'borrowing' as AssetStatus }),
+    });
+    const { data: statStorage } = useQuery({
+        queryKey: ['asset-stat', 'storage', statsFiltersBase],
+        queryFn: () => assetService.getAll({ ...statsFiltersBase, status: 'storage' as AssetStatus }),
     });
 
     const createMutation = useMutation({
@@ -188,23 +217,19 @@ const AssetList: React.FC = () => {
         [assets, selectedRowKeys]
     );
 
-    const assetSummary = useMemo(() => {
-        return assets.reduce(
-            (summary, asset) => {
-                summary.total += 1;
-                summary[asset.status] += 1;
-                return summary;
+    const assetSummary = useMemo(
+        () => ({
+            active: statActive?.total ?? 0,
+            maintenance: statMaintenance?.total ?? 0,
+            broken: statBroken?.total ?? 0,
+            borrowing: statBorrowing?.total ?? 0,
+            storage: statStorage?.total ?? 0,
+            get total() {
+                return this.active + this.maintenance + this.broken + this.borrowing + this.storage;
             },
-            {
-                total: 0,
-                active: 0,
-                maintenance: 0,
-                broken: 0,
-                borrowing: 0,
-                storage: 0,
-            }
-        );
-    }, [assets]);
+        }),
+        [statActive, statMaintenance, statBroken, statBorrowing, statStorage]
+    );
 
     const applyFilters = () => {
         const nextFilters = {
@@ -270,7 +295,7 @@ const AssetList: React.FC = () => {
         const url = window.URL.createObjectURL(blob);
         const link = document.createElement('a');
         link.href = url;
-        link.download = 'assets.csv';
+        link.download = 'assets.xlsx';
         document.body.appendChild(link);
         link.click();
         link.remove();
@@ -445,37 +470,38 @@ const AssetList: React.FC = () => {
                     title='Quản Lý Thiết Bị'
                     subtitle='Theo dõi và quản lý toàn bộ thiết bị trong nhà máy'
                     actions={
-                        canManageAssets ? (
+                        canExportImport ? (
                             <Space wrap size={8}>
                                 <Button icon={<DownloadOutlined />} onClick={handleExport} className='rounded-lg border-slate-200 text-slate-600'>
-                                    Export CSV
+                                    Export Excel
                                 </Button>
                                 <Button icon={<InboxOutlined />} onClick={() => setIsImportModalOpen(true)} className='rounded-lg border-slate-200 text-slate-600'>
                                     Import Excel
                                 </Button>
-                                <Button type='primary' icon={<PlusOutlined />} onClick={handleOpenCreate} className='rounded-lg bg-blue-600 hover:!bg-blue-700'>
-                                    Thêm thiết bị
-                                </Button>
+                                {canManageAssets ? (
+                                    <Button type='primary' icon={<PlusOutlined />} onClick={handleOpenCreate} className='rounded-lg bg-blue-600 hover:!bg-blue-700'>
+                                        Thêm thiết bị
+                                    </Button>
+                                ) : null}
                             </Space>
                         ) : undefined
                     }
                 />
             </div>
 
-            {/* Stats count strip — subdued, not hero */}
+            {/* Stats count strip — reflects current applied filter */}
             <div className='al-s flex flex-wrap gap-px overflow-hidden rounded-xl border border-slate-200 bg-slate-200'>
                 {[
-                    { label: 'Tổng cộng', value: assetSummary.total, note: `${assetResponse?.total ?? 0} trong hệ thống` },
+                    { label: 'Tổng cộng', value: assetSummary.total },
                     { label: 'Hoạt động', value: assetSummary.active, accent: 'oklch(0.42 0.14 145)' },
                     { label: 'Bảo trì', value: assetSummary.maintenance, accent: 'oklch(0.46 0.14 70)' },
                     { label: 'Lỗi / hỏng', value: assetSummary.broken, accent: 'oklch(0.44 0.16 25)' },
                     { label: 'Đang mượn', value: assetSummary.borrowing, accent: 'oklch(0.44 0.14 280)' },
                     { label: 'Tồn kho', value: assetSummary.storage, accent: 'oklch(0.48 0.04 250)' },
-                ].map(({ label, value, note, accent }) => (
+                ].map(({ label, value, accent }) => (
                     <div key={label} className='al-stat flex min-w-[100px] flex-1 flex-col gap-0.5 bg-white px-5 py-4'>
                         <span className='text-[11px] font-medium text-slate-400'>{label}</span>
                         <span className='text-base font-bold' style={{ color: accent ?? 'oklch(0.18 0.012 250)' }}>{value}</span>
-                        {note && <span className='text-[11px] text-slate-400'>{note}</span>}
                     </div>
                 ))}
             </div>
@@ -510,12 +536,12 @@ const AssetList: React.FC = () => {
                     options={plants.map((plant) => ({ value: plant.id, label: plant.name }))}
                 />
                 <Select
-                    placeholder='Model'
+                    placeholder='Nhãn hiệu'
                     className='min-w-[148px]'
                     allowClear
-                    value={draftFilters.model}
-                    onChange={(value) => setDraftFilters((prev) => ({ ...prev, model: value }))}
-                    options={models.map((value) => ({ value, label: value }))}
+                    value={draftFilters.brandId}
+                    onChange={(value) => setDraftFilters((prev) => ({ ...prev, brandId: value }))}
+                    options={brands.map((b) => ({ value: b.id, label: b.name }))}
                 />
                 <div className='flex gap-2'>
                     <Button type='primary' icon={<SearchOutlined />} onClick={applyFilters} className='rounded-lg bg-blue-600 hover:!bg-blue-700'>
