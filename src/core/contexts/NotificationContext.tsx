@@ -16,8 +16,8 @@ interface NotificationContextValue {
 const NotificationContext = createContext<NotificationContextValue | null>(null);
 
 export const NotificationProvider = ({ children }: { children: ReactNode }) => {
-    useSocket();
-    const notificationData = useNotificationsHook();
+    const { socket } = useSocket();
+    const notificationData = useNotificationsHook(socket);
 
     return (
         <NotificationContext.Provider value={notificationData}>

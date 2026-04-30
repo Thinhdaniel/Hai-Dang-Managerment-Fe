@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { devtools, persist } from 'zustand/middleware';
+import { devtools } from 'zustand/middleware';
 
 export type NotificationType = 'info' | 'success' | 'warning' | 'error';
 export type NotificationActionType =
@@ -46,78 +46,71 @@ interface NotificationStoreState {
 
 export const useNotificationStore = create<NotificationStoreState>()(
     devtools(
-        persist(
-            (set, get) => ({
-                notifications: [],
-                loading: false,
-                error: null,
+        (set, get) => ({
+            notifications: [],
+            loading: false,
+            error: null,
 
-                addNotification: (notification: Notification) => {
-                    set((state) => {
-                        // Prevent duplicates
-                        if (state.notifications.some((n) => n._id === notification._id)) {
-                            return state;
-                        }
-                        return {
-                            notifications: [notification, ...state.notifications],
-                        };
-                    });
-                },
+            addNotification: (notification: Notification) => {
+                set((state) => {
+                    // Prevent duplicates
+                    if (state.notifications.some((n) => n._id === notification._id)) {
+                        return state;
+                    }
+                    return {
+                        notifications: [notification, ...state.notifications],
+                    };
+                });
+            },
 
-                removeNotification: (id: string) => {
-                    set((state) => ({
-                        notifications: state.notifications.filter((n) => n._id !== id),
-                    }));
-                },
+            removeNotification: (id: string) => {
+                set((state) => ({
+                    notifications: state.notifications.filter((n) => n._id !== id),
+                }));
+            },
 
-                setNotifications: (notifications: Notification[]) => {
-                    set({ notifications });
-                },
+            setNotifications: (notifications: Notification[]) => {
+                set({ notifications });
+            },
 
-                markAsRead: (id: string) => {
-                    set((state) => ({
-                        notifications: state.notifications.map((n) =>
-                            n._id === id ? { ...n, isRead: true, readAt: new Date().toISOString() } : n
-                        ),
-                    }));
-                },
+            markAsRead: (id: string) => {
+                set((state) => ({
+                    notifications: state.notifications.map((n) =>
+                        n._id === id ? { ...n, isRead: true, readAt: new Date().toISOString() } : n
+                    ),
+                }));
+            },
 
-                markAllAsRead: () => {
-                    set((state) => ({
-                        notifications: state.notifications.map((n) => ({
-                            ...n,
-                            isRead: true,
-                            readAt: new Date().toISOString(),
-                        })),
-                    }));
-                },
+            markAllAsRead: () => {
+                set((state) => ({
+                    notifications: state.notifications.map((n) => ({
+                        ...n,
+                        isRead: true,
+                        readAt: new Date().toISOString(),
+                    })),
+                }));
+            },
 
-                clearNotifications: () => {
-                    set({ notifications: [] });
-                },
+            clearNotifications: () => {
+                set({ notifications: [] });
+            },
 
-                setLoading: (loading: boolean) => {
-                    set({ loading });
-                },
+            setLoading: (loading: boolean) => {
+                set({ loading });
+            },
 
-                setError: (error: string | null) => {
-                    set({ error });
-                },
+            setError: (error: string | null) => {
+                set({ error });
+            },
 
-                unreadCount: () => {
-                    return get().notifications.filter((n) => !n.isRead).length;
-                },
+            unreadCount: () => {
+                return get().notifications.filter((n) => !n.isRead).length;
+            },
 
-                getUnreadNotifications: () => {
-                    return get().notifications.filter((n) => !n.isRead);
-                },
-            }),
-            {
-                name: 'notification-store',
-                partialize: (state) => ({
-                    notifications: state.notifications,
-                }),
-            }
-        )
+            getUnreadNotifications: () => {
+                return get().notifications.filter((n) => !n.isRead);
+            },
+        }),
+        { name: 'NotificationStore' }
     )
 );

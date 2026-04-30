@@ -1,6 +1,7 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { socketService } from '../services/socket.service';
 import { useAuth } from '../contexts/AuthContext';
+import type { Socket } from 'socket.io-client';
 
 /**
  * Hook to manage Socket.io connection lifecycle
@@ -8,19 +9,24 @@ import { useAuth } from '../contexts/AuthContext';
  */
 export const useSocket = () => {
     const { accessToken, isAuthenticated } = useAuth();
+    const [socket, setSocket] = useState<Socket | null>(socketService.getSocket());
 
     useEffect(() => {
         if (!isAuthenticated || !accessToken) {
             // Disconnect if not authenticated
             if (socketService.isConnected()) {
                 socketService.disconnect();
+                setSocket(null);
             }
             return;
         }
 
         // Connect if not already connected
         if (!socketService.isConnected()) {
-            socketService.connect(accessToken);
+            const newSocket = socketService.connect(accessToken);
+            setSocket(newSocket);
+        } else {
+            setSocket(socketService.getSocket());
         }
 
         return () => {
@@ -32,6 +38,6 @@ export const useSocket = () => {
 
     return {
         isConnected: socketService.isConnected(),
-        socket: socketService.getSocket(),
+        socket,
     };
 };

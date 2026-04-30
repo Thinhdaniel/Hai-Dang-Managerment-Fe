@@ -22,10 +22,10 @@ export const notificationService = {
      * Returns the unwrapped data payload { notifications, total, unreadCount }.
      */
     getNotifications: async (limit = 50, offset = 0): Promise<GetNotificationsData> => {
-        const response = await api.get<ApiResponse<GetNotificationsData>>('/notifications', {
+        const response = await api.get<GetNotificationsData>('/notifications', {
             params: { limit, offset },
         });
-        return response.data;
+        return response as unknown as GetNotificationsData;
     },
 
     /**

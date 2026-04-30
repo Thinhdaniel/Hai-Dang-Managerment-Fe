@@ -14,7 +14,7 @@ const NOTIFICATION_EVENTS = {
     CLEAR: 'notify:clear',
 } as const;
 
-export const useNotifications = () => {
+export const useNotifications = (socket: import('socket.io-client').Socket | null) => {
     const store = useNotificationStore();
     const { isAuthenticated } = useAuth();
 
@@ -48,7 +48,7 @@ export const useNotifications = () => {
 
     // Setup socket listeners
     useEffect(() => {
-        if (!isAuthenticated || !socketService.getSocket()) {
+        if (!isAuthenticated || !socket) {
             return;
         }
 
@@ -73,7 +73,7 @@ export const useNotifications = () => {
             unsubscribeCleared();
         };
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [isAuthenticated]);
+    }, [isAuthenticated, socket]);
 
     // Mark notification as read
     const markAsRead = useCallback(

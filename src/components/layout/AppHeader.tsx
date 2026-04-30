@@ -47,7 +47,7 @@ interface AppHeaderProps {
 const AppHeader: React.FC<AppHeaderProps> = ({ collapsed, isDesktop, mobileOpen, onToggle }) => {
     const navigate = useNavigate();
     const { role, logout, user } = useAuth();
-    const { notifications, unreadCount, markAsRead } = useNotificationContext();
+    const { notifications, unreadCount, markAsRead, markAllAsRead } = useNotificationContext();
     const { pathname } = useLocation();
     const [searchParams] = useSearchParams();
     const [searchValue, setSearchValue] = useState('');
@@ -167,9 +167,23 @@ const AppHeader: React.FC<AppHeaderProps> = ({ collapsed, isDesktop, mobileOpen,
                     <div className='text-sm font-semibold text-slate-900'>Notifications</div>
                     <div className='text-[11px] text-slate-500'>Important system updates and alerts</div>
                 </div>
-                <span className='rounded-full bg-blue-50 px-2.5 py-1 text-[10px] font-semibold text-blue-700'>
-                    {unreadCount} new
-                </span>
+                <div className='flex items-center gap-2'>
+                    {unreadCount > 0 ? (
+                        <Button 
+                            type='text' 
+                            size='small' 
+                            className='!px-2 !text-[12px] !text-blue-600 hover:!bg-blue-50' 
+                            onClick={async () => {
+                                await markAllAsRead();
+                            }}
+                        >
+                            Đánh dấu tất cả đã đọc
+                        </Button>
+                    ) : null}
+                    <span className='rounded-full bg-blue-50 px-2.5 py-1 text-[10px] font-semibold text-blue-700'>
+                        {unreadCount} new
+                    </span>
+                </div>
             </div>
 
             <div className='max-h-[300px] overflow-y-auto p-2'>

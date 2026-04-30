@@ -8,6 +8,7 @@ import {
 } from 'react';
 import { authService, userService } from '../services';
 import type { User } from '../types';
+import { useNotificationStore } from '../notificationStore';
 
 const ACCESS_TOKEN_KEY = 'access_token';
 
@@ -95,6 +96,8 @@ export const AuthProvider = ({ children }: PropsWithChildren) => {
             clearStoredAccessToken();
             setAccessToken(null);
             setUserState(null);
+            // Clear notifications so the next user starts with a fresh state
+            useNotificationStore.getState().clearNotifications();
         }
     };
 
