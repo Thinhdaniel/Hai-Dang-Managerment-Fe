@@ -87,6 +87,7 @@ const createDefaultFilters = (search = '') => ({
     status: undefined as AssetStatus | undefined,
     plantId: undefined as string | undefined,
     brandId: undefined as string | undefined,
+    type: undefined as string | undefined,
 });
 
 const AssetList: React.FC = () => {
@@ -134,16 +135,22 @@ const AssetList: React.FC = () => {
         queryFn: () => brandService.getAll(),
     });
 
+    const { data: types = [] } = useQuery({
+        queryKey: ['asset-types'],
+        queryFn: () => assetService.getTypes(),
+    });
+
     // Stats base — uses committed filters without status/pagination for per-status counts
     const statsFiltersBase = useMemo(
         () => ({
             search: filters.search,
             plantId: filters.plantId,
             brandId: filters.brandId,
+            type: filters.type,
             page: 1,
             limit: 1,
         }),
-        [filters.search, filters.plantId, filters.brandId]
+        [filters.search, filters.plantId, filters.brandId, filters.type]
     );
 
     const { data: statActive } = useQuery({
@@ -402,7 +409,10 @@ const AssetList: React.FC = () => {
                             type='text'
                             icon={<EyeOutlined />}
                             className='flex h-8 w-8 items-center justify-center rounded-md bg-blue-50 text-blue-600 transition-colors hover:bg-blue-100 hover:text-blue-700'
-                            onClick={() => navigate(`/assets/${record.id}`)}
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                navigate(`/assets/${record.id}`);
+                            }}
                         />
                     </Tooltip>
                     {canManageAssets ? (
@@ -411,7 +421,10 @@ const AssetList: React.FC = () => {
                                 type='text'
                                 icon={<EditOutlined />}
                                 className='flex h-8 w-8 items-center justify-center rounded-md bg-amber-50 text-amber-600 transition-colors hover:bg-amber-100 hover:text-amber-700'
-                                onClick={() => handleOpenEdit(record)}
+                                onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleOpenEdit(record);
+                                }}
                             />
                         </Tooltip>
                     ) : null}
@@ -425,7 +438,10 @@ const AssetList: React.FC = () => {
                                 ? 'bg-slate-50 text-slate-300 cursor-not-allowed' 
                                 : 'bg-sky-50 text-sky-600 hover:bg-sky-100 hover:text-sky-700'
                             }`}
-                            onClick={() => !record.hasOpenTransfer && handleOpenTransfer(record)}
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                if (!record.hasOpenTransfer) handleOpenTransfer(record);
+                            }}
                         />
                     </Tooltip>
                     {canManageAssets ? (
@@ -435,7 +451,10 @@ const AssetList: React.FC = () => {
                                 icon={<QrcodeOutlined />}
                                 loading={ensurePublicIdMutation.isPending && qrLoadingAssetId === record.id}
                                 className='flex h-8 w-8 items-center justify-center rounded-md bg-violet-50 text-violet-600 transition-colors hover:bg-violet-100 hover:text-violet-700'
-                                onClick={() => handleOpenQr(record)}
+                                onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleOpenQr(record);
+                                }}
                             />
                         </Tooltip>
                     ) : null}
@@ -446,14 +465,16 @@ const AssetList: React.FC = () => {
                             okLabel='Xóa'
                             onConfirm={() => handleDelete(record.id)}
                         >
-                            <Tooltip title='Xóa mềm'>
-                                <Button
-                                    type='text'
-                                    danger
-                                    icon={<DeleteOutlined />}
-                                    className='flex h-8 w-8 items-center justify-center rounded-md bg-rose-50 text-rose-600 transition-colors hover:bg-rose-100 hover:text-rose-700'
-                                />
-                            </Tooltip>
+                            <div onClick={(e) => e.stopPropagation()}>
+                                <Tooltip title='Xóa mềm'>
+                                    <Button
+                                        type='text'
+                                        danger
+                                        icon={<DeleteOutlined />}
+                                        className='flex h-8 w-8 items-center justify-center rounded-md bg-rose-50 text-rose-600 transition-colors hover:bg-rose-100 hover:text-rose-700'
+                                    />
+                                </Tooltip>
+                            </div>
                         </ConfirmAction>
                     ) : null}
                 </div>
@@ -536,6 +557,14 @@ const AssetList: React.FC = () => {
                     options={plants.map((plant) => ({ value: plant.id, label: plant.name }))}
                 />
                 <Select
+                    placeholder='Loại máy'
+                    className='min-w-[148px]'
+                    allowClear
+                    value={draftFilters.type}
+                    onChange={(value) => setDraftFilters((prev) => ({ ...prev, type: value }))}
+                    options={types.map((t) => ({ value: t, label: t }))}
+                />
+                <Select
                     placeholder='Nhãn hiệu'
                     className='min-w-[148px]'
                     allowClear
@@ -599,6 +628,10 @@ const AssetList: React.FC = () => {
                         dataSource={assets}
                         loading={isLoading}
                         scroll={{ x: 1100 }}
+                        onRow={(record) => ({
+                            onClick: () => navigate(`/assets/${record.id}`),
+                            className: 'cursor-pointer',
+                        })}
                         pagination={{
                             current: assetResponse?.page ?? filters.page,
                             total: assetResponse?.total ?? 0,

@@ -22,6 +22,8 @@ export const assetService = {
 
     getModels: (): Promise<string[]> => api.get<string[]>(`${BASE}/models`),
 
+    getTypes: (): Promise<string[]> => api.get<string[]>(`${BASE}/types`),
+
     getById: (id: string): Promise<Asset> => api.get<Asset>(`${BASE}/${id}`),
 
     ensurePublicId: (id: string): Promise<AssetPublicIdResponse> => api.post<AssetPublicIdResponse>(`${BASE}/${id}/public-id`),
