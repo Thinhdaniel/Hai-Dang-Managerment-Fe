@@ -529,6 +529,41 @@ const AssetList: React.FC = () => {
 
             {/* Filter bar — no card wrapper, just controls */}
             <div className='al-f flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center'>
+                <Select
+                    placeholder='Cơ sở'
+                    className='min-w-[148px]'
+                    allowClear
+                    value={draftFilters.plantId}
+                    onChange={(value) => setDraftFilters((prev) => ({ ...prev, plantId: value }))}
+                    options={plants.map((plant) => ({ value: plant.id, label: plant.name }))}
+                />
+                <Select
+                    showSearch
+                    placeholder='Loại máy'
+                    className='min-w-[148px]'
+                    allowClear
+                    value={draftFilters.type}
+                    onChange={(value) => setDraftFilters((prev) => ({ ...prev, type: value }))}
+                    options={types.map((t) => ({ value: t, label: t }))}
+                />
+                <Select
+                    showSearch
+                    placeholder='Nhãn hiệu'
+                    className='min-w-[148px]'
+                    allowClear
+                    value={draftFilters.brandId}
+                    onChange={(value) => setDraftFilters((prev) => ({ ...prev, brandId: value }))}
+                    options={brands.map((b) => ({ value: b.id, label: b.name }))}
+                    optionFilterProp="label"
+                />
+                <Select
+                    placeholder='Trạng thái'
+                    className='min-w-[148px]'
+                    allowClear
+                    value={draftFilters.status}
+                    onChange={(value) => setDraftFilters((prev) => ({ ...prev, status: value }))}
+                    options={Object.entries(statusMeta).map(([value, meta]) => ({ value, label: meta.label }))}
+                />
                 <div className='flex-1 min-w-[220px]'>
                     <Input
                         prefix={<SearchOutlined className='text-slate-400' />}
@@ -540,38 +575,6 @@ const AssetList: React.FC = () => {
                         className='w-full rounded-lg'
                     />
                 </div>
-                <Select
-                    placeholder='Trạng thái'
-                    className='min-w-[148px]'
-                    allowClear
-                    value={draftFilters.status}
-                    onChange={(value) => setDraftFilters((prev) => ({ ...prev, status: value }))}
-                    options={Object.entries(statusMeta).map(([value, meta]) => ({ value, label: meta.label }))}
-                />
-                <Select
-                    placeholder='Cơ sở'
-                    className='min-w-[148px]'
-                    allowClear
-                    value={draftFilters.plantId}
-                    onChange={(value) => setDraftFilters((prev) => ({ ...prev, plantId: value }))}
-                    options={plants.map((plant) => ({ value: plant.id, label: plant.name }))}
-                />
-                <Select
-                    placeholder='Loại máy'
-                    className='min-w-[148px]'
-                    allowClear
-                    value={draftFilters.type}
-                    onChange={(value) => setDraftFilters((prev) => ({ ...prev, type: value }))}
-                    options={types.map((t) => ({ value: t, label: t }))}
-                />
-                <Select
-                    placeholder='Nhãn hiệu'
-                    className='min-w-[148px]'
-                    allowClear
-                    value={draftFilters.brandId}
-                    onChange={(value) => setDraftFilters((prev) => ({ ...prev, brandId: value }))}
-                    options={brands.map((b) => ({ value: b.id, label: b.name }))}
-                />
                 <div className='flex gap-2'>
                     <Button type='primary' icon={<SearchOutlined />} onClick={applyFilters} className='rounded-lg bg-blue-600 hover:!bg-blue-700'>
                         Tìm

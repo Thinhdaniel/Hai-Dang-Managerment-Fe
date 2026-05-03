@@ -311,7 +311,31 @@ const AssetDetail: React.FC = () => {
                             <Segmented<AssetStatus>
                                 value={statusValue ?? asset.status}
                                 size='small'
-                                options={Object.entries(statusMeta).map(([value, meta]) => ({ value: value as AssetStatus, label: meta.label }))}
+                                options={Object.entries(statusMeta).map(([value, meta]) => {
+                                    const isSelected = (statusValue ?? asset.status) === value;
+                                    return {
+                                        value: value as AssetStatus,
+                                        label: (
+                                            <div className='flex items-center gap-1.5 px-1'>
+                                                {isSelected && (
+                                                    <span 
+                                                        className='h-1.5 w-1.5 rounded-full shadow-sm' 
+                                                        style={{ background: meta.accent }}
+                                                    />
+                                                )}
+                                                <span 
+                                                    className='transition-colors'
+                                                    style={{ 
+                                                        color: isSelected ? meta.accent : 'inherit',
+                                                        fontWeight: isSelected ? 600 : 500
+                                                    }}
+                                                >
+                                                    {meta.label}
+                                                </span>
+                                            </div>
+                                        )
+                                    };
+                                })}
                                 onChange={handleStatusChange}
                             />
                         </div>
