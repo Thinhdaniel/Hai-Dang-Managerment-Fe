@@ -308,6 +308,7 @@ export interface UpdateUserPayload {
     name: string;
     role: UserRole;
     isActive: boolean;
+    plantId?: string;
 }
 
 // ===== DASHBOARD =====

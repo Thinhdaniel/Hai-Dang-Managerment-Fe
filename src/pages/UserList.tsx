@@ -513,6 +513,7 @@ const UserList: React.FC = () => {
                     <UserFormModal
                         mode='create'
                         open={isCreateModalOpen}
+                        plants={plants}
                         submitting={createUserMutation.isPending}
                         onClose={() => setIsCreateModalOpen(false)}
                         onSubmit={handleCreateUser}
@@ -526,6 +527,7 @@ const UserList: React.FC = () => {
                         mode='edit'
                         open={Boolean(editingUser)}
                         initialValues={editingUser}
+                        plants={plants}
                         isCurrentUser={user?.id === editingUser.id}
                         submitting={updateUserMutation.isPending}
                         onClose={() => setEditingUser(null)}

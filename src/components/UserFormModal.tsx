@@ -2,18 +2,20 @@ import { useEffect } from 'react';
 import { Button, Form, Input, Modal, Select, Switch } from 'antd';
 import { EditOutlined, PlusOutlined } from '@ant-design/icons';
 import { USER_ROLE_LABEL } from '../core/constants';
-import { UserRole, type CreateUserPayload, type UpdateUserPayload, type User } from '../core/types';
+import { UserRole, type CreateUserPayload, type UpdateUserPayload, type User, type Plant } from '../core/types';
 
 type UserFormValues = {
     name: string;
     email: string;
     role: UserRole;
+    plantId?: string;
     password?: string;
     isActive?: boolean;
 };
 
 type BaseUserFormModalProps = {
     open: boolean;
+    plants: Plant[];
     submitting?: boolean;
     onClose: () => void;
 };
@@ -60,6 +62,7 @@ const UserFormModal = (props: UserFormModalProps) => {
                 name: initialValues.name,
                 email: initialValues.email,
                 role: initialValues.role,
+                plantId: initialValues.plantId,
                 isActive: initialValues.isActive,
             });
             return;
@@ -78,6 +81,7 @@ const UserFormModal = (props: UserFormModalProps) => {
             await props.onSubmit({
                 name: sanitizeValue(values.name),
                 role: values.role,
+                plantId: values.plantId,
                 isActive: values.isActive !== false,
             });
         } else {
@@ -85,6 +89,7 @@ const UserFormModal = (props: UserFormModalProps) => {
                 name: sanitizeValue(values.name),
                 email: sanitizeValue(values.email).toLowerCase(),
                 role: values.role,
+                plantId: values.plantId,
                 password: values.password || '',
             });
         }
@@ -163,6 +168,18 @@ const UserFormModal = (props: UserFormModalProps) => {
                     extra={isCurrentUser && isEditMode ? 'Không thể tự thay đổi phân quyền của chính mình.' : undefined}
                 >
                     <Select size='large' options={roleOptions} disabled={isCurrentUser && isEditMode} />
+                </Form.Item>
+
+                <Form.Item
+                    name='plantId'
+                    label='Cơ sở làm việc'
+                >
+                    <Select
+                        size='large'
+                        allowClear
+                        placeholder='Chọn cơ sở (tùy chọn)'
+                        options={props.plants.map((p) => ({ value: p.id, label: p.name }))}
+                    />
                 </Form.Item>
 
                 {isEditMode ? (
