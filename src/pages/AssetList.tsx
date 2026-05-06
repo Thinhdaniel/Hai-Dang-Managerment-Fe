@@ -87,7 +87,7 @@ const createDefaultFilters = (search = '') => ({
     status: undefined as AssetStatus | undefined,
     plantId: undefined as string | undefined,
     brandId: undefined as string | undefined,
-    type: undefined as string | undefined,
+    name: undefined as string | undefined,
 });
 
 const AssetList: React.FC = () => {
@@ -135,22 +135,21 @@ const AssetList: React.FC = () => {
         queryFn: () => brandService.getAll(),
     });
 
-    const { data: types = [] } = useQuery({
-        queryKey: ['asset-types'],
-        queryFn: () => assetService.getTypes(),
-    });
-
-    // Stats base — uses committed filters without status/pagination for per-status counts
+    const { data: names = [] } = useQuery({
+        queryKey: ['asset-names'],
+        queryFn: () => assetService.getNames(),
+        staleTime: 5 * 60 * 1000,
+    });// Stats base — uses committed filters without status/pagination for per-status counts
     const statsFiltersBase = useMemo(
         () => ({
             search: filters.search,
             plantId: filters.plantId,
             brandId: filters.brandId,
-            type: filters.type,
+            name: filters.name,
             page: 1,
             limit: 1,
         }),
-        [filters.search, filters.plantId, filters.brandId, filters.type]
+        [filters.search, filters.plantId, filters.brandId, filters.name]
     );
 
     const { data: statActive } = useQuery({
@@ -539,12 +538,12 @@ const AssetList: React.FC = () => {
                 />
                 <Select
                     showSearch
-                    placeholder='Loại máy'
+                    placeholder='Tên máy'
                     className='min-w-[148px]'
                     allowClear
-                    value={draftFilters.type}
-                    onChange={(value) => setDraftFilters((prev) => ({ ...prev, type: value }))}
-                    options={types.map((t) => ({ value: t, label: t }))}
+                    value={draftFilters.name}
+                    onChange={(value) => setDraftFilters((prev) => ({ ...prev, name: value }))}
+                    options={names.map((n) => ({ value: n, label: n }))}
                 />
                 <Select
                     showSearch

@@ -21,7 +21,7 @@ export const assetService = {
         api.get<PaginatedResponse<Asset>>(BASE, { params }),
 
     getModels: (): Promise<string[]> => api.get<string[]>(`${BASE}/models`),
-
+    getNames: (): Promise<string[]> => api.get<string[]>(`${BASE}/names`),
     getTypes: (): Promise<string[]> => api.get<string[]>(`${BASE}/types`),
 
     getById: (id: string): Promise<Asset> => api.get<Asset>(`${BASE}/${id}`),

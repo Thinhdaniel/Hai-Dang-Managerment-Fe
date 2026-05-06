@@ -84,12 +84,14 @@ export const USER_ROLE_LABEL: Record<UserRole, string> = {
     [UserRole.ADMIN]: 'Quản trị viên',
     [UserRole.MANAGER]: 'Quản lý',
     [UserRole.STAFF]: 'Nhân viên',
+    [UserRole.DIRECTOR]: 'Giám đốc',
 };
 
 export const USER_ROLE_COLOR: Record<UserRole, string> = {
     [UserRole.ADMIN]: 'red',
     [UserRole.MANAGER]: 'blue',
     [UserRole.STAFF]: 'green',
+    [UserRole.DIRECTOR]: 'purple',
 };
 
 // ===== MACHINE TYPES =====
