@@ -1,17 +1,24 @@
 import { Button, Drawer, Layout, Tooltip, Typography, Badge } from 'antd';
 import {
     AppstoreOutlined,
+    BarChartOutlined,
     BuildOutlined,
     ClusterOutlined,
     DashboardOutlined,
+    DatabaseOutlined,
     DeploymentUnitOutlined,
+    FileAddOutlined,
     InboxOutlined,
     MenuFoldOutlined,
     MenuUnfoldOutlined,
+    ShopOutlined,
+    SendOutlined,
+    ShoppingCartOutlined,
     SwapOutlined,
     TagsOutlined,
     TeamOutlined,
     BellOutlined,
+    FormOutlined,
 } from '@ant-design/icons';
 import { useLocation, useNavigate } from 'react-router-dom';
 import type { ReactNode } from 'react';
@@ -26,6 +33,7 @@ type NavigationItem = {
     path: string;
     label: string;
     icon: ReactNode;
+    matchMode?: 'exact' | 'prefix';
 };
 
 type NavigationSection = {
@@ -98,6 +106,60 @@ const navigationSections: NavigationSection[] = [
             },
         ],
     },
+    {
+        key: 'material-management',
+        label: 'Quản lý Vật tư',
+        items: [
+            {
+                path: '/materials',
+                label: 'Danh mục vật tư',
+                icon: <DatabaseOutlined />,
+                matchMode: 'exact',
+            },
+            {
+                path: '/materials/suppliers',
+                label: 'Nhà cung cấp',
+                icon: <ShopOutlined />,
+                matchMode: 'exact',
+            },
+            {
+                path: '/materials/inventory',
+                label: 'Tồn kho',
+                icon: <InboxOutlined />,
+                matchMode: 'exact',
+            },
+            {
+                path: '/materials/purchase-requests',
+                label: 'Đề xuất mua',
+                icon: <FileAddOutlined />,
+                matchMode: 'exact',
+            },
+            {
+                path: '/materials/supply-requests',
+                label: 'Đề xuất cấp vật tư',
+                icon: <FormOutlined />,
+                matchMode: 'exact',
+            },
+            {
+                path: '/materials/purchase-orders',
+                label: 'Đặt hàng',
+                icon: <ShoppingCartOutlined />,
+                matchMode: 'exact',
+            },
+            {
+                path: '/materials/distributions',
+                label: 'Cấp phát',
+                icon: <SendOutlined />,
+                matchMode: 'exact',
+            },
+            {
+                path: '/materials/reports',
+                label: 'Báo cáo',
+                icon: <BarChartOutlined />,
+                matchMode: 'exact',
+            },
+        ],
+    },
 ];
 
 interface AppSidebarProps {
@@ -111,12 +173,16 @@ interface AppSidebarProps {
     onMobileClose: () => void;
 }
 
-const isActivePath = (pathname: string, path: string) => {
-    if (path === '/dashboard') {
+const isActivePath = (pathname: string, item: NavigationItem) => {
+    if (item.path === '/dashboard') {
         return pathname === '/dashboard' || pathname === '/';
     }
 
-    return pathname.startsWith(path);
+    if (item.matchMode === 'exact') {
+        return pathname === item.path;
+    }
+
+    return pathname === item.path || pathname.startsWith(`${item.path}/`);
 };
 
 const SidebarNavButton = ({
@@ -182,6 +248,19 @@ const AppSidebar: React.FC<AppSidebarProps> = ({
     const navigate = useNavigate();
     const location = useLocation();
     const { unreadCount } = useNotificationContext();
+    const { user } = useAuth();
+
+    const mainPlantId = import.meta.env.VITE_MAIN_PLANT_ID as string | undefined;
+    const isCS1Manager =
+        Boolean(mainPlantId && user?.plantId === mainPlantId) &&
+        (user?.role === 'admin' || user?.role === 'manager');
+
+    const visibleSections = navigationSections.map((section) => ({
+        ...section,
+        items: section.items.filter(
+            (item) => item.path !== '/materials/purchase-requests' || isCS1Manager
+        ),
+    }));
 
     const handleSelect = (path: string) => {
         navigate(path);
@@ -191,8 +270,7 @@ const AppSidebar: React.FC<AppSidebarProps> = ({
         }
     };
 
-    // Custom SidebarContent with notification button
-    const SidebarWithNotification = ({ isCollapsed, onToggleCollapse }: { isCollapsed: boolean; onToggleCollapse?: () => void }) => (
+    const renderSidebarContent = (isCollapsed: boolean, onToggleCollapse?: () => void) => (
         <div className='flex h-full flex-col rounded-r-[28px] border-r border-slate-200/80 bg-[rgba(255,255,255,0.94)] shadow-[14px_0_40px_rgba(15,23,42,0.06)] backdrop-blur-xl'>
             <div className={`border-b border-slate-100 px-4 py-5 ${isCollapsed ? 'px-3' : ''}`}>
                 <div className={`flex items-center ${isCollapsed ? 'justify-center' : 'gap-3'}`}>
@@ -210,11 +288,11 @@ const AppSidebar: React.FC<AppSidebarProps> = ({
 
             <div className='flex-1 overflow-y-auto px-3 py-4'>
                 <div className='space-y-5'>
-                    {navigationSections.map((section) => (
+                    {visibleSections.map((section) => (
                         <section key={section.key} className='space-y-2'>
                             {!isCollapsed ? (
                                 <div className='px-2'>
-                                    <Text className='text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-400'>
+                                    <Text className='text-[11px] font-semibold tracking-[0.2em] text-slate-400 uppercase'>
                                         {section.label}
                                     </Text>
                                 </div>
@@ -228,7 +306,7 @@ const AppSidebar: React.FC<AppSidebarProps> = ({
                                         key={item.path}
                                         item={item}
                                         collapsed={isCollapsed}
-                                        active={isActivePath(location.pathname, item.path)}
+                                        active={isActivePath(location.pathname, item)}
                                         onSelect={() => handleSelect(item.path)}
                                     />
                                 ))}
@@ -238,7 +316,6 @@ const AppSidebar: React.FC<AppSidebarProps> = ({
                 </div>
             </div>
 
-            {/* Notification button */}
             <div className={`border-t border-slate-100 p-3 ${isCollapsed ? 'flex justify-center' : ''}`}>
                 <Badge count={unreadCount} size='small' offset={isCollapsed ? [-2, 2] : undefined}>
                     <Button
@@ -292,7 +369,7 @@ const AppSidebar: React.FC<AppSidebarProps> = ({
                     },
                 }}
             >
-                <SidebarWithNotification isCollapsed={false} onToggleCollapse={undefined} />
+                {renderSidebarContent(false)}
             </Drawer>
         );
     }
@@ -303,10 +380,10 @@ const AppSidebar: React.FC<AppSidebarProps> = ({
             collapsed={collapsed}
             collapsedWidth={collapsedWidth}
             width={width}
-            className='!fixed !left-0 !bottom-0 !bg-transparent'
+            className='!fixed !bottom-0 !left-0 !bg-transparent'
             style={{ top: headerOffset, height: `calc(100vh - ${headerOffset}px)` }}
         >
-            <SidebarWithNotification isCollapsed={collapsed} />
+            {renderSidebarContent(collapsed)}
         </Sider>
     );
 };

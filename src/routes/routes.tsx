@@ -15,6 +15,14 @@ const BorrowingCreate = lazy(() => import('../pages/BorrowingCreate'));
 const BorrowingDetail = lazy(() => import('../pages/BorrowingDetail'));
 const PlantList = lazy(() => import('../pages/PlantList'));
 const UserList = lazy(() => import('../pages/UserList'));
+const MaterialListPage = lazy(() => import('../pages/MaterialListPage'));
+const MaterialSupplierPage = lazy(() => import('../pages/MaterialSupplierPage'));
+const MaterialInventoryPage = lazy(() => import('../pages/MaterialInventoryPage'));
+const PurchaseRequestPage = lazy(() => import('../pages/PurchaseRequestPage'));
+const SupplyRequestPage = lazy(() => import('../pages/SupplyRequestPage'));
+const PurchaseOrderPage = lazy(() => import('../pages/PurchaseOrderPage'));
+const DistributionPage = lazy(() => import('../pages/DistributionPage'));
+const MaterialReportPage = lazy(() => import('../pages/MaterialReportPage'));
 const LoginPage = lazy(() => import('../pages/LoginPage'));
 const ForgotPasswordPage = lazy(() => import('../pages/ForgotPasswordPage'));
 const ResetPasswordPage = lazy(() => import('../pages/ResetPasswordPage'));
@@ -62,6 +70,14 @@ export const router = createBrowserRouter([
             { path: 'storage', element: withSuspense(<ComingSoonPage />) },
             { path: 'plants', element: withSuspense(<PlantList />) },
             { path: 'users', element: withSuspense(<UserList />) },
+            { path: 'materials', element: withSuspense(<MaterialListPage />) },
+            { path: 'materials/suppliers', element: withSuspense(<MaterialSupplierPage />) },
+            { path: 'materials/inventory', element: withSuspense(<MaterialInventoryPage />) },
+            { path: 'materials/purchase-requests', element: withSuspense(<PurchaseRequestPage />) },
+            { path: 'materials/supply-requests', element: withSuspense(<SupplyRequestPage />) },
+            { path: 'materials/purchase-orders', element: withSuspense(<PurchaseOrderPage />) },
+            { path: 'materials/distributions', element: withSuspense(<DistributionPage />) },
+            { path: 'materials/reports', element: withSuspense(<MaterialReportPage />) },
         ],
     },
     {

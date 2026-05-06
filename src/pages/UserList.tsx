@@ -18,9 +18,10 @@ const { Text } = Typography;
 
 // OKLCH role pills
 const ROLE_PILL: Record<User['role'], { bg: string; text: string; label: string }> = {
-    admin:   { bg: 'oklch(0.96 0.04 25)',  text: 'oklch(0.36 0.18 25)',  label: USER_ROLE_LABEL.admin },
-    manager: { bg: 'oklch(0.95 0.05 255)', text: 'oklch(0.36 0.16 255)', label: USER_ROLE_LABEL.manager },
-    staff:   { bg: 'oklch(0.96 0.04 145)', text: 'oklch(0.32 0.14 145)', label: USER_ROLE_LABEL.staff },
+    admin:    { bg: 'oklch(0.96 0.04 25)',  text: 'oklch(0.36 0.18 25)',  label: USER_ROLE_LABEL.admin },
+    manager:  { bg: 'oklch(0.95 0.05 255)', text: 'oklch(0.36 0.16 255)', label: USER_ROLE_LABEL.manager },
+    staff:    { bg: 'oklch(0.96 0.04 145)', text: 'oklch(0.32 0.14 145)', label: USER_ROLE_LABEL.staff },
+    director: { bg: 'oklch(0.95 0.06 300)', text: 'oklch(0.36 0.18 300)', label: USER_ROLE_LABEL.director },
 };
 
 const PAGE_ANIM = `
@@ -189,6 +190,7 @@ const UserList: React.FC = () => {
                     admin: 0,
                     manager: 0,
                     staff: 0,
+                    director: 0,
                 }
             ),
         [userResponse?.statsSource]

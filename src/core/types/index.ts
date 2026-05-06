@@ -35,6 +35,7 @@ export enum UserRole {
     ADMIN = 'admin',
     MANAGER = 'manager',
     STAFF = 'staff',
+    DIRECTOR = 'director',
 }
 
 // ===== BASE =====
@@ -112,6 +113,7 @@ export interface Asset {
 
 export interface AssetFilter extends PaginationParams {
     search?: string;
+    name?: string;
     status?: AssetStatus;
     plantId?: string;
     model?: string;
