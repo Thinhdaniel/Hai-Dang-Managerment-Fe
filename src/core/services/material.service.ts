@@ -470,8 +470,12 @@ export interface TopConsumedMaterial {
     materialId?: string;
     materialCode?: string;
     materialName: string;
+    category?: string;
     unit?: string;
-    quantity: number;
+    quantity?: number;
+    totalQuantityOut?: number;
+    currentStock?: number;
+    minStockLevel?: number;
     totalAmount?: number;
 }
 
@@ -744,9 +748,31 @@ export const materialReportService = {
     getCostByPeriod: (params?: MaterialCostByPeriodQueryParams): Promise<MaterialCostByPeriodPoint[]> =>
         api.get<MaterialCostByPeriodPoint[]>(`${MATERIALS_BASE}/reports/cost-by-period`, { params }),
 
+    getTopMaterials: (params?: MaterialReportQueryParams & { limit?: number }): Promise<TopConsumedMaterial[]> =>
+        api.get<TopConsumedMaterial[]>(`${MATERIALS_BASE}/reports/top-materials`, { params }),
+
     getBySupplier: (params?: MaterialReportQueryParams): Promise<SupplierReportRow[]> =>
         api.get<SupplierReportRow[]>(`${MATERIALS_BASE}/reports/by-supplier`, { params }),
 
     getPriceComparison: (params?: MaterialReportQueryParams): Promise<PriceComparisonReportRow[]> =>
         api.get<PriceComparisonReportRow[]>(`${MATERIALS_BASE}/reports/price-comparison`, { params }),
+
+    exportExcel: async (params?: MaterialReportQueryParams): Promise<void> => {
+        const data: any = await axiosInstance.get(`${MATERIALS_BASE}/reports/export-excel`, {
+            params,
+            responseType: 'blob',
+        });
+        const blob = data instanceof Blob ? data : new Blob([data]);
+        const startStr = params?.startDate ? params.startDate.replace(/-/g, '') : '';
+        const endStr = params?.endDate ? params.endDate.replace(/-/g, '') : '';
+        const filename = `BaoCaoVatTu_${startStr}_${endStr}.xlsx`;
+        const objectUrl = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = objectUrl;
+        link.download = filename;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(objectUrl);
+    },
 };

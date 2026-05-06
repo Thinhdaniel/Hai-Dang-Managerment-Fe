@@ -105,7 +105,7 @@ const TransactionForm = ({
 
                 <div className='grid grid-cols-1 gap-4 lg:grid-cols-2'>
                     <Form.Item
-                        label='Thiết bị'
+                        label=''
                         name='assetId'
                         rules={[{ required: true, message: 'Vui lòng chọn thiết bị' }]}
                     >
