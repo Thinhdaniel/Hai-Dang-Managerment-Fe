@@ -5,7 +5,7 @@ import { RouterProvider } from 'react-router-dom';
 import { AuthProvider } from './core/contexts/AuthContext';
 import { NotificationProvider } from './core/contexts/NotificationContext';
 
-const queryClient = new QueryClient();
+export const queryClient = new QueryClient();
 
 function App() {
     return (

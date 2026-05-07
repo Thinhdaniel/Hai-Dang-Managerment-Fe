@@ -4,6 +4,7 @@ import { notificationService } from '../services/notification.service';
 import { socketService } from '../services/socket.service';
 import { notification as antNotification } from 'antd';
 import { useAuth } from '../contexts/AuthContext';
+import { queryClient } from '../../App';
 
 // Socket event names
 const NOTIFICATION_EVENTS = {
@@ -54,6 +55,25 @@ export const useNotifications = (socket: import('socket.io-client').Socket | nul
 
         const unsubscribeNew = socketService.on<Notification>(NOTIFICATION_EVENTS.NEW, (notification) => {
             store.addNotification(notification);
+
+            // Invalidate React Query cache based on actionType
+            if (notification.actionType) {
+                const invalidateMap: Record<string, string[][]> = {
+                    transfer: [['transfers'], ['transfers-stats']],
+                    asset: [['assets']],
+                    borrowing: [['borrowings']],
+                    maintenance: [['maintenances']],
+                    'purchase-request': [['purchase-requests']],
+                    'purchase-order': [['purchase-orders']],
+                    'supply-request': [['supply-requests']],
+                    distribution: [['distributions']],
+                };
+                const keys = invalidateMap[notification.actionType] ?? [];
+                keys.forEach((queryKey) => queryClient.invalidateQueries({ queryKey }));
+                if (notification.actionId) {
+                    queryClient.invalidateQueries({ queryKey: [notification.actionType, notification.actionId] });
+                }
+            }
 
             // Show toast notification
             showNotificationToast(notification);
