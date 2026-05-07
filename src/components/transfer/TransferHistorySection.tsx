@@ -1,5 +1,5 @@
 import { Button, Card, Empty, Table, Tooltip, Typography, type TableColumnsType } from 'antd';
-import { CheckCircleOutlined, CheckOutlined } from '@ant-design/icons';
+import { CheckCircleOutlined, CheckOutlined, CloseOutlined, StopOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import type { Transfer } from '../../core/types';
 import ConfirmAction from '../shared/ConfirmAction';
@@ -12,9 +12,13 @@ type TransferHistorySectionProps = {
     loading?: boolean;
     approvingTransferId?: string | null;
     completingTransferId?: string | null;
+    rejectingTransferId?: string | null;
+    cancellingTransferId?: string | null;
     onCreate?: () => void;
     onApprove?: (transfer: Transfer) => void;
     onComplete?: (transfer: Transfer) => void;
+    onReject?: (transfer: Transfer) => void;
+    onCancel?: (transfer: Transfer) => void;
 };
 
 const formatDate = (value?: string) => (value ? dayjs(value).format('DD/MM/YYYY') : '-');
@@ -26,9 +30,13 @@ const TransferHistorySection = ({
     loading,
     approvingTransferId,
     completingTransferId,
+    rejectingTransferId,
+    cancellingTransferId,
     onCreate,
     onApprove,
     onComplete,
+    onReject,
+    onCancel,
 }: TransferHistorySectionProps) => {
     const columns: TableColumnsType<Transfer> = [
         {
@@ -95,11 +103,11 @@ const TransferHistorySection = ({
         },
     ];
 
-    if (onApprove || onComplete) {
+    if (onApprove || onComplete || onReject || onCancel) {
         columns.push({
             title: 'THAO TÁC',
             key: 'action',
-            width: 120,
+            width: 160,
             align: 'right',
             render: (_value, record) => (
                 <div className='flex items-center justify-end gap-2'>
@@ -135,6 +143,42 @@ const TransferHistorySection = ({
                                     icon={<CheckCircleOutlined />}
                                     loading={completingTransferId === record.id}
                                     className='flex h-8 w-8 items-center justify-center rounded-md bg-emerald-50 text-emerald-600 transition-colors hover:bg-emerald-100 hover:text-emerald-700'
+                                />
+                            </Tooltip>
+                        </ConfirmAction>
+                    ) : null}
+                    {['pending', 'approved'].includes(record.status) && onReject ? (
+                        <ConfirmAction
+                            intent='danger'
+                            title='Từ chối lệnh điều chuyển'
+                            description='Xác nhận từ chối lệnh điều chuyển này?'
+                            okLabel='Từ chối'
+                            onConfirm={() => onReject(record)}
+                        >
+                            <Tooltip title='Từ chối'>
+                                <Button
+                                    type='text'
+                                    icon={<CloseOutlined />}
+                                    loading={rejectingTransferId === record.id}
+                                    className='flex h-8 w-8 items-center justify-center rounded-md bg-rose-50 text-rose-600 transition-colors hover:bg-rose-100 hover:text-rose-700'
+                                />
+                            </Tooltip>
+                        </ConfirmAction>
+                    ) : null}
+                    {record.status === 'pending' && onCancel ? (
+                        <ConfirmAction
+                            intent='danger'
+                            title='Hủy lệnh điều chuyển'
+                            description='Xác nhận hủy lệnh điều chuyển này?'
+                            okLabel='Hủy lệnh'
+                            onConfirm={() => onCancel(record)}
+                        >
+                            <Tooltip title='Hủy lệnh'>
+                                <Button
+                                    type='text'
+                                    icon={<StopOutlined />}
+                                    loading={cancellingTransferId === record.id}
+                                    className='flex h-8 w-8 items-center justify-center rounded-md bg-slate-50 text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-700'
                                 />
                             </Tooltip>
                         </ConfirmAction>

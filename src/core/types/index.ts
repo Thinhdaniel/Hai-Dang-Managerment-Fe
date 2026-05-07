@@ -18,6 +18,7 @@ export enum TransferStatus {
     APPROVED = 'approved',
     COMPLETED = 'completed',
     REJECTED = 'rejected',
+    CANCELLED = 'cancelled',
 }
 
 export enum BorrowingStatus {
@@ -200,6 +201,11 @@ export interface Transfer {
     completedBy?: string;
     completedAt?: string;
     rejectReason?: string;
+    receivedBy?: string;
+    handoverImages?: string[];
+    cancelledBy?: string;
+    cancelledAt?: string;
+    cancelReason?: string;
     note?: string;
     createdBy?: string;
     createdAt: string;

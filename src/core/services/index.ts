@@ -5,6 +5,22 @@ export { plantService } from './plant.service';
 
 export type UserListApiResponse = User[] | PaginatedResponse<User>;
 
+export interface Supplier {
+    id: string;
+    name: string;
+    code?: string;
+    phone?: string;
+    address?: string;
+    contactName?: string;
+    supplyTypes?: string[];
+    isActive?: boolean;
+}
+
+export const supplierService = {
+    getAll: (params?: { limit?: number; search?: string }): Promise<Supplier[]> => 
+        api.get<Supplier[]>('/material-suppliers', { params }),
+};
+
 export const brandService = {
     getAll: (params?: { search?: string }): Promise<Brand[]> => api.get<Brand[]>('/brands', { params }),
 

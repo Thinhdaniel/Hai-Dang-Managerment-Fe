@@ -20,6 +20,7 @@ import type { Asset, AssetStatus, Borrowing, CreateTransferPayload, Maintenance,
 
 const AssetFormModal = lazy(() => import('../components/AssetFormModal'));
 const TransferModal = lazy(() => import('../components/transfer/TransferModal'));
+const HandoverModal = lazy(() => import('../components/transfer/HandoverModal'));
 
 const { Title, Text } = Typography;
 
@@ -76,6 +77,7 @@ const AssetDetail: React.FC = () => {
     const [statusValue, setStatusValue] = useState<AssetStatus | undefined>(undefined);
     const [approvingTransferId, setApprovingTransferId] = useState<string | null>(null);
     const [completingTransferId, setCompletingTransferId] = useState<string | null>(null);
+    const [handoverTransfer, setHandoverTransfer] = useState<Transfer | null>(null);
     const canManageAssets = hasManagerAccess(role);
 
     const { data: asset, isLoading } = useQuery({
@@ -151,7 +153,8 @@ const AssetDetail: React.FC = () => {
     });
 
     const completeTransferMutation = useMutation({
-        mutationFn: transferService.complete,
+        mutationFn: ({ id, payload }: { id: string; payload: { receivedBy: string; handoverImages?: string[] } }) =>
+            transferService.complete(id, payload),
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ['transfers', 'asset', id] });
             queryClient.invalidateQueries({ queryKey: ['transfers'] });
@@ -229,10 +232,16 @@ const AssetDetail: React.FC = () => {
     };
 
     const handleCompleteTransfer = async (transfer: Transfer) => {
+        setHandoverTransfer(transfer);
+    };
+
+    const handleHandoverSubmit = async (payload: { receivedBy: string; handoverImages?: string[] }) => {
+        if (!handoverTransfer) return;
         try {
-            setCompletingTransferId(transfer.id);
-            await completeTransferMutation.mutateAsync(transfer.id);
+            setCompletingTransferId(handoverTransfer.id);
+            await completeTransferMutation.mutateAsync({ id: handoverTransfer.id, payload });
             message.success('Đã hoàn tất điều chuyển và cập nhật vị trí thiết bị');
+            setHandoverTransfer(null);
         } finally {
             setCompletingTransferId(null);
         }
@@ -572,6 +581,18 @@ const AssetDetail: React.FC = () => {
                         submitting={createTransferMutation.isPending}
                         onClose={() => setIsTransferModalOpen(false)}
                         onSubmit={handleCreateTransfer}
+                    />
+                </LazyBoundary>
+            ) : null}
+
+            {handoverTransfer ? (
+                <LazyBoundary mode='overlay'>
+                    <HandoverModal
+                        open={Boolean(handoverTransfer)}
+                        assetName={handoverTransfer.asset?.name || asset.name}
+                        submitting={completeTransferMutation.isPending}
+                        onClose={() => setHandoverTransfer(null)}
+                        onSubmit={handleHandoverSubmit}
                     />
                 </LazyBoundary>
             ) : null}

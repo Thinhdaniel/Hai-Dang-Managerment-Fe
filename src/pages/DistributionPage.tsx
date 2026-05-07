@@ -9,6 +9,7 @@ import {
     Empty,
     Input,
     Select,
+    Space,
     Steps,
     Table,
     Tag,
@@ -25,9 +26,11 @@ import {
     PlusOutlined,
     ReloadOutlined,
     SearchOutlined,
+    ThunderboltOutlined,
 } from '@ant-design/icons';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useLocation } from 'react-router-dom';
+import ExpressDispatchModal from '../components/ExpressDispatchModal';
 import SupplyDistributionModal from '../components/SupplyDistributionModal';
 import ConfirmAction from '../components/shared/ConfirmAction';
 import PageHeader from '../components/shared/PageHeader';
@@ -156,6 +159,7 @@ const DistributionPage: React.FC = () => {
     const [pagination, setPagination] = useState({ page: DEFAULT_PAGE, limit: DEFAULT_LIMIT });
     const [selectedId, setSelectedId] = useState<string | null>(null);
     const [createOpen, setCreateOpen] = useState(false);
+    const [expressOpen, setExpressOpen] = useState(false);
     const [confirmingId, setConfirmingId] = useState<string | null>(null);
     const [distributingId, setDistributingId] = useState<string | null>(null);
     const [exportingId, setExportingId] = useState<string | null>(null);
@@ -500,13 +504,22 @@ const DistributionPage: React.FC = () => {
                     </div>
 
                     {isCS1Manager && (
-                        <Button
-                            type='primary' icon={<PlusOutlined />}
-                            onClick={() => setCreateOpen(true)}
-                            className='rounded-lg bg-blue-600 hover:!bg-blue-700'
-                        >
-                            Tạo phiếu cấp phát
-                        </Button>
+                        <Space>
+                            <Button
+                                icon={<ThunderboltOutlined />}
+                                onClick={() => setExpressOpen(true)}
+                                className='rounded-lg border-orange-400 text-orange-500 hover:!border-orange-500 hover:!text-orange-600'
+                            >
+                                Xuất thẳng khẩn cấp
+                            </Button>
+                            <Button
+                                type='primary' icon={<PlusOutlined />}
+                                onClick={() => setCreateOpen(true)}
+                                className='rounded-lg bg-blue-600 hover:!bg-blue-700'
+                            >
+                                Tạo phiếu cấp phát
+                            </Button>
+                        </Space>
                     )}
                 </div>
             </div>
@@ -551,6 +564,15 @@ const DistributionPage: React.FC = () => {
                         setCreateOpen(false);
                         invalidate();
                     }}
+                />
+            )}
+
+            {/* Express Dispatch Modal */}
+            {isCS1Manager && (
+                <ExpressDispatchModal
+                    open={expressOpen}
+                    onClose={() => setExpressOpen(false)}
+                    onSuccess={() => { setExpressOpen(false); invalidate(); }}
                 />
             )}
 

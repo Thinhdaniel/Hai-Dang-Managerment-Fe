@@ -17,5 +17,8 @@ export const transferService = {
 
     reject: (id: string, reason: string): Promise<Transfer> => api.patch<Transfer>(`${BASE}/${id}/reject`, { reason }),
 
-    complete: (id: string): Promise<Transfer> => api.patch<Transfer>(`${BASE}/${id}/complete`),
+    complete: (id: string, payload: { receivedBy: string; handoverImages?: string[] }): Promise<Transfer> =>
+        api.patch<Transfer>(`${BASE}/${id}/complete`, payload),
+
+    cancel: (id: string, reason: string): Promise<Transfer> => api.patch<Transfer>(`${BASE}/${id}/cancel`, { reason }),
 };

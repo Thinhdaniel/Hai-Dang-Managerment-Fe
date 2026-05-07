@@ -23,6 +23,10 @@ export const transferStatusMeta: Record<
         label: 'Từ chối',
         badgeClassName: 'border-rose-200 bg-rose-50 text-rose-700',
     },
+    cancelled: {
+        label: 'Đã hủy',
+        badgeClassName: 'border-slate-200 bg-slate-50 text-slate-500',
+    },
 };
 
 export const transferStatusOptions = Object.entries(transferStatusMeta).map(([value, meta]) => ({

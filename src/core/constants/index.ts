@@ -53,6 +53,7 @@ export const TRANSFER_STATUS_LABEL: Record<TransferStatus, string> = {
     [TransferStatus.APPROVED]: 'Đã duyệt',
     [TransferStatus.COMPLETED]: 'Hoàn thành',
     [TransferStatus.REJECTED]: 'Từ chối',
+    [TransferStatus.CANCELLED]: 'Đã hủy',
 };
 
 export const TRANSFER_STATUS_COLOR: Record<TransferStatus, string> = {
@@ -60,6 +61,7 @@ export const TRANSFER_STATUS_COLOR: Record<TransferStatus, string> = {
     [TransferStatus.APPROVED]: 'processing',
     [TransferStatus.COMPLETED]: 'success',
     [TransferStatus.REJECTED]: 'error',
+    [TransferStatus.CANCELLED]: 'default',
 };
 
 // ===== BORROWING STATUS =====

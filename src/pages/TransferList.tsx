@@ -1,12 +1,14 @@
-import React, { useMemo, useState } from 'react';
-import { App, Button, Card, Input, Select, Space, Table, Tooltip, Typography, type TableColumnsType } from 'antd';
+import React, { useState } from 'react';
+import { App, Button, Input, Modal, Select, Table, Tooltip, Typography, type TableColumnsType } from 'antd';
 import {
     AppstoreOutlined,
     CheckCircleOutlined,
     CheckOutlined,
+    CloseOutlined,
     EyeOutlined,
     ReloadOutlined,
     SearchOutlined,
+    StopOutlined,
     SwapOutlined,
     ClockCircleOutlined,
 } from '@ant-design/icons';
@@ -15,6 +17,7 @@ import { useNavigate } from 'react-router-dom';
 import PageHeader from '../components/shared/PageHeader';
 import ConfirmAction from '../components/shared/ConfirmAction';
 import TransferStatusBadge from '../components/transfer/TransferStatusBadge';
+import HandoverModal from '../components/transfer/HandoverModal';
 import { transferStatusOptions } from '../core/constants/transfer';
 import { useAuth } from '../core/contexts/AuthContext';
 import { hasManagerAccess } from '../core/lib/permissions';
@@ -46,6 +49,15 @@ const TransferList: React.FC = () => {
     const [draftFilters, setDraftFilters] = useState(() => createDefaultFilters());
     const [approvingTransferId, setApprovingTransferId] = useState<string | null>(null);
     const [completingTransferId, setCompletingTransferId] = useState<string | null>(null);
+    const [rejectingTransferId, setRejectingTransferId] = useState<string | null>(null);
+    const [cancellingTransferId, setCancellingTransferId] = useState<string | null>(null);
+    const [rejectModal, setRejectModal] = useState<{ open: boolean; transfer: Transfer | null; reason: string }>({
+        open: false, transfer: null, reason: '',
+    });
+    const [cancelModal, setCancelModal] = useState<{ open: boolean; transfer: Transfer | null; reason: string }>({
+        open: false, transfer: null, reason: '',
+    });
+    const [handoverTransfer, setHandoverTransfer] = useState<Transfer | null>(null);
     const canManageTransfers = hasManagerAccess(role);
 
     const { data: plants = [] } = useQuery({
@@ -58,6 +70,28 @@ const TransferList: React.FC = () => {
         queryFn: () => transferService.getAll(filters),
     });
 
+    // Stats queries riêng — chính xác toàn bộ DB, không bị ảnh hưởng bởi filter/pagination
+    const { data: totalStats = 0 } = useQuery({
+        queryKey: ['transfers-stats', 'total'],
+        queryFn: () => transferService.getAll({ page: 1, limit: 1 }),
+        select: (d) => d.total,
+    });
+    const { data: pendingStats = 0 } = useQuery({
+        queryKey: ['transfers-stats', 'pending'],
+        queryFn: () => transferService.getAll({ page: 1, limit: 1, status: 'pending' as any }),
+        select: (d) => d.total,
+    });
+    const { data: approvedStats = 0 } = useQuery({
+        queryKey: ['transfers-stats', 'approved'],
+        queryFn: () => transferService.getAll({ page: 1, limit: 1, status: 'approved' as any }),
+        select: (d) => d.total,
+    });
+    const { data: completedStats = 0 } = useQuery({
+        queryKey: ['transfers-stats', 'completed'],
+        queryFn: () => transferService.getAll({ page: 1, limit: 1, status: 'completed' as any }),
+        select: (d) => d.total,
+    });
+
     const approveMutation = useMutation({
         mutationFn: transferService.approve,
         onSuccess: () => {
@@ -67,41 +101,33 @@ const TransferList: React.FC = () => {
     });
 
     const completeMutation = useMutation({
-        mutationFn: transferService.complete,
+        mutationFn: ({ id, payload }: { id: string; payload: { receivedBy: string; handoverImages?: string[] } }) =>
+            transferService.complete(id, payload),
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ['transfers'] });
             queryClient.invalidateQueries({ queryKey: ['assets'] });
         },
     });
 
-    const transfers = useMemo(() => transferResponse?.data ?? [], [transferResponse?.data]);
+    const rejectMutation = useMutation({
+        mutationFn: ({ id, reason }: { id: string; reason: string }) => transferService.reject(id, reason),
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['transfers'] });
+            queryClient.invalidateQueries({ queryKey: ['assets'] });
+        },
+    });
 
-    const transferSummary = useMemo(
-        () =>
-            transfers.reduce(
-                (summary, transfer) => {
-                    summary.total += 1;
-                    summary[transfer.status] += 1;
-                    return summary;
-                },
-                {
-                    total: 0,
-                    pending: 0,
-                    approved: 0,
-                    completed: 0,
-                    rejected: 0,
-                }
-            ),
-        [transfers]
-    );
+    const cancelMutation = useMutation({
+        mutationFn: ({ id, reason }: { id: string; reason: string }) => transferService.cancel(id, reason),
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['transfers'] });
+            queryClient.invalidateQueries({ queryKey: ['assets'] });
+        },
+    });
 
-    const applyFilters = () => {
-        setFilters({
-            ...draftFilters,
-            search: draftFilters.search.trim(),
-            page: 1,
-        });
-    };
+    const transfers = transferResponse?.data ?? [];
+
+    const applyFilters = () => setFilters({ ...draftFilters, search: draftFilters.search.trim(), page: 1 });
 
     const resetFilters = () => {
         const next = createDefaultFilters();
@@ -120,12 +146,42 @@ const TransferList: React.FC = () => {
     };
 
     const handleComplete = async (transfer: Transfer) => {
+        setHandoverTransfer(transfer);
+    };
+
+    const handleHandoverSubmit = async (payload: { receivedBy: string; handoverImages?: string[] }) => {
+        if (!handoverTransfer) return;
         try {
-            setCompletingTransferId(transfer.id);
-            await completeMutation.mutateAsync(transfer.id);
+            setCompletingTransferId(handoverTransfer.id);
+            await completeMutation.mutateAsync({ id: handoverTransfer.id, payload });
             message.success('Đã hoàn tất điều chuyển');
+            setHandoverTransfer(null);
         } finally {
             setCompletingTransferId(null);
+        }
+    };
+
+    const handleReject = async () => {
+        if (!rejectModal.transfer || !rejectModal.reason.trim()) return;
+        try {
+            setRejectingTransferId(rejectModal.transfer.id);
+            await rejectMutation.mutateAsync({ id: rejectModal.transfer.id, reason: rejectModal.reason.trim() });
+            message.success('Đã từ chối lệnh điều chuyển');
+            setRejectModal({ open: false, transfer: null, reason: '' });
+        } finally {
+            setRejectingTransferId(null);
+        }
+    };
+
+    const handleCancel = async () => {
+        if (!cancelModal.transfer || !cancelModal.reason.trim()) return;
+        try {
+            setCancellingTransferId(cancelModal.transfer.id);
+            await cancelMutation.mutateAsync({ id: cancelModal.transfer.id, reason: cancelModal.reason.trim() });
+            message.success('Đã hủy lệnh điều chuyển');
+            setCancelModal({ open: false, transfer: null, reason: '' });
+        } finally {
+            setCancellingTransferId(null);
         }
     };
 
@@ -147,7 +203,7 @@ const TransferList: React.FC = () => {
                 <div className='flex flex-col gap-0.5'>
                     <span className='text-[14px] font-semibold text-slate-800'>{record.asset?.name || '-'}</span>
                     <span className='font-mono text-xs font-medium text-slate-500'>
-                        Mã máy: <span className="text-slate-600">{record.asset?.machineCode || record.assetId}</span>
+                        Mã máy: <span className='text-slate-600'>{record.asset?.machineCode || record.assetId}</span>
                     </span>
                 </div>
             ),
@@ -157,14 +213,16 @@ const TransferList: React.FC = () => {
             key: 'route',
             render: (_value, record) => (
                 <div className='flex items-center gap-3'>
-                    <div className="flex flex-col gap-0.5">
+                    <div className='flex flex-col gap-0.5'>
                         <span className='text-[13px] font-semibold text-slate-700'>{record.fromPlant?.name || '-'}</span>
                         <span className='text-xs font-medium text-slate-500'>{record.fromArea || 'Chưa chỉ định'}</span>
                     </div>
-                    <div className="text-slate-300">
-                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M14 5l7 7m0 0l-7 7m7-7H3"></path></svg>
+                    <div className='text-slate-300'>
+                        <svg className='h-4 w-4' fill='none' stroke='currentColor' viewBox='0 0 24 24'>
+                            <path strokeLinecap='round' strokeLinejoin='round' strokeWidth='2' d='M14 5l7 7m0 0l-7 7m7-7H3' />
+                        </svg>
                     </div>
-                    <div className="flex flex-col gap-0.5">
+                    <div className='flex flex-col gap-0.5'>
                         <span className='text-[13px] font-semibold text-slate-700'>{record.toPlant?.name || '-'}</span>
                         <span className='text-xs font-medium text-slate-500'>{record.toArea || 'Chưa chỉ định'}</span>
                     </div>
@@ -193,32 +251,33 @@ const TransferList: React.FC = () => {
             key: 'reason',
             render: (value: string, record) => (
                 <div className='flex flex-col gap-1'>
-                    <span className='text-sm font-medium text-slate-700 line-clamp-1' title={value}>{value}</span>
-                    {record.note ? <Text type='secondary' className="text-xs line-clamp-1" title={record.note}>{record.note}</Text> : null}
-                    {record.rejectReason ? <span className='text-xs font-medium text-rose-600 line-clamp-1' title={record.rejectReason}>{record.rejectReason}</span> : null}
+                    <span className='line-clamp-1 text-sm font-medium text-slate-700' title={value}>{value}</span>
+                    {record.note ? <Text type='secondary' className='line-clamp-1 text-xs' title={record.note}>{record.note}</Text> : null}
+                    {record.rejectReason ? <span className='line-clamp-1 text-xs font-medium text-rose-600' title={record.rejectReason}>{record.rejectReason}</span> : null}
+                    {record.cancelReason ? <span className='line-clamp-1 text-xs font-medium text-slate-400' title={record.cancelReason}>{record.cancelReason}</span> : null}
                 </div>
             ),
         },
         {
             title: 'THAO TÁC',
             key: 'action',
-            width: 150,
+            width: 190,
             align: 'right',
             render: (_value, record) => (
-                <div className='flex items-center justify-end gap-2'>
-                    <Tooltip title='Xem thiết bị'>
+                <div className='flex items-center justify-end gap-1.5' onClick={(e) => e.stopPropagation()}>
+                    <Tooltip title='Xem chi tiết'>
                         <Button
                             type='text'
                             icon={<EyeOutlined />}
                             className='flex h-8 w-8 items-center justify-center rounded-md bg-slate-50 text-slate-600 transition-colors hover:bg-slate-100 hover:text-slate-800'
-                            onClick={() => navigate(`/assets/${record.assetId}`)}
+                            onClick={() => navigate(`/transfers/${record.id}`)}
                         />
                     </Tooltip>
                     {record.status === 'pending' && canManageTransfers ? (
                         <ConfirmAction
                             intent='warning'
                             title='Duyệt lệnh điều chuyển'
-                            description={`Xác nhận duyệt lệnh điều chuyển máy “${record.asset?.name || record.assetId}”?`}
+                            description={`Xác nhận duyệt lệnh điều chuyển máy "${record.asset?.name || record.assetId}"?`}
                             okLabel='Duyệt'
                             onConfirm={() => handleApprove(record)}
                         >
@@ -236,7 +295,7 @@ const TransferList: React.FC = () => {
                         <ConfirmAction
                             intent='primary'
                             title='Hoàn tất điều chuyển'
-                            description={`Xác nhận hoàn tất và cập nhật vị trí máy “${record.asset?.name || record.assetId}”?`}
+                            description={`Xác nhận hoàn tất và cập nhật vị trí máy "${record.asset?.name || record.assetId}"?`}
                             okLabel='Hoàn tất'
                             onConfirm={() => handleComplete(record)}
                         >
@@ -249,6 +308,28 @@ const TransferList: React.FC = () => {
                                 />
                             </Tooltip>
                         </ConfirmAction>
+                    ) : null}
+                    {['pending', 'approved'].includes(record.status) && canManageTransfers ? (
+                        <Tooltip title='Từ chối'>
+                            <Button
+                                type='text'
+                                icon={<CloseOutlined />}
+                                loading={rejectingTransferId === record.id}
+                                onClick={() => setRejectModal({ open: true, transfer: record, reason: '' })}
+                                className='flex h-8 w-8 items-center justify-center rounded-md bg-rose-50 text-rose-600 transition-colors hover:bg-rose-100 hover:text-rose-700'
+                            />
+                        </Tooltip>
+                    ) : null}
+                    {record.status === 'pending' ? (
+                        <Tooltip title='Hủy lệnh'>
+                            <Button
+                                type='text'
+                                icon={<StopOutlined />}
+                                loading={cancellingTransferId === record.id}
+                                onClick={() => setCancelModal({ open: true, transfer: record, reason: '' })}
+                                className='flex h-8 w-8 items-center justify-center rounded-md bg-slate-50 text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-700'
+                            />
+                        </Tooltip>
                     ) : null}
                 </div>
             ),
@@ -271,86 +352,31 @@ const TransferList: React.FC = () => {
                 }
             />
 
-            {/* Stats Cards Section */}
+            {/* Stats Cards */}
             <div className='grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4'>
-                {/* Total */}
-                <div className='group relative overflow-hidden rounded-xl border border-slate-200 bg-white p-5 shadow-sm transition-shadow hover:shadow-md'>
-                    <div className='absolute top-0 bottom-0 left-0 w-1 rounded-l-xl bg-blue-500'></div>
-                    <div className='flex items-start justify-between'>
-                        <div>
-                            <div className='mb-1 text-xs font-bold tracking-wider text-slate-500 uppercase'>
-                                Tổng lệnh
+                {[
+                    { label: 'Tổng lệnh', value: totalStats, color: 'blue', sub: 'Toàn bộ lịch sử', icon: <AppstoreOutlined /> },
+                    { label: 'Chờ duyệt', value: pendingStats, color: 'amber', sub: 'Lệnh đang chờ xử lý', icon: <ClockCircleOutlined /> },
+                    { label: 'Đã duyệt / Đang chuyển', value: approvedStats, color: 'sky', sub: 'Thiết bị đang trên đường', icon: <SwapOutlined /> },
+                    { label: 'Hoàn tất', value: completedStats, color: 'emerald', sub: 'Đã cập nhật vị trí mới', icon: <CheckCircleOutlined /> },
+                ].map(({ label, value, color, sub, icon }) => (
+                    <div key={label} className='group relative overflow-hidden rounded-xl border border-slate-200 bg-white p-5 shadow-sm transition-shadow hover:shadow-md'>
+                        <div className={`absolute top-0 bottom-0 left-0 w-1 rounded-l-xl bg-${color}-500`} />
+                        <div className='flex items-start justify-between'>
+                            <div>
+                                <div className='mb-1 text-xs font-bold uppercase tracking-wider text-slate-500'>{label}</div>
+                                <div className='text-3xl font-bold text-slate-800'>{value}</div>
+                                <div className={`mt-2 text-xs font-medium text-${color}-600`}>{sub}</div>
                             </div>
-                            <div className='text-3xl font-bold text-slate-800'>{transferResponse?.total ?? 0}</div>
-                            <div className='mt-2 text-xs font-medium text-slate-500'>
-                                Toàn bộ lịch sử điều chuyển
+                            <div className={`flex h-12 w-12 items-center justify-center rounded-xl bg-${color}-50 text-2xl text-${color}-600 transition-transform group-hover:scale-110`}>
+                                {icon}
                             </div>
-                        </div>
-                        <div className='flex h-12 w-12 items-center justify-center rounded-xl bg-blue-50 text-2xl text-blue-600 transition-transform group-hover:scale-110'>
-                            <AppstoreOutlined />
                         </div>
                     </div>
-                </div>
-
-                {/* Pending */}
-                <div className='group relative overflow-hidden rounded-xl border border-slate-200 bg-white p-5 shadow-sm transition-shadow hover:shadow-md'>
-                    <div className='absolute top-0 bottom-0 left-0 w-1 rounded-l-xl bg-amber-500'></div>
-                    <div className='flex items-start justify-between'>
-                        <div>
-                            <div className='mb-1 text-xs font-bold tracking-wider text-slate-500 uppercase'>
-                                Chờ duyệt
-                            </div>
-                            <div className='text-3xl font-bold text-slate-800'>{transferSummary.pending}</div>
-                            <div className='mt-2 flex items-center gap-1 text-xs font-medium text-amber-600'>
-                                Lệnh đang chờ xử lý
-                            </div>
-                        </div>
-                        <div className='flex h-12 w-12 items-center justify-center rounded-xl bg-amber-50 text-2xl text-amber-600 transition-transform group-hover:scale-110'>
-                            <ClockCircleOutlined />
-                        </div>
-                    </div>
-                </div>
-
-                {/* Approved */}
-                <div className='group relative overflow-hidden rounded-xl border border-slate-200 bg-white p-5 shadow-sm transition-shadow hover:shadow-md'>
-                    <div className='absolute top-0 bottom-0 left-0 w-1 rounded-l-xl bg-sky-500'></div>
-                    <div className='flex items-start justify-between'>
-                        <div>
-                            <div className='mb-1 text-xs font-bold tracking-wider text-slate-500 uppercase'>
-                                Đã duyệt / Đang chuyển
-                            </div>
-                            <div className='text-3xl font-bold text-slate-800'>{transferSummary.approved}</div>
-                            <div className='mt-2 flex items-center gap-1 text-xs font-medium text-sky-600'>
-                                Thiết bị đang trên đường
-                            </div>
-                        </div>
-                        <div className='flex h-12 w-12 items-center justify-center rounded-xl bg-sky-50 text-2xl text-sky-600 transition-transform group-hover:scale-110'>
-                            <SwapOutlined />
-                        </div>
-                    </div>
-                </div>
-
-                {/* Completed */}
-                <div className='group relative overflow-hidden rounded-xl border border-slate-200 bg-white p-5 shadow-sm transition-shadow hover:shadow-md'>
-                    <div className='absolute top-0 bottom-0 left-0 w-1 rounded-l-xl bg-emerald-500'></div>
-                    <div className='flex items-start justify-between'>
-                        <div>
-                            <div className='mb-1 text-xs font-bold tracking-wider text-slate-500 uppercase'>
-                                Hoàn tất
-                            </div>
-                            <div className='text-3xl font-bold text-slate-800'>{transferSummary.completed}</div>
-                            <div className='mt-2 flex items-center gap-1 text-xs font-medium text-emerald-600'>
-                                Đã cập nhật vị trí mới
-                            </div>
-                        </div>
-                        <div className='flex h-12 w-12 items-center justify-center rounded-xl bg-emerald-50 text-2xl text-emerald-600 transition-transform group-hover:scale-110'>
-                            <CheckCircleOutlined />
-                        </div>
-                    </div>
-                </div>
+                ))}
             </div>
 
-            {/* Filter Section */}
+            {/* Filter */}
             <div className='rounded-xl border border-slate-200 bg-white p-4 shadow-sm'>
                 <div className='flex flex-col gap-4 lg:flex-row'>
                     <div className='flex-1'>
@@ -358,11 +384,11 @@ const TransferList: React.FC = () => {
                             prefix={<SearchOutlined className='text-slate-400' />}
                             placeholder='Tìm theo tên máy, mã máy, lý do điều chuyển...'
                             value={draftFilters.search}
-                            onChange={(event) => setDraftFilters((prev) => ({ ...prev, search: event.target.value }))}
+                            onChange={(e) => setDraftFilters((prev) => ({ ...prev, search: e.target.value }))}
                             onPressEnter={applyFilters}
                             allowClear
                             size='large'
-                            className='w-full rounded-lg transition-all focus-within:border-blue-500 focus-within:shadow-[0_0_0_2px_rgba(59,130,246,0.1)] hover:border-blue-400'
+                            className='w-full rounded-lg'
                         />
                     </div>
                     <div className='w-full lg:w-48'>
@@ -383,7 +409,7 @@ const TransferList: React.FC = () => {
                             size='large'
                             value={draftFilters.fromPlantId}
                             onChange={(value) => setDraftFilters((prev) => ({ ...prev, fromPlantId: value }))}
-                            options={plants.map((plant) => ({ value: plant.id, label: plant.name }))}
+                            options={plants.map((p) => ({ value: p.id, label: p.name }))}
                             className='w-full'
                         />
                     </div>
@@ -394,33 +420,22 @@ const TransferList: React.FC = () => {
                             size='large'
                             value={draftFilters.toPlantId}
                             onChange={(value) => setDraftFilters((prev) => ({ ...prev, toPlantId: value }))}
-                            options={plants.map((plant) => ({ value: plant.id, label: plant.name }))}
+                            options={plants.map((p) => ({ value: p.id, label: p.name }))}
                             className='w-full'
                         />
                     </div>
                     <div className='flex w-full gap-2 lg:w-auto'>
-                        <Button
-                            type='primary'
-                            icon={<SearchOutlined />}
-                            onClick={applyFilters}
-                            size='large'
-                            className='flex-1 rounded-lg border-none bg-blue-600 font-medium shadow-sm hover:bg-blue-700 lg:flex-none'
-                        >
+                        <Button type='primary' icon={<SearchOutlined />} onClick={applyFilters} size='large' className='flex-1 rounded-lg border-none bg-blue-600 font-medium shadow-sm hover:bg-blue-700 lg:flex-none'>
                             Tìm kiếm
                         </Button>
-                        <Button
-                            icon={<ReloadOutlined />}
-                            onClick={resetFilters}
-                            size='large'
-                            className='flex-1 rounded-lg font-medium text-slate-600 hover:text-slate-800 lg:flex-none'
-                        >
+                        <Button icon={<ReloadOutlined />} onClick={resetFilters} size='large' className='flex-1 rounded-lg font-medium text-slate-600 hover:text-slate-800 lg:flex-none'>
                             Làm mới
                         </Button>
                     </div>
                 </div>
             </div>
 
-            {/* Table Section */}
+            {/* Table */}
             <div className='flex flex-col overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm'>
                 <div className='[&_.ant-table-row]:group [&_.ant-table]:!bg-white [&_.ant-table-row:hover_td]:!bg-slate-50/80 [&_.ant-table-thead_th]:!bg-slate-50 [&_.ant-table-thead_th]:!text-[12px] [&_.ant-table-thead_th]:!font-bold [&_.ant-table-thead_th]:!tracking-wider [&_.ant-table-thead_th]:!text-slate-500'>
                     <Table<Transfer>
@@ -428,7 +443,11 @@ const TransferList: React.FC = () => {
                         columns={columns}
                         dataSource={transfers}
                         loading={isLoading}
-                        scroll={{ x: 1100 }}
+                        scroll={{ x: 1200 }}
+                        onRow={(record) => ({
+                            onClick: () => navigate(`/transfers/${record.id}`),
+                            style: { cursor: 'pointer' },
+                        })}
                         pagination={{
                             current: transferResponse?.page ?? filters.page,
                             total: transferResponse?.total ?? 0,
@@ -446,6 +465,58 @@ const TransferList: React.FC = () => {
                     />
                 </div>
             </div>
+
+            {/* Modal từ chối */}
+            <Modal
+                open={rejectModal.open}
+                title='Từ chối lệnh điều chuyển'
+                okText='Từ chối'
+                cancelText='Hủy'
+                okButtonProps={{ danger: true, loading: rejectMutation.isPending }}
+                onOk={handleReject}
+                onCancel={() => setRejectModal({ open: false, transfer: null, reason: '' })}
+                destroyOnHidden
+            >
+                <p className='mb-3 text-sm text-slate-600'>
+                    Thiết bị: <strong>{rejectModal.transfer?.asset?.name || rejectModal.transfer?.assetId}</strong>
+                </p>
+                <Input.TextArea
+                    rows={3}
+                    placeholder='Nhập lý do từ chối...'
+                    value={rejectModal.reason}
+                    onChange={(e) => setRejectModal((prev) => ({ ...prev, reason: e.target.value }))}
+                />
+            </Modal>
+
+            {/* Modal hủy lệnh */}
+            <Modal
+                open={cancelModal.open}
+                title='Hủy lệnh điều chuyển'
+                okText='Xác nhận hủy'
+                cancelText='Đóng'
+                okButtonProps={{ danger: true, loading: cancelMutation.isPending }}
+                onOk={handleCancel}
+                onCancel={() => setCancelModal({ open: false, transfer: null, reason: '' })}
+                destroyOnHidden
+            >
+                <p className='mb-3 text-sm text-slate-600'>
+                    Thiết bị: <strong>{cancelModal.transfer?.asset?.name || cancelModal.transfer?.assetId}</strong>
+                </p>
+                <Input.TextArea
+                    rows={3}
+                    placeholder='Nhập lý do hủy...'
+                    value={cancelModal.reason}
+                    onChange={(e) => setCancelModal((prev) => ({ ...prev, reason: e.target.value }))}
+                />
+            </Modal>
+
+            <HandoverModal
+                open={Boolean(handoverTransfer)}
+                assetName={handoverTransfer?.asset?.name}
+                submitting={completeMutation.isPending}
+                onClose={() => setHandoverTransfer(null)}
+                onSubmit={handleHandoverSubmit}
+            />
         </div>
     );
 };

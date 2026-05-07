@@ -776,3 +776,40 @@ export const materialReportService = {
         URL.revokeObjectURL(objectUrl);
     },
 };
+
+
+const EXPRESS_DISPATCH_BASE = '/express-dispatch';
+
+export interface QuickSupplier {
+    name: string;
+    phone?: string;
+    address?: string;
+}
+
+export interface ExpressDispatchItem {
+    materialName: string;
+    unit: string;
+    quantity: number;
+    unitPrice: number;
+    vatRate?: number;
+    supplierId?: string;
+    quickSupplier?: QuickSupplier;
+    note?: string;
+}
+
+export interface ExpressDispatchPayload {
+    items: ExpressDispatchItem[];
+    toPlantId: string;
+    note?: string;
+}
+
+export interface ExpressDispatchResult {
+    orderCode: string;
+    distributionCode: string;
+    newSupplierIds?: string[];
+}
+
+export const expressDispatchService = {
+    create: (data: ExpressDispatchPayload): Promise<ExpressDispatchResult> =>
+        api.post<ExpressDispatchResult, ExpressDispatchPayload>(EXPRESS_DISPATCH_BASE, data),
+};
