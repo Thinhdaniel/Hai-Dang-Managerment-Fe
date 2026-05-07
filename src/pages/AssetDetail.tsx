@@ -1,6 +1,16 @@
 import React, { lazy, useMemo, useState } from 'react';
-import { App, Badge, Button, Card, Descriptions, Empty, Segmented, Space, Spin, Tag, Timeline, Tooltip, Typography } from 'antd';
-import { ArrowLeftOutlined, EditOutlined, RollbackOutlined, SwapOutlined } from '@ant-design/icons';
+import { App, Button, Empty, Segmented, Spin, Tag, Tabs, Timeline, Tooltip } from 'antd';
+import {
+    ArrowLeftOutlined,
+    CalendarOutlined,
+    EditOutlined,
+    EnvironmentOutlined,
+    HistoryOutlined,
+    RollbackOutlined,
+    SwapOutlined,
+    ToolOutlined,
+    WalletOutlined,
+} from '@ant-design/icons';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate, useParams } from 'react-router-dom';
 import dayjs from 'dayjs';
@@ -22,48 +32,49 @@ const AssetFormModal = lazy(() => import('../components/AssetFormModal'));
 const TransferModal = lazy(() => import('../components/transfer/TransferModal'));
 const HandoverModal = lazy(() => import('../components/transfer/HandoverModal'));
 
-const { Title, Text } = Typography;
-
-const statusMeta: Record<
-    AssetStatus,
-    { color: 'success' | 'warning' | 'error' | 'processing' | 'default'; label: string; accent: string }
-> = {
-    active: { color: 'success', label: 'Hoạt động', accent: '#22a06b' },
-    maintenance: { color: 'warning', label: 'Bảo trì', accent: '#fa8c16' },
-    broken: { color: 'error', label: 'Lỗi / hỏng', accent: '#ef4444' },
-    borrowing: { color: 'processing', label: 'Đang mượn/Cho mượn', accent: '#7c3aed' },
-    storage: { color: 'default', label: 'Tồn kho', accent: '#64748b' },
+const STATUS_CFG: Record<AssetStatus, { label: string; accent: string; bg: string; text: string; dot: string; ring: string }> = {
+    active:      { label: 'Đang hoạt động', accent: '#16a34a', bg: '#f0fdf4', text: '#15803d', dot: '#22c55e', ring: '#bbf7d0' },
+    maintenance: { label: 'Đang bảo trì',   accent: '#d97706', bg: '#fffbeb', text: '#b45309', dot: '#f59e0b', ring: '#fde68a' },
+    broken:      { label: 'Hỏng / Lỗi',     accent: '#dc2626', bg: '#fef2f2', text: '#b91c1c', dot: '#ef4444', ring: '#fecaca' },
+    borrowing:   { label: 'Đang cho mượn',  accent: '#7c3aed', bg: '#f5f3ff', text: '#6d28d9', dot: '#8b5cf6', ring: '#ddd6fe' },
+    storage:     { label: 'Tồn kho',        accent: '#475569', bg: '#f8fafc', text: '#475569', dot: '#94a3b8', ring: '#e2e8f0' },
 };
 
-const formatDateTime = (value?: string) => (value ? dayjs(value).format('DD/MM/YYYY') : '-');
-
-const STATUS_PILL: Record<AssetStatus, { bg: string; text: string; dot: string }> = {
-    active:      { bg: 'oklch(0.96 0.04 145)', text: 'oklch(0.32 0.14 145)', dot: 'oklch(0.52 0.20 145)' },
-    maintenance: { bg: 'oklch(0.97 0.04 65)',  text: 'oklch(0.38 0.16 65)',  dot: 'oklch(0.58 0.22 65)'  },
-    broken:      { bg: 'oklch(0.96 0.04 25)',  text: 'oklch(0.36 0.16 25)',  dot: 'oklch(0.52 0.24 25)'  },
-    borrowing:   { bg: 'oklch(0.95 0.05 280)', text: 'oklch(0.36 0.16 280)', dot: 'oklch(0.50 0.22 280)' },
-    storage:     { bg: 'oklch(0.96 0.01 250)', text: 'oklch(0.44 0.04 250)', dot: 'oklch(0.56 0.08 250)' },
+const MAINT_CLS: Record<string, string> = {
+    completed: 'bg-emerald-50 text-emerald-700', overdue: 'bg-rose-50 text-rose-700',
+    in_progress: 'bg-sky-50 text-sky-700', pending: 'bg-amber-50 text-amber-700',
+};
+const MAINT_LABEL: Record<string, string> = {
+    completed: 'Hoàn thành', overdue: 'Quá hạn', in_progress: 'Đang làm', pending: 'Chờ xử lý',
+};
+const TRANSFER_CLS: Record<string, string> = {
+    completed: 'bg-emerald-50 text-emerald-700', approved: 'bg-sky-50 text-sky-700',
+    pending: 'bg-amber-50 text-amber-700', rejected: 'bg-rose-50 text-rose-700', cancelled: 'bg-slate-100 text-slate-500',
+};
+const TRANSFER_LABEL: Record<string, string> = {
+    completed: 'Hoàn tất', approved: 'Đã duyệt', pending: 'Chờ duyệt', rejected: 'Từ chối', cancelled: 'Đã hủy',
 };
 
-const PAGE_ANIM = `
-@keyframes ad-up{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
-@keyframes ad-dot{0%,100%{opacity:1}50%{opacity:0.45}}
-.ad-h{animation:ad-up .3s cubic-bezier(.22,1,.36,1) .04s both}
-.ad-s{animation:ad-up .32s cubic-bezier(.22,1,.36,1) .14s both}
-.ad-m{animation:ad-up .34s cubic-bezier(.22,1,.36,1) .22s both}
-.ad-r{animation:ad-up .34s cubic-bezier(.22,1,.36,1) .30s both}
-.ad-dot{animation:ad-dot 2.4s ease-in-out infinite}
-.ad-row{transition:background-color 120ms cubic-bezier(.22,1,.36,1)}
-.ad-row:hover{background-color:oklch(0.975 0.004 250)}
-.ad-stat{transition:background-color 150ms cubic-bezier(.22,1,.36,1)}
-.ad-stat:hover{background-color:oklch(0.97 0.006 250)}
-.ad-btn:active{transform:scale(0.97);transition:transform 80ms cubic-bezier(.22,1,.36,1)}
-@media(prefers-reduced-motion:reduce){
-  .ad-h,.ad-s,.ad-m,.ad-r{animation:none}
-  .ad-dot{animation:none}
-  .ad-row,.ad-stat,.ad-btn{transition:none}
-}
-`;
+const fmt = (v?: string) => (v ? dayjs(v).format('DD/MM/YYYY') : '—');
+const fmtMoney = (v?: number) => (v ? v.toLocaleString('vi-VN') + ' ₫' : '—');
+
+const Field = ({ label, children }: { label: string; children: React.ReactNode }) => (
+    <div className='flex flex-col gap-0.5'>
+        <span className='text-[11px] font-semibold uppercase tracking-wider text-slate-400'>{label}</span>
+        <span className='text-sm font-medium text-slate-800'>{children || '—'}</span>
+    </div>
+);
+
+const SidePanel = ({ icon, title, children }: { icon: React.ReactNode; title: string; children: React.ReactNode }) => (
+    <div className='overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm'>
+        <div className='flex items-center gap-2 border-b border-slate-100 px-4 py-3'>
+            <span className='text-slate-400 text-xs'>{icon}</span>
+            <span className='text-[11px] font-bold uppercase tracking-wider text-slate-400'>{title}</span>
+        </div>
+        {children}
+    </div>
+);
+
 
 const AssetDetail: React.FC = () => {
     const { id = '' } = useParams();
@@ -71,531 +82,422 @@ const AssetDetail: React.FC = () => {
     const { role } = useAuth();
     const queryClient = useQueryClient();
     const { message } = App.useApp();
+    const canManage = hasManagerAccess(role);
 
-    const [isFormModalOpen, setIsFormModalOpen] = useState(false);
-    const [isTransferModalOpen, setIsTransferModalOpen] = useState(false);
-    const [statusValue, setStatusValue] = useState<AssetStatus | undefined>(undefined);
-    const [approvingTransferId, setApprovingTransferId] = useState<string | null>(null);
-    const [completingTransferId, setCompletingTransferId] = useState<string | null>(null);
+    const [isFormOpen, setIsFormOpen] = useState(false);
+    const [isTransferOpen, setIsTransferOpen] = useState(false);
+    const [statusDraft, setStatusDraft] = useState<AssetStatus | undefined>();
+    const [approvingId, setApprovingId] = useState<string | null>(null);
+    const [completingId, setCompletingId] = useState<string | null>(null);
     const [handoverTransfer, setHandoverTransfer] = useState<Transfer | null>(null);
-    const canManageAssets = hasManagerAccess(role);
+    const [tab, setTab] = useState('overview');
 
-    const { data: asset, isLoading } = useQuery({
-        queryKey: ['asset', id],
-        queryFn: () => assetService.getById(id),
-        enabled: Boolean(id),
+    const { data: asset, isLoading } = useQuery({ queryKey: ['asset', id], queryFn: () => assetService.getById(id), enabled: !!id });
+    const { data: plants = [] } = useQuery({ queryKey: ['plants'], queryFn: () => plantService.getAll() });
+    const { data: brands = [] } = useQuery({ queryKey: ['brands'], queryFn: () => brandService.getAll() });
+    const { data: maintenances = [] } = useQuery({ queryKey: ['maintenances', 'asset', id], queryFn: () => maintenanceService.getByAsset(id), enabled: !!id });
+    const { data: transfers = [] } = useQuery({ queryKey: ['transfers', 'asset', id], queryFn: () => transferService.getByAsset(id), enabled: !!id });
+    const { data: borrowings = [] } = useQuery({ queryKey: ['borrowings', 'asset', id], queryFn: () => borrowingService.getByAsset(id), enabled: !!id });
+
+    const inv = () => { queryClient.invalidateQueries({ queryKey: ['asset', id] }); queryClient.invalidateQueries({ queryKey: ['assets'] }); };
+
+    const updateMut = useMutation({ mutationFn: (p: { id: string; data: Partial<Asset> }) => assetService.update(p.id, p.data), onSuccess: () => { inv(); queryClient.invalidateQueries({ queryKey: ['asset-models'] }); } });
+    const statusMut = useMutation({ mutationFn: ({ nextStatus, note }: { nextStatus: AssetStatus; note?: string }) => assetService.updateStatus(id, nextStatus, note), onSuccess: inv });
+    const createTransferMut = useMutation({ mutationFn: transferService.create, onSuccess: (_t, p) => { queryClient.invalidateQueries({ queryKey: ['transfers', 'asset', p.assetId] }); queryClient.invalidateQueries({ queryKey: ['transfers'] }); inv(); } });
+    const approveTransferMut = useMutation({ mutationFn: transferService.approve, onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['transfers', 'asset', id] }); queryClient.invalidateQueries({ queryKey: ['transfers'] }); inv(); } });
+    const completeTransferMut = useMutation({
+        mutationFn: ({ id, payload }: { id: string; payload: { receivedBy: string; handoverImages?: string[] } }) => transferService.complete(id, payload),
+        onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['transfers', 'asset', id] }); queryClient.invalidateQueries({ queryKey: ['transfers'] }); inv(); },
     });
 
-    const { data: plants = [] } = useQuery({
-        queryKey: ['plants'],
-        queryFn: () => plantService.getAll(),
-    });
-
-    const { data: brands = [] } = useQuery({
-        queryKey: ['brands'],
-        queryFn: () => brandService.getAll(),
-    });
-
-    const { data: maintenances = [] } = useQuery({
-        queryKey: ['maintenances', 'asset', id],
-        queryFn: () => maintenanceService.getByAsset(id),
-        enabled: Boolean(id),
-    });
-
-    const { data: transfers = [] } = useQuery({
-        queryKey: ['transfers', 'asset', id],
-        queryFn: () => transferService.getByAsset(id),
-        enabled: Boolean(id),
-    });
-
-    const { data: borrowings = [] } = useQuery({
-        queryKey: ['borrowings', 'asset', id],
-        queryFn: () => borrowingService.getByAsset(id),
-        enabled: Boolean(id),
-    });
-
-    const updateAssetMutation = useMutation({
-        mutationFn: (payload: { id: string; data: Partial<Asset> }) => assetService.update(payload.id, payload.data),
-        onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: ['asset', id] });
-            queryClient.invalidateQueries({ queryKey: ['assets'] });
-            queryClient.invalidateQueries({ queryKey: ['asset-models'] });
-        },
-    });
-
-    const updateStatusMutation = useMutation({
-        mutationFn: ({ nextStatus, note }: { nextStatus: AssetStatus; note?: string }) =>
-            assetService.updateStatus(id, nextStatus, note),
-        onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: ['asset', id] });
-            queryClient.invalidateQueries({ queryKey: ['assets'] });
-        },
-    });
-
-    const createTransferMutation = useMutation({
-        mutationFn: transferService.create,
-        onSuccess: (_transfer, payload) => {
-            queryClient.invalidateQueries({ queryKey: ['transfers', 'asset', payload.assetId] });
-            queryClient.invalidateQueries({ queryKey: ['transfers'] });
-            queryClient.invalidateQueries({ queryKey: ['asset', id] });
-            queryClient.invalidateQueries({ queryKey: ['assets'] });
-        },
-    });
-
-    const approveTransferMutation = useMutation({
-        mutationFn: transferService.approve,
-        onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: ['transfers', 'asset', id] });
-            queryClient.invalidateQueries({ queryKey: ['transfers'] });
-            queryClient.invalidateQueries({ queryKey: ['asset', id] });
-            queryClient.invalidateQueries({ queryKey: ['assets'] });
-        },
-    });
-
-    const completeTransferMutation = useMutation({
-        mutationFn: ({ id, payload }: { id: string; payload: { receivedBy: string; handoverImages?: string[] } }) =>
-            transferService.complete(id, payload),
-        onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: ['transfers', 'asset', id] });
-            queryClient.invalidateQueries({ queryKey: ['transfers'] });
-            queryClient.invalidateQueries({ queryKey: ['asset', id] });
-            queryClient.invalidateQueries({ queryKey: ['assets'] });
-        },
-    });
-
-    const combinedHistory = useMemo(() => {
-        const maintenanceEvents = maintenances.map((item: Maintenance) => ({
-            key: `m-${item.id}`,
-            date: item.endDate || item.startDate,
-            color: item.status === 'completed' ? 'green' : item.status === 'overdue' ? 'red' : 'orange',
-            title: `Bảo trì ${item.type}`,
-            description: item.description,
-            meta: item.technician ? `KTV: ${item.technician}` : undefined,
-        }));
-
-        const transferEvents = transfers.map((item: Transfer) => ({
-            key: `t-${item.id}`,
-            date: item.transferDate,
-            color: item.status === 'completed' ? 'blue' : item.status === 'rejected' ? 'red' : 'gray',
-            title: `Điều chuyển ${item.fromPlant?.name || '-'} -> ${item.toPlant?.name || '-'}`,
-            description: item.reason,
-            meta: item.note || undefined,
-        }));
-
-        const borrowingEvents = borrowings.map((item: Borrowing) => ({
-            key: `b-${item.id}`,
-            date: item.returnTime || item.borrowTime,
-            color: item.status === 'returned' ? 'green' : 'gold',
-            title:
-                item.status === 'returned'
-                    ? `Đã trả ${item.type === 'rental' ? 'thiết bị thuê' : 'thiết bị'}`
-                    : `Giao dịch ${item.type === 'internal' ? 'mượn nội bộ' : item.type === 'external' ? 'mượn ngoài' : 'thuê máy'}`,
-            description: item.purpose || item.partnerName || 'Giao dịch thiết bị',
-            meta: item.borrowerName
-                ? `Người mượn: ${item.borrowerName}`
-                : item.partnerName
-                  ? `Đối tác: ${item.partnerName}`
-                  : item.location,
-        }));
-
-        return [...maintenanceEvents, ...transferEvents, ...borrowingEvents].sort(
-            (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()
-        );
+    const history = useMemo(() => {
+        const m = maintenances.map((i: Maintenance) => ({ key: `m-${i.id}`, date: i.endDate || i.startDate, color: i.status === 'completed' ? 'green' : i.status === 'overdue' ? 'red' : 'orange', title: `Bảo trì ${i.type}`, desc: i.description, meta: i.technician ? `KTV: ${i.technician}` : undefined }));
+        const t = transfers.map((i: Transfer) => ({ key: `t-${i.id}`, date: i.transferDate, color: i.status === 'completed' ? 'blue' : i.status === 'rejected' ? 'red' : 'gray', title: `Điều chuyển: ${i.fromPlant?.name || '?'} → ${i.toPlant?.name || '?'}`, desc: i.reason, meta: undefined }));
+        const b = borrowings.map((i: Borrowing) => ({ key: `b-${i.id}`, date: i.returnTime || i.borrowTime, color: i.status === 'returned' ? 'green' : 'gold', title: i.status === 'returned' ? 'Đã trả thiết bị' : `Giao dịch ${i.type}`, desc: i.purpose || i.partnerName || '', meta: i.borrowerName ? `Người mượn: ${i.borrowerName}` : undefined }));
+        return [...m, ...t, ...b].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
     }, [borrowings, maintenances, transfers]);
 
-    const handleUpdateAsset = async (values: Omit<Asset, 'id' | 'createdAt' | 'updatedAt'>) => {
-        await updateAssetMutation.mutateAsync({ id, data: values });
-        message.success('Cập nhật thiết bị thành công');
-        setIsFormModalOpen(false);
-    };
-
-    const handleCreateTransfer = async (payload: CreateTransferPayload) => {
-        await createTransferMutation.mutateAsync(payload);
-        message.success('Đã tạo lệnh điều chuyển');
-        setIsTransferModalOpen(false);
-    };
-
-    const handleStatusChange = async (value: AssetStatus) => {
-        setStatusValue(value);
-        await updateStatusMutation.mutateAsync({ nextStatus: value });
-        message.success('Đã cập nhật trạng thái thiết bị');
-    };
-
-    const handleApproveTransfer = async (transfer: Transfer) => {
-        try {
-            setApprovingTransferId(transfer.id);
-            await approveTransferMutation.mutateAsync(transfer.id);
-            message.success('Đã duyệt lệnh điều chuyển');
-        } finally {
-            setApprovingTransferId(null);
-        }
-    };
-
-    const handleCompleteTransfer = async (transfer: Transfer) => {
-        setHandoverTransfer(transfer);
-    };
-
-    const handleHandoverSubmit = async (payload: { receivedBy: string; handoverImages?: string[] }) => {
+    const handleUpdate = async (values: Omit<Asset, 'id' | 'createdAt' | 'updatedAt'>) => { await updateMut.mutateAsync({ id, data: values }); message.success('Đã cập nhật thiết bị'); setIsFormOpen(false); };
+    const handleCreateTransfer = async (payload: CreateTransferPayload) => { await createTransferMut.mutateAsync(payload); message.success('Đã tạo lệnh điều chuyển'); setIsTransferOpen(false); };
+    const handleStatusChange = async (v: AssetStatus) => { setStatusDraft(v); await statusMut.mutateAsync({ nextStatus: v }); message.success('Đã cập nhật trạng thái'); };
+    const handleApprove = async (t: Transfer) => { try { setApprovingId(t.id); await approveTransferMut.mutateAsync(t.id); message.success('Đã duyệt lệnh điều chuyển'); } finally { setApprovingId(null); } };
+    const handleComplete = (t: Transfer) => setHandoverTransfer(t);
+    const handleHandover = async (payload: { receivedBy: string; handoverImages?: string[] }) => {
         if (!handoverTransfer) return;
-        try {
-            setCompletingTransferId(handoverTransfer.id);
-            await completeTransferMutation.mutateAsync({ id: handoverTransfer.id, payload });
-            message.success('Đã hoàn tất điều chuyển và cập nhật vị trí thiết bị');
-            setHandoverTransfer(null);
-        } finally {
-            setCompletingTransferId(null);
-        }
+        try { setCompletingId(handoverTransfer.id); await completeTransferMut.mutateAsync({ id: handoverTransfer.id, payload }); message.success('Đã hoàn tất điều chuyển'); setHandoverTransfer(null); }
+        finally { setCompletingId(null); }
     };
 
-    if (isLoading) {
-        return <div className='flex min-h-[40vh] items-center justify-center'><Spin size='large' /></div>;
-    }
+    if (isLoading) return <div className='flex min-h-[50vh] items-center justify-center'><Spin size='large' /></div>;
+    if (!asset) return <Empty description='Không tìm thấy thiết bị' className='py-20' />;
 
-    if (!asset) {
-        return <Empty description='Không tìm thấy thiết bị' className='py-20' />;
-    }
+    const sc = STATUS_CFG[asset.status];
+    const cur = statusDraft ?? asset.status;
+    const openTransfer = transfers.find((t: Transfer) => ['pending', 'approved'].includes(t.status));
 
-    const sp = STATUS_PILL[asset.status];
 
     return (
-        <div className='flex w-full max-w-full flex-col gap-6 overflow-hidden'>
-            <style>{PAGE_ANIM}</style>
+        <div className='flex w-full max-w-full flex-col overflow-hidden'>
 
-            {/* ── Page header ── */}
-            <section className='ad-h overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm'>
-                <div className='flex flex-col gap-5 p-6 md:p-8'>
-                    <div className='flex flex-col items-start justify-between gap-4 md:flex-row'>
-                        <div className='flex min-w-0 flex-col gap-2.5'>
-                            <AppBreadcrumb />
-                            <div className='flex flex-wrap items-center gap-2.5'>
-                                <Button
-                                    icon={<ArrowLeftOutlined />}
-                                    onClick={() => navigate('/assets')}
-                                    size='small'
-                                    className='rounded-lg border-slate-200 text-slate-500 hover:border-slate-300'
-                                >
-                                    Quay lại
-                                </Button>
-                                {/* Status pill — identity, not action */}
+            {/* ── HEADER ── */}
+            <div className='border-b border-slate-200 bg-white'>
+                {/* Status accent bar */}
+                <div className='h-1 w-full' style={{ background: sc.accent }} />
+
+                <div className='px-6 pb-0 pt-5 md:px-8'>
+                    {/* Nav */}
+                    <div className='mb-4 flex items-center gap-2'>
+                        <Button icon={<ArrowLeftOutlined />} size='small' onClick={() => navigate('/assets')} className='rounded-lg border-slate-200 text-slate-500'>
+                            Danh sách máy
+                        </Button>
+                        <span className='text-slate-300'>/</span>
+                        <AppBreadcrumb />
+                    </div>
+
+                    {/* Identity + actions */}
+                    <div className='flex flex-col items-start justify-between gap-4 md:flex-row md:items-start'>
+                        <div className='flex flex-col gap-2'>
+                            {/* Badges */}
+                            <div className='flex flex-wrap items-center gap-2'>
                                 <span
-                                    className='inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-semibold'
-                                    style={{ background: sp.bg, color: sp.text }}
+                                    className='inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-xs font-bold'
+                                    style={{ background: sc.bg, color: sc.text, borderColor: sc.ring }}
                                 >
-                                    <span className='ad-dot h-1.5 w-1.5 rounded-full flex-shrink-0' style={{ background: sp.dot }} />
-                                    {statusMeta[asset.status].label}
+                                    <span className='h-1.5 w-1.5 rounded-full' style={{ background: sc.dot }} />
+                                    {sc.label}
                                 </span>
+                                {openTransfer && (
+                                    <span className='inline-flex items-center gap-1 rounded-full border border-amber-200 bg-amber-50 px-2.5 py-0.5 text-xs font-bold text-amber-700'>
+                                        <SwapOutlined style={{ fontSize: 10 }} /> Đang điều chuyển
+                                    </span>
+                                )}
                             </div>
-                            <h1 className='text-[1.375rem] font-bold leading-tight tracking-tight text-slate-900'>{asset.name}</h1>
+
+                            {/* Name */}
+                            <h1 className='text-2xl font-bold tracking-tight text-slate-900'>{asset.name}</h1>
+
+                            {/* Meta */}
                             <div className='flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-slate-500'>
-                                <code className='rounded bg-blue-50 px-2 py-0.5 font-mono text-xs font-semibold text-blue-700'>{asset.machineCode}</code>
-                                {asset.serial && <span>Serial {asset.serial}</span>}
-                                {(asset.model || asset.type) && <span>{asset.model || asset.type}</span>}
+                                <code className='rounded-md bg-blue-50 px-2 py-0.5 font-mono text-xs font-bold text-blue-700'>{asset.machineCode}</code>
+                                {asset.serial && <span>S/N: <strong className='text-slate-700'>{asset.serial}</strong></span>}
                                 {asset.brand?.name && <span>{asset.brand.name}</span>}
-                                {asset.plant?.name && <span>{asset.plant.name}{asset.area ? ` · ${asset.area}` : ''}</span>}
+                                {asset.plant?.name && (
+                                    <span className='flex items-center gap-1'>
+                                        <EnvironmentOutlined className='text-slate-300' />
+                                        {asset.plant.name}{asset.area ? ` · ${asset.area}` : ''}
+                                    </span>
+                                )}
                             </div>
                         </div>
 
-                        <div className='flex flex-wrap items-center gap-2'>
-                            <Tooltip title={asset.hasOpenTransfer ? 'Thiết bị đang có lệnh điều chuyển chờ xử lý' : ''}>
-                                <Button 
-                                    icon={<SwapOutlined />} 
-                                    onClick={() => !asset.hasOpenTransfer && setIsTransferModalOpen(true)} 
-                                    className='ad-btn h-9 rounded-lg'
-                                    disabled={asset.hasOpenTransfer}
-                                >
+                        {/* Actions */}
+                        <div className='flex flex-shrink-0 flex-wrap items-center gap-2'>
+                            <Tooltip title={asset.hasOpenTransfer ? 'Đang có lệnh điều chuyển chờ xử lý' : ''}>
+                                <Button icon={<SwapOutlined />} disabled={asset.hasOpenTransfer} onClick={() => setIsTransferOpen(true)} className='rounded-lg'>
                                     Điều chuyển
                                 </Button>
                             </Tooltip>
-                            <Button icon={<RollbackOutlined />} onClick={() => navigate(`/borrowings/new?assetId=${asset.id}`)} className='ad-btn h-9 rounded-lg'>Tạo giao dịch</Button>
-                            {canManageAssets && (
-                                <Button icon={<EditOutlined />} type='primary' onClick={() => setIsFormModalOpen(true)} className='ad-btn h-9 rounded-lg bg-blue-600 hover:!bg-blue-700'>Sửa thông tin</Button>
+                            <Button icon={<RollbackOutlined />} onClick={() => navigate(`/borrowings/new?assetId=${asset.id}`)} className='rounded-lg'>
+                                Tạo giao dịch
+                            </Button>
+                            {canManage && (
+                                <Button type='primary' icon={<EditOutlined />} onClick={() => setIsFormOpen(true)} className='rounded-lg bg-blue-600 hover:!bg-blue-700'>
+                                    Chỉnh sửa
+                                </Button>
                             )}
                         </div>
                     </div>
 
-                    {/* Status control — separated from actions */}
-                    {canManageAssets && (
-                        <div className='flex items-center gap-3 rounded-xl border border-slate-100 bg-slate-50 px-4 py-2.5'>
-                            <span className='text-xs font-semibold uppercase tracking-wide text-slate-400'>Trạng thái</span>
+                    {/* Status control */}
+                    {canManage && (
+                        <div className='mt-4 flex flex-wrap items-center gap-3 rounded-xl border border-slate-100 bg-slate-50 px-4 py-2.5'>
+                            <span className='text-xs font-bold uppercase tracking-wider text-slate-400'>Trạng thái</span>
                             <Segmented<AssetStatus>
-                                value={statusValue ?? asset.status}
+                                value={cur}
                                 size='small'
-                                options={Object.entries(statusMeta).map(([value, meta]) => {
-                                    const isSelected = (statusValue ?? asset.status) === value;
-                                    return {
-                                        value: value as AssetStatus,
-                                        label: (
-                                            <div className='flex items-center gap-1.5 px-1'>
-                                                {isSelected && (
-                                                    <span 
-                                                        className='h-1.5 w-1.5 rounded-full shadow-sm' 
-                                                        style={{ background: meta.accent }}
-                                                    />
-                                                )}
-                                                <span 
-                                                    className='transition-colors'
-                                                    style={{ 
-                                                        color: isSelected ? meta.accent : 'inherit',
-                                                        fontWeight: isSelected ? 600 : 500
-                                                    }}
-                                                >
-                                                    {meta.label}
-                                                </span>
-                                            </div>
-                                        )
-                                    };
-                                })}
+                                options={Object.entries(STATUS_CFG).map(([v, cfg]) => ({
+                                    value: v as AssetStatus,
+                                    label: (
+                                        <span className='flex items-center gap-1.5 px-0.5' style={{ color: cur === v ? cfg.text : undefined, fontWeight: cur === v ? 700 : 400 }}>
+                                            {cur === v && <span className='h-1.5 w-1.5 rounded-full' style={{ background: cfg.dot }} />}
+                                            {cfg.label}
+                                        </span>
+                                    ),
+                                }))}
                                 onChange={handleStatusChange}
                             />
                         </div>
                     )}
-                </div>
 
-                {/* Counts strip — subdued, not hero */}
-                <div className='ad-s flex flex-wrap gap-px border-t border-slate-100 bg-slate-100'>
-                    {[
-                        { label: 'Bảo trì', value: maintenances.length },
-                        { label: 'Điều chuyển', value: transfers.length },
-                        { label: 'Giao dịch', value: borrowings.length },
-                        { label: 'Bảo trì gần nhất', value: formatDateTime(asset.lastMaintenanceDate) },
-                        { label: 'Bảo trì kế tiếp', value: formatDateTime(asset.nextMaintenanceDate) },
-                    ].map(({ label, value }) => (
-                        <div key={label} className='ad-stat flex min-w-[110px] flex-1 flex-col gap-0.5 bg-white px-5 py-4'>
-                            <span className='text-[11px] font-medium text-slate-400'>{label}</span>
-                            <span className='text-base font-bold text-slate-800'>{value}</span>
-                        </div>
-                    ))}
-                </div>
-            </section>
-
-            <div className='grid grid-cols-1 items-start gap-6 lg:grid-cols-3' style={{ animationFillMode: 'both' }}>
-                <div className='ad-m flex flex-col gap-6 lg:col-span-2'>
-                    <Card
-                        title={<span className='font-bold text-slate-800'>Thông tin chung</span>}
-                        bordered={false}
-                        className='rounded-2xl border border-slate-200 shadow-sm [&_.ant-card-head]:border-b-slate-100'
-                    >
-                        <Descriptions
-                            column={{ xs: 1, md: 2, xl: 3 }}
-                            layout='vertical'
-                            className='[&_.ant-descriptions-item-content]:font-medium [&_.ant-descriptions-item-content]:text-slate-800 [&_.ant-descriptions-item-label]:font-medium [&_.ant-descriptions-item-label]:text-slate-500'
-                        >
-                            <Descriptions.Item label='Loại máy'>
-                                <Tag color='blue' className='rounded border-blue-200 bg-blue-50 text-blue-700'>
-                                    {asset.type || '-'}
-                                </Tag>
-                            </Descriptions.Item>
-                            <Descriptions.Item label='Model'>{asset.model || asset.type || '-'}</Descriptions.Item>
-                            <Descriptions.Item label='Cơ sở'>{asset.plant?.name || '-'}</Descriptions.Item>
-                            <Descriptions.Item label='Khu vực / xưởng'>{asset.area || '-'}</Descriptions.Item>
-                            <Descriptions.Item label='Ngày mua / nhập'>
-                                {formatDateTime(asset.purchaseDate)}
-                            </Descriptions.Item>
-                            <Descriptions.Item label='Giá trị'>
-                                {asset.purchasePrice ? asset.purchasePrice.toLocaleString('vi-VN') + ' VNĐ' : '-'}
-                            </Descriptions.Item>
-                            <Descriptions.Item label='Bảo trì kế tiếp'>
-                                {formatDateTime(asset.nextMaintenanceDate)}
-                            </Descriptions.Item>
-                            <Descriptions.Item label='Ngày tạo'>{formatDateTime(asset.createdAt)}</Descriptions.Item>
-                            <Descriptions.Item label='Ngày cập nhật'>
-                                {formatDateTime(asset.updatedAt)}
-                            </Descriptions.Item>
-                            <Descriptions.Item label='Trạng thái'>{statusMeta[asset.status].label}</Descriptions.Item>
-                        </Descriptions>
-
-                        <div className='mt-6'>
-                            <Text className='font-bold text-slate-800'>Ghi chú</Text>
-                            <div className='mt-2 min-h-[80px] rounded-xl border border-amber-100 bg-amber-50/50 p-4 text-slate-700'>
-                                {asset.note || <Text type='secondary'>Chưa có ghi chú</Text>}
-                            </div>
-                        </div>
-                    </Card>
-
-                    <Card
-                        title={<span className='font-bold text-slate-800'>Thông số kỹ thuật</span>}
-                        bordered={false}
-                        className='rounded-2xl border border-slate-200 shadow-sm [&_.ant-card-head]:border-b-slate-100'
-                    >
-                        {asset.specifications && Object.keys(asset.specifications).length > 0 ? (
-                            <Descriptions
-                                column={{ xs: 1, md: 2 }}
-                                bordered
-                                size='small'
-                                className='[&_.ant-descriptions-item-content]:font-medium [&_.ant-descriptions-item-label]:bg-slate-50 [&_.ant-descriptions-item-label]:font-medium [&_.ant-descriptions-view]:border-slate-200'
-                            >
-                                {Object.entries(asset.specifications).map(([key, value]) => (
-                                    <Descriptions.Item key={key} label={key}>
-                                        {String(value)}
-                                    </Descriptions.Item>
-                                ))}
-                            </Descriptions>
-                        ) : (
-                            <Empty description='Chưa có thông số kỹ thuật' />
-                        )}
-                    </Card>
-
-                    <TransferHistorySection
-                        transfers={transfers}
-                        loading={
-                            createTransferMutation.isPending ||
-                            approveTransferMutation.isPending ||
-                            completeTransferMutation.isPending
-                        }
-                        approvingTransferId={approvingTransferId}
-                        completingTransferId={completingTransferId}
-                        onCreate={() => setIsTransferModalOpen(true)}
-                        onApprove={canManageAssets ? handleApproveTransfer : undefined}
-                        onComplete={canManageAssets ? handleCompleteTransfer : undefined}
-                    />
-
-                    <Card
-                        title={<span className='font-bold text-slate-800'>Lịch sử hoạt động</span>}
-                        bordered={false}
-                        className='rounded-2xl border border-slate-200 shadow-sm [&_.ant-card-head]:border-b-slate-100'
-                    >
-                        {combinedHistory.length > 0 ? (
-                            <Timeline
-                                items={combinedHistory.map((item) => ({
-                                    key: item.key,
-                                    color: item.color,
-                                    children: (
-                                        <div className='pb-4'>
-                                            <div className='font-bold text-slate-800'>{formatDateTime(item.date)}</div>
-                                            <div className='mt-1 font-medium text-slate-700'>{item.title}</div>
-                                            <div className='mt-1 leading-relaxed text-slate-500'>
-                                                {item.description}
-                                            </div>
-                                            {item.meta && (
-                                                <div className='mt-2 inline-block rounded bg-slate-50 px-2 py-1 text-sm font-medium text-slate-400'>
-                                                    {item.meta}
-                                                </div>
-                                            )}
-                                        </div>
-                                    ),
-                                }))}
-                                className='mt-4'
-                            />
-                        ) : (
-                            <Empty description='Chưa có lịch sử hoạt động' />
-                        )}
-                    </Card>
-                </div>
-
-                <div className='ad-r flex flex-col gap-4'>
-                    {/* Location — compact panel */}
-                    <div className='rounded-xl border border-slate-200 bg-white p-5'>
-                        <p className='mb-3 text-[11px] font-bold uppercase tracking-[0.16em] text-slate-400'>Vị trí hiện tại</p>
-                        <div className='grid grid-cols-2 gap-3'>
-                            {[['Cơ sở', asset.plant?.name], ['Mã cơ sở', asset.plant?.code], ['Khu vực', asset.area], ['Serial', asset.serial]].map(([lbl, val]) => (
-                                <div key={lbl}>
-                                    <div className='text-[11px] text-slate-400'>{lbl}</div>
-                                    <div className='mt-0.5 text-sm font-semibold text-slate-800'>{val || '—'}</div>
-                                </div>
-                            ))}
-                        </div>
-                    </div>
-
-                    {/* Maintenance list */}
-                    <div className='overflow-hidden rounded-xl border border-slate-200 bg-white'>
-                        <div className='border-b border-slate-100 px-5 py-3'>
-                            <p className='text-[11px] font-bold uppercase tracking-[0.16em] text-slate-400'>Bảo trì gần đây</p>
-                        </div>
-                        {maintenances.length ? (
-                            <div className='divide-y divide-slate-100'>
-                                {maintenances.slice(0, 4).map((item) => (
-                                    <div key={item.id} className='ad-row px-5 py-3'>
-                                        <div className='text-xs font-semibold text-slate-400'>{formatDateTime(item.startDate)}</div>
-                                        <div className='mt-0.5 text-sm font-medium text-slate-800'>{item.description || item.type}</div>
-                                        {item.technician && <div className='mt-0.5 text-xs text-slate-400'>{item.technician}</div>}
-                                    </div>
-                                ))}
-                            </div>
-                        ) : <div className='px-5 py-5'><Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description='Chưa có dữ liệu' /></div>}
-                    </div>
-
-                    {/* Transfers list */}
-                    <div className='overflow-hidden rounded-xl border border-slate-200 bg-white'>
-                        <div className='border-b border-slate-100 px-5 py-3'>
-                            <p className='text-[11px] font-bold uppercase tracking-[0.16em] text-slate-400'>Điều chuyển gần đây</p>
-                        </div>
-                        {transfers.length ? (
-                            <div className='divide-y divide-slate-100'>
-                                {transfers.slice(0, 4).map((item) => (
-                                    <div key={item.id} className='ad-row px-5 py-3'>
-                                        <div className='text-xs font-semibold text-slate-400'>{formatDateTime(item.transferDate)}</div>
-                                        <div className='mt-0.5 text-sm font-medium text-slate-800'>{item.fromPlant?.name || '?'} → {item.toPlant?.name || '?'}</div>
-                                        {item.reason && <div className='mt-0.5 text-xs text-slate-400'>{item.reason}</div>}
-                                    </div>
-                                ))}
-                            </div>
-                        ) : <div className='px-5 py-5'><Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description='Chưa có dữ liệu' /></div>}
-                    </div>
-
-                    {/* Borrowings list */}
-                    <div className='overflow-hidden rounded-xl border border-slate-200 bg-white'>
-                        <div className='flex items-center justify-between border-b border-slate-100 px-5 py-3'>
-                            <p className='text-[11px] font-bold uppercase tracking-[0.16em] text-slate-400'>Giao dịch gần đây</p>
-                            <button onClick={() => navigate(`/borrowings/new?assetId=${asset.id}`)} className='text-xs font-semibold text-blue-600 transition-colors hover:text-blue-700'>+ Tạo</button>
-                        </div>
-                        {borrowings.length ? (
-                            <div className='divide-y divide-slate-100'>
-                                {borrowings.slice(0, 4).map((item) => (
-                                    <div key={item.id} className='ad-row px-5 py-3'>
-                                        <div className='flex items-center justify-between'>
-                                            <span className='text-xs font-semibold text-slate-400'>{formatDateTime(item.borrowTime)}</span>
-                                            <div className='flex gap-1'>
-                                                <TransactionTypeBadge type={item.type} />
-                                                <TransactionStatusBadge status={item.status} />
-                                            </div>
-                                        </div>
-                                        <div className='mt-0.5 text-sm font-medium text-slate-800'>{item.borrowerName || item.partnerName || '—'}</div>
-                                        <button onClick={() => navigate(`/borrowings/${item.id}`)} className='mt-1 text-xs font-medium text-blue-600 transition-colors hover:text-blue-700'>Xem chi tiết →</button>
-                                    </div>
-                                ))}
-                            </div>
-                        ) : <div className='px-5 py-5'><Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description='Chưa có dữ liệu' /></div>}
+                    {/* Tabs */}
+                    <div className='mt-4'>
+                        <Tabs
+                            activeKey={tab}
+                            onChange={setTab}
+                            size='middle'
+                            className='[&_.ant-tabs-nav]:!mb-0 [&_.ant-tabs-tab]:!py-3 [&_.ant-tabs-tab]:!px-1 [&_.ant-tabs-tab]:font-medium'
+                            items={[
+                                { key: 'overview', label: 'Tổng quan' },
+                                {
+                                    key: 'maintenance',
+                                    label: <span className='flex items-center gap-1.5'>Bảo trì {maintenances.length > 0 && <span className='rounded-full bg-slate-100 px-1.5 py-0.5 text-[10px] font-bold text-slate-500'>{maintenances.length}</span>}</span>,
+                                },
+                                {
+                                    key: 'transfer',
+                                    label: <span className='flex items-center gap-1.5'>Điều chuyển {transfers.length > 0 && <span className='rounded-full bg-slate-100 px-1.5 py-0.5 text-[10px] font-bold text-slate-500'>{transfers.length}</span>}</span>,
+                                },
+                                {
+                                    key: 'borrowing',
+                                    label: <span className='flex items-center gap-1.5'>Giao dịch {borrowings.length > 0 && <span className='rounded-full bg-slate-100 px-1.5 py-0.5 text-[10px] font-bold text-slate-500'>{borrowings.length}</span>}</span>,
+                                },
+                                { key: 'history', label: <span className='flex items-center gap-1.5'><HistoryOutlined />Lịch sử</span> },
+                            ]}
+                        />
                     </div>
                 </div>
             </div>
 
-            {isFormModalOpen ? (
-                <LazyBoundary mode='overlay'>
-                    <AssetFormModal
-                        open={isFormModalOpen}
-                        onClose={() => setIsFormModalOpen(false)}
-                        initialValues={asset}
-                        onSubmit={handleUpdateAsset}
-                        plants={plants}
-                        brands={brands}
-                    />
-                </LazyBoundary>
-            ) : null}
 
-            {isTransferModalOpen ? (
-                <LazyBoundary mode='overlay'>
-                    <TransferModal
-                        open={isTransferModalOpen}
-                        asset={asset}
-                        plants={plants}
-                        submitting={createTransferMutation.isPending}
-                        onClose={() => setIsTransferModalOpen(false)}
-                        onSubmit={handleCreateTransfer}
-                    />
-                </LazyBoundary>
-            ) : null}
+            {/* ── TAB CONTENT ── */}
+            <div className='min-h-[60vh] bg-slate-50 p-6 md:p-8'>
 
-            {handoverTransfer ? (
-                <LazyBoundary mode='overlay'>
-                    <HandoverModal
-                        open={Boolean(handoverTransfer)}
-                        assetName={handoverTransfer.asset?.name || asset.name}
-                        submitting={completeTransferMutation.isPending}
-                        onClose={() => setHandoverTransfer(null)}
-                        onSubmit={handleHandoverSubmit}
+                {/* OVERVIEW */}
+                {tab === 'overview' && (
+                    <div className='grid grid-cols-1 gap-6 lg:grid-cols-3'>
+
+                        {/* Main */}
+                        <div className='flex flex-col gap-6 lg:col-span-2'>
+                            {/* Core info */}
+                            <div className='overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm'>
+                                <div className='border-b border-slate-100 px-6 py-4'>
+                                    <h3 className='font-bold text-slate-800'>Thông tin thiết bị</h3>
+                                </div>
+                                <div className='p-6'>
+                                    <div className='grid grid-cols-2 gap-x-8 gap-y-5 sm:grid-cols-3'>
+                                        <Field label='Loại máy'>{asset.type ? <Tag className='rounded border-blue-100 bg-blue-50 font-medium text-blue-700'>{asset.type}</Tag> : '—'}</Field>
+                                        <Field label='Model'>{asset.model || asset.type}</Field>
+                                        <Field label='Thương hiệu'>{asset.brand?.name}</Field>
+                                        <Field label='Cơ sở'>{asset.plant?.name}</Field>
+                                        <Field label='Khu vực'>{asset.area}</Field>
+                                        <Field label='Serial'>{asset.serial ? <code className='font-mono text-sm font-bold text-slate-700'>{asset.serial}</code> : undefined}</Field>
+                                        <Field label='Ngày mua'>{fmt(asset.purchaseDate)}</Field>
+                                        <Field label='Giá trị'><strong className='text-slate-800'>{fmtMoney(asset.purchasePrice)}</strong></Field>
+                                        <Field label='Nhập hệ thống'>{fmt(asset.createdAt)}</Field>
+                                    </div>
+                                    {asset.note && (
+                                        <div className='mt-6 rounded-xl border border-amber-100 bg-amber-50/70 p-4'>
+                                            <div className='mb-1.5 text-xs font-bold uppercase tracking-wider text-amber-600'>Ghi chú</div>
+                                            <p className='text-sm leading-relaxed text-slate-700'>{asset.note}</p>
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+
+                            {/* Specs */}
+                            {asset.specifications && Object.keys(asset.specifications).length > 0 && (
+                                <div className='overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm'>
+                                    <div className='border-b border-slate-100 px-6 py-4'>
+                                        <h3 className='font-bold text-slate-800'>Thông số kỹ thuật</h3>
+                                    </div>
+                                    <div className='p-6'>
+                                        <div className='grid grid-cols-2 gap-3 sm:grid-cols-3'>
+                                            {Object.entries(asset.specifications).map(([k, v]) => (
+                                                <div key={k} className='rounded-xl border border-slate-100 bg-slate-50 px-4 py-3'>
+                                                    <div className='text-[11px] font-semibold uppercase tracking-wider text-slate-400'>{k}</div>
+                                                    <div className='mt-1 text-sm font-bold text-slate-800'>{String(v)}</div>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+
+                        {/* Sidebar sticky */}
+                        <div className='flex flex-col gap-4 lg:sticky lg:top-4 lg:self-start'>
+                            {/* Location */}
+                            <SidePanel icon={<EnvironmentOutlined />} title='Vị trí hiện tại'>
+                                <div className='flex flex-col gap-3 p-4'>
+                                    <div className='rounded-lg border border-slate-100 bg-slate-50 p-3'>
+                                        <div className='text-[11px] font-semibold uppercase tracking-wider text-slate-400'>Cơ sở</div>
+                                        <div className='mt-0.5 font-bold text-slate-800'>{asset.plant?.name || '—'}</div>
+                                        {asset.plant?.code && <div className='text-xs text-slate-400'>{asset.plant.code}</div>}
+                                        {asset.plant?.address && <div className='mt-1 text-xs text-slate-500'>{asset.plant.address}</div>}
+                                    </div>
+                                    {asset.area && (
+                                        <div className='rounded-lg border border-slate-100 bg-slate-50 p-3'>
+                                            <div className='text-[11px] font-semibold uppercase tracking-wider text-slate-400'>Khu vực</div>
+                                            <div className='mt-0.5 font-bold text-slate-800'>{asset.area}</div>
+                                        </div>
+                                    )}
+                                </div>
+                            </SidePanel>
+
+                            {/* Maintenance schedule */}
+                            <SidePanel icon={<CalendarOutlined />} title='Lịch bảo trì'>
+                                <div className='divide-y divide-slate-50'>
+                                    {[
+                                        { label: 'Gần nhất', value: fmt(asset.lastMaintenanceDate), warn: false },
+                                        { label: 'Kế tiếp', value: fmt(asset.nextMaintenanceDate), warn: !!asset.nextMaintenanceDate && dayjs(asset.nextMaintenanceDate).isBefore(dayjs()) },
+                                        { label: 'Tổng lần bảo trì', value: String(maintenances.length), warn: false },
+                                    ].map(({ label, value, warn }) => (
+                                        <div key={label} className='flex items-center justify-between px-4 py-3'>
+                                            <span className='text-xs text-slate-400'>{label}</span>
+                                            <span className={`text-sm font-semibold ${warn ? 'text-rose-600' : 'text-slate-700'}`}>{value}</span>
+                                        </div>
+                                    ))}
+                                </div>
+                            </SidePanel>
+
+                            {/* Finance */}
+                            {(asset.purchaseDate || asset.purchasePrice) && (
+                                <SidePanel icon={<WalletOutlined />} title='Tài chính'>
+                                    <div className='divide-y divide-slate-50'>
+                                        {asset.purchaseDate && (
+                                            <div className='flex items-center justify-between px-4 py-3'>
+                                                <span className='text-xs text-slate-400'>Ngày mua</span>
+                                                <span className='text-sm font-semibold text-slate-700'>{fmt(asset.purchaseDate)}</span>
+                                            </div>
+                                        )}
+                                        {asset.purchasePrice && (
+                                            <div className='px-4 py-3'>
+                                                <div className='text-xs text-slate-400'>Giá trị</div>
+                                                <div className='mt-0.5 text-lg font-bold text-slate-800'>{fmtMoney(asset.purchasePrice)}</div>
+                                            </div>
+                                        )}
+                                    </div>
+                                </SidePanel>
+                            )}
+
+                            {/* Quick actions */}
+                            <SidePanel icon={<ToolOutlined />} title='Thao tác nhanh'>
+                                <div className='flex flex-col gap-2 p-4'>
+                                    <Tooltip title={asset.hasOpenTransfer ? 'Đang có lệnh điều chuyển' : ''}>
+                                        <Button block icon={<SwapOutlined />} disabled={asset.hasOpenTransfer} onClick={() => setIsTransferOpen(true)} className='rounded-lg justify-start'>
+                                            Tạo lệnh điều chuyển
+                                        </Button>
+                                    </Tooltip>
+                                    <Button block icon={<RollbackOutlined />} onClick={() => navigate(`/borrowings/new?assetId=${asset.id}`)} className='rounded-lg justify-start'>
+                                        Tạo giao dịch mượn/thuê
+                                    </Button>
+                                    {canManage && (
+                                        <Button block type='primary' icon={<EditOutlined />} onClick={() => setIsFormOpen(true)} className='rounded-lg bg-blue-600 hover:!bg-blue-700 justify-start'>
+                                            Chỉnh sửa thông tin
+                                        </Button>
+                                    )}
+                                </div>
+                            </SidePanel>
+                        </div>
+                    </div>
+                )}
+
+
+                {/* MAINTENANCE */}
+                {tab === 'maintenance' && (
+                    <div className='overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm'>
+                        <div className='flex items-center justify-between border-b border-slate-100 px-6 py-4'>
+                            <h3 className='font-bold text-slate-800'>Lịch sử bảo trì</h3>
+                            <span className='text-sm text-slate-400'>{maintenances.length} lần</span>
+                        </div>
+                        {maintenances.length ? (
+                            <div className='divide-y divide-slate-50'>
+                                {maintenances.map((item: Maintenance) => (
+                                    <div key={item.id} className='flex items-start justify-between gap-4 px-6 py-4 transition-colors hover:bg-slate-50'>
+                                        <div className='flex flex-col gap-1'>
+                                            <div className='flex items-center gap-2'>
+                                                <span className='text-sm font-bold text-slate-800'>{item.description || item.type}</span>
+                                                <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold uppercase ${MAINT_CLS[item.status || 'pending'] || 'bg-slate-100 text-slate-500'}`}>
+                                                    {MAINT_LABEL[item.status || 'pending'] || item.status}
+                                                </span>
+                                            </div>
+                                            {item.technician && <span className='text-xs text-slate-400'>KTV: {item.technician}</span>}
+                                            {item.cost && <span className='text-xs font-semibold text-slate-600'>{fmtMoney(item.cost)}</span>}
+                                        </div>
+                                        <div className='flex-shrink-0 text-right'>
+                                            <div className='text-xs font-semibold text-slate-500'>{fmt(item.startDate)}</div>
+                                            {item.endDate && <div className='text-xs text-slate-400'>→ {fmt(item.endDate)}</div>}
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        ) : <div className='py-16'><Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description='Chưa có lịch sử bảo trì' /></div>}
+                    </div>
+                )}
+
+                {/* TRANSFER */}
+                {tab === 'transfer' && (
+                    <TransferHistorySection
+                        transfers={transfers}
+                        loading={createTransferMut.isPending || approveTransferMut.isPending || completeTransferMut.isPending}
+                        approvingTransferId={approvingId}
+                        completingTransferId={completingId}
+                        onCreate={() => setIsTransferOpen(true)}
+                        onApprove={canManage ? handleApprove : undefined}
+                        onComplete={canManage ? handleComplete : undefined}
                     />
-                </LazyBoundary>
-            ) : null}
+                )}
+
+                {/* BORROWING */}
+                {tab === 'borrowing' && (
+                    <div className='overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm'>
+                        <div className='flex items-center justify-between border-b border-slate-100 px-6 py-4'>
+                            <h3 className='font-bold text-slate-800'>Lịch sử giao dịch</h3>
+                            <Button size='small' icon={<RollbackOutlined />} onClick={() => navigate(`/borrowings/new?assetId=${asset.id}`)} className='rounded-lg'>
+                                Tạo giao dịch
+                            </Button>
+                        </div>
+                        {borrowings.length ? (
+                            <div className='divide-y divide-slate-50'>
+                                {borrowings.map((item: Borrowing) => (
+                                    <div key={item.id} className='flex cursor-pointer items-start justify-between gap-4 px-6 py-4 transition-colors hover:bg-slate-50' onClick={() => navigate(`/borrowings/${item.id}`)}>
+                                        <div className='flex flex-col gap-1'>
+                                            <div className='flex items-center gap-2'>
+                                                <span className='text-sm font-bold text-slate-800'>{item.borrowerName || item.partnerName || '—'}</span>
+                                                <TransactionTypeBadge type={item.type} />
+                                                <TransactionStatusBadge status={item.status} />
+                                            </div>
+                                            {item.purpose && <span className='text-xs text-slate-400'>{item.purpose}</span>}
+                                        </div>
+                                        <div className='flex-shrink-0 text-right'>
+                                            <div className='text-xs font-semibold text-slate-500'>{fmt(item.borrowTime)}</div>
+                                            {item.returnTime && <div className='text-xs text-slate-400'>→ {fmt(item.returnTime)}</div>}
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        ) : <div className='py-16'><Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description='Chưa có giao dịch nào' /></div>}
+                    </div>
+                )}
+
+                {/* HISTORY */}
+                {tab === 'history' && (
+                    <div className='overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm'>
+                        <div className='border-b border-slate-100 px-6 py-4'>
+                            <h3 className='font-bold text-slate-800'>Lịch sử hoạt động</h3>
+                        </div>
+                        <div className='p-6'>
+                            {history.length > 0 ? (
+                                <Timeline items={history.map(item => ({
+                                    key: item.key, color: item.color,
+                                    children: (
+                                        <div className='pb-3'>
+                                            <div className='text-xs font-semibold text-slate-400'>{fmt(item.date)}</div>
+                                            <div className='mt-0.5 text-sm font-bold text-slate-800'>{item.title}</div>
+                                            {item.desc && <div className='mt-0.5 text-sm text-slate-500'>{item.desc}</div>}
+                                            {item.meta && <div className='mt-1 inline-block rounded-md bg-slate-50 px-2 py-1 text-xs text-slate-400'>{item.meta}</div>}
+                                        </div>
+                                    ),
+                                }))} />
+                            ) : <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description='Chưa có lịch sử' />}
+                        </div>
+                    </div>
+                )}
+            </div>
+
+            {/* ── MODALS ── */}
+            {isFormOpen && <LazyBoundary mode='overlay'><AssetFormModal open onClose={() => setIsFormOpen(false)} initialValues={asset} onSubmit={handleUpdate} plants={plants} brands={brands} /></LazyBoundary>}
+            {isTransferOpen && <LazyBoundary mode='overlay'><TransferModal open asset={asset} plants={plants} submitting={createTransferMut.isPending} onClose={() => setIsTransferOpen(false)} onSubmit={handleCreateTransfer} /></LazyBoundary>}
+            {handoverTransfer && <LazyBoundary mode='overlay'><HandoverModal open assetName={handoverTransfer.asset?.name || asset.name} submitting={completeTransferMut.isPending} onClose={() => setHandoverTransfer(null)} onSubmit={handleHandover} /></LazyBoundary>}
         </div>
     );
 };
