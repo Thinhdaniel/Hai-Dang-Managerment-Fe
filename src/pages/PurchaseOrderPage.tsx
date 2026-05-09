@@ -32,6 +32,7 @@ import {
     FileExcelOutlined,
     InboxOutlined,
     PlusOutlined,
+    RollbackOutlined,
     ShoppingOutlined,
 } from '@ant-design/icons';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -43,6 +44,7 @@ import {
     materialSupplierService,
     purchaseOrderService,
     purchaseRequestService,
+    returnRecordService,
     type PurchaseOrder,
     type PurchaseOrderItem,
     type PurchaseOrderItemUpdate,
@@ -218,6 +220,49 @@ const DetailDrawer: React.FC<DrawerProps> = ({
     const queryClient = useQueryClient();
     const [editedItems, setEditedItems] = useState<Record<number, Partial<PurchaseOrderItemUpdate>>>({});
     const [hasEdit, setHasEdit] = useState(false);
+    const [returnOpen, setReturnOpen] = useState(false);
+    const [returnNote, setReturnNote] = useState('');
+    const [returnItems, setReturnItems] = useState<Array<{
+        materialId?: string; materialName: string; unit: string;
+        quantityReturned: number; unitPrice: number; vatRate: number; reason: string;
+    }>>([]);
+
+    const returnMut = useMutation({
+        mutationFn: returnRecordService.create,
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['purchase-orders'] });
+            queryClient.invalidateQueries({ queryKey: ['returns', record?.id] });
+            message.success('Tạo phiếu trả hàng thành công');
+            setReturnOpen(false);
+            setReturnItems([]);
+            setReturnNote('');
+        },
+        onError: (e: any) => message.error(e?.message || 'Không thể tạo phiếu trả hàng'),
+    });
+
+    // Lấy danh sách phiếu trả của PO này
+    const { data: returnRecords = [] } = useQuery({
+        queryKey: ['returns', record?.id],
+        queryFn: () => returnRecordService.getByPurchaseOrder(record!.id),
+        enabled: !!record?.id && record?.status === 'received',
+    });
+
+    // Map materialId → { totalReturned, reasons }
+    const returnedMap = useMemo(() => {
+        const map = new Map<string, { qty: number; reasons: string[] }>();
+        (returnRecords as any[]).forEach((rr: any) => {
+            (rr.items ?? []).forEach((item: any) => {
+                const key = String(item.materialId ?? item.materialName);
+                const cur = map.get(key) ?? { qty: 0, reasons: [] };
+                cur.qty += item.quantityReturned ?? 0;
+                if (item.reason) cur.reasons.push(item.reason);
+                map.set(key, cur);
+            });
+        });
+        return map;
+    }, [returnRecords]);
+
+    const totalRefunded = (returnRecords as any[]).reduce((s: number, r: any) => s + (r.totalRefundWithVat ?? 0), 0);
 
     const { data: suppliersResp } = useQuery({
         queryKey: ['material-suppliers', 'all'],
@@ -291,10 +336,23 @@ const DetailDrawer: React.FC<DrawerProps> = ({
 
     const itemCols: TableColumnsType<any> = [
         { title: 'STT', key: 'stt', width: 46, align: 'center', render: (_: any, __: any, i: number) => i + 1 },
-        { title: 'Tên vật tư', key: 'name', width: 180, render: (_: any, r: any) => (
-            <div><div style={{ fontWeight: 600 }}>{r.materialName}</div>
-            <div style={{ fontSize: 11, color: '#888' }}>{r.purchaseRequestCode}</div></div>
-        ) },
+        { title: 'Tên vật tư', key: 'name', width: 180, render: (_: any, r: any) => {
+            const key = String(r.materialId ?? r.materialName);
+            const ret = returnedMap.get(key);
+            return (
+                <div>
+                    <div style={{ fontWeight: 600 }}>{r.materialName}</div>
+                    <div style={{ fontSize: 11, color: '#888' }}>{r.purchaseRequestCode}</div>
+                    {ret && (
+                        <Tooltip title={ret.reasons.length ? `Lý do: ${ret.reasons.join('; ')}` : 'Đã trả hàng'}>
+                            <Tag color="red" style={{ fontSize: 10, marginTop: 2, cursor: 'help' }}>
+                                <RollbackOutlined /> Trả {fmtNum(ret.qty)} {r.unit}
+                            </Tag>
+                        </Tooltip>
+                    )}
+                </div>
+            );
+        } },
         { title: 'Cơ sở', dataIndex: 'plantName', key: 'plant', width: 100 },
         { title: 'Người ĐX', dataIndex: 'proposedBy', key: 'proposedBy', width: 110 },
         { title: 'Mục đích', dataIndex: 'purpose', key: 'purpose', width: 140 },
@@ -337,6 +395,7 @@ const DetailDrawer: React.FC<DrawerProps> = ({
     const meta = record ? STATUS_META[record.status] : null;
 
     return (
+        <>
         <Drawer open={Boolean(record)} onClose={onClose} width={1100} placement="right" destroyOnHidden
             title={record ? (
                 <Space>
@@ -379,6 +438,12 @@ const DetailDrawer: React.FC<DrawerProps> = ({
                             Xuất Excel
                         </Button>
                     )}
+                    {record.status === 'received' && isCS1Manager && (
+                        <Button icon={<RollbackOutlined />} danger
+                            onClick={() => setReturnOpen(true)}>
+                            Trả hàng NCC
+                        </Button>
+                    )}
                 </Space>
             ) : undefined}
         >
@@ -402,10 +467,21 @@ const DetailDrawer: React.FC<DrawerProps> = ({
                         <Descriptions.Item label="Tổng cộng">
                             <Text strong style={{ color: '#1A3A5C', fontSize: 15 }}>{fmtVND(record.totalWithVat)}</Text>
                         </Descriptions.Item>
+                        {totalRefunded > 0 && (
+                            <Descriptions.Item label="Đã hoàn trả" span={3}>
+                                <Space>
+                                    <Tag color="red" icon={<RollbackOutlined />}>-{fmtVND(totalRefunded)}</Tag>
+                                    <Text strong style={{ color: '#16a34a' }}>
+                                        Thực chi: {fmtVND(Math.max(0, (record.totalWithVat ?? 0) - totalRefunded))}
+                                    </Text>
+                                </Space>
+                            </Descriptions.Item>
+                        )}
                     </Descriptions>
 
                     <Table dataSource={displayItems} columns={itemCols} rowKey="_idx"
                         pagination={false} size="small" scroll={{ x: 'max-content' }}
+                        rowClassName={(r) => returnedMap.has(String(r.materialId ?? r.materialName)) ? 'bg-red-50/40' : ''}
                         summary={() => (
                             <Table.Summary.Row>
                                 <Table.Summary.Cell index={0} colSpan={9}><Text strong>Tổng cộng</Text></Table.Summary.Cell>
@@ -420,6 +496,133 @@ const DetailDrawer: React.FC<DrawerProps> = ({
                 </div>
             )}
         </Drawer>
+
+        {/* Return Modal */}
+        <Modal
+            open={returnOpen}
+            onCancel={() => { setReturnOpen(false); setReturnItems([]); setReturnNote(''); }}
+            title={<span className="flex items-center gap-2 text-red-600"><RollbackOutlined /> Tạo phiếu trả hàng NCC</span>}
+            width={860}
+            okText="Xác nhận trả hàng"
+            okButtonProps={{ danger: true, loading: returnMut.isPending, disabled: !returnItems.length }}
+            onOk={() => {
+                if (!record) return;
+                returnMut.mutate({
+                    purchaseOrderId: record.id,
+                    items: returnItems.map((i) => ({
+                        materialId: i.materialId,
+                        materialName: i.materialName,
+                        unit: i.unit,
+                        quantityReturned: i.quantityReturned,
+                        unitPrice: i.unitPrice,
+                        vatRate: i.vatRate,
+                        reason: i.reason || undefined,
+                    })),
+                    note: returnNote || undefined,
+                });
+            }}
+            destroyOnHidden
+        >
+            <div className="flex flex-col gap-4 py-2">
+                {/* Pre-fill từ PO items */}
+                {returnItems.length === 0 && (
+                    <div className="rounded-lg border border-blue-100 bg-blue-50 p-3 text-sm text-blue-700">
+                        Chọn mặt hàng cần trả từ đơn hàng <strong>{record?.orderCode}</strong>:
+                        <div className="mt-2 flex flex-wrap gap-2">
+                            {(record?.items ?? []).map((item, idx) => (
+                                <Button key={idx} size="small"
+                                    onClick={() => setReturnItems((p) => [...p, {
+                                        materialId: item.materialId,
+                                        materialName: item.materialName || '',
+                                        unit: item.unit || '',
+                                        quantityReturned: item.quantityOrdered ?? item.quantityRequested ?? 1,
+                                        unitPrice: item.unitPrice ?? 0,
+                                        vatRate: item.vatRate ?? 0,
+                                        reason: '',
+                                    }])}>
+                                    + {item.materialName}{item.supplierName ? ` (${item.supplierName})` : ''}
+                                </Button>
+                            ))}
+                        </div>
+                    </div>
+                )}
+
+                {/* Items table */}
+                {returnItems.length > 0 && (
+                    <div className="overflow-x-auto rounded-xl border border-slate-200">
+                        <table className="w-full text-sm">
+                            <thead className="bg-slate-50">
+                                <tr>
+                                    {['Tên vật tư', 'ĐVT', 'SL trả', 'Đơn giá', 'VAT%', 'Hoàn tiền', 'Lý do', ''].map((h) => (
+                                        <th key={h} className="px-3 py-2 text-left text-xs font-semibold text-slate-500">{h}</th>
+                                    ))}
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {returnItems.map((item, idx) => {
+                                    const refund = Number(((item.quantityReturned * item.unitPrice) * (1 + item.vatRate / 100)).toFixed(0));
+                                    return (
+                                        <tr key={idx} className="border-t border-slate-100">
+                                            <td className="px-3 py-2 font-medium">{item.materialName}</td>
+                                            <td className="px-3 py-2">{item.unit}</td>
+                                            <td className="px-3 py-2">
+                                                <InputNumber min={1} size="small" style={{ width: 80 }}
+                                                    value={item.quantityReturned}
+                                                    onChange={(v) => setReturnItems((p) => p.map((r, i) => i === idx ? { ...r, quantityReturned: v ?? 1 } : r))} />
+                                            </td>
+                                            <td className="px-3 py-2">
+                                                <InputNumber min={0} size="small" style={{ width: 100 }}
+                                                    value={item.unitPrice}
+                                                    formatter={(v) => `${v ?? ''}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')}
+                                                    onChange={(v) => setReturnItems((p) => p.map((r, i) => i === idx ? { ...r, unitPrice: v ?? 0 } : r))} />
+                                            </td>
+                                            <td className="px-3 py-2">
+                                                <InputNumber min={0} max={100} size="small" style={{ width: 70 }}
+                                                    value={item.vatRate}
+                                                    onChange={(v) => setReturnItems((p) => p.map((r, i) => i === idx ? { ...r, vatRate: v ?? 0 } : r))} />
+                                            </td>
+                                            <td className="px-3 py-2 font-semibold text-green-700">
+                                                {fmtVND(refund)}
+                                            </td>
+                                            <td className="px-3 py-2">
+                                                <Input size="small" placeholder="Lý do..." style={{ width: 140 }}
+                                                    value={item.reason}
+                                                    onChange={(e) => setReturnItems((p) => p.map((r, i) => i === idx ? { ...r, reason: e.target.value } : r))} />
+                                            </td>
+                                            <td className="px-3 py-2">
+                                                <Button type="text" danger size="small" icon={<DeleteOutlined />}
+                                                    onClick={() => setReturnItems((p) => p.filter((_, i) => i !== idx))} />
+                                            </td>
+                                        </tr>
+                                    );
+                                })}
+                            </tbody>
+                            <tfoot>
+                                <tr className="border-t-2 border-slate-200 bg-slate-50 font-semibold">
+                                    <td colSpan={5} className="px-3 py-2 text-right text-slate-600">Tổng hoàn tiền:</td>
+                                    <td className="px-3 py-2 text-green-700">
+                                        {fmtVND(returnItems.reduce((s, i) => s + i.quantityReturned * i.unitPrice * (1 + i.vatRate / 100), 0))}
+                                    </td>
+                                    <td colSpan={2} />
+                                </tr>
+                            </tfoot>
+                        </table>
+                    </div>
+                )}
+
+                {returnItems.length > 0 && (
+                    <div className="flex items-center gap-3">
+                        <Button size="small" icon={<PlusOutlined />}
+                            onClick={() => setReturnItems((p) => [...p, { materialName: '', unit: '', quantityReturned: 1, unitPrice: 0, vatRate: 0, reason: '' }])}>
+                            Thêm dòng
+                        </Button>
+                        <Input placeholder="Ghi chú phiếu trả hàng..." value={returnNote}
+                            onChange={(e) => setReturnNote(e.target.value)} className="flex-1" />
+                    </div>
+                )}
+            </div>
+        </Modal>
+        </>
     );
 };
 

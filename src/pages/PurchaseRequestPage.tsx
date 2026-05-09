@@ -243,6 +243,7 @@ const ModalForm: React.FC<ModalFormProps> = ({ open, initial, plants, mainPlantI
             unit: r.unit,
             proposedBy: r.proposedBy,
             purpose: r.purpose,
+            plantId: r.plantId || undefined,
             quantityRequested: r.quantityRequested,
             quantityOrdered: r.quantityOrdered || undefined,
             unitPrice: r.unitPrice || undefined,

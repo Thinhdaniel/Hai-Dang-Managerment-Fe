@@ -311,7 +311,7 @@ function CostTrendTab({ data, loading }: { data: MaterialCostByPeriodPoint[]; lo
                     <XAxis dataKey="period" tick={{ fontSize: 12 }} />
                     <YAxis tickFormatter={fmtShort} tick={{ fontSize: 12 }} width={60} />
                     <Tooltip
-                        formatter={(v: number) => [fmtCurrency(v), 'Chi phí']}
+                        formatter={(v: any) => [fmtCurrency(Number(v)), 'Chi phí']}
                         labelStyle={{ fontWeight: 600 }}
                     />
                     <Legend />
@@ -351,7 +351,7 @@ function TopMaterialsTab({ data, loading }: { data: TopConsumedMaterial[]; loadi
                         />
                         <YAxis tick={{ fontSize: 12 }} />
                         <Tooltip
-                            formatter={(v: number, _: string, entry: any) => [
+                            formatter={(v: any, _: any, entry: any) => [
                                 `${v} ${entry.payload.unit || ''}`,
                                 'Số lượng xuất',
                             ]}
@@ -439,7 +439,7 @@ function SupplierTab({ data, loading }: { data: SupplierReportRow[]; loading: bo
                                         <Cell key={i} fill={CHART_COLORS[i % CHART_COLORS.length]} />
                                     ))}
                                 </Pie>
-                                <Tooltip formatter={(v: number) => fmtCurrency(v)} />
+                                <Tooltip formatter={(v: any) => fmtCurrency(Number(v))} />
                                 <Legend
                                     formatter={(value) =>
                                         value.length > 18 ? value.slice(0, 18) + '…' : value
@@ -617,7 +617,7 @@ function DistributionCostTab({
                             <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
                             <XAxis dataKey="period" tick={{ fontSize: 12 }} />
                             <YAxis tickFormatter={fmtShort} tick={{ fontSize: 12 }} width={60} />
-                            <Tooltip formatter={(v: number) => [fmtCurrency(v), 'Chi phí (có VAT)']} />
+                            <Tooltip formatter={(v: any) => [fmtCurrency(Number(v)), 'Chi phí (có VAT)']} />
                             <Bar dataKey="totalWithVat" name="Chi phí" fill="#722ed1" radius={[4, 4, 0, 0]} />
                         </BarChart>
                     </ResponsiveContainer>

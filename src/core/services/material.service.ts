@@ -135,6 +135,7 @@ export interface PurchaseRequestItemPayload {
     unit?: string;
     proposedBy: string;
     purpose: string;
+    plantId?: string;
     quantityRequested: number;
     quantityOrdered?: number;
     unitPrice?: number;
@@ -862,4 +863,59 @@ export interface ExpressDispatchResult {
 export const expressDispatchService = {
     create: (data: ExpressDispatchPayload): Promise<ExpressDispatchResult> =>
         api.post<ExpressDispatchResult, ExpressDispatchPayload>(EXPRESS_DISPATCH_BASE, data),
+};
+
+// ─── Return Records ───────────────────────────────────────────────────────────
+
+export interface ReturnRecordItem {
+    materialId?: string;
+    materialName: string;
+    unit: string;
+    quantityReturned: number;
+    unitPrice: number;
+    vatRate: number;
+    refundAmount: number;
+    refundWithVat: number;
+    reason?: string;
+}
+
+export interface ReturnRecord {
+    id?: string;
+    returnCode?: string;
+    purchaseOrderId: string;
+    purchaseOrderCode?: string;
+    supplierId?: string;
+    supplierName?: string;
+    items: ReturnRecordItem[];
+    totalRefund: number;
+    totalRefundWithVat: number;
+    returnedAt?: string;
+    note?: string;
+    createdAt?: string;
+}
+
+export interface ReturnRecordPayload {
+    purchaseOrderId: string;
+    items: Array<{
+        materialId?: string;
+        materialName: string;
+        unit: string;
+        quantityReturned: number;
+        unitPrice: number;
+        vatRate: number;
+        reason?: string;
+    }>;
+    note?: string;
+    returnedAt?: string;
+}
+
+export const returnRecordService = {
+    create: (data: ReturnRecordPayload): Promise<ReturnRecord> =>
+        api.post<ReturnRecord, ReturnRecordPayload>('/return-records', data),
+
+    getAll: (params?: { purchaseOrderId?: string; supplierId?: string; page?: number; limit?: number }): Promise<PaginatedResponse<ReturnRecord> | ReturnRecord[]> =>
+        api.get('/return-records', { params }),
+
+    getByPurchaseOrder: (purchaseOrderId: string): Promise<ReturnRecord[]> =>
+        api.get<ReturnRecord[]>(`/return-records/by-po/${purchaseOrderId}`),
 };
