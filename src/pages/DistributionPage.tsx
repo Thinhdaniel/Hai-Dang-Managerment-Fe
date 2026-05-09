@@ -8,6 +8,8 @@ import {
     Drawer,
     Empty,
     Input,
+    InputNumber,
+    Modal,
     Select,
     Space,
     Steps,
@@ -22,6 +24,7 @@ import {
     CheckCircleOutlined,
     ClockCircleOutlined,
     DownloadOutlined,
+    EditOutlined,
     EyeOutlined,
     PlusOutlined,
     ReloadOutlined,
@@ -163,6 +166,7 @@ const DistributionPage: React.FC = () => {
     const [confirmingId, setConfirmingId] = useState<string | null>(null);
     const [distributingId, setDistributingId] = useState<string | null>(null);
     const [exportingId, setExportingId] = useState<string | null>(null);
+    const [editPriceOpen, setEditPriceOpen] = useState(false);
 
     // Auto-open create modal when navigated from SR page
     useEffect(() => {
@@ -222,6 +226,7 @@ const DistributionPage: React.FC = () => {
     // ── Mutations ─────────────────────────────────────────────────────────────
     const confirmMutation = useMutation({ mutationFn: (id: string) => distributionService.confirm(id) });
     const distributeMutation = useMutation({ mutationFn: (id: string) => distributionService.distribute(id) });
+    const updateMutation = useMutation({ mutationFn: ({ id, data }: { id: string; data: any }) => distributionService.update(id, data) });
 
     const invalidate = async (id?: string) => {
         await Promise.all([
@@ -534,6 +539,10 @@ const DistributionPage: React.FC = () => {
                         loading={isLoading || isFetching}
                         size='small'
                         scroll={{ x: 900 }}
+                        onRow={(record) => ({
+                            onClick: () => setSelectedId(record.id),
+                            style: { cursor: 'pointer' },
+                        })}
                         locale={{ emptyText: <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description='Chưa có phiếu cấp phát' /> }}
                         pagination={{
                             current: listRes?.page ?? pagination.page,
@@ -602,6 +611,15 @@ const DistributionPage: React.FC = () => {
                                 Tổng: <strong>{fmt(detail.items.reduce((s, i) => s + (i.totalWithVat ?? 0), 0))}</strong>
                             </Text>
                             <div className='flex flex-wrap gap-2'>
+                                {/* Cập nhật giá: CS1Manager, mọi status */}
+                                {isCS1Manager && (
+                                    <Button
+                                        icon={<EditOutlined />}
+                                        onClick={() => setEditPriceOpen(true)}
+                                    >
+                                        Cập nhật giá
+                                    </Button>
+                                )}
                                 {/* Xuất kho: pending + CS1Manager */}
                                 {detail.status === 'pending' && isCS1Manager && (
                                     <ConfirmAction
@@ -741,12 +759,167 @@ const DistributionPage: React.FC = () => {
                                 />
                             </div>
                         </div>
+
+                        {/* Edit price modal */}
+                        {editPriceOpen && (
+                            <EditDistributionPriceModal
+                                open={editPriceOpen}
+                                distribution={detail}
+                                onClose={() => setEditPriceOpen(false)}
+                                onSuccess={async () => {
+                                    setEditPriceOpen(false);
+                                    await invalidate(detail.id);
+                                }}
+                                updateMutation={updateMutation}
+                            />
+                        )}
                     </div>
                 ) : (
                     <Empty description='Không có dữ liệu' />
                 )}
             </Drawer>
         </div>
+    );
+};
+
+// ── Edit Distribution Price Modal ─────────────────────────────────────────────
+type EditItemRow = {
+    index: number;
+    materialName: string;
+    unit: string;
+    quantity: number;
+    unitPrice: number;
+    vatRate: number;
+    totalPrice: number;
+    vatAmount: number;
+    totalWithVat: number;
+    note: string;
+};
+
+const computeEditRow = (r: EditItemRow): EditItemRow => {
+    const totalPrice = Number((r.quantity * r.unitPrice).toFixed(2));
+    const vatAmount = Number((totalPrice * r.vatRate / 100).toFixed(2));
+    return { ...r, totalPrice, vatAmount, totalWithVat: Number((totalPrice + vatAmount).toFixed(2)) };
+};
+
+interface EditDistributionPriceModalProps {
+    open: boolean;
+    distribution: Distribution;
+    onClose: () => void;
+    onSuccess: () => void;
+    updateMutation: ReturnType<typeof useMutation<Distribution, Error, { id: string; data: any }>>;
+}
+
+const EditDistributionPriceModal: React.FC<EditDistributionPriceModalProps> = ({
+    open, distribution, onClose, onSuccess, updateMutation,
+}) => {
+    const { message } = App.useApp();
+    const [rows, setRows] = useState<EditItemRow[]>([]);
+
+    useEffect(() => {
+        if (!open) return;
+        setRows(
+            distribution.items.map((item, idx) =>
+                computeEditRow({
+                    index: idx,
+                    materialName: item.material?.name || item.materialName || '',
+                    unit: item.unit || '',
+                    quantity: item.quantity,
+                    unitPrice: item.unitPrice ?? 0,
+                    vatRate: item.vatRate ?? 0,
+                    totalPrice: item.totalPrice ?? 0,
+                    vatAmount: item.vatAmount ?? 0,
+                    totalWithVat: item.totalWithVat ?? 0,
+                    note: item.note || '',
+                })
+            )
+        );
+    }, [open, distribution]);
+
+    const patch = (index: number, field: keyof EditItemRow, value: any) =>
+        setRows((prev) => prev.map((r) => r.index === index ? computeEditRow({ ...r, [field]: value }) : r));
+
+    const totals = {
+        price: rows.reduce((s, r) => s + r.totalPrice, 0),
+        vat: rows.reduce((s, r) => s + r.vatAmount, 0),
+        total: rows.reduce((s, r) => s + r.totalWithVat, 0),
+    };
+
+    const handleOk = async () => {
+        await updateMutation.mutateAsync({
+            id: distribution.id,
+            data: {
+                items: rows.map((r) => ({ index: r.index, unitPrice: r.unitPrice, vatRate: r.vatRate, note: r.note || undefined })),
+            },
+        });
+        message.success('Cập nhật giá thành công!');
+        onSuccess();
+    };
+
+    const columns: TableColumnsType<EditItemRow> = [
+        { title: 'STT', key: 'stt', width: 46, align: 'center', render: (_v, _r, i) => i + 1 },
+        { title: 'Tên vật tư', dataIndex: 'materialName', key: 'name' },
+        { title: 'ĐVT', dataIndex: 'unit', key: 'unit', width: 60, align: 'center' },
+        { title: 'SL', dataIndex: 'quantity', key: 'qty', width: 70, align: 'right', render: (v) => fmt(v) },
+        {
+            title: 'Đơn giá', key: 'price', width: 130,
+            render: (_v, r) => (
+                <InputNumber
+                    size='small' min={0} value={r.unitPrice} style={{ width: 120 }}
+                    formatter={(v) => `${v}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')}
+                    parser={(v) => Number(String(v).replace(/,/g, '')) as any}
+                    onChange={(v) => patch(r.index, 'unitPrice', v ?? 0)}
+                />
+            ),
+        },
+        {
+            title: 'VAT%', key: 'vat', width: 80,
+            render: (_v, r) => (
+                <InputNumber
+                    size='small' min={0} max={100} value={r.vatRate} style={{ width: 70 }}
+                    formatter={(v) => `${v}%`} parser={(v) => Number(String(v).replace('%', '')) as any}
+                    onChange={(v) => patch(r.index, 'vatRate', v ?? 0)}
+                />
+            ),
+        },
+        { title: 'Thành tiền', key: 'tp', width: 120, align: 'right', render: (_v, r) => fmt(r.totalPrice) },
+        { title: 'Tiền VAT', key: 'va', width: 110, align: 'right', render: (_v, r) => fmt(r.vatAmount) },
+        {
+            title: 'Tổng tiền', key: 'tw', width: 120, align: 'right',
+            render: (_v, r) => <span className='font-bold text-slate-900'>{fmt(r.totalWithVat)}</span>,
+        },
+        {
+            title: 'Ghi chú', key: 'note', width: 160,
+            render: (_v, r) => (
+                <Input size='small' value={r.note} style={{ width: 150 }}
+                    onChange={(e) => patch(r.index, 'note', e.target.value)} />
+            ),
+        },
+    ];
+
+    return (
+        <Modal
+            open={open} title={`Cập nhật giá — ${distribution.distributionCode || ''}`}
+            width={1000} centered maskClosable={false} destroyOnClose onCancel={onClose}
+            okText='Lưu cập nhật' cancelText='Huỷ'
+            confirmLoading={updateMutation.isPending}
+            onOk={handleOk}
+            footer={(_, { OkBtn, CancelBtn }) => (
+                <div className='flex items-end justify-between border-t border-slate-100 pt-3'>
+                    <div className='text-sm text-slate-500'>
+                        <div>Thành tiền: <strong>{fmt(totals.price)}</strong></div>
+                        <div>Tổng VAT: <strong>{fmt(totals.vat)}</strong></div>
+                        <div className='text-base font-bold text-slate-900'>TỔNG CỘNG: {fmt(totals.total)}</div>
+                    </div>
+                    <Space><CancelBtn /><OkBtn /></Space>
+                </div>
+            )}
+        >
+            <Table<EditItemRow>
+                rowKey='index' dataSource={rows} columns={columns}
+                pagination={false} size='small' scroll={{ x: 'max-content' }}
+            />
+        </Modal>
     );
 };
 

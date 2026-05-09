@@ -48,6 +48,25 @@ export const NOTIFICATION_EVENTS = {
     BORROWING_CREATED: 'borrowing:created',
     BORROWING_APPROVED: 'borrowing:approved',
     BORROWING_REJECTED: 'borrowing:rejected',
+
+    // Material - Purchase Request events
+    PURCHASE_REQUEST_CREATED: 'purchase_request:created',
+    PURCHASE_REQUEST_APPROVED: 'purchase_request:approved',
+    PURCHASE_REQUEST_REJECTED: 'purchase_request:rejected',
+
+    // Material - Supply Request events
+    SUPPLY_REQUEST_CREATED: 'supply_request:created',
+    SUPPLY_REQUEST_APPROVED: 'supply_request:approved',
+    SUPPLY_REQUEST_REJECTED: 'supply_request:rejected',
+
+    // Material - Purchase Order events
+    PURCHASE_ORDER_CREATED: 'purchase_order:created',
+    PURCHASE_ORDER_RECEIVED: 'purchase_order:received',
+
+    // Material - Distribution events
+    DISTRIBUTION_CREATED: 'distribution:created',
+    DISTRIBUTION_DISPATCHED: 'distribution:dispatched',
+    DISTRIBUTION_CONFIRMED: 'distribution:confirmed',
 } as const;
 
 export type NotificationEvent = typeof NOTIFICATION_EVENTS[keyof typeof NOTIFICATION_EVENTS];

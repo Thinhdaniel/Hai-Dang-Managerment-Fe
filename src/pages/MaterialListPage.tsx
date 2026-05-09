@@ -13,7 +13,7 @@ import {
     Typography,
     type TableColumnsType,
 } from 'antd';
-import { DeleteOutlined, EditOutlined, PlusOutlined, ReloadOutlined, SearchOutlined, WarningOutlined } from '@ant-design/icons';
+import { DeleteOutlined, DownloadOutlined, EditOutlined, PlusOutlined, ReloadOutlined, SearchOutlined, UploadOutlined, WarningOutlined } from '@ant-design/icons';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import ConfirmAction from '../components/shared/ConfirmAction';
 import LazyBoundary from '../components/shared/LazyBoundary';
@@ -32,6 +32,7 @@ import { inventoryService, materialReportService, materialService } from '../cor
 import type { PaginatedResponse } from '../core/types';
 
 const MaterialFormModal = lazy(() => import('../components/MaterialFormModal'));
+const MaterialImportModal = lazy(() => import('../components/MaterialImportModal'));
 
 const { Text } = Typography;
 
@@ -143,6 +144,8 @@ const MaterialListPage: React.FC = () => {
     const [isFormModalOpen, setIsFormModalOpen] = useState(false);
     const [editingMaterial, setEditingMaterial] = useState<Material | null>(null);
     const [detailMaterial, setDetailMaterial] = useState<Material | null>(null);
+    const [importOpen, setImportOpen] = useState(false);
+    const [exporting, setExporting] = useState(false);
 
     const queryParams = useMemo(
         () => ({
@@ -496,14 +499,35 @@ const MaterialListPage: React.FC = () => {
                     subtitle='Quản lý danh mục vật tư dùng chung cho mua sắm, tồn kho và cấp phát trong hệ thống.'
                     actions={
                         canManageMaterials ? (
-                            <Button
-                                type='primary'
-                                icon={<PlusOutlined />}
-                                onClick={handleOpenCreate}
-                                className='rounded-lg bg-blue-600 hover:!bg-blue-700'
-                            >
-                                Thêm vật tư
-                            </Button>
+                            <div className='flex flex-wrap items-center gap-2'>
+                                <Button
+                                    icon={<DownloadOutlined />}
+                                    loading={exporting}
+                                    onClick={async () => {
+                                        try {
+                                            setExporting(true);
+                                            await materialService.exportExcel();
+                                        } catch {
+                                            message.error('Không thể xuất Excel');
+                                        } finally {
+                                            setExporting(false);
+                                        }
+                                    }}
+                                >
+                                    Xuất Excel
+                                </Button>
+                                <Button icon={<UploadOutlined />} onClick={() => setImportOpen(true)}>
+                                    Import Excel
+                                </Button>
+                                <Button
+                                    type='primary'
+                                    icon={<PlusOutlined />}
+                                    onClick={handleOpenCreate}
+                                    className='rounded-lg bg-blue-600 hover:!bg-blue-700'
+                                >
+                                    Thêm vật tư
+                                </Button>
+                            </div>
                         ) : undefined
                     }
                 />
@@ -619,6 +643,17 @@ const MaterialListPage: React.FC = () => {
                     />
                 </LazyBoundary>
             ) : null}
+
+            <LazyBoundary mode='overlay'>
+                <MaterialImportModal
+                    open={importOpen}
+                    onClose={() => setImportOpen(false)}
+                    onSuccess={() => {
+                        setImportOpen(false);
+                        queryClient.invalidateQueries({ queryKey: ['materials'] });
+                    }}
+                />
+            </LazyBoundary>
 
             <Drawer
                 title='Chi tiết vật tư'

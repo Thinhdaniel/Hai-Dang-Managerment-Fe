@@ -1,28 +1,26 @@
 import React, { useState } from 'react';
-import {
-    Alert,
-    Button,
-    Input,
-    Modal,
-    Space,
-    Table,
-    Typography,
-    Upload,
-    App,
-    type UploadFile,
-} from 'antd';
-import { CheckCircleOutlined, CloseCircleOutlined, DownloadOutlined, InboxOutlined } from '@ant-design/icons';
+import { Alert, App, Button, Input, Modal, Space, Table, Tag, Upload, type TableColumnsType, type UploadFile } from 'antd';
+import { DownloadOutlined, InboxOutlined } from '@ant-design/icons';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { inventoryService } from '../core/services/material.service';
 
 const { Dragger } = Upload;
-const { Text } = Typography;
 
-interface ImportResult {
-    success: number;
-    failed: number;
-    errors: Array<{ row: number; materialCode: string; reason: string }>;
-}
+type PreviewRow = {
+    row: number;
+    materialCode: string;
+    materialName?: string;
+    currentStock?: number;
+    newStock: number;
+    note: string;
+    isValid: boolean;
+    reason?: string;
+};
+
+type PreviewResult = {
+    summary: { totalRows: number; validRows: number; invalidRows: number };
+    rows: PreviewRow[];
+};
 
 interface Props {
     open: boolean;
@@ -30,156 +28,134 @@ interface Props {
     onClose: () => void;
 }
 
+const columns: TableColumnsType<PreviewRow> = [
+    { title: 'Dòng', dataIndex: 'row', key: 'row', width: 65, align: 'center' },
+    { title: 'Mã VT', dataIndex: 'materialCode', key: 'code', width: 110 },
+    { title: 'Tên vật tư', dataIndex: 'materialName', key: 'name', render: (v) => v || '-' },
+    { title: 'Tồn hiện tại', dataIndex: 'currentStock', key: 'cur', width: 110, align: 'right', render: (v) => v != null ? v.toLocaleString('vi-VN') : '-' },
+    { title: 'Tồn mới', dataIndex: 'newStock', key: 'new', width: 100, align: 'right', render: (v) => <span className='font-semibold'>{v.toLocaleString('vi-VN')}</span> },
+    {
+        title: 'Kết quả', key: 'status', width: 100,
+        render: (_, r) => r.isValid ? <Tag color='success'>Hợp lệ</Tag> : <Tag color='error'>Lỗi</Tag>,
+    },
+    {
+        title: 'Chi tiết', key: 'detail',
+        render: (_, r) => r.isValid
+            ? <span className='text-slate-400 text-xs'>Sẵn sàng</span>
+            : <span className='text-rose-600 text-xs'>{r.reason}</span>,
+    },
+];
+
 const ModalImportExcel: React.FC<Props> = ({ open, plantId, onClose }) => {
     const { message } = App.useApp();
     const queryClient = useQueryClient();
     const [fileList, setFileList] = useState<UploadFile[]>([]);
+    const [file, setFile] = useState<File | null>(null);
     const [reason, setReason] = useState('');
-    const [result, setResult] = useState<ImportResult | null>(null);
+    const [preview, setPreview] = useState<PreviewResult | null>(null);
 
-    const { mutateAsync: doImport, isPending } = useMutation({
-        mutationFn: inventoryService.importExcel,
-        onSuccess: (res: any) => {
-            setResult(res);
-            if (res.failed === 0) {
-                queryClient.invalidateQueries({ queryKey: ['materials', 'inventory'] });
-            }
-        },
-        onError: (err: any) => {
-            message.error(err?.message || 'Import thất bại');
-        },
+    const reset = () => { setFileList([]); setFile(null); setReason(''); setPreview(null); };
+    const handleClose = () => { reset(); onClose(); };
+
+    const previewMutation = useMutation({
+        mutationFn: ({ f, pid }: { f: File; pid: string }) => inventoryService.previewImport(f, pid),
+        onSuccess: (data) => setPreview(data),
+        onError: (e: any) => message.error(e?.message || 'Không thể xem trước'),
     });
 
-    const handleClose = () => {
-        setFileList([]);
-        setReason('');
-        setResult(null);
-        if (result && result.success > 0) {
+    const importMutation = useMutation({
+        mutationFn: (fd: FormData) => inventoryService.importExcel(fd),
+        onSuccess: (res: any) => {
+            message.success(`Import thành công ${res.success} vật tư${res.failed > 0 ? `, ${res.failed} lỗi` : ''}`);
             queryClient.invalidateQueries({ queryKey: ['materials', 'inventory'] });
-        }
-        onClose();
+            handleClose();
+        },
+        onError: (e: any) => message.error(e?.message || 'Import thất bại'),
+    });
+
+    const handlePreview = () => {
+        if (!file) { message.error('Vui lòng chọn file'); return; }
+        if (!reason.trim()) { message.error('Vui lòng nhập lý do'); return; }
+        previewMutation.mutate({ f: file, pid: plantId });
     };
 
-    const handleImport = async () => {
-        if (!reason.trim()) {
-            message.error('Vui lòng nhập lý do');
-            return;
-        }
-        if (fileList.length === 0 || !fileList[0].originFileObj) {
-            message.error('Vui lòng chọn file Excel');
-            return;
-        }
-        const formData = new FormData();
-        formData.append('file', fileList[0].originFileObj);
-        formData.append('plantId', plantId);
-        formData.append('reason', reason.trim());
-        await doImport(formData);
+    const handleConfirm = () => {
+        if (!file) return;
+        const fd = new FormData();
+        fd.append('file', file);
+        fd.append('plantId', plantId);
+        fd.append('reason', reason.trim());
+        importMutation.mutate(fd);
     };
 
-    const errorColumns = [
-        { title: 'Dòng', dataIndex: 'row', key: 'row', width: 70 },
-        { title: 'Mã vật tư', dataIndex: 'materialCode', key: 'materialCode', width: 120 },
-        { title: 'Lý do lỗi', dataIndex: 'reason', key: 'reason' },
-    ];
+    const canConfirm = preview && preview.summary.validRows > 0;
 
     return (
         <Modal
-            open={open}
-            title="Import tồn kho từ Excel"
-            width={640}
-            onCancel={handleClose}
+            open={open} title='Import tồn kho từ Excel' width={860}
+            onCancel={handleClose} destroyOnClose maskClosable={false}
             footer={
-                result ? (
-                    <Button type="primary" onClick={handleClose}>
-                        Đóng
+                <div className='flex items-center justify-between'>
+                    <Button icon={<DownloadOutlined />} onClick={() => inventoryService.downloadTemplate()}>
+                        Tải file mẫu
                     </Button>
-                ) : (
                     <Space>
                         <Button onClick={handleClose}>Huỷ</Button>
-                        <Button type="primary" loading={isPending} onClick={handleImport}>
-                            Bắt đầu Import
+                        <Button loading={previewMutation.isPending} disabled={!file || !reason.trim()} onClick={handlePreview}>
+                            Xem trước
+                        </Button>
+                        <Button type='primary' disabled={!canConfirm} loading={importMutation.isPending} onClick={handleConfirm}>
+                            Import {canConfirm ? `${preview.summary.validRows} dòng` : ''}
                         </Button>
                     </Space>
-                )
+                </div>
             }
-            destroyOnClose
         >
-            {result ? (
-                <Space direction="vertical" style={{ width: '100%' }} size={12}>
-                    <Alert
-                        type={result.failed === 0 ? 'success' : 'warning'}
-                        icon={result.failed === 0 ? <CheckCircleOutlined /> : undefined}
-                        showIcon
-                        message={
-                            <Space direction="vertical" size={2}>
-                                <Text>
-                                    <CheckCircleOutlined style={{ color: '#16a34a' }} /> Thành công:{' '}
-                                    <strong>{result.success}</strong> vật tư
-                                </Text>
-                                {result.failed > 0 && (
-                                    <Text>
-                                        <CloseCircleOutlined style={{ color: '#dc2626' }} /> Thất bại:{' '}
-                                        <strong>{result.failed}</strong> dòng
-                                    </Text>
-                                )}
-                            </Space>
-                        }
+            <div className='flex flex-col gap-4'>
+                <Dragger
+                    accept='.xlsx,.xls' maxCount={1} fileList={fileList}
+                    beforeUpload={(f) => { setFile(f); setFileList([f]); setPreview(null); return false; }}
+                    onRemove={() => { setFile(null); setFileList([]); setPreview(null); }}
+                >
+                    <p className='ant-upload-drag-icon'><InboxOutlined /></p>
+                    <p className='ant-upload-text'>Kéo thả hoặc click để chọn file Excel</p>
+                </Dragger>
+
+                <div>
+                    <div className='mb-1 text-sm font-medium'>Lý do nhập <span className='text-red-500'>*</span></div>
+                    <Input
+                        placeholder='VD: Import tồn kho tháng 01/2026'
+                        value={reason}
+                        onChange={(e) => { setReason(e.target.value); setPreview(null); }}
                     />
-                    {result.errors.length > 0 && (
-                        <Table
-                            dataSource={result.errors}
-                            columns={errorColumns}
-                            rowKey="row"
-                            size="small"
-                            pagination={false}
-                            scroll={{ y: 200 }}
-                        />
-                    )}
-                </Space>
-            ) : (
-                <Space direction="vertical" style={{ width: '100%' }} size={16}>
-                    <Space>
-                        <Text>Chưa có file mẫu?</Text>
-                        <Button
-                            icon={<DownloadOutlined />}
-                            size="small"
-                            onClick={() => inventoryService.downloadTemplate()}
-                        >
-                            Tải file mẫu
-                        </Button>
-                    </Space>
+                </div>
 
-                    <Dragger
-                        accept=".xlsx"
-                        maxCount={1}
-                        fileList={fileList}
-                        beforeUpload={() => false}
-                        onChange={({ fileList: fl }) => setFileList(fl)}
-                    >
-                        <p className="ant-upload-drag-icon">
-                            <InboxOutlined />
-                        </p>
-                        <p className="ant-upload-text">Kéo thả file .xlsx vào đây hoặc click để chọn</p>
-                        <p className="ant-upload-hint">Chỉ chấp nhận file .xlsx</p>
-                    </Dragger>
-
-                    <div>
-                        <Text strong>
-                            Lý do nhập <Text type="danger">*</Text>
-                        </Text>
-                        <Input
-                            style={{ marginTop: 4 }}
-                            placeholder="VD: Import tồn kho tháng 01/2026"
-                            value={reason}
-                            onChange={(e) => setReason(e.target.value)}
+                {preview && (
+                    <div className='flex flex-col gap-3'>
+                        <div className='grid grid-cols-3 gap-3'>
+                            {[
+                                { label: 'Tổng dòng', value: preview.summary.totalRows, cls: 'bg-slate-50 border-slate-200 text-slate-800' },
+                                { label: 'Hợp lệ', value: preview.summary.validRows, cls: 'bg-emerald-50 border-emerald-200 text-emerald-700' },
+                                { label: 'Không hợp lệ', value: preview.summary.invalidRows, cls: 'bg-rose-50 border-rose-200 text-rose-700' },
+                            ].map(({ label, value, cls }) => (
+                                <div key={label} className={`rounded-xl border p-3 ${cls}`}>
+                                    <div className='text-[11px] font-semibold uppercase tracking-wide opacity-70'>{label}</div>
+                                    <div className='mt-1 text-2xl font-bold'>{value}</div>
+                                </div>
+                            ))}
+                        </div>
+                        {preview.summary.invalidRows > 0 && (
+                            <Alert type='warning' showIcon message={`${preview.summary.invalidRows} dòng lỗi sẽ bị bỏ qua khi import.`} />
+                        )}
+                        <Table<PreviewRow>
+                            rowKey='row' dataSource={preview.rows} columns={columns}
+                            size='small' pagination={{ pageSize: 10, showSizeChanger: false }}
+                            scroll={{ x: 750 }}
+                            rowClassName={(r) => r.isValid ? '' : 'bg-rose-50/60'}
                         />
                     </div>
-
-                    {isPending && (
-                        <Alert type="info" showIcon message="Đang xử lý..." />
-                    )}
-                </Space>
-            )}
+                )}
+            </div>
         </Modal>
     );
 };

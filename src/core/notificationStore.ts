@@ -9,6 +9,10 @@ export type NotificationActionType =
     | 'transfer'
     | 'maintenance'
     | 'borrowing'
+    | 'purchase_request'
+    | 'supply_request'
+    | 'purchase_order'
+    | 'distribution'
     | 'system';
 
 export interface Notification {

@@ -486,6 +486,25 @@ export interface SupplierReportRow {
     totalAmount?: number;
 }
 
+export interface DistributionCostByPlant {
+    plantId: string;
+    plantName: string;
+    totalWithVat: number;
+    totalAmount: number;
+    count: number;
+}
+
+export interface DistributionCostByPeriod {
+    period: string;
+    totalWithVat: number;
+    count: number;
+}
+
+export interface DistributionCostReport {
+    byPlant: DistributionCostByPlant[];
+    byPeriod: DistributionCostByPeriod[];
+}
+
 export interface PriceComparisonReportRow {
     orderId: string;
     orderCode?: string;
@@ -531,6 +550,23 @@ export const materialService = {
         api.put<Material, Partial<MaterialPayload>>(`${MATERIALS_BASE}/${id}`, data),
 
     delete: (id: string): Promise<void> => api.delete(`${MATERIALS_BASE}/${id}`),
+
+    exportExcel: () => downloadFile(`${MATERIALS_BASE}/export-excel`, 'danh-muc-vat-tu.xlsx'),
+
+    downloadTemplate: () => downloadFile(`${MATERIALS_BASE}/import-template`, 'mau-nhap-vat-tu.xlsx'),
+
+    previewImport: (file: File): Promise<{
+        summary: { totalRows: number; validRows: number; invalidRows: number; toCreate: number; toUpdate: number };
+        rows: Array<{ rowNumber: number; isValid: boolean; action?: string; values: { code: string; name: string; category: string; unit: string; minStockLevel: number }; errors: string[] }>;
+    }> => {
+        const fd = new FormData(); fd.append('file', file);
+        return api.post(`${MATERIALS_BASE}/import/preview`, fd, { headers: { 'Content-Type': undefined } });
+    },
+
+    confirmImport: (file: File): Promise<{ created: number; updated: number; errors: number; total: number }> => {
+        const fd = new FormData(); fd.append('file', file);
+        return api.post(`${MATERIALS_BASE}/import/confirm`, fd, { headers: { 'Content-Type': undefined } });
+    },
 };
 
 export const materialSupplierService = {
@@ -684,10 +720,21 @@ export const inventoryService = {
         reason: string;
     }) => api.post<{ success: number; failed: number; errors: any[] }, any>(`${INVENTORY_BASE}/initialize`, data),
 
+    previewImport: (file: File, plantId: string): Promise<{
+        summary: { totalRows: number; validRows: number; invalidRows: number };
+        rows: Array<{ row: number; materialCode: string; materialName?: string; currentStock?: number; newStock: number; note: string; isValid: boolean; reason?: string }>;
+    }> => {
+        const fd = new FormData();
+        fd.append('file', file);
+        fd.append('plantId', plantId);
+        return api.post(`${INVENTORY_BASE}/import-preview`, fd, { headers: { 'Content-Type': undefined } });
+    },
+
     importExcel: (formData: FormData) =>
         api.post<{ success: number; failed: number; errors: Array<{ row: number; materialCode: string; reason: string }> }, FormData>(
             `${INVENTORY_BASE}/import-excel`,
-            formData
+            formData,
+            { headers: { 'Content-Type': undefined } }
         ),
 
     downloadTemplate: () => downloadFile(`${INVENTORY_BASE}/import-template`, 'mau-nhap-ton-kho.xlsx'),
@@ -716,8 +763,8 @@ export const distributionService = {
     create: (data: DistributionPayload): Promise<Distribution> =>
         api.post<Distribution, DistributionPayload>(DISTRIBUTIONS_BASE, data),
 
-    update: (id: string, data: Partial<DistributionPayload>): Promise<Distribution> =>
-        api.patch<Distribution, Partial<DistributionPayload>>(`${DISTRIBUTIONS_BASE}/${id}`, data),
+    update: (id: string, data: { items?: Array<{ index: number; unitPrice?: number; vatRate?: number; note?: string }>; note?: string }): Promise<Distribution> =>
+        api.patch<Distribution, any>(`${DISTRIBUTIONS_BASE}/${id}`, data),
 
     // CS1 xuất kho → trừ stock
     distribute: (id: string): Promise<Distribution> =>
@@ -756,6 +803,9 @@ export const materialReportService = {
 
     getPriceComparison: (params?: MaterialReportQueryParams): Promise<PriceComparisonReportRow[]> =>
         api.get<PriceComparisonReportRow[]>(`${MATERIALS_BASE}/reports/price-comparison`, { params }),
+
+    getDistributionCost: (params?: MaterialReportQueryParams): Promise<DistributionCostReport> =>
+        api.get<DistributionCostReport>(`${MATERIALS_BASE}/reports/distribution-cost`, { params }),
 
     exportExcel: async (params?: MaterialReportQueryParams): Promise<void> => {
         const data: any = await axiosInstance.get(`${MATERIALS_BASE}/reports/export-excel`, {

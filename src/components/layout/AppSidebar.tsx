@@ -258,7 +258,9 @@ const AppSidebar: React.FC<AppSidebarProps> = ({
     const visibleSections = navigationSections.map((section) => ({
         ...section,
         items: section.items.filter(
-            (item) => item.path !== '/materials/purchase-requests' || isCS1Manager
+            (item) =>
+                (item.path !== '/materials/purchase-requests' && item.path !== '/materials/purchase-orders') ||
+                isCS1Manager
         ),
     }));
 
