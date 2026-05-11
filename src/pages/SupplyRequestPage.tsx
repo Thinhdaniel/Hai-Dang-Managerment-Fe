@@ -2,9 +2,11 @@ import React, { useEffect, useMemo, useState } from 'react';
 import dayjs, { type Dayjs } from 'dayjs';
 import {
     App, Badge, Button, DatePicker, Descriptions, Drawer, Empty,
-    Form, Input, InputNumber, Modal, Select, Steps, Table, Tag, Tooltip, Typography,
+    Form, Grid, Input, InputNumber, Modal, Select, Steps, Table, Tag, Tooltip, Typography,
     type TableColumnsType,
 } from 'antd';
+
+const { useBreakpoint } = Grid;
 import {
     CheckCircleOutlined, ClockCircleOutlined, CloseCircleOutlined,
     DeleteOutlined, DownloadOutlined, EyeOutlined, FileTextOutlined,
@@ -147,18 +149,18 @@ const StatCard: React.FC<{
     <div
         onClick={onClick}
         className={[
-            'flex cursor-pointer items-center gap-4 rounded-2xl border p-4 transition-all hover:shadow-md',
-            active ? `border-[${color}] bg-[${color}]/5 shadow-sm` : 'border-slate-200 bg-white',
+            'flex cursor-pointer items-center gap-2 sm:gap-4 rounded-2xl border p-3 sm:p-4 transition-all hover:shadow-md',
+            active ? 'shadow-sm' : 'border-slate-200 bg-white',
         ].join(' ')}
         style={active ? { borderColor: color, backgroundColor: `${color}10` } : undefined}
     >
-        <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl text-xl"
+        <div className="flex h-8 w-8 sm:h-11 sm:w-11 shrink-0 items-center justify-center rounded-xl text-base sm:text-xl"
             style={{ background: `${color}18`, color }}>
             {icon}
         </div>
-        <div>
-            <div className="text-xs font-medium text-slate-400 uppercase tracking-wide">{title}</div>
-            <div className="text-2xl font-bold" style={{ color }}>{fmtNum(value)}</div>
+        <div className="min-w-0">
+            <div className="text-[10px] sm:text-xs font-medium text-slate-400 uppercase tracking-wide truncate">{title}</div>
+            <div className="text-lg sm:text-2xl font-bold leading-tight" style={{ color }}>{fmtNum(value)}</div>
         </div>
     </div>
 );
@@ -176,6 +178,8 @@ const FormDrawer: React.FC<{
 }> = ({ open, initialValues, defaultPlantId, defaultPlantName, submitting, onClose, onSubmit }) => {
     const [form] = Form.useForm<FormValues>();
     const watchedItems: FormItemValue[] = Form.useWatch('items', form) ?? [];
+    const screens = useBreakpoint();
+    const isMobile = !screens.sm;
 
     useEffect(() => {
         if (!open) return;
@@ -216,10 +220,10 @@ const FormDrawer: React.FC<{
         <Drawer
             open={open}
             onClose={onClose}
-            width={860}
+            width={isMobile ? '100%' : 860}
             destroyOnHidden
             maskClosable={false}
-            styles={{ body: { padding: '20px', display: 'flex', flexDirection: 'column', overflow: 'hidden' } }}
+            styles={{ body: { padding: isMobile ? '12px' : '20px', display: 'flex', flexDirection: 'column', overflow: 'hidden' } }}
             title={
                 <div className="flex items-center gap-3">
                     <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-blue-50 text-blue-600">
@@ -250,11 +254,11 @@ const FormDrawer: React.FC<{
         >
             <Form form={form} layout="vertical" className="h-full flex flex-col gap-0">
                 {/* Thông tin chung — cố định */}
-                <div className="rounded-2xl border border-slate-200 bg-slate-50 p-5 mb-5 shrink-0">
-                    <div className="mb-4 flex items-center gap-2 text-sm font-semibold text-slate-700">
+                <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3 sm:p-5 mb-3 sm:mb-5 shrink-0">
+                    <div className="mb-3 sm:mb-4 flex items-center gap-2 text-sm font-semibold text-slate-700">
                         <FileTextOutlined /> Thông tin chung
                     </div>
-                    <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                    <div className="grid grid-cols-1 gap-3 sm:gap-4 sm:grid-cols-2">
                         <Form.Item label="Cơ sở gửi" className="mb-0">
                             <Input value={defaultPlantName || '—'} readOnly
                                 className="cursor-default bg-white font-medium text-slate-700" />
@@ -266,7 +270,7 @@ const FormDrawer: React.FC<{
                             <DatePicker format="DD/MM/YYYY" className="w-full" />
                         </Form.Item>
 
-                        <Form.Item name="note" label="Lý do / Mục đích đề xuất" className="mb-0 md:col-span-2"
+                        <Form.Item name="note" label="Lý do / Mục đích đề xuất" className="mb-0 sm:col-span-2"
                             rules={[
                                 { required: true, message: 'Vui lòng nhập lý do đề xuất' },
                                 { min: 10, message: 'Tối thiểu 10 ký tự' },
@@ -282,7 +286,7 @@ const FormDrawer: React.FC<{
                     {(fields, { add, remove }) => (
                         <div className="flex flex-col rounded-2xl border border-slate-200 bg-white overflow-hidden flex-1 min-h-0">
                             {/* Sticky header */}
-                            <div className="flex items-center justify-between border-b border-slate-100 bg-slate-50 px-5 py-3 shrink-0">
+                            <div className="flex items-center justify-between border-b border-slate-100 bg-slate-50 px-3 sm:px-5 py-3 shrink-0">
                                 <div>
                                     <div className="text-sm font-semibold text-slate-800">Danh sách vật tư cần cấp</div>
                                     <div className="text-xs text-slate-400">Tối thiểu 1 vật tư.</div>
@@ -290,10 +294,12 @@ const FormDrawer: React.FC<{
                                 <Tag color="blue">{fields.length} loại</Tag>
                             </div>
 
-                            {/* Column headers */}
-                            <div className="grid grid-cols-[minmax(0,2.5fr)_90px_130px_minmax(0,1.5fr)_40px] gap-3 border-b border-slate-100 bg-slate-50/50 px-5 py-2 text-[11px] font-semibold uppercase tracking-wider text-slate-400 shrink-0">
-                                <span>Tên vật tư *</span><span>ĐVT *</span><span>Số lượng *</span><span>Ghi chú</span><span />
-                            </div>
+                            {/* Column headers — desktop only */}
+                            {!isMobile && (
+                                <div className="grid grid-cols-[minmax(0,2.5fr)_90px_130px_minmax(0,1.5fr)_40px] gap-3 border-b border-slate-100 bg-slate-50/50 px-5 py-2 text-[11px] font-semibold uppercase tracking-wider text-slate-400 shrink-0">
+                                    <span>Tên vật tư *</span><span>ĐVT *</span><span>Số lượng *</span><span>Ghi chú</span><span />
+                                </div>
+                            )}
 
                             {/* Scrollable rows */}
                             <div className="overflow-y-auto flex-1">
@@ -304,39 +310,75 @@ const FormDrawer: React.FC<{
                                     </div>
                                 )}
                                 {fields.map((field, index) => (
-                                    <div key={field.key}
-                                        className="grid grid-cols-[minmax(0,2.5fr)_90px_130px_minmax(0,1.5fr)_40px] gap-3 border-b border-slate-100 px-5 py-3 last:border-b-0 hover:bg-blue-50/20 transition-colors">
-                                        <Form.Item name={[field.name, 'materialName']} className="mb-0"
-                                            rules={[{ required: true, message: 'Nhập tên' }]}>
-                                            <Input placeholder={`Vật tư ${index + 1}`} maxLength={200} />
-                                        </Form.Item>
-                                        <Form.Item name={[field.name, 'unit']} className="mb-0"
-                                            rules={[{ required: true, message: 'Nhập ĐVT' }]}>
-                                            <Input placeholder="Cái, Kg..." maxLength={50} />
-                                        </Form.Item>
-                                        <Form.Item name={[field.name, 'quantityRequested']} className="mb-0"
-                                            rules={[{ required: true, message: 'Nhập SL' }]}>
-                                            <InputNumber<number> min={1} className="w-full"
-                                                formatter={(v) => `${v ?? ''}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')}
-                                                parser={parseNum} />
-                                        </Form.Item>
-                                        <Form.Item name={[field.name, 'note']} className="mb-0">
-                                            <Input placeholder="Ghi chú..." maxLength={250} />
-                                        </Form.Item>
-                                        <div className="flex items-center justify-center">
-                                            <Tooltip title="Xoá dòng">
-                                                <Button type="text" danger size="small"
-                                                    disabled={fields.length === 1}
-                                                    icon={<DeleteOutlined />}
-                                                    onClick={() => remove(field.name)} />
-                                            </Tooltip>
+                                    isMobile ? (
+                                        /* Mobile: card layout dọc */
+                                        <div key={field.key}
+                                            className="border-b border-slate-100 px-3 py-3 last:border-b-0">
+                                            <div className="flex items-center justify-between mb-2">
+                                                <span className="text-xs font-semibold text-slate-500">Vật tư #{index + 1}</span>
+                                                <Tooltip title="Xoá dòng">
+                                                    <Button type="text" danger size="small"
+                                                        disabled={fields.length === 1}
+                                                        icon={<DeleteOutlined />}
+                                                        onClick={() => remove(field.name)} />
+                                                </Tooltip>
+                                            </div>
+                                            <div className="grid grid-cols-2 gap-2">
+                                                <Form.Item name={[field.name, 'materialName']} label="Tên vật tư" className="mb-0 col-span-2"
+                                                    rules={[{ required: true, message: 'Nhập tên' }]}>
+                                                    <Input placeholder={`Vật tư ${index + 1}`} maxLength={200} />
+                                                </Form.Item>
+                                                <Form.Item name={[field.name, 'unit']} label="ĐVT" className="mb-0"
+                                                    rules={[{ required: true, message: 'Nhập ĐVT' }]}>
+                                                    <Input placeholder="Cái, Kg..." maxLength={50} />
+                                                </Form.Item>
+                                                <Form.Item name={[field.name, 'quantityRequested']} label="Số lượng" className="mb-0"
+                                                    rules={[{ required: true, message: 'Nhập SL' }]}>
+                                                    <InputNumber<number> min={1} className="w-full"
+                                                        formatter={(v) => `${v ?? ''}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')}
+                                                        parser={parseNum} />
+                                                </Form.Item>
+                                                <Form.Item name={[field.name, 'note']} label="Ghi chú" className="mb-0 col-span-2">
+                                                    <Input placeholder="Ghi chú..." maxLength={250} />
+                                                </Form.Item>
+                                            </div>
                                         </div>
-                                    </div>
+                                    ) : (
+                                        /* Desktop: grid layout ngang */
+                                        <div key={field.key}
+                                            className="grid grid-cols-[minmax(0,2.5fr)_90px_130px_minmax(0,1.5fr)_40px] gap-3 border-b border-slate-100 px-5 py-3 last:border-b-0 hover:bg-blue-50/20 transition-colors">
+                                            <Form.Item name={[field.name, 'materialName']} className="mb-0"
+                                                rules={[{ required: true, message: 'Nhập tên' }]}>
+                                                <Input placeholder={`Vật tư ${index + 1}`} maxLength={200} />
+                                            </Form.Item>
+                                            <Form.Item name={[field.name, 'unit']} className="mb-0"
+                                                rules={[{ required: true, message: 'Nhập ĐVT' }]}>
+                                                <Input placeholder="Cái, Kg..." maxLength={50} />
+                                            </Form.Item>
+                                            <Form.Item name={[field.name, 'quantityRequested']} className="mb-0"
+                                                rules={[{ required: true, message: 'Nhập SL' }]}>
+                                                <InputNumber<number> min={1} className="w-full"
+                                                    formatter={(v) => `${v ?? ''}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')}
+                                                    parser={parseNum} />
+                                            </Form.Item>
+                                            <Form.Item name={[field.name, 'note']} className="mb-0">
+                                                <Input placeholder="Ghi chú..." maxLength={250} />
+                                            </Form.Item>
+                                            <div className="flex items-center justify-center">
+                                                <Tooltip title="Xoá dòng">
+                                                    <Button type="text" danger size="small"
+                                                        disabled={fields.length === 1}
+                                                        icon={<DeleteOutlined />}
+                                                        onClick={() => remove(field.name)} />
+                                                </Tooltip>
+                                            </div>
+                                        </div>
+                                    )
                                 ))}
                             </div>
 
                             {/* Sticky footer — nút thêm luôn hiển thị */}
-                            <div className="flex items-center justify-between border-t border-slate-200 bg-slate-50 px-5 py-3 shrink-0">
+                            <div className="flex items-center justify-between border-t border-slate-200 bg-slate-50 px-3 sm:px-5 py-3 shrink-0">
                                 <Text type="secondary" className="text-xs">
                                     Tổng: <strong>{fields.length}</strong> loại vật tư
                                 </Text>
@@ -361,6 +403,8 @@ const SupplyRequestPage: React.FC = () => {
     const { user } = useAuth();
     const navigate = useNavigate();
     const [searchParams] = useSearchParams();
+    const screens = useBreakpoint();
+    const isMobile = !screens.sm;
 
     const mainPlantId = import.meta.env.VITE_MAIN_PLANT_ID;
     const isMainPlant = Boolean(mainPlantId && user?.plantId === mainPlantId);
@@ -386,7 +430,7 @@ const SupplyRequestPage: React.FC = () => {
     const [rejectTarget, setRejectTarget] = useState<PurchaseRequest | null>(null);
     const [rejectReason, setRejectReason] = useState('');
     const [approvingId, setApprovingId] = useState<string | null>(null);
-    const [approvalSel, setApprovalSel] = useState<Record<number, { materialId?: string; quantityApproved?: number }>>({});
+    const [approvalQty, setApprovalQty] = useState<Record<number, number>>({});;
 
     // Debounce search
     useEffect(() => {
@@ -414,14 +458,6 @@ const SupplyRequestPage: React.FC = () => {
         queryKey: ['plants'],
         queryFn: () => plantService.getAll(),
         staleTime: 5 * 60_000,
-    });
-
-    const { data: materialsWithStock = [] } = useQuery({
-        queryKey: ['materials', 'with-stock-cs1'],
-        queryFn: () => materialService.getAll({ includeStock: true, limit: 1000, isActive: true } as any)
-            .then((r: any) => Array.isArray(r) ? r : r.data ?? []),
-        enabled: isCS1Manager,
-        staleTime: 60_000,
     });
 
     const { data: listRes, isLoading, isFetching } = useQuery({
@@ -486,7 +522,7 @@ const SupplyRequestPage: React.FC = () => {
     });
 
     const { mutateAsync: approveReq } = useMutation({
-        mutationFn: ({ id, payload }: { id: string; payload: { items: Array<{ materialId: string; quantityApproved: number }> } }) =>
+        mutationFn: ({ id, payload }: { id: string; payload: { items: Array<{ quantityApproved: number }> } }) =>
             supplyRequestService.approve(id, payload),
         onSuccess: (approved) => {
             queryClient.invalidateQueries({ queryKey: ['supply-requests'] });
@@ -547,6 +583,7 @@ const SupplyRequestPage: React.FC = () => {
         },
         {
             title: 'Cơ sở gửi', key: 'plant',
+            responsive: ['sm'] as any,
             render: (_: any, r: PurchaseRequest) => (
                 <span className="font-medium text-slate-700">
                     {r.fromPlant?.name || r.plant?.name || '—'}
@@ -555,18 +592,21 @@ const SupplyRequestPage: React.FC = () => {
         },
         {
             title: 'Ngày đề xuất', key: 'date', width: 130,
+            responsive: ['md'] as any,
             render: (_: any, r: PurchaseRequest) => (
                 <span className="text-slate-500 text-sm">{fmtDate(r.requestDate || r.createdAt)}</span>
             ),
         },
         {
             title: 'Số loại VT', key: 'items', width: 100, align: 'center' as const,
+            responsive: ['sm'] as any,
             render: (_: any, r: PurchaseRequest) => (
                 <Badge count={r.items?.length ?? 0} color="#6366f1" showZero />
             ),
         },
         {
             title: 'Người tạo', key: 'requestedBy', width: 140,
+            responsive: ['lg'] as any,
             render: (_: any, r: PurchaseRequest) => (
                 <span className="text-sm text-slate-600">{resolveUser(r.requestedBy)}</span>
             ),
@@ -579,14 +619,16 @@ const SupplyRequestPage: React.FC = () => {
             title: '', key: 'action', width: 90, align: 'right' as const,
             render: (_: any, record: PurchaseRequest) => (
                 <div className="flex items-center justify-end gap-1">
-                    <Tooltip title="Xuất Excel">
-                        <Button type="text" size="small" icon={<DownloadOutlined />}
-                            onClick={(e) => { e.stopPropagation(); exportXlsx(record); }}
-                            className="text-slate-400 hover:text-green-600" />
-                    </Tooltip>
+                    {!isMobile && (
+                        <Tooltip title="Xuất Excel">
+                            <Button type="text" size="small" icon={<DownloadOutlined />}
+                                onClick={(e) => { e.stopPropagation(); exportXlsx(record); }}
+                                className="text-slate-400 hover:text-green-600" />
+                        </Tooltip>
+                    )}
                     <Tooltip title="Xem chi tiết">
                         <Button type="text" size="small" icon={<EyeOutlined />}
-                            onClick={() => { setSelectedId(record.id); setApprovalSel({}); }}
+                            onClick={() => { setSelectedId(record.id); setApprovalQty({}); }}
                             className="text-slate-400 hover:text-blue-600" />
                     </Tooltip>
                 </div>
@@ -617,7 +659,7 @@ const SupplyRequestPage: React.FC = () => {
 
             {/* Stats */}
             {isCS1Manager && (
-                <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
+                <div className="grid grid-cols-3 gap-2 sm:grid-cols-3 lg:grid-cols-6">
                     {[
                         { title: 'Tổng phiếu',     value: stats.total,       color: '#3b82f6', icon: <FileTextOutlined />,    tab: 'all' as SupplyRequestTab,    status: undefined },
                         { title: 'Chờ duyệt',       value: stats.pending,     color: '#f97316', icon: <ClockCircleOutlined />, tab: 'pending' as SupplyRequestTab, status: undefined },
@@ -664,21 +706,21 @@ const SupplyRequestPage: React.FC = () => {
                 </div>
 
                 {/* Filters */}
-                <div className="flex flex-wrap items-center gap-3 border-b border-slate-100 px-5 py-3">
+                <div className="flex flex-col sm:flex-row sm:flex-wrap items-stretch sm:items-center gap-2 sm:gap-3 border-b border-slate-100 px-3 sm:px-5 py-3">
                     <Input prefix={<SearchOutlined className="text-slate-400" />}
                         placeholder="Tìm mã phiếu, ghi chú..." allowClear
                         value={draft.search}
                         onChange={(e) => setDraft((p) => ({ ...p, search: e.target.value }))}
-                        className="w-60" />
+                        className="w-full sm:w-60" />
                     {isCS1Manager && (
                         <Select placeholder="Cơ sở gửi" allowClear value={draft.fromPlantId}
                             onChange={(v) => { setDraft((p) => ({ ...p, fromPlantId: v })); setFilters((p) => ({ ...p, fromPlantId: v })); setPagination((p) => ({ ...p, page: 1 })); }}
                             options={plants.map((p: Plant) => ({ label: p.name, value: p.id }))}
-                            className="w-44" />
+                            className="w-full sm:w-44" />
                     )}
                     <Select placeholder="Trạng thái" allowClear value={draft.status}
                         onChange={(v) => { setDraft((p) => ({ ...p, status: v })); setFilters((p) => ({ ...p, status: v })); setPagination((p) => ({ ...p, page: 1 })); }}
-                        options={STATUS_OPTIONS} className="w-40" />
+                        options={STATUS_OPTIONS} className="w-full sm:w-40" />
                     <RangePicker value={draft.dateRange}
                         onChange={(dates) => {
                             setDraft((p) => ({ ...p, dateRange: dates as any }));
@@ -689,25 +731,27 @@ const SupplyRequestPage: React.FC = () => {
                             }));
                             setPagination((p) => ({ ...p, page: 1 }));
                         }}
-                        format="DD/MM/YYYY" className="w-60" />
+                        format="DD/MM/YYYY" className="w-full sm:w-60" />
                 </div>
 
                 {/* Table */}
-                <div className="px-5 py-4">
+                <div className="px-2 sm:px-5 py-4">
                     <Table
                         columns={columns}
                         dataSource={requests}
                         rowKey="id"
                         loading={isLoading || isFetching}
+                        size={isMobile ? 'small' : 'middle'}
                         onRow={(record) => ({
-                            onClick: () => { setSelectedId(record.id); setApprovalSel({}); },
+                            onClick: () => { setSelectedId(record.id); setApprovalQty({}); },
                             className: 'cursor-pointer hover:bg-blue-50/30 transition-colors',
                         })}
                         pagination={{
                             current: pagination.page, pageSize: pagination.limit, total: totalRequests,
-                            showSizeChanger: true,
+                            showSizeChanger: !isMobile,
+                            simple: isMobile,
                             onChange: (page, limit) => setPagination({ page, limit }),
-                            showTotal: (total) => `${total} phiếu`,
+                            showTotal: isMobile ? undefined : (total) => `${total} phiếu`,
                         }}
                         locale={{ emptyText: <Empty description="Không có phiếu nào" image={Empty.PRESENTED_IMAGE_SIMPLE} /> }}
                     />
@@ -728,9 +772,10 @@ const SupplyRequestPage: React.FC = () => {
             {/* Detail Drawer */}
             <Drawer
                 open={!!selectedId}
-                onClose={() => { setSelectedId(null); setApprovalSel({}); }}
-                width={820}
+                onClose={() => { setSelectedId(null); setApprovalQty({}); }}
+                width={isMobile ? '100%' : 820}
                 destroyOnHidden
+                styles={{ body: { padding: isMobile ? '12px' : undefined } }}
                 title={
                     <div className="flex items-center gap-3">
                         <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-indigo-50 text-indigo-600">
@@ -750,27 +795,23 @@ const SupplyRequestPage: React.FC = () => {
                     </div>
                 }
                 footer={selectedRequest && (
-                    <div className="flex items-center justify-between gap-3">
-                        <Button icon={<DownloadOutlined />} onClick={() => exportXlsx(selectedRequest)}>
+                    <div className={`flex gap-2 ${isMobile ? 'flex-col' : 'items-center justify-between'}`}>
+                        <Button icon={<DownloadOutlined />} onClick={() => exportXlsx(selectedRequest)}
+                            className={isMobile ? 'w-full' : ''}>
                             Xuất Excel
                         </Button>
-                        <div className="flex gap-2">
+                        <div className={`flex gap-2 ${isMobile ? 'flex-col' : ''}`}>
                             {selectedRequest.status === 'pending' && isCS1Manager && (
                                 <>
-                                    <Button danger onClick={() => setRejectTarget(selectedRequest)}>
+                                    <Button danger onClick={() => setRejectTarget(selectedRequest)}
+                                        className={isMobile ? 'w-full' : ''}>
                                         Từ chối
                                     </Button>
-                                    <Button type="primary" className="bg-green-600 hover:!bg-green-700"
+                                    <Button type="primary" className={`bg-green-600 hover:!bg-green-700${isMobile ? ' w-full' : ''}`}
                                         loading={approvingId === selectedRequest.id}
                                         onClick={() => {
-                                            const missing = selectedRequest.items.findIndex((_: any, idx: number) => !approvalSel[idx]?.materialId);
-                                            if (missing !== -1) {
-                                                message.error(`Vui lòng chọn vật tư thực tế cho dòng ${missing + 1}`);
-                                                return;
-                                            }
-                                            const items = selectedRequest.items.map((_: any, idx: number) => ({
-                                                materialId: approvalSel[idx]!.materialId!,
-                                                quantityApproved: approvalSel[idx]?.quantityApproved ?? selectedRequest.items[idx].quantityRequested,
+                                            const items = selectedRequest.items.map((r: any, idx: number) => ({
+                                                quantityApproved: approvalQty[idx] ?? r.quantityRequested,
                                             }));
                                             Modal.confirm({
                                                 title: 'Duyệt phiếu đề xuất?',
@@ -788,7 +829,7 @@ const SupplyRequestPage: React.FC = () => {
                             )}
                             {canConfirm && (
                                 <Button type="primary" loading={isConfirming}
-                                    className="bg-green-600 hover:!bg-green-700"
+                                    className={`bg-green-600 hover:!bg-green-700${isMobile ? ' w-full' : ''}`}
                                     onClick={() => {
                                         if (!linkedDist?.id) return;
                                         Modal.confirm({
@@ -843,7 +884,7 @@ const SupplyRequestPage: React.FC = () => {
                         {/* Info */}
                         <div className="rounded-2xl border border-slate-200 bg-white p-5">
                             <div className="mb-3 text-sm font-semibold text-slate-700">Thông tin phiếu</div>
-                            <Descriptions column={2} size="small" labelStyle={{ color: '#94a3b8', fontWeight: 500 }}>
+                            <Descriptions column={isMobile ? 1 : 2} size="small" labelStyle={{ color: '#94a3b8', fontWeight: 500 }}>
                                 <Descriptions.Item label="Mã phiếu">
                                     <Text copyable className="font-mono font-semibold text-blue-700">
                                         {selectedRequest.requestCode}
@@ -912,46 +953,14 @@ const SupplyRequestPage: React.FC = () => {
                                         width: 100, align: 'right' as const,
                                         render: (v: number) => <span className="font-semibold">{fmtNum(v)}</span>,
                                     },
-                                    // CS1 duyệt: chọn vật tư thực tế + SL duyệt
                                     ...(isCS1Manager && selectedRequest.status === 'pending' ? [
-                                        {
-                                            title: 'Vật tư thực tế (kho CS1)',
-                                            key: 'matSel', width: 260,
-                                            render: (_: any, _r: any, idx: number) => (
-                                                <Select showSearch optionFilterProp="label"
-                                                    placeholder="Chọn vật tư..." style={{ width: '100%' }}
-                                                    value={approvalSel[idx]?.materialId}
-                                                    onChange={(v) => setApprovalSel((p) => ({ ...p, [idx]: { ...p[idx], materialId: v } }))}
-                                                    options={(materialsWithStock as any[]).map((m: any) => ({
-                                                        value: m.id,
-                                                        label: `${m.code ? m.code + ' · ' : ''}${m.name}`,
-                                                    }))}
-                                                    optionRender={(opt) => {
-                                                        const m = (materialsWithStock as any[]).find((x: any) => x.id === opt.value);
-                                                        const stock = m?.cs1CurrentStock ?? null;
-                                                        return (
-                                                            <div className="flex items-center justify-between gap-2">
-                                                                <span className="flex-1 truncate">{opt.label}</span>
-                                                                {stock === null ? (
-                                                                    <Tag color="error" className="text-[10px]">Chưa có</Tag>
-                                                                ) : stock > 0 ? (
-                                                                    <Tag color="success" className="text-[10px]">Còn {stock} {m?.unit}</Tag>
-                                                                ) : (
-                                                                    <Tag color="warning" className="text-[10px]">Hết hàng</Tag>
-                                                                )}
-                                                            </div>
-                                                        );
-                                                    }}
-                                                />
-                                            ),
-                                        },
                                         {
                                             title: 'SL duyệt', key: 'qtyA', width: 110,
                                             render: (_: any, r: any, idx: number) => (
                                                 <InputNumber min={1} size="small" style={{ width: '100%' }}
-                                                    value={approvalSel[idx]?.quantityApproved ?? r.quantityRequested}
-                                                    onChange={(v) => setApprovalSel((p) => ({
-                                                        ...p, [idx]: { ...p[idx], quantityApproved: v ?? r.quantityRequested },
+                                                    value={approvalQty[idx] ?? r.quantityRequested}
+                                                    onChange={(v) => setApprovalQty((p) => ({
+                                                        ...p, [idx]: v ?? r.quantityRequested,
                                                     }))} />
                                             ),
                                         },

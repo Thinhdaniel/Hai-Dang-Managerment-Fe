@@ -34,6 +34,7 @@ import {
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useLocation } from 'react-router-dom';
 import ExpressDispatchModal from '../components/ExpressDispatchModal';
+import InternalDistributionModal from '../components/InternalDistributionModal';
 import SupplyDistributionModal from '../components/SupplyDistributionModal';
 import ConfirmAction from '../components/shared/ConfirmAction';
 import PageHeader from '../components/shared/PageHeader';
@@ -44,6 +45,7 @@ import type {
     Distribution,
     DistributionQueryParams,
     DistributionStatus,
+    DistributionType,
     PurchaseRequest,
 } from '../core/services/material.service';
 import { distributionService, supplyRequestService } from '../core/services/material.service';
@@ -70,6 +72,7 @@ type DateRangeValue = [Dayjs, Dayjs];
 type FilterState = {
     search: string;
     toPlantId?: string;
+    distributionType?: DistributionType;
     status?: DistributionStatus;
     startDate?: string;
     endDate?: string;
@@ -78,12 +81,14 @@ type FilterState = {
 type DraftFilterState = {
     search: string;
     toPlantId?: string;
+    distributionType?: DistributionType;
     status?: DistributionStatus;
     dateRange: DateRangeValue | null;
 };
 
 // Status display config
 const STATUS_META: Record<DistributionStatus, { color: string; label: string; icon: React.ReactNode }> = {
+    draft:       { color: 'orange',     label: 'Nháp',                icon: <ClockCircleOutlined /> },
     pending:     { color: 'default',    label: 'Chờ xuất kho',        icon: <ClockCircleOutlined /> },
     processing:  { color: 'processing', label: 'Đang xử lý',          icon: <ClockCircleOutlined /> },
     distributed: { color: 'blue',       label: 'Đã xuất — chờ nhận',  icon: <ArrowRightOutlined /> },
@@ -94,6 +99,11 @@ const STATUS_OPTIONS: Array<{ value: DistributionStatus; label: string }> = [
     { value: 'pending',     label: 'Chờ xuất kho' },
     { value: 'distributed', label: 'Đã xuất — chờ nhận' },
     { value: 'confirmed',   label: 'Hoàn thành' },
+];
+
+const TYPE_OPTIONS: Array<{ value: DistributionType; label: string }> = [
+    { value: 'facility_transfer', label: 'Lien co so' },
+    { value: 'internal_issue', label: 'Noi bo' },
 ];
 
 // Helpers
@@ -157,16 +167,19 @@ const DistributionPage: React.FC = () => {
         user!.plantId === MAIN_PLANT_ID &&
         (role === 'admin' || role === 'manager' || role === 'director');
 
-    const [filters, setFilters] = useState<FilterState>({ search: '', toPlantId: undefined, status: undefined });
-    const [draft, setDraft] = useState<DraftFilterState>({ search: '', toPlantId: undefined, status: undefined, dateRange: null });
+    const [filters, setFilters] = useState<FilterState>({ search: '', toPlantId: undefined, distributionType: undefined, status: undefined });
+    const [draft, setDraft] = useState<DraftFilterState>({ search: '', toPlantId: undefined, distributionType: undefined, status: undefined, dateRange: null });
     const [pagination, setPagination] = useState({ page: DEFAULT_PAGE, limit: DEFAULT_LIMIT });
     const [selectedId, setSelectedId] = useState<string | null>(null);
     const [createOpen, setCreateOpen] = useState(false);
+    const [internalOpen, setInternalOpen] = useState(false);
     const [expressOpen, setExpressOpen] = useState(false);
     const [confirmingId, setConfirmingId] = useState<string | null>(null);
     const [distributingId, setDistributingId] = useState<string | null>(null);
     const [exportingId, setExportingId] = useState<string | null>(null);
     const [editPriceOpen, setEditPriceOpen] = useState(false);
+    /** Draft đang mở để thêm vật tư */
+    const [activeDraft, setActiveDraft] = useState<Distribution | null>(null);
 
     // Auto-open create modal when navigated from SR page
     useEffect(() => {
@@ -187,6 +200,7 @@ const DistributionPage: React.FC = () => {
         () => ({
             search: filters.search || undefined,
             toPlantId: filters.toPlantId,
+            distributionType: filters.distributionType,
             status: filters.status,
             startDate: filters.startDate,
             endDate: filters.endDate,
@@ -219,6 +233,21 @@ const DistributionPage: React.FC = () => {
                 .getAll({ status: 'approved', limit: 100 })
                 .then((r) => (Array.isArray(r) ? r : (r as PaginatedResponse<PurchaseRequest>).data)),
         enabled: createOpen && isCS1Manager,
+    });
+
+    // Phiếu nội bộ đang draft (hôm nay)
+    const { data: draftInternals = [] } = useQuery({
+        queryKey: ['materials', 'distributions', 'draft-internal'],
+        queryFn: () =>
+            distributionService.getAll({
+                distributionType: 'internal_issue',
+                status: 'draft' as any,
+                startDate: dayjs().startOf('day').toISOString(),
+                endDate: dayjs().endOf('day').toISOString(),
+                limit: 50,
+            }).then((r) => (Array.isArray(r) ? r : (r as PaginatedResponse<Distribution>).data ?? [])),
+        enabled: isCS1Manager,
+        staleTime: 30_000,
     });
 
     const distributions = listRes?.data ?? [];
@@ -282,8 +311,8 @@ const DistributionPage: React.FC = () => {
 
     const resetFilters = () => {
         setPagination({ page: DEFAULT_PAGE, limit: DEFAULT_LIMIT });
-        setDraft({ search: '', toPlantId: undefined, status: undefined, dateRange: null });
-        setFilters({ search: '', toPlantId: undefined, status: undefined });
+        setDraft({ search: '', toPlantId: undefined, distributionType: undefined, status: undefined, dateRange: null });
+        setFilters({ search: '', toPlantId: undefined, distributionType: undefined, status: undefined });
     };
 
     const userPlantId = user?.plantId || (user as any)?.plant?.id;
@@ -304,6 +333,16 @@ const DistributionPage: React.FC = () => {
                 <span className='inline-flex items-center rounded border border-blue-100 bg-blue-50 px-2 py-1 font-mono text-xs font-semibold text-blue-700'>
                     {v || '-'}
                 </span>
+            ),
+        },
+        {
+            title: 'LOAI',
+            key: 'distributionType',
+            width: 120,
+            render: (_v, r) => (
+                <Tag color={r.distributionType === 'internal_issue' ? 'green' : 'blue'}>
+                    {r.distributionType === 'internal_issue' ? 'Noi bo' : 'Lien co so'}
+                </Tag>
             ),
         },
         {
@@ -458,74 +497,117 @@ const DistributionPage: React.FC = () => {
                 ))}
             </div>
 
-            {/* Filters */}
+            {/* Filters + Actions */}
             <div className='mdp-f rounded-xl border border-slate-200 bg-white shadow-sm'>
-                <div className='flex flex-col gap-3 border-b border-slate-100 px-4 py-4 lg:flex-row lg:items-center lg:justify-between'>
-                    <div className='flex flex-wrap items-center gap-2'>
-                        <Select
-                            showSearch allowClear placeholder='Cơ sở nhận' className='min-w-[200px]'
-                            value={draft.toPlantId}
-                            onChange={(v) => {
-                                setDraft((d) => ({ ...d, toPlantId: v }));
-                                setPagination((p) => ({ ...p, page: DEFAULT_PAGE }));
-                                setFilters((f) => ({ ...f, toPlantId: v }));
-                            }}
-                            options={(plants as Plant[]).map((p) => ({ value: p.id, label: p.name }))}
-                            optionFilterProp='label'
-                        />
-                        <Select
-                            allowClear placeholder='Trạng thái' className='min-w-[180px]'
-                            value={draft.status}
-                            onChange={(v) => {
-                                setDraft((d) => ({ ...d, status: v }));
-                                setPagination((p) => ({ ...p, page: DEFAULT_PAGE }));
-                                setFilters((f) => ({ ...f, status: v }));
-                            }}
-                            options={STATUS_OPTIONS}
-                        />
-                        <RangePicker
-                            className='min-w-[240px]' format='DD/MM/YYYY'
-                            value={draft.dateRange}
-                            onChange={(v) => {
-                                const range = v && v[0] && v[1] ? [v[0], v[1]] as DateRangeValue : null;
-                                setDraft((d) => ({ ...d, dateRange: range }));
-                                setPagination((p) => ({ ...p, page: DEFAULT_PAGE }));
-                                setFilters((f) => ({
-                                    ...f,
-                                    startDate: range ? range[0].startOf('day').format('YYYY-MM-DD') : undefined,
-                                    endDate: range ? range[1].endOf('day').format('YYYY-MM-DD') : undefined,
-                                }));
-                            }}
-                        />
-                        <Input
-                            allowClear prefix={<SearchOutlined className='text-slate-400' />}
-                            placeholder='Tìm mã phiếu, mã đề xuất...' className='min-w-[220px] rounded-lg'
-                            value={draft.search}
-                            onChange={(e) => setDraft((d) => ({ ...d, search: e.target.value }))}
-                        />
-                        <Button icon={<ReloadOutlined />} onClick={resetFilters} className='text-slate-500'>
-                            Làm mới
-                        </Button>
-                    </div>
-
-                    {isCS1Manager && (
-                        <Space>
+                {/* Row 1: Actions */}
+                {isCS1Manager && (
+                    <div className='flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 px-5 py-3'>
+                        <div className='flex flex-wrap items-center gap-2'>
+                            {/* Draft badge */}
+                            {(draftInternals as Distribution[]).length > 0 && (
+                                <Select
+                                    placeholder={
+                                        <span className='flex items-center gap-1.5'>
+                                            <ClockCircleOutlined className='text-orange-500' />
+                                            <span className='font-medium text-orange-600'>
+                                                {(draftInternals as Distribution[]).length} phiếu nháp hôm nay
+                                            </span>
+                                        </span>
+                                    }
+                                    style={{ minWidth: 210 }}
+                                    value={null}
+                                    onChange={(id) => {
+                                        const d = (draftInternals as Distribution[]).find((x) => x.id === id);
+                                        if (d) { setActiveDraft(d); setInternalOpen(true); }
+                                    }}
+                                    options={(draftInternals as Distribution[]).map((d) => ({
+                                        value: d.id,
+                                        label: (
+                                            <span className='flex items-center gap-2'>
+                                                <span className='font-mono text-xs font-semibold'>{d.distributionCode}</span>
+                                                <span className='text-xs text-slate-400'>{d.targetDepartment || d.requesterName} · {d.items?.length ?? 0} dòng</span>
+                                            </span>
+                                        ),
+                                    }))}
+                                />
+                            )}
+                        </div>
+                        <div className='flex flex-wrap items-center gap-2'>
+                            <Button
+                                icon={<PlusOutlined />}
+                                onClick={() => setInternalOpen(true)}
+                                className='border-emerald-500 text-emerald-600 hover:!border-emerald-600 hover:!text-emerald-700'
+                            >
+                                Cấp phát nội bộ
+                            </Button>
                             <Button
                                 icon={<ThunderboltOutlined />}
                                 onClick={() => setExpressOpen(true)}
-                                className='rounded-lg border-orange-400 text-orange-500 hover:!border-orange-500 hover:!text-orange-600'
+                                className='border-orange-400 text-orange-500 hover:!border-orange-500 hover:!text-orange-600'
                             >
                                 Xuất thẳng khẩn cấp
                             </Button>
                             <Button
                                 type='primary' icon={<PlusOutlined />}
                                 onClick={() => setCreateOpen(true)}
-                                className='rounded-lg bg-blue-600 hover:!bg-blue-700'
+                                className='bg-blue-600 hover:!bg-blue-700'
                             >
                                 Tạo phiếu cấp phát
                             </Button>
-                        </Space>
-                    )}
+                        </div>
+                    </div>
+                )}
+
+                {/* Row 2: Filters */}
+                <div className='flex flex-wrap items-center gap-2 px-5 py-3'>
+                    <Input
+                        allowClear
+                        prefix={<SearchOutlined className='text-slate-400' />}
+                        placeholder='Tìm mã phiếu, mã đề xuất...'
+                        style={{ width: 220 }}
+                        value={draft.search}
+                        onChange={(e) => setDraft((d) => ({ ...d, search: e.target.value }))}
+                    />
+                    <Select
+                        showSearch allowClear placeholder='Cơ sở nhận'
+                        style={{ width: 180 }}
+                        value={draft.toPlantId}
+                        onChange={(v) => { setDraft((d) => ({ ...d, toPlantId: v })); setPagination((p) => ({ ...p, page: DEFAULT_PAGE })); setFilters((f) => ({ ...f, toPlantId: v })); }}
+                        options={(plants as Plant[]).map((p) => ({ value: p.id, label: p.name }))}
+                        optionFilterProp='label'
+                    />
+                    <Select
+                        allowClear placeholder='Loại phiếu'
+                        style={{ width: 150 }}
+                        value={draft.distributionType}
+                        onChange={(v) => { setDraft((d) => ({ ...d, distributionType: v })); setPagination((p) => ({ ...p, page: DEFAULT_PAGE })); setFilters((f) => ({ ...f, distributionType: v })); }}
+                        options={TYPE_OPTIONS}
+                    />
+                    <Select
+                        allowClear placeholder='Trạng thái'
+                        style={{ width: 170 }}
+                        value={draft.status}
+                        onChange={(v) => { setDraft((d) => ({ ...d, status: v })); setPagination((p) => ({ ...p, page: DEFAULT_PAGE })); setFilters((f) => ({ ...f, status: v })); }}
+                        options={STATUS_OPTIONS}
+                    />
+                    <RangePicker
+                        format='DD/MM/YYYY'
+                        style={{ width: 230 }}
+                        value={draft.dateRange}
+                        onChange={(v) => {
+                            const range = v && v[0] && v[1] ? [v[0], v[1]] as DateRangeValue : null;
+                            setDraft((d) => ({ ...d, dateRange: range }));
+                            setPagination((p) => ({ ...p, page: DEFAULT_PAGE }));
+                            setFilters((f) => ({
+                                ...f,
+                                startDate: range ? range[0].startOf('day').format('YYYY-MM-DD') : undefined,
+                                endDate: range ? range[1].endOf('day').format('YYYY-MM-DD') : undefined,
+                            }));
+                        }}
+                    />
+                    <Button icon={<ReloadOutlined />} onClick={resetFilters} className='text-slate-500'>
+                        Làm mới
+                    </Button>
                 </div>
             </div>
 
@@ -563,6 +645,22 @@ const DistributionPage: React.FC = () => {
 
 
             {/* Create modal — SR-only flow via SupplyDistributionModal */}
+            {isCS1Manager && (
+                <InternalDistributionModal
+                    open={internalOpen}
+                    plantId={MAIN_PLANT_ID}
+                    existingDraft={activeDraft}
+                    onClose={() => { setInternalOpen(false); setActiveDraft(null); }}
+                    onSuccess={(distribution) => {
+                        setInternalOpen(false);
+                        setActiveDraft(null);
+                        setSelectedId(distribution.id);
+                        invalidate(distribution.id);
+                        queryClient.invalidateQueries({ queryKey: ['materials', 'distributions', 'draft-internal'] });
+                    }}
+                />
+            )}
+
             {isCS1Manager && (
                 <CreateFromSRDrawer
                     open={createOpen}
@@ -619,6 +717,42 @@ const DistributionPage: React.FC = () => {
                                     >
                                         Cập nhật giá
                                     </Button>
+                                )}
+                                {/* Draft nội bộ: nút thêm vật tư + chốt phiếu */}
+                                {detail.status === 'draft' && detail.distributionType === 'internal_issue' && isCS1Manager && (
+                                    <>
+                                        <Button
+                                            icon={<PlusOutlined />}
+                                            onClick={() => {
+                                                setActiveDraft(detail);
+                                                setSelectedId(null);
+                                                setInternalOpen(true);
+                                            }}
+                                        >
+                                            Thêm vật tư
+                                        </Button>
+                                        <Button
+                                            type='primary'
+                                            icon={<CheckCircleOutlined />}
+                                            className='rounded-lg bg-emerald-600 hover:!bg-emerald-700'
+                                            onClick={() => {
+                                                Modal.confirm({
+                                                    title: 'Chốt phiếu cấp phát nội bộ?',
+                                                    content: 'Tồn kho sẽ bị trừ ngay lập tức. Không thể hoàn tác.',
+                                                    okText: 'Chốt phiếu',
+                                                    okButtonProps: { className: 'bg-green-600' },
+                                                    onOk: async () => {
+                                                        await distributionService.finalizeInternalDraft(detail.id);
+                                                        await invalidate(detail.id);
+                                                        queryClient.invalidateQueries({ queryKey: ['materials', 'distributions', 'draft-internal'] });
+                                                        setSelectedId(null);
+                                                    },
+                                                });
+                                            }}
+                                        >
+                                            Chốt phiếu — trừ kho
+                                        </Button>
+                                    </>
                                 )}
                                 {/* Xuất kho: pending + CS1Manager */}
                                 {detail.status === 'pending' && isCS1Manager && (
@@ -718,6 +852,15 @@ const DistributionPage: React.FC = () => {
                                 <Descriptions.Item label='Người cấp phát'>{resolveUser(detail.distributedBy)}</Descriptions.Item>
                                 <Descriptions.Item label='Ngày xác nhận'>{fmtDt(detail.confirmedAt)}</Descriptions.Item>
                                 <Descriptions.Item label='Người xác nhận'>{resolveUser(detail.confirmedBy)}</Descriptions.Item>
+                                {detail.requesterName && (
+                                    <Descriptions.Item label='Nguoi xin cap'>{detail.requesterName}</Descriptions.Item>
+                                )}
+                                {detail.targetDepartment && (
+                                    <Descriptions.Item label='Bo phan'>{detail.targetDepartment}</Descriptions.Item>
+                                )}
+                                {detail.targetLine && (
+                                    <Descriptions.Item label='Chuyen may'>{detail.targetLine}</Descriptions.Item>
+                                )}
                                 {detail.note && (
                                     <Descriptions.Item label='Ghi chú' span={2}>{detail.note}</Descriptions.Item>
                                 )}

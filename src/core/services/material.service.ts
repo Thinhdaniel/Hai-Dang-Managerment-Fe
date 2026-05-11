@@ -36,7 +36,8 @@ export type PurchaseRequestStatus =
     | 'distributed'
     | 'cancelled';
 export type PurchaseOrderStatus = 'draft' | 'sent' | 'confirmed' | 'ordered' | 'received' | 'cancelled';
-export type DistributionStatus = 'pending' | 'processing' | 'distributed' | 'confirmed';
+export type DistributionStatus = 'draft' | 'pending' | 'processing' | 'distributed' | 'confirmed';
+export type DistributionType = 'facility_transfer' | 'internal_issue';
 export type InventoryTransactionType = 'import' | 'export' | 'adjust' | 'adjustment';
 export type InventoryTransactionRelatedType = 'purchase_order' | 'distribution' | 'manual';
 
@@ -394,6 +395,7 @@ export interface DistributionItemPayload {
 export interface Distribution {
     id: string;
     distributionCode?: string;
+    distributionType?: DistributionType;
     purchaseOrderId?: string;
     purchaseOrder?: PurchaseOrder;
     supplyRequestId?: string;
@@ -411,6 +413,9 @@ export interface Distribution {
     createdAt: string;
     updatedAt: string;
     confirmedAt?: string;
+    requesterName?: string;
+    targetDepartment?: string;
+    targetLine?: string;
 }
 
 export interface DistributionPayload {
@@ -423,10 +428,21 @@ export interface DistributionPayload {
     note?: string;
 }
 
+export interface InternalDistributionPayload {
+    distributedAt?: string;
+    requesterName: string;
+    targetDepartment?: string;
+    targetLine?: string;
+    items: DistributionItemPayload[];
+    note?: string;
+    status?: 'draft' | 'confirmed';
+}
+
 export interface DistributionQueryParams {
     search?: string;
     fromPlantId?: string;
     toPlantId?: string;
+    distributionType?: DistributionType;
     status?: DistributionStatus;
     startDate?: string;
     endDate?: string;
@@ -763,6 +779,15 @@ export const distributionService = {
 
     create: (data: DistributionPayload): Promise<Distribution> =>
         api.post<Distribution, DistributionPayload>(DISTRIBUTIONS_BASE, data),
+
+    createInternal: (data: InternalDistributionPayload): Promise<Distribution> =>
+        api.post<Distribution, InternalDistributionPayload>(`${DISTRIBUTIONS_BASE}/internal`, data),
+
+    appendInternalItems: (id: string, items: DistributionItemPayload[]): Promise<Distribution> =>
+        api.post<Distribution, { items: DistributionItemPayload[] }>(`${DISTRIBUTIONS_BASE}/${id}/internal/items`, { items }),
+
+    finalizeInternalDraft: (id: string): Promise<Distribution> =>
+        api.patch<Distribution>(`${DISTRIBUTIONS_BASE}/${id}/internal/finalize`),
 
     update: (id: string, data: { items?: Array<{ index: number; unitPrice?: number; vatRate?: number; note?: string }>; note?: string }): Promise<Distribution> =>
         api.patch<Distribution, any>(`${DISTRIBUTIONS_BASE}/${id}`, data),
