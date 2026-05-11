@@ -522,7 +522,7 @@ const SupplyRequestPage: React.FC = () => {
     });
 
     const { mutateAsync: approveReq } = useMutation({
-        mutationFn: ({ id, payload }: { id: string; payload: { items: Array<{ quantityApproved: number }> } }) =>
+        mutationFn: ({ id, payload }: { id: string; payload: { items: Array<{ materialId: string; quantityApproved: number }> } }) =>
             supplyRequestService.approve(id, payload),
         onSuccess: (approved) => {
             queryClient.invalidateQueries({ queryKey: ['supply-requests'] });
@@ -811,6 +811,7 @@ const SupplyRequestPage: React.FC = () => {
                                         loading={approvingId === selectedRequest.id}
                                         onClick={() => {
                                             const items = selectedRequest.items.map((r: any, idx: number) => ({
+                                                materialId: resolveId(r.materialId) ?? r.materialId,
                                                 quantityApproved: approvalQty[idx] ?? r.quantityRequested,
                                             }));
                                             Modal.confirm({
