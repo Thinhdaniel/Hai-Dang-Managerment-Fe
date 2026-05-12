@@ -177,6 +177,7 @@ const DistributionPage: React.FC = () => {
     const [confirmingId, setConfirmingId] = useState<string | null>(null);
     const [distributingId, setDistributingId] = useState<string | null>(null);
     const [exportingId, setExportingId] = useState<string | null>(null);
+    const [exportingRange, setExportingRange] = useState(false);
     const [editPriceOpen, setEditPriceOpen] = useState(false);
     /** Draft đang mở để thêm vật tư */
     const [activeDraft, setActiveDraft] = useState<Distribution | null>(null);
@@ -306,6 +307,28 @@ const DistributionPage: React.FC = () => {
             message.error('Không thể xuất Excel.');
         } finally {
             setExportingId(null);
+        }
+    };
+
+    const handleExportRange = async () => {
+        try {
+            setExportingRange(true);
+            const params: Record<string, string | undefined> = {
+                startDate: filters.startDate,
+                endDate: filters.endDate,
+                toPlantId: filters.toPlantId,
+                distributionType: filters.distributionType,
+                status: filters.status,
+                search: filters.search || undefined,
+            };
+            const label = filters.startDate && filters.endDate
+                ? `${filters.startDate}_den_${filters.endDate}`
+                : 'tat-ca';
+            await distributionService.exportRangeXlsx(params, `cap-phat-${label}.xlsx`);
+        } catch {
+            message.error('Không thể xuất Excel.');
+        } finally {
+            setExportingRange(false);
         }
     };
 
@@ -607,6 +630,15 @@ const DistributionPage: React.FC = () => {
                     />
                     <Button icon={<ReloadOutlined />} onClick={resetFilters} className='text-slate-500'>
                         Làm mới
+                    </Button>
+                    <Button
+                        icon={<DownloadOutlined />}
+                        loading={exportingRange}
+                        onClick={handleExportRange}
+                        type='primary'
+                        ghost
+                    >
+                        Xuất Excel
                     </Button>
                 </div>
             </div>
