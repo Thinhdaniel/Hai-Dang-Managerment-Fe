@@ -7,6 +7,7 @@ import {
     Descriptions,
     Drawer,
     Empty,
+    Grid,
     Input,
     InputNumber,
     Modal,
@@ -26,11 +27,15 @@ import {
     DownloadOutlined,
     EditOutlined,
     EyeOutlined,
+    FilterOutlined,
     PlusOutlined,
     ReloadOutlined,
+    RightOutlined,
     SearchOutlined,
     ThunderboltOutlined,
 } from '@ant-design/icons';
+
+const { useBreakpoint } = Grid;
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useLocation } from 'react-router-dom';
 import ExpressDispatchModal from '../components/ExpressDispatchModal';
@@ -179,6 +184,9 @@ const DistributionPage: React.FC = () => {
     const [exportingId, setExportingId] = useState<string | null>(null);
     const [exportingRange, setExportingRange] = useState(false);
     const [editPriceOpen, setEditPriceOpen] = useState(false);
+    const [filterOpen, setFilterOpen] = useState(false);
+    const screens = useBreakpoint();
+    const isMobile = !screens.sm;
     /** Draft đang mở để thêm vật tư */
     const [activeDraft, setActiveDraft] = useState<Distribution | null>(null);
 
@@ -506,173 +514,217 @@ const DistributionPage: React.FC = () => {
             </div>
 
             {/* Stats */}
-            <div className='mdp-s flex flex-wrap gap-px overflow-hidden rounded-xl border border-slate-200 bg-slate-200'>
+            <div className='mdp-s grid grid-cols-2 gap-2 sm:flex sm:gap-0 sm:overflow-hidden sm:rounded-xl sm:border sm:border-slate-200 sm:bg-slate-200'>
                 {[
-                    { label: 'Tổng phiếu', value: listRes?.total ?? 0, accent: 'oklch(0.18 0.012 250)' },
-                    { label: 'Chờ xuất kho', value: 0, accent: 'oklch(0.64 0.16 72)' },
-                    { label: 'Đã xuất — chờ nhận', value: 0, accent: 'oklch(0.48 0.15 250)' },
-                    { label: 'Hoàn thành', value: 0, accent: 'oklch(0.58 0.15 160)' },
+                    { label: 'Tổng phiếu',          value: listRes?.total ?? 0, accent: '#1A3A5C' },
+                    { label: 'Chờ xuất kho',         value: 0,                  accent: '#FA8C16' },
+                    { label: 'Đã xuất — chờ nhận',   value: 0,                  accent: '#1677ff' },
+                    { label: 'Hoàn thành',            value: 0,                  accent: '#16a34a' },
                 ].map(({ label, value, accent }) => (
-                    <div key={label} className='flex min-w-[150px] flex-1 flex-col gap-0.5 bg-white px-5 py-4'>
-                        <span className='text-[11px] font-medium text-slate-400'>{label}</span>
-                        <span className='text-base font-bold' style={{ color: accent }}>{fmt(value)}</span>
+                    <div key={label} className='flex flex-col gap-0.5 rounded-xl border border-slate-200 bg-white px-4 py-3 sm:min-w-[150px] sm:flex-1 sm:rounded-none sm:border-0'>
+                        <span className='text-[10px] font-semibold uppercase tracking-wide text-slate-400'>{label}</span>
+                        <span className='text-xl font-bold sm:text-base' style={{ color: accent }}>{fmt(value)}</span>
                     </div>
                 ))}
             </div>
 
-            {/* Filters + Actions */}
+            {/* Actions + Filters */}
             <div className='mdp-f rounded-xl border border-slate-200 bg-white shadow-sm'>
-                {/* Row 1: Actions */}
+                {/* Actions row */}
                 {isCS1Manager && (
-                    <div className='flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 px-5 py-3'>
-                        <div className='flex flex-wrap items-center gap-2'>
-                            {/* Draft badge */}
-                            {(draftInternals as Distribution[]).length > 0 && (
-                                <Select
-                                    placeholder={
-                                        <span className='flex items-center gap-1.5'>
-                                            <ClockCircleOutlined className='text-orange-500' />
-                                            <span className='font-medium text-orange-600'>
-                                                {(draftInternals as Distribution[]).length} phiếu nháp hôm nay
-                                            </span>
+                    <div className='flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 px-3 sm:px-5 py-3'>
+                        {/* Draft badge — mobile: compact */}
+                        {(draftInternals as Distribution[]).length > 0 && (
+                            <Select
+                                placeholder={
+                                    <span className='flex items-center gap-1.5'>
+                                        <ClockCircleOutlined className='text-orange-500' />
+                                        <span className='font-medium text-orange-600 text-xs sm:text-sm'>
+                                            {(draftInternals as Distribution[]).length} nháp hôm nay
                                         </span>
-                                    }
-                                    style={{ minWidth: 210 }}
-                                    value={null}
-                                    onChange={(id) => {
-                                        const d = (draftInternals as Distribution[]).find((x) => x.id === id);
-                                        if (d) { setActiveDraft(d); setInternalOpen(true); }
-                                    }}
-                                    options={(draftInternals as Distribution[]).map((d) => ({
-                                        value: d.id,
-                                        label: (
-                                            <span className='flex items-center gap-2'>
-                                                <span className='font-mono text-xs font-semibold'>{d.distributionCode}</span>
-                                                <span className='text-xs text-slate-400'>{d.targetDepartment || d.requesterName} · {d.items?.length ?? 0} dòng</span>
-                                            </span>
-                                        ),
-                                    }))}
-                                />
+                                    </span>
+                                }
+                                style={{ minWidth: isMobile ? 160 : 210 }}
+                                value={null}
+                                onChange={(id) => {
+                                    const d = (draftInternals as Distribution[]).find((x) => x.id === id);
+                                    if (d) { setActiveDraft(d); setInternalOpen(true); }
+                                }}
+                                options={(draftInternals as Distribution[]).map((d) => ({
+                                    value: d.id,
+                                    label: (
+                                        <span className='flex items-center gap-2'>
+                                            <span className='font-mono text-xs font-semibold'>{d.distributionCode}</span>
+                                            <span className='text-xs text-slate-400'>{d.targetDepartment || d.requesterName} · {d.items?.length ?? 0} dòng</span>
+                                        </span>
+                                    ),
+                                }))}
+                            />
+                        )}
+                        <div className='flex flex-wrap items-center gap-2 ml-auto'>
+                            {isMobile ? (
+                                /* Mobile: icon-only buttons */
+                                <>
+                                    <Tooltip title='Cấp phát nội bộ'>
+                                        <Button icon={<PlusOutlined />} onClick={() => setInternalOpen(true)}
+                                            className='border-emerald-500 text-emerald-600' />
+                                    </Tooltip>
+                                    <Tooltip title='Xuất thẳng khẩn cấp'>
+                                        <Button icon={<ThunderboltOutlined />} onClick={() => setExpressOpen(true)}
+                                            className='border-orange-400 text-orange-500' />
+                                    </Tooltip>
+                                    <Button type='primary' icon={<PlusOutlined />} onClick={() => setCreateOpen(true)}
+                                        className='bg-blue-600 hover:!bg-blue-700'>
+                                        Tạo phiếu
+                                    </Button>
+                                </>
+                            ) : (
+                                <>
+                                    <Button icon={<PlusOutlined />} onClick={() => setInternalOpen(true)}
+                                        className='border-emerald-500 text-emerald-600 hover:!border-emerald-600 hover:!text-emerald-700'>
+                                        Cấp phát nội bộ
+                                    </Button>
+                                    <Button icon={<ThunderboltOutlined />} onClick={() => setExpressOpen(true)}
+                                        className='border-orange-400 text-orange-500 hover:!border-orange-500 hover:!text-orange-600'>
+                                        Xuất thẳng khẩn cấp
+                                    </Button>
+                                    <Button type='primary' icon={<PlusOutlined />} onClick={() => setCreateOpen(true)}
+                                        className='bg-blue-600 hover:!bg-blue-700'>
+                                        Tạo phiếu cấp phát
+                                    </Button>
+                                </>
                             )}
-                        </div>
-                        <div className='flex flex-wrap items-center gap-2'>
-                            <Button
-                                icon={<PlusOutlined />}
-                                onClick={() => setInternalOpen(true)}
-                                className='border-emerald-500 text-emerald-600 hover:!border-emerald-600 hover:!text-emerald-700'
-                            >
-                                Cấp phát nội bộ
-                            </Button>
-                            <Button
-                                icon={<ThunderboltOutlined />}
-                                onClick={() => setExpressOpen(true)}
-                                className='border-orange-400 text-orange-500 hover:!border-orange-500 hover:!text-orange-600'
-                            >
-                                Xuất thẳng khẩn cấp
-                            </Button>
-                            <Button
-                                type='primary' icon={<PlusOutlined />}
-                                onClick={() => setCreateOpen(true)}
-                                className='bg-blue-600 hover:!bg-blue-700'
-                            >
-                                Tạo phiếu cấp phát
-                            </Button>
                         </div>
                     </div>
                 )}
 
-                {/* Row 2: Filters */}
-                <div className='flex flex-wrap items-center gap-2 px-5 py-3'>
-                    <Input
-                        allowClear
-                        prefix={<SearchOutlined className='text-slate-400' />}
-                        placeholder='Tìm mã phiếu, mã đề xuất...'
-                        style={{ width: 220 }}
-                        value={draft.search}
-                        onChange={(e) => setDraft((d) => ({ ...d, search: e.target.value }))}
-                    />
-                    <Select
-                        showSearch allowClear placeholder='Cơ sở nhận'
-                        style={{ width: 180 }}
-                        value={draft.toPlantId}
-                        onChange={(v) => { setDraft((d) => ({ ...d, toPlantId: v })); setPagination((p) => ({ ...p, page: DEFAULT_PAGE })); setFilters((f) => ({ ...f, toPlantId: v })); }}
-                        options={(plants as Plant[]).map((p) => ({ value: p.id, label: p.name }))}
-                        optionFilterProp='label'
-                    />
-                    <Select
-                        allowClear placeholder='Loại phiếu'
-                        style={{ width: 150 }}
-                        value={draft.distributionType}
-                        onChange={(v) => { setDraft((d) => ({ ...d, distributionType: v })); setPagination((p) => ({ ...p, page: DEFAULT_PAGE })); setFilters((f) => ({ ...f, distributionType: v })); }}
-                        options={TYPE_OPTIONS}
-                    />
-                    <Select
-                        allowClear placeholder='Trạng thái'
-                        style={{ width: 170 }}
-                        value={draft.status}
-                        onChange={(v) => { setDraft((d) => ({ ...d, status: v })); setPagination((p) => ({ ...p, page: DEFAULT_PAGE })); setFilters((f) => ({ ...f, status: v })); }}
-                        options={STATUS_OPTIONS}
-                    />
-                    <RangePicker
-                        format='DD/MM/YYYY'
-                        style={{ width: 230 }}
-                        value={draft.dateRange}
-                        onChange={(v) => {
-                            const range = v && v[0] && v[1] ? [v[0], v[1]] as DateRangeValue : null;
-                            setDraft((d) => ({ ...d, dateRange: range }));
-                            setPagination((p) => ({ ...p, page: DEFAULT_PAGE }));
-                            setFilters((f) => ({
-                                ...f,
-                                startDate: range ? range[0].startOf('day').format('YYYY-MM-DD') : undefined,
-                                endDate: range ? range[1].endOf('day').format('YYYY-MM-DD') : undefined,
-                            }));
-                        }}
-                    />
-                    <Button icon={<ReloadOutlined />} onClick={resetFilters} className='text-slate-500'>
-                        Làm mới
-                    </Button>
-                    <Button
-                        icon={<DownloadOutlined />}
-                        loading={exportingRange}
-                        onClick={handleExportRange}
-                        type='primary'
-                        ghost
-                    >
-                        Xuất Excel
-                    </Button>
+                {/* Filter row */}
+                <div className='px-3 sm:px-5 py-3'>
+                    {/* Mobile */}
+                    <div className='flex gap-2 sm:hidden'>
+                        <Input allowClear prefix={<SearchOutlined className='text-slate-400' />}
+                            placeholder='Tìm mã phiếu...' className='flex-1'
+                            value={draft.search} onChange={(e) => setDraft((d) => ({ ...d, search: e.target.value }))} />
+                        <Button icon={<FilterOutlined />}
+                            type={(draft.toPlantId || draft.distributionType || draft.status || draft.dateRange) ? 'primary' : 'default'}
+                            ghost={!!(draft.toPlantId || draft.distributionType || draft.status || draft.dateRange)}
+                            onClick={() => setFilterOpen((v) => !v)} />
+                        <Button icon={<DownloadOutlined />} loading={exportingRange} onClick={handleExportRange} />
+                    </div>
+                    {filterOpen && (
+                        <div className='mt-2 flex flex-col gap-2 sm:hidden'>
+                            <Select showSearch allowClear placeholder='Cơ sở nhận' className='w-full'
+                                value={draft.toPlantId}
+                                onChange={(v) => { setDraft((d) => ({ ...d, toPlantId: v })); setPagination((p) => ({ ...p, page: DEFAULT_PAGE })); setFilters((f) => ({ ...f, toPlantId: v })); }}
+                                options={(plants as Plant[]).map((p) => ({ value: p.id, label: p.name }))} optionFilterProp='label' />
+                            <Select allowClear placeholder='Loại phiếu' className='w-full'
+                                value={draft.distributionType}
+                                onChange={(v) => { setDraft((d) => ({ ...d, distributionType: v })); setPagination((p) => ({ ...p, page: DEFAULT_PAGE })); setFilters((f) => ({ ...f, distributionType: v })); }}
+                                options={TYPE_OPTIONS} />
+                            <Select allowClear placeholder='Trạng thái' className='w-full'
+                                value={draft.status}
+                                onChange={(v) => { setDraft((d) => ({ ...d, status: v })); setPagination((p) => ({ ...p, page: DEFAULT_PAGE })); setFilters((f) => ({ ...f, status: v })); }}
+                                options={STATUS_OPTIONS} />
+                            <RangePicker format='DD/MM/YYYY' className='w-full' inputReadOnly
+                                value={draft.dateRange}
+                                onChange={(v) => {
+                                    const range = v && v[0] && v[1] ? [v[0], v[1]] as DateRangeValue : null;
+                                    setDraft((d) => ({ ...d, dateRange: range }));
+                                    setPagination((p) => ({ ...p, page: DEFAULT_PAGE }));
+                                    setFilters((f) => ({ ...f, startDate: range ? range[0].startOf('day').format('YYYY-MM-DD') : undefined, endDate: range ? range[1].endOf('day').format('YYYY-MM-DD') : undefined }));
+                                }} />
+                        </div>
+                    )}
+                    {/* Desktop */}
+                    <div className='hidden sm:flex flex-wrap items-center gap-2'>
+                        <Input allowClear prefix={<SearchOutlined className='text-slate-400' />}
+                            placeholder='Tìm mã phiếu, mã đề xuất...' style={{ width: 220 }}
+                            value={draft.search} onChange={(e) => setDraft((d) => ({ ...d, search: e.target.value }))} />
+                        <Select showSearch allowClear placeholder='Cơ sở nhận' style={{ width: 180 }}
+                            value={draft.toPlantId}
+                            onChange={(v) => { setDraft((d) => ({ ...d, toPlantId: v })); setPagination((p) => ({ ...p, page: DEFAULT_PAGE })); setFilters((f) => ({ ...f, toPlantId: v })); }}
+                            options={(plants as Plant[]).map((p) => ({ value: p.id, label: p.name }))} optionFilterProp='label' />
+                        <Select allowClear placeholder='Loại phiếu' style={{ width: 150 }}
+                            value={draft.distributionType}
+                            onChange={(v) => { setDraft((d) => ({ ...d, distributionType: v })); setPagination((p) => ({ ...p, page: DEFAULT_PAGE })); setFilters((f) => ({ ...f, distributionType: v })); }}
+                            options={TYPE_OPTIONS} />
+                        <Select allowClear placeholder='Trạng thái' style={{ width: 170 }}
+                            value={draft.status}
+                            onChange={(v) => { setDraft((d) => ({ ...d, status: v })); setPagination((p) => ({ ...p, page: DEFAULT_PAGE })); setFilters((f) => ({ ...f, status: v })); }}
+                            options={STATUS_OPTIONS} />
+                        <RangePicker format='DD/MM/YYYY' style={{ width: 230 }} value={draft.dateRange}
+                            onChange={(v) => {
+                                const range = v && v[0] && v[1] ? [v[0], v[1]] as DateRangeValue : null;
+                                setDraft((d) => ({ ...d, dateRange: range }));
+                                setPagination((p) => ({ ...p, page: DEFAULT_PAGE }));
+                                setFilters((f) => ({ ...f, startDate: range ? range[0].startOf('day').format('YYYY-MM-DD') : undefined, endDate: range ? range[1].endOf('day').format('YYYY-MM-DD') : undefined }));
+                            }} />
+                        <Button icon={<ReloadOutlined />} onClick={resetFilters} className='text-slate-500'>Làm mới</Button>
+                        <Button icon={<DownloadOutlined />} loading={exportingRange} onClick={handleExportRange} type='primary' ghost>Xuất Excel</Button>
+                    </div>
                 </div>
             </div>
 
-            {/* Table */}
+            {/* Table / Card list */}
             <div className='mdp-t overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm'>
-                <div className='[&_.ant-table]:!bg-white [&_.ant-table-row:hover_td]:!bg-blue-50/30 [&_.ant-table-thead_th]:!bg-slate-50 [&_.ant-table-thead_th]:!text-[11px] [&_.ant-table-thead_th]:!font-bold [&_.ant-table-thead_th]:!tracking-[0.07em] [&_.ant-table-thead_th]:!text-slate-400'>
-                    <Table<Distribution>
-                        rowKey='id'
-                        columns={columns}
-                        dataSource={distributions}
-                        loading={isLoading || isFetching}
-                        size='small'
-                        scroll={{ x: 900 }}
-                        onRow={(record) => ({
-                            onClick: () => setSelectedId(record.id),
-                            style: { cursor: 'pointer' },
+                {isMobile ? (
+                    <div className='divide-y divide-slate-100'>
+                        {(isLoading || isFetching) && distributions.length === 0 ? (
+                            <div className='py-16 text-center text-sm text-slate-400'>Đang tải...</div>
+                        ) : distributions.length === 0 ? (
+                            <div className='py-16'><Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description='Chưa có phiếu cấp phát' /></div>
+                        ) : distributions.map((r) => {
+                            const meta = STATUS_META[r.status];
+                            const total = r.items.reduce((s, i) => s + (i.totalWithVat ?? 0), 0);
+                            return (
+                                <div key={r.id} onClick={() => setSelectedId(r.id)}
+                                    className='flex items-center gap-3 px-4 py-3.5 active:bg-slate-50 cursor-pointer transition-colors'>
+                                    <div className='shrink-0 w-2 h-2 rounded-full mt-0.5'
+                                        style={{ backgroundColor: ({ orange: '#FA8C16', default: '#94a3b8', processing: '#1677ff', blue: '#1677ff', green: '#16a34a' } as any)[meta?.color] ?? '#94a3b8' }} />
+                                    <div className='flex-1 min-w-0'>
+                                        <div className='flex items-center justify-between gap-2 mb-0.5'>
+                                            <span className='font-mono text-xs font-bold text-blue-700 truncate'>{r.distributionCode || '—'}</span>
+                                            {meta && <Tag color={meta.color} icon={meta.icon} style={{ margin: 0 }}>{meta.label}</Tag>}
+                                        </div>
+                                        <div className='text-sm font-medium text-slate-700 truncate'>
+                                            {r.distributionType === 'internal_issue' ? 'Nội bộ' : (r.toPlant?.name || r.toPlantId || '—')}
+                                        </div>
+                                        <div className='flex items-center gap-2 mt-0.5 text-xs text-slate-400'>
+                                            <span>{dayjs(r.distributedAt || r.createdAt).format('DD/MM/YYYY')}</span>
+                                            <span>·</span>
+                                            <span>{r.items.length} vật tư</span>
+                                            {total > 0 && <><span>·</span><span className='font-semibold text-slate-600'>{fmt(total)}</span></>}
+                                        </div>
+                                    </div>
+                                    <RightOutlined className='shrink-0 text-slate-300 text-xs' />
+                                </div>
+                            );
                         })}
-                        locale={{ emptyText: <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description='Chưa có phiếu cấp phát' /> }}
-                        pagination={{
-                            current: listRes?.page ?? pagination.page,
-                            total: listRes?.total ?? 0,
-                            pageSize: listRes?.limit ?? pagination.limit,
-                            showSizeChanger: true,
-                            showTotal: (total, range) => (
-                                <span className='text-sm text-slate-400'>
-                                    {total > 0 ? `${range[0]}-${range[1]} / ${total} phiếu` : 'Không có kết quả'}
-                                </span>
-                            ),
-                            onChange: (page, pageSize) => setPagination({ page, limit: pageSize }),
-                            className: '!m-0 border-t border-slate-100 !px-5 !py-3',
-                        }}
-                    />
-                </div>
+                        {(listRes?.total ?? 0) > 0 && (
+                            <div className='flex items-center justify-between px-4 py-3 bg-slate-50'>
+                                <Button size='small' disabled={pagination.page <= 1} onClick={() => setPagination((p) => ({ ...p, page: p.page - 1 }))}>← Trước</Button>
+                                <span className='text-xs text-slate-400'>{pagination.page} / {Math.max(1, Math.ceil((listRes?.total ?? 0) / pagination.limit))} · {listRes?.total ?? 0} phiếu</span>
+                                <Button size='small' disabled={pagination.page >= Math.ceil((listRes?.total ?? 0) / pagination.limit)} onClick={() => setPagination((p) => ({ ...p, page: p.page + 1 }))}>Sau →</Button>
+                            </div>
+                        )}
+                    </div>
+                ) : (
+                    <div className='[&_.ant-table]:!bg-white [&_.ant-table-row:hover_td]:!bg-blue-50/30 [&_.ant-table-thead_th]:!bg-slate-50 [&_.ant-table-thead_th]:!text-[11px] [&_.ant-table-thead_th]:!font-bold [&_.ant-table-thead_th]:!tracking-[0.07em] [&_.ant-table-thead_th]:!text-slate-400'>
+                        <Table<Distribution>
+                            rowKey='id' columns={columns} dataSource={distributions}
+                            loading={isLoading || isFetching} size='small' scroll={{ x: 900 }}
+                            onRow={(record) => ({ onClick: () => setSelectedId(record.id), style: { cursor: 'pointer' } })}
+                            locale={{ emptyText: <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description='Chưa có phiếu cấp phát' /> }}
+                            pagination={{
+                                current: listRes?.page ?? pagination.page, total: listRes?.total ?? 0,
+                                pageSize: listRes?.limit ?? pagination.limit, showSizeChanger: true,
+                                showTotal: (total, range) => <span className='text-sm text-slate-400'>{total > 0 ? `${range[0]}-${range[1]} / ${total} phiếu` : 'Không có kết quả'}</span>,
+                                onChange: (page, pageSize) => setPagination({ page, limit: pageSize }),
+                                className: '!m-0 border-t border-slate-100 !px-5 !py-3',
+                            }}
+                        />
+                    </div>
+                )}
             </div>
 
 
@@ -719,239 +771,174 @@ const DistributionPage: React.FC = () => {
             <Drawer
                 title={
                     detail ? (
-                        <div className='flex flex-wrap items-center gap-3'>
-                            <span className='font-semibold text-slate-900'>
-                                {detail.distributionCode || 'Chi tiết phiếu cấp phát'}
-                            </span>
-                            <Tag color={STATUS_META[detail.status]?.color ?? 'default'} icon={STATUS_META[detail.status]?.icon}>
+                        <div className='flex items-center gap-2'>
+                            <span className='font-semibold text-slate-900 text-sm sm:text-base'>{detail.distributionCode || 'Chi tiết'}</span>
+                            <Tag color={STATUS_META[detail.status]?.color ?? 'default'} icon={STATUS_META[detail.status]?.icon} style={{ margin: 0 }}>
                                 {STATUS_META[detail.status]?.label ?? detail.status}
                             </Tag>
                         </div>
                     ) : 'Chi tiết phiếu cấp phát'
                 }
-                width={1020}
+                width={isMobile ? '100%' : 1020}
+                placement={isMobile ? 'bottom' : 'right'}
+                height={isMobile ? '92%' : undefined}
                 open={Boolean(selectedId)}
                 onClose={() => setSelectedId(null)}
                 destroyOnHidden
-                footer={
-                    detail ? (
-                        <div className='flex flex-wrap items-center justify-between gap-3'>
-                            <Text className='text-sm text-slate-500'>
-                                {detail.items.length} vật tư •{' '}
-                                Tổng: <strong>{fmt(detail.items.reduce((s, i) => s + (i.totalWithVat ?? 0), 0))}</strong>
-                            </Text>
-                            <div className='flex flex-wrap gap-2'>
-                                {/* Cập nhật giá: CS1Manager, mọi status */}
-                                {isCS1Manager && (
-                                    <Button
-                                        icon={<EditOutlined />}
-                                        onClick={() => setEditPriceOpen(true)}
-                                    >
-                                        Cập nhật giá
+                styles={{ body: { padding: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden' }, header: { padding: isMobile ? '12px 16px' : undefined } }}
+                footer={detail ? (
+                    <div className={`flex gap-2 ${isMobile ? 'flex-col' : 'flex-wrap items-center justify-between'}`}>
+                        {!isMobile && <Text className='text-sm text-slate-500'>{detail.items.length} vật tư · Tổng: <strong>{fmt(detail.items.reduce((s, i) => s + (i.totalWithVat ?? 0), 0))}</strong></Text>}
+                        <div className={`flex gap-2 ${isMobile ? 'flex-col' : 'flex-wrap'}`}>
+                            {isCS1Manager && <Button icon={<EditOutlined />} onClick={() => setEditPriceOpen(true)} block={isMobile}>Cập nhật giá</Button>}
+                            {detail.status === 'draft' && detail.distributionType === 'internal_issue' && isCS1Manager && (
+                                <>
+                                    <Button icon={<PlusOutlined />} block={isMobile} onClick={() => { setActiveDraft(detail); setSelectedId(null); setInternalOpen(true); }}>Thêm vật tư</Button>
+                                    <Button type='primary' icon={<CheckCircleOutlined />} block={isMobile} className='bg-emerald-600 hover:!bg-emerald-700'
+                                        onClick={() => Modal.confirm({ title: 'Chốt phiếu cấp phát nội bộ?', content: 'Tồn kho sẽ bị trừ ngay lập tức. Không thể hoàn tác.', okText: 'Chốt phiếu', okButtonProps: { className: 'bg-green-600' }, onOk: async () => { await distributionService.finalizeInternalDraft(detail.id); await invalidate(detail.id); queryClient.invalidateQueries({ queryKey: ['materials', 'distributions', 'draft-internal'] }); setSelectedId(null); } })}>
+                                        Chốt phiếu — trừ kho
                                     </Button>
-                                )}
-                                {/* Draft nội bộ: nút thêm vật tư + chốt phiếu */}
-                                {detail.status === 'draft' && detail.distributionType === 'internal_issue' && isCS1Manager && (
-                                    <>
-                                        <Button
-                                            icon={<PlusOutlined />}
-                                            onClick={() => {
-                                                setActiveDraft(detail);
-                                                setSelectedId(null);
-                                                setInternalOpen(true);
-                                            }}
-                                        >
-                                            Thêm vật tư
-                                        </Button>
-                                        <Button
-                                            type='primary'
-                                            icon={<CheckCircleOutlined />}
-                                            className='rounded-lg bg-emerald-600 hover:!bg-emerald-700'
-                                            onClick={() => {
-                                                Modal.confirm({
-                                                    title: 'Chốt phiếu cấp phát nội bộ?',
-                                                    content: 'Tồn kho sẽ bị trừ ngay lập tức. Không thể hoàn tác.',
-                                                    okText: 'Chốt phiếu',
-                                                    okButtonProps: { className: 'bg-green-600' },
-                                                    onOk: async () => {
-                                                        await distributionService.finalizeInternalDraft(detail.id);
-                                                        await invalidate(detail.id);
-                                                        queryClient.invalidateQueries({ queryKey: ['materials', 'distributions', 'draft-internal'] });
-                                                        setSelectedId(null);
-                                                    },
-                                                });
-                                            }}
-                                        >
-                                            Chốt phiếu — trừ kho
-                                        </Button>
-                                    </>
-                                )}
-                                {/* Xuất kho: pending + CS1Manager */}
-                                {detail.status === 'pending' && isCS1Manager && (
-                                    <ConfirmAction
-                                        intent='primary'
-                                        title='Xác nhận xuất kho?'
-                                        description='Tồn kho CS1 sẽ bị trừ ngay lập tức và không thể hoàn tác.'
-                                        okLabel='Xác nhận xuất kho'
-                                        onConfirm={() => handleDistribute(detail)}
-                                    >
-                                        <Button
-                                            type='primary'
-                                            icon={<CheckCircleOutlined />}
-                                            loading={distributingId === detail.id}
-                                            disabled={distributingId === detail.id}
-                                            className='rounded-lg bg-green-600 hover:!bg-green-700'
-                                        >
-                                            Xác nhận xuất kho
-                                        </Button>
-                                    </ConfirmAction>
-                                )}
-                                {/* Xác nhận đã nhận: distributed + CS nhận */}
-                                {canConfirm && (
-                                    <ConfirmAction
-                                        intent='primary'
-                                        title='Xác nhận đã nhận vật tư'
-                                        description='Xác nhận đã nhận đủ vật tư theo phiếu?'
-                                        okLabel='Xác nhận đã nhận'
-                                        onConfirm={() => handleConfirm(detail)}
-                                    >
-                                        <Button
-                                            type='primary'
-                                            icon={<CheckCircleOutlined />}
-                                            loading={confirmingId === detail.id}
-                                            disabled={confirmingId === detail.id}
-                                            className='rounded-lg bg-blue-600 hover:!bg-blue-700'
-                                        >
-                                            Xác nhận đã nhận
-                                        </Button>
-                                    </ConfirmAction>
-                                )}
-                                {/* Xuất Excel: CS1Manager, chỉ khi distributed hoặc confirmed */}
-                                {isCS1Manager && (detail.status === 'distributed' || detail.status === 'confirmed') && (
-                                    <Button
-                                        icon={<DownloadOutlined />}
-                                        loading={exportingId === detail.id}
-                                        onClick={() => handleExport(detail.id, detail.distributionCode || detail.id)}
-                                    >
-                                        Xuất Excel
-                                    </Button>
-                                )}
-                            </div>
+                                </>
+                            )}
+                            {detail.status === 'pending' && isCS1Manager && (
+                                <ConfirmAction intent='primary' title='Xác nhận xuất kho?' description='Tồn kho CS1 sẽ bị trừ ngay lập tức và không thể hoàn tác.' okLabel='Xác nhận xuất kho' onConfirm={() => handleDistribute(detail)}>
+                                    <Button type='primary' icon={<CheckCircleOutlined />} loading={distributingId === detail.id} block={isMobile} className='bg-green-600 hover:!bg-green-700'>Xác nhận xuất kho</Button>
+                                </ConfirmAction>
+                            )}
+                            {canConfirm && (
+                                <ConfirmAction intent='primary' title='Xác nhận đã nhận vật tư' description='Xác nhận đã nhận đủ vật tư theo phiếu?' okLabel='Xác nhận đã nhận' onConfirm={() => handleConfirm(detail)}>
+                                    <Button type='primary' icon={<CheckCircleOutlined />} loading={confirmingId === detail.id} block={isMobile} className='bg-blue-600 hover:!bg-blue-700'>Xác nhận đã nhận</Button>
+                                </ConfirmAction>
+                            )}
+                            {isCS1Manager && (detail.status === 'distributed' || detail.status === 'confirmed') && (
+                                <Button icon={<DownloadOutlined />} loading={exportingId === detail.id} block={isMobile} onClick={() => handleExport(detail.id, detail.distributionCode || detail.id)}>Xuất Excel</Button>
+                            )}
                         </div>
-                    ) : undefined
-                }
+                    </div>
+                ) : undefined}
             >
                 {detailLoading ? (
                     <div className='py-12 text-center text-sm text-slate-500'>Đang tải...</div>
                 ) : detail ? (
-                    <div className='flex flex-col gap-6'>
-                        {/* Status steps */}
-                        <div className='rounded-xl border border-slate-200 bg-white p-4'>
-                            <StatusSteps status={detail.status} />
-                        </div>
+                    <div className='flex-1 overflow-y-auto'>
+                        <div className='flex flex-col gap-4 p-4 sm:p-5'>
+                            {/* Status steps */}
+                            <div className='rounded-xl border border-slate-200 bg-white p-4'>
+                                <StatusSteps status={detail.status} />
+                            </div>
 
-                        {/* Info */}
-                        <div className='rounded-xl border border-slate-200 bg-white p-5'>
                             {/* From → To */}
-                            <div className='mb-4 flex flex-col gap-3 rounded-xl border border-slate-100 bg-slate-50 p-4 sm:flex-row sm:items-center'>
-                                <div className='flex flex-1 flex-col gap-1 rounded-lg border border-slate-200 bg-white px-4 py-3'>
-                                    <span className='text-[11px] font-medium uppercase tracking-widest text-slate-400'>Từ cơ sở</span>
-                                    <span className='font-semibold text-slate-900'>{detail.fromPlant?.name || detail.fromPlantId || '-'}</span>
+                            <div className='flex flex-col gap-2 rounded-xl border border-slate-100 bg-slate-50 p-3 sm:flex-row sm:items-center sm:gap-3 sm:p-4'>
+                                <div className='flex flex-1 flex-col gap-0.5 rounded-lg border border-slate-200 bg-white px-3 py-2.5'>
+                                    <span className='text-[10px] font-semibold uppercase tracking-widest text-slate-400'>Từ cơ sở</span>
+                                    <span className='font-semibold text-slate-900 text-sm'>{detail.fromPlant?.name || detail.fromPlantId || '-'}</span>
                                 </div>
-                                <ArrowRightOutlined className='text-slate-400' />
-                                <div className='flex flex-1 flex-col gap-1 rounded-lg border border-slate-200 bg-white px-4 py-3'>
-                                    <span className='text-[11px] font-medium uppercase tracking-widest text-slate-400'>Đến cơ sở</span>
-                                    <span className='font-semibold text-slate-900'>{detail.toPlant?.name || detail.toPlantId || '-'}</span>
+                                <ArrowRightOutlined className='text-slate-400 self-center hidden sm:block' />
+                                <div className='flex flex-1 flex-col gap-0.5 rounded-lg border border-slate-200 bg-white px-3 py-2.5'>
+                                    <span className='text-[10px] font-semibold uppercase tracking-widest text-slate-400'>
+                                        {detail.distributionType === 'internal_issue' ? 'Bộ phận' : 'Đến cơ sở'}
+                                    </span>
+                                    <span className='font-semibold text-slate-900 text-sm'>
+                                        {detail.distributionType === 'internal_issue'
+                                            ? (detail.targetDepartment || detail.requesterName || '-')
+                                            : (detail.toPlant?.name || detail.toPlantId || '-')}
+                                    </span>
                                 </div>
                             </div>
 
                             {/* SR info */}
                             {detail.supplyRequest && (
-                                <div className='mb-4 rounded-lg border border-blue-100 bg-blue-50 px-4 py-3 text-sm'>
+                                <div className='rounded-lg border border-blue-100 bg-blue-50 px-4 py-3 text-sm'>
                                     <span className='font-medium text-blue-700'>Căn cứ đề xuất: </span>
-                                    <span className='font-mono font-semibold text-blue-900'>
-                                        {detail.supplyRequest?.requestCode || detail.supplyRequestId}
-                                    </span>
+                                    <span className='font-mono font-semibold text-blue-900'>{detail.supplyRequest?.requestCode || detail.supplyRequestId}</span>
                                 </div>
                             )}
 
-                            <Descriptions
-                                column={{ xs: 1, md: 2 }}
-                                size='small'
-                                className='[&_.ant-descriptions-item-content]:font-medium [&_.ant-descriptions-item-content]:text-slate-800 [&_.ant-descriptions-item-label]:text-slate-500'
-                            >
-                                <Descriptions.Item label='Ngày cấp phát'>{fmtDt(detail.distributedAt || detail.createdAt)}</Descriptions.Item>
-                                <Descriptions.Item label='Người cấp phát'>{resolveUser(detail.distributedBy)}</Descriptions.Item>
-                                <Descriptions.Item label='Ngày xác nhận'>{fmtDt(detail.confirmedAt)}</Descriptions.Item>
-                                <Descriptions.Item label='Người xác nhận'>{resolveUser(detail.confirmedBy)}</Descriptions.Item>
-                                {detail.requesterName && (
-                                    <Descriptions.Item label='Nguoi xin cap'>{detail.requesterName}</Descriptions.Item>
-                                )}
-                                {detail.targetDepartment && (
-                                    <Descriptions.Item label='Bo phan'>{detail.targetDepartment}</Descriptions.Item>
-                                )}
-                                {detail.targetLine && (
-                                    <Descriptions.Item label='Chuyen may'>{detail.targetLine}</Descriptions.Item>
-                                )}
-                                {detail.note && (
-                                    <Descriptions.Item label='Ghi chú' span={2}>{detail.note}</Descriptions.Item>
-                                )}
-                            </Descriptions>
-                        </div>
-
-                        {/* Items table */}
-                        <div className='overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm'>
-                            <div className='border-b border-slate-100 px-5 py-4'>
-                                <div className='text-sm font-semibold text-slate-900'>Danh sách vật tư</div>
-                                <div className='text-xs text-slate-500'>{detail.items.length} dòng vật tư</div>
+                            {/* Info rows */}
+                            <div className='rounded-xl border border-slate-200 bg-white overflow-hidden'>
+                                <div className='border-b border-slate-100 bg-slate-50 px-4 py-2.5 text-xs font-semibold uppercase tracking-wider text-slate-400'>Thông tin phiếu</div>
+                                <div className='divide-y divide-slate-100'>
+                                    {[
+                                        { label: 'Ngày cấp phát', value: fmtDt(detail.distributedAt || detail.createdAt) },
+                                        { label: 'Người cấp phát', value: resolveUser(detail.distributedBy) },
+                                        ...(detail.confirmedAt ? [{ label: 'Ngày xác nhận', value: fmtDt(detail.confirmedAt) }] : []),
+                                        ...(detail.confirmedBy ? [{ label: 'Người xác nhận', value: resolveUser(detail.confirmedBy) }] : []),
+                                        ...(detail.requesterName ? [{ label: 'Người xin cấp', value: detail.requesterName }] : []),
+                                        ...(detail.targetDepartment ? [{ label: 'Bộ phận', value: detail.targetDepartment }] : []),
+                                        ...(detail.targetLine ? [{ label: 'Chuyền may', value: detail.targetLine }] : []),
+                                        ...(detail.note ? [{ label: 'Ghi chú', value: detail.note }] : []),
+                                    ].map(({ label, value }) => (
+                                        <div key={label} className='flex items-start justify-between gap-3 px-4 py-2.5'>
+                                            <span className='text-xs text-slate-400 shrink-0 w-28'>{label}</span>
+                                            <span className='text-sm text-slate-800 text-right flex-1'>{value}</span>
+                                        </div>
+                                    ))}
+                                </div>
                             </div>
-                            <div className='[&_.ant-table]:!bg-white [&_.ant-table-row:hover_td]:!bg-slate-50/80 [&_.ant-table-thead_th]:!bg-slate-50 [&_.ant-table-thead_th]:!text-[11px] [&_.ant-table-thead_th]:!font-bold [&_.ant-table-thead_th]:!tracking-[0.07em] [&_.ant-table-thead_th]:!text-slate-400'>
-                                <Table<Distribution['items'][number]>
-                                    rowKey={(_r, i) => String(i)}
-                                    columns={detailColumns}
-                                    dataSource={detail.items}
-                                    pagination={false}
-                                    size='small'
-                                    scroll={{ x: 1100 }}
-                                    summary={() => {
-                                        const tp = detail.items.reduce((s, i) => s + (i.totalPrice ?? 0), 0);
-                                        const tv = detail.items.reduce((s, i) => s + (i.vatAmount ?? 0), 0);
-                                        const tw = detail.items.reduce((s, i) => s + (i.totalWithVat ?? 0), 0);
-                                        if (!tp && !tv && !tw) return null;
-                                        return (
-                                            <Table.Summary.Row className='bg-slate-50 font-semibold'>
-                                                <Table.Summary.Cell index={0} colSpan={6} align='right'>Tổng TT</Table.Summary.Cell>
-                                                <Table.Summary.Cell index={1} align='right'>{fmt(tp)}</Table.Summary.Cell>
-                                                <Table.Summary.Cell index={2} />
-                                                <Table.Summary.Cell index={3} align='right'>{fmt(tv)}</Table.Summary.Cell>
-                                                <Table.Summary.Cell index={4} align='right'>
-                                                    <span className='font-bold text-slate-900'>{fmt(tw)}</span>
-                                                </Table.Summary.Cell>
-                                                <Table.Summary.Cell index={5} />
-                                            </Table.Summary.Row>
-                                        );
-                                    }}
-                                />
-                            </div>
-                        </div>
 
-                        {/* Edit price modal */}
-                        {editPriceOpen && (
-                            <EditDistributionPriceModal
-                                open={editPriceOpen}
-                                distribution={detail}
-                                onClose={() => setEditPriceOpen(false)}
-                                onSuccess={async () => {
-                                    setEditPriceOpen(false);
-                                    await invalidate(detail.id);
-                                }}
-                                updateMutation={updateMutation}
-                            />
-                        )}
+                            {/* Items */}
+                            <div className='rounded-xl border border-slate-200 bg-white overflow-hidden'>
+                                <div className='border-b border-slate-100 bg-slate-50 px-4 py-2.5 text-xs font-semibold uppercase tracking-wider text-slate-400'>
+                                    Danh sách vật tư · {detail.items.length} dòng
+                                </div>
+                                {isMobile ? (
+                                    <div className='divide-y divide-slate-100'>
+                                        {detail.items.map((item, idx) => (
+                                            <div key={idx} className='px-4 py-3'>
+                                                <div className='flex items-start justify-between gap-2 mb-1'>
+                                                    <span className='text-sm font-semibold text-slate-800 flex-1'>{item.material?.name || item.materialName || '—'}</span>
+                                                    <span className='text-xs text-slate-400 shrink-0'>{item.unit || '—'}</span>
+                                                </div>
+                                                {item.adjustReason && <Tag color='warning' className='mb-1 text-xs'>⚠ {item.adjustReason}</Tag>}
+                                                <div className='flex flex-wrap gap-x-4 gap-y-0.5 text-xs text-slate-500'>
+                                                    {item.quantityRequested != null && <span>Đề xuất: <strong>{fmt(item.quantityRequested)}</strong></span>}
+                                                    <span>Cấp: <strong className='text-slate-700'>{fmt(item.quantity)}</strong></span>
+                                                    {item.unitPrice ? <span>Đơn giá: <strong>{fmt(item.unitPrice)}</strong></span> : null}
+                                                    {item.totalWithVat ? <span className='font-bold text-slate-900'>Tổng: {fmt(item.totalWithVat)}</span> : null}
+                                                </div>
+                                                {item.note && <div className='mt-0.5 text-xs text-slate-400 italic'>{item.note}</div>}
+                                            </div>
+                                        ))}
+                                        <div className='flex items-center justify-between px-4 py-3 bg-slate-50'>
+                                            <span className='text-xs font-semibold text-slate-500'>Tổng cộng</span>
+                                            <span className='font-bold text-slate-900'>{fmt(detail.items.reduce((s, i) => s + (i.totalWithVat ?? 0), 0))}</span>
+                                        </div>
+                                    </div>
+                                ) : (
+                                    <div className='[&_.ant-table]:!bg-white [&_.ant-table-thead_th]:!bg-slate-50 [&_.ant-table-thead_th]:!text-[11px] [&_.ant-table-thead_th]:!font-bold [&_.ant-table-thead_th]:!text-slate-400'>
+                                        <Table<Distribution['items'][number]>
+                                            rowKey={(_r, i) => String(i)} columns={detailColumns} dataSource={detail.items}
+                                            pagination={false} size='small' scroll={{ x: 1100 }}
+                                            summary={() => {
+                                                const tp = detail.items.reduce((s, i) => s + (i.totalPrice ?? 0), 0);
+                                                const tv = detail.items.reduce((s, i) => s + (i.vatAmount ?? 0), 0);
+                                                const tw = detail.items.reduce((s, i) => s + (i.totalWithVat ?? 0), 0);
+                                                if (!tp && !tv && !tw) return null;
+                                                return (
+                                                    <Table.Summary.Row className='bg-slate-50 font-semibold'>
+                                                        <Table.Summary.Cell index={0} colSpan={6} align='right'>Tổng TT</Table.Summary.Cell>
+                                                        <Table.Summary.Cell index={1} align='right'>{fmt(tp)}</Table.Summary.Cell>
+                                                        <Table.Summary.Cell index={2} />
+                                                        <Table.Summary.Cell index={3} align='right'>{fmt(tv)}</Table.Summary.Cell>
+                                                        <Table.Summary.Cell index={4} align='right'><span className='font-bold text-slate-900'>{fmt(tw)}</span></Table.Summary.Cell>
+                                                        <Table.Summary.Cell index={5} />
+                                                    </Table.Summary.Row>
+                                                );
+                                            }}
+                                        />
+                                    </div>
+                                )}
+                            </div>
+
+                            {editPriceOpen && (
+                                <EditDistributionPriceModal open={editPriceOpen} distribution={detail}
+                                    onClose={() => setEditPriceOpen(false)}
+                                    onSuccess={async () => { setEditPriceOpen(false); await invalidate(detail.id); }}
+                                    updateMutation={updateMutation} />
+                            )}
+                        </div>
                     </div>
-                ) : (
-                    <Empty description='Không có dữ liệu' />
-                )}
+                ) : <Empty description='Không có dữ liệu' className='py-20' />}
             </Drawer>
         </div>
     );
@@ -989,6 +976,8 @@ const EditDistributionPriceModal: React.FC<EditDistributionPriceModalProps> = ({
     open, distribution, onClose, onSuccess, updateMutation,
 }) => {
     const { message } = App.useApp();
+    const screens = useBreakpoint();
+    const isMobile = !screens.sm;
     const [rows, setRows] = useState<EditItemRow[]>([]);
 
     useEffect(() => {
@@ -1072,28 +1061,72 @@ const EditDistributionPriceModal: React.FC<EditDistributionPriceModalProps> = ({
         },
     ];
 
-    return (
-        <Modal
-            open={open} title={`Cập nhật giá — ${distribution.distributionCode || ''}`}
-            width={1000} centered maskClosable={false} destroyOnClose onCancel={onClose}
-            okText='Lưu cập nhật' cancelText='Huỷ'
-            confirmLoading={updateMutation.isPending}
-            onOk={handleOk}
-            footer={(_, { OkBtn, CancelBtn }) => (
-                <div className='flex items-end justify-between border-t border-slate-100 pt-3'>
-                    <div className='text-sm text-slate-500'>
-                        <div>Thành tiền: <strong>{fmt(totals.price)}</strong></div>
-                        <div>Tổng VAT: <strong>{fmt(totals.vat)}</strong></div>
-                        <div className='text-base font-bold text-slate-900'>TỔNG CỘNG: {fmt(totals.total)}</div>
+    const footerEl = (
+        <div className={`flex ${isMobile ? 'flex-col gap-2' : 'items-end justify-between border-t border-slate-100 pt-3'}`}>
+            <div className='text-sm text-slate-500'>
+                <div>Thành tiền: <strong>{fmt(totals.price)}</strong></div>
+                <div>Tổng VAT: <strong>{fmt(totals.vat)}</strong></div>
+                <div className='text-base font-bold text-slate-900'>TỔNG CỘNG: {fmt(totals.total)}</div>
+            </div>
+            <div className={`flex gap-2 ${isMobile ? 'flex-col-reverse' : ''}`}>
+                <Button onClick={onClose} block={isMobile}>Huỷ</Button>
+                <Button type='primary' loading={updateMutation.isPending} onClick={handleOk} block={isMobile}>Lưu cập nhật</Button>
+            </div>
+        </div>
+    );
+
+    const tableEl = isMobile ? (
+        <div className='flex flex-col gap-3'>
+            {rows.map((r) => (
+                <div key={r.index} className='rounded-xl border border-slate-200 bg-slate-50 p-3'>
+                    <div className='flex items-center justify-between mb-2'>
+                        <span className='text-sm font-semibold text-slate-800'>{r.materialName}</span>
+                        <span className='text-xs text-slate-400'>{r.unit} · SL: {fmt(r.quantity)}</span>
                     </div>
-                    <Space><CancelBtn /><OkBtn /></Space>
+                    <div className='grid grid-cols-2 gap-2'>
+                        <div>
+                            <div className='text-xs text-slate-400 mb-1'>Đơn giá</div>
+                            <InputNumber size='large' min={0} value={r.unitPrice} style={{ width: '100%' }}
+                                formatter={(v) => `${v}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')}
+                                parser={(v) => Number(String(v).replace(/,/g, '')) as any}
+                                onChange={(v) => patch(r.index, 'unitPrice', v ?? 0)} />
+                        </div>
+                        <div>
+                            <div className='text-xs text-slate-400 mb-1'>VAT%</div>
+                            <InputNumber size='large' min={0} max={100} value={r.vatRate} style={{ width: '100%' }}
+                                formatter={(v) => `${v}%`} parser={(v) => Number(String(v).replace('%', '')) as any}
+                                onChange={(v) => patch(r.index, 'vatRate', v ?? 0)} />
+                        </div>
+                        <div className='col-span-2'>
+                            <div className='text-xs text-slate-400 mb-1'>Ghi chú</div>
+                            <Input value={r.note} onChange={(e) => patch(r.index, 'note', e.target.value)} />
+                        </div>
+                        {r.totalWithVat > 0 && <div className='col-span-2 text-right text-sm font-bold text-slate-900'>Tổng: {fmt(r.totalWithVat)}</div>}
+                    </div>
                 </div>
-            )}
-        >
-            <Table<EditItemRow>
-                rowKey='index' dataSource={rows} columns={columns}
-                pagination={false} size='small' scroll={{ x: 'max-content' }}
-            />
+            ))}
+        </div>
+    ) : (
+        <Table<EditItemRow> rowKey='index' dataSource={rows} columns={columns} pagination={false} size='small' scroll={{ x: 'max-content' }} />
+    );
+
+    if (isMobile) {
+        return (
+            <Drawer open={open} onClose={onClose} placement='bottom' height='92%' destroyOnClose
+                title={`Cập nhật giá — ${distribution.distributionCode || ''}`}
+                styles={{ body: { padding: '16px', overflowY: 'auto' }, footer: { padding: '12px 16px' } }}
+                footer={footerEl}>
+                {tableEl}
+            </Drawer>
+        );
+    }
+
+    return (
+        <Modal open={open} title={`Cập nhật giá — ${distribution.distributionCode || ''}`}
+            width={1000} centered maskClosable={false} destroyOnClose onCancel={onClose}
+            okText='Lưu cập nhật' cancelText='Huỷ' confirmLoading={updateMutation.isPending} onOk={handleOk}
+            footer={() => footerEl}>
+            {tableEl}
         </Modal>
     );
 };

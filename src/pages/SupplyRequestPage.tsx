@@ -10,22 +10,21 @@ const { useBreakpoint } = Grid;
 import {
     CheckCircleOutlined, ClockCircleOutlined, CloseCircleOutlined,
     DeleteOutlined, DownloadOutlined, EyeOutlined, FileTextOutlined,
-    InboxOutlined, PlusOutlined, ReloadOutlined, SearchOutlined,
-    SendOutlined, SyncOutlined, WarningOutlined,
+    FilterOutlined, InboxOutlined, PlusOutlined, ReloadOutlined, RightOutlined,
+    SearchOutlined, SendOutlined, SyncOutlined, WarningOutlined,
 } from '@ant-design/icons';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import PageHeader from '../components/shared/PageHeader';
 import { useAuth } from '../core/contexts/AuthContext';
 import { api } from '../core/lib/api';
-import { hasManagerAccess } from '../core/lib/permissions';
 import { normalizeSearchTerm } from '../core/lib/search';
 import { plantService } from '../core/services';
 import type {
-    Material, PurchaseRequest, PurchaseRequestPayload,
+    PurchaseRequest, PurchaseRequestPayload,
     PurchaseRequestQueryParams, PurchaseRequestStatus,
 } from '../core/services/material.service';
-import { distributionService, materialService, supplyRequestService } from '../core/services/material.service';
+import { distributionService, supplyRequestService } from '../core/services/material.service';
 import type { PaginatedResponse, Plant, User } from '../core/types';
 
 const { RangePicker } = DatePicker;
@@ -35,145 +34,75 @@ const DEFAULT_PAGE = 1;
 const DEFAULT_LIMIT = 10;
 const SEARCH_DEBOUNCE_MS = 300;
 
-// ─── Types ────────────────────────────────────────────────────────────────────
-
 type SupplyRequestTab = 'mine' | 'pending' | 'all';
 type DateRangeValue = [Dayjs, Dayjs];
-
-type FilterState = {
-    search: string;
-    fromPlantId?: string;
-    status?: PurchaseRequestStatus;
-    startDate?: string;
-    endDate?: string;
-};
-
-type DraftFilterState = {
-    search: string;
-    fromPlantId?: string;
-    status?: PurchaseRequestStatus;
-    dateRange: DateRangeValue | null;
-};
-
-type FormItemValue = {
-    materialName?: string;
-    unit?: string;
-    quantityRequested?: number;
-    note?: string;
-};
-
-type FormValues = {
-    fromPlantId?: string;
-    note?: string;
-    requestDate?: any;
-    items: FormItemValue[];
-};
-
-type Stats = {
-    total: number; pending: number; approved: number;
-    in_progress: number; distributed: number; rejected: number;
-};
-
-// ─── Constants ────────────────────────────────────────────────────────────────
+type FilterState = { search: string; fromPlantId?: string; status?: PurchaseRequestStatus; startDate?: string; endDate?: string };
+type DraftFilterState = { search: string; fromPlantId?: string; status?: PurchaseRequestStatus; dateRange: DateRangeValue | null };
+type FormItemValue = { materialName?: string; unit?: string; quantityRequested?: number; note?: string };
+type FormValues = { fromPlantId?: string; note?: string; requestDate?: any; items: FormItemValue[] };
+type Stats = { total: number; pending: number; approved: number; in_progress: number; distributed: number; rejected: number };
 
 const STATUS_META: Record<string, { color: string; label: string; icon: React.ReactNode }> = {
-    pending:     { color: 'orange',  label: 'Chờ duyệt',      icon: <ClockCircleOutlined /> },
-    approved:    { color: 'blue',    label: 'Đã duyệt',        icon: <CheckCircleOutlined /> },
-    in_progress: { color: 'cyan',    label: 'Đang cấp phát',   icon: <SyncOutlined spin /> },
-    distributed: { color: 'green',   label: 'Đã nhận hàng',    icon: <CheckCircleOutlined /> },
-    rejected:    { color: 'red',     label: 'Từ chối',          icon: <CloseCircleOutlined /> },
-    cancelled:   { color: 'default', label: 'Đã hủy',           icon: <CloseCircleOutlined /> },
+    pending:     { color: 'orange',  label: 'Chờ duyệt',    icon: <ClockCircleOutlined /> },
+    approved:    { color: 'blue',    label: 'Đã duyệt',      icon: <CheckCircleOutlined /> },
+    in_progress: { color: 'cyan',    label: 'Đang cấp phát', icon: <SyncOutlined spin /> },
+    distributed: { color: 'green',   label: 'Đã nhận hàng',  icon: <CheckCircleOutlined /> },
+    rejected:    { color: 'red',     label: 'Từ chối',        icon: <CloseCircleOutlined /> },
+    cancelled:   { color: 'default', label: 'Đã hủy',         icon: <CloseCircleOutlined /> },
 };
 
 const STATUS_OPTIONS: Array<{ value: PurchaseRequestStatus; label: string }> = [
-    { value: 'pending',                          label: 'Chờ duyệt' },
-    { value: 'approved',                         label: 'Đã duyệt' },
+    { value: 'pending',                              label: 'Chờ duyệt' },
+    { value: 'approved',                             label: 'Đã duyệt' },
     { value: 'in_progress' as PurchaseRequestStatus, label: 'Đang cấp phát' },
-    { value: 'distributed',                      label: 'Đã nhận hàng' },
-    { value: 'rejected',                         label: 'Từ chối' },
+    { value: 'distributed',                          label: 'Đã nhận hàng' },
+    { value: 'rejected',                             label: 'Từ chối' },
 ];
 
 const WORKFLOW_STEPS = [
-    { title: 'Tạo phiếu',     status: 'pending' },
-    { title: 'Duyệt',         status: 'approved' },
-    { title: 'Cấp phát',      status: 'in_progress' },
-    { title: 'Đã nhận hàng',  status: 'distributed' },
+    { title: 'Tạo phiếu', status: 'pending' },
+    { title: 'Duyệt',     status: 'approved' },
+    { title: 'Cấp phát',  status: 'in_progress' },
+    { title: 'Nhận hàng', status: 'distributed' },
 ];
-
-// ─── Helpers ──────────────────────────────────────────────────────────────────
 
 const fmtNum = (v?: number) => (v ?? 0).toLocaleString('vi-VN');
 const fmtDate = (v?: string) => (v ? dayjs(v).format('DD/MM/YYYY') : '—');
 const fmtDateTime = (v?: string) => (v ? dayjs(v).format('DD/MM/YYYY HH:mm') : '—');
-const resolveUser = (v?: string | User) => {
-    if (!v) return '—';
-    if (typeof v === 'string') return v;
-    return (v as any).name || (v as any).email || '—';
-};
+const resolveUser = (v?: string | User) => { if (!v) return '—'; if (typeof v === 'string') return v; return (v as any).name || (v as any).email || '—'; };
 const normalizeText = (v?: string | null) => { const s = (v || '').trim().replace(/\s+/g, ' '); return s || undefined; };
-const resolveError = (e: unknown, fallback: string) =>
-    e && typeof e === 'object' && 'message' in e ? String((e as any).message) : fallback;
-const parseNum = (v: string | number | null | undefined) => {
-    const n = String(v ?? '').replace(/[^\d.-]/g, '');
-    return n ? Number(n) : 0;
-};
+const resolveError = (e: unknown, fb: string) => e && typeof e === 'object' && 'message' in e ? String((e as any).message) : fb;
+const parseNum = (v: string | number | null | undefined) => { const n = String(v ?? '').replace(/[^\d.-]/g, ''); return n ? Number(n) : 0; };
 const normalizePaginated = <T,>(res: T[] | PaginatedResponse<T>, page: number, limit: number): PaginatedResponse<T> => {
-    if (Array.isArray(res)) {
-        const total = res.length;
-        const totalPages = Math.max(1, Math.ceil(total / limit));
-        const safePage = Math.min(page, totalPages);
-        return { data: res.slice((safePage - 1) * limit, safePage * limit), total, page: safePage, limit, totalPages };
-    }
+    if (Array.isArray(res)) { const total = res.length; const tp = Math.max(1, Math.ceil(total / limit)); const sp = Math.min(page, tp); return { data: res.slice((sp - 1) * limit, sp * limit), total, page: sp, limit, totalPages: tp }; }
     return res;
 };
-
-const getWorkflowStep = (status: string) => {
-    if (status === 'rejected' || status === 'cancelled') return -1;
-    const idx = WORKFLOW_STEPS.findIndex((s) => s.status === status);
-    return idx === -1 ? 0 : idx;
-};
-
+const getWorkflowStep = (status: string) => { if (status === 'rejected' || status === 'cancelled') return -1; const i = WORKFLOW_STEPS.findIndex((s) => s.status === status); return i === -1 ? 0 : i; };
 const emptyItem = (): FormItemValue => ({ materialName: '', unit: '', quantityRequested: 1, note: '' });
 
-// ─── Sub-components ───────────────────────────────────────────────────────────
-
+// ── StatusTag ─────────────────────────────────────────────────────────────────
 const StatusTag: React.FC<{ status: string }> = ({ status }) => {
     const m = STATUS_META[status] ?? { color: 'default', label: status, icon: null };
-    return <Tag color={m.color} icon={m.icon}>{m.label}</Tag>;
+    return <Tag color={m.color} icon={m.icon} style={{ margin: 0 }}>{m.label}</Tag>;
 };
 
-const StatCard: React.FC<{
-    title: string; value: number; icon: React.ReactNode;
-    color: string; active?: boolean; onClick?: () => void;
-}> = ({ title, value, icon, color, active, onClick }) => (
-    <div
-        onClick={onClick}
-        className={[
-            'flex cursor-pointer items-center gap-2 sm:gap-4 rounded-2xl border p-3 sm:p-4 transition-all hover:shadow-md',
-            active ? 'shadow-sm' : 'border-slate-200 bg-white',
-        ].join(' ')}
-        style={active ? { borderColor: color, backgroundColor: `${color}10` } : undefined}
-    >
-        <div className="flex h-8 w-8 sm:h-11 sm:w-11 shrink-0 items-center justify-center rounded-xl text-base sm:text-xl"
-            style={{ background: `${color}18`, color }}>
-            {icon}
-        </div>
-        <div className="min-w-0">
-            <div className="text-[10px] sm:text-xs font-medium text-slate-400 uppercase tracking-wide truncate">{title}</div>
-            <div className="text-lg sm:text-2xl font-bold leading-tight" style={{ color }}>{fmtNum(value)}</div>
+// ── StatCard ──────────────────────────────────────────────────────────────────
+const StatCard: React.FC<{ title: string; value: number; icon: React.ReactNode; color: string; active?: boolean; onClick?: () => void }> = ({ title, value, icon, color, active, onClick }) => (
+    <div onClick={onClick} className={['flex cursor-pointer items-center gap-2.5 rounded-2xl border p-3 transition-all active:scale-[0.98]', active ? 'shadow-sm' : 'border-slate-200 bg-white hover:shadow-md'].join(' ')}
+        style={active ? { borderColor: color, backgroundColor: `${color}12` } : undefined}>
+        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-base" style={{ background: `${color}18`, color }}>{icon}</div>
+        <div className="min-w-0 flex-1">
+            <div className="truncate text-[10px] font-semibold uppercase tracking-wide text-slate-400">{title}</div>
+            <div className="text-xl font-bold leading-tight sm:text-2xl" style={{ color }}>{fmtNum(value)}</div>
         </div>
     </div>
 );
 
-// ─── Form Drawer ──────────────────────────────────────────────────────────────
-
+// ── FormDrawer ────────────────────────────────────────────────────────────────
 const FormDrawer: React.FC<{
-    open: boolean;
-    initialValues?: PurchaseRequest | null;
-    defaultPlantId?: string;
-    defaultPlantName?: string;
-    submitting: boolean;
-    onClose: () => void;
+    open: boolean; initialValues?: PurchaseRequest | null;
+    defaultPlantId?: string; defaultPlantName?: string;
+    submitting: boolean; onClose: () => void;
     onSubmit: (payload: Partial<PurchaseRequestPayload>) => Promise<void>;
 }> = ({ open, initialValues, defaultPlantId, defaultPlantName, submitting, onClose, onSubmit }) => {
     const [form] = Form.useForm<FormValues>();
@@ -185,15 +114,9 @@ const FormDrawer: React.FC<{
         if (!open) return;
         if (initialValues) {
             form.setFieldsValue({
-                fromPlantId: initialValues.fromPlantId,
-                note: initialValues.note,
+                fromPlantId: initialValues.fromPlantId, note: initialValues.note,
                 requestDate: initialValues.requestDate ? dayjs(initialValues.requestDate) : dayjs(),
-                items: initialValues.items.map((i) => ({
-                    materialName: i.materialName || '',
-                    unit: i.unit || '',
-                    quantityRequested: i.quantityRequested,
-                    note: i.note,
-                })),
+                items: initialValues.items.map((i) => ({ materialName: i.materialName || '', unit: i.unit || '', quantityRequested: i.quantityRequested, note: i.note })),
             });
         } else {
             form.resetFields();
@@ -207,136 +130,92 @@ const FormDrawer: React.FC<{
             fromPlantId: String(values.fromPlantId),
             note: normalizeText(values.note),
             requestDate: values.requestDate?.toISOString(),
-            items: (values.items ?? []).map((i) => ({
-                materialName: String(i.materialName ?? '').trim(),
-                unit: String(i.unit ?? '').trim(),
-                quantityRequested: Number(i.quantityRequested ?? 0),
-                note: normalizeText(i.note),
-            })) as any,
+            items: (values.items ?? []).map((i) => ({ materialName: String(i.materialName ?? '').trim(), unit: String(i.unit ?? '').trim(), quantityRequested: Number(i.quantityRequested ?? 0), note: normalizeText(i.note) })) as any,
         });
     };
 
     return (
-        <Drawer
-            open={open}
-            onClose={onClose}
-            width={isMobile ? '100%' : 860}
-            destroyOnHidden
-            maskClosable={false}
-            styles={{ body: { padding: isMobile ? '12px' : '20px', display: 'flex', flexDirection: 'column', overflow: 'hidden' } }}
+        <Drawer open={open} onClose={onClose} width={isMobile ? '100%' : 860} destroyOnHidden maskClosable={false}
+            styles={{ body: { padding: isMobile ? '0' : '20px', display: 'flex', flexDirection: 'column', overflow: 'hidden' } }}
             title={
                 <div className="flex items-center gap-3">
-                    <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-blue-50 text-blue-600">
-                        <SendOutlined />
-                    </div>
+                    <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-blue-50 text-blue-600"><SendOutlined /></div>
                     <div>
-                        <div className="font-semibold text-slate-900">
-                            {initialValues ? 'Cập nhật đề xuất cấp vật tư' : 'Tạo đề xuất cấp vật tư'}
-                        </div>
-                        <div className="text-xs text-slate-400">Gửi yêu cầu cấp vật tư từ cơ sở chính</div>
+                        <div className="font-semibold text-slate-900">{initialValues ? 'Cập nhật đề xuất' : 'Tạo đề xuất cấp vật tư'}</div>
+                        <div className="text-xs text-slate-400">Gửi yêu cầu cấp vật tư từ cơ sở</div>
                     </div>
                 </div>
             }
             footer={
-                <div className="flex items-center justify-between">
-                    <Text type="secondary" className="text-sm">
-                        {watchedItems.length} loại vật tư
-                    </Text>
-                    <div className="flex gap-2">
-                        <Button onClick={onClose}>Huỷ</Button>
-                        <Button type="primary" loading={submitting} onClick={handleSubmit}
-                            disabled={!watchedItems.length} icon={<SendOutlined />}>
+                <div className={`flex gap-2 ${isMobile ? 'flex-col' : 'items-center justify-between'}`}>
+                    {!isMobile && <Text type="secondary" className="text-sm">{watchedItems.length} loại vật tư</Text>}
+                    <div className={`flex gap-2 ${isMobile ? 'flex-col-reverse' : ''}`}>
+                        <Button onClick={onClose} block={isMobile}>Huỷ</Button>
+                        <Button type="primary" loading={submitting} onClick={handleSubmit} disabled={!watchedItems.length} icon={<SendOutlined />} block={isMobile}>
                             {initialValues ? 'Lưu cập nhật' : 'Gửi đề xuất'}
                         </Button>
                     </div>
                 </div>
             }
         >
-            <Form form={form} layout="vertical" className="h-full flex flex-col gap-0">
-                {/* Thông tin chung — cố định */}
-                <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3 sm:p-5 mb-3 sm:mb-5 shrink-0">
-                    <div className="mb-3 sm:mb-4 flex items-center gap-2 text-sm font-semibold text-slate-700">
-                        <FileTextOutlined /> Thông tin chung
-                    </div>
-                    <div className="grid grid-cols-1 gap-3 sm:gap-4 sm:grid-cols-2">
-                        <Form.Item label="Cơ sở gửi" className="mb-0">
-                            <Input value={defaultPlantName || '—'} readOnly
-                                className="cursor-default bg-white font-medium text-slate-700" />
+            <Form form={form} layout="vertical" className="h-full flex flex-col">
+                {/* Thông tin chung */}
+                <div className={`shrink-0 border-b border-slate-100 bg-slate-50 ${isMobile ? 'px-4 py-4' : 'rounded-2xl border border-slate-200 p-5 mb-5'}`}>
+                    {isMobile && <div className="mb-3 text-xs font-semibold uppercase tracking-wider text-slate-400">Thông tin chung</div>}
+                    {!isMobile && <div className="mb-4 flex items-center gap-2 text-sm font-semibold text-slate-700"><FileTextOutlined /> Thông tin chung</div>}
+                    <div className={`grid gap-3 ${isMobile ? 'grid-cols-2' : 'grid-cols-2 gap-4'}`}>
+                        <Form.Item label="Cơ sở gửi" className="mb-0 col-span-2 sm:col-span-1">
+                            <Input value={defaultPlantName || '—'} readOnly className="cursor-default bg-white font-medium text-slate-700" />
                         </Form.Item>
                         <Form.Item name="fromPlantId" hidden><Input /></Form.Item>
-
-                        <Form.Item name="requestDate" label="Ngày đề xuất" className="mb-0"
-                            rules={[{ required: true, message: 'Chọn ngày đề xuất' }]}>
-                            <DatePicker format="DD/MM/YYYY" className="w-full" />
+                        <Form.Item name="requestDate" label="Ngày đề xuất" className="mb-0 col-span-2 sm:col-span-1" rules={[{ required: true, message: 'Chọn ngày' }]}>
+                            <DatePicker format="DD/MM/YYYY" className="w-full" inputReadOnly={isMobile} />
                         </Form.Item>
-
-                        <Form.Item name="note" label="Lý do / Mục đích đề xuất" className="mb-0 sm:col-span-2"
-                            rules={[
-                                { required: true, message: 'Vui lòng nhập lý do đề xuất' },
-                                { min: 10, message: 'Tối thiểu 10 ký tự' },
-                            ]}>
-                            <Input.TextArea rows={3} maxLength={500} showCount
-                                placeholder="Ghi rõ lý do cần cấp và mục đích sử dụng vật tư..." />
+                        <Form.Item name="note" label="Lý do / Mục đích" className="mb-0 col-span-2"
+                            rules={[{ required: true, message: 'Vui lòng nhập lý do' }, { min: 10, message: 'Tối thiểu 10 ký tự' }]}>
+                            <Input.TextArea rows={isMobile ? 2 : 3} maxLength={500} showCount placeholder="Ghi rõ lý do cần cấp và mục đích sử dụng..." />
                         </Form.Item>
                     </div>
                 </div>
 
-                {/* Danh sách vật tư — scroll riêng */}
+                {/* Danh sách vật tư */}
                 <Form.List name="items">
                     {(fields, { add, remove }) => (
-                        <div className="flex flex-col rounded-2xl border border-slate-200 bg-white overflow-hidden flex-1 min-h-0">
-                            {/* Sticky header */}
-                            <div className="flex items-center justify-between border-b border-slate-100 bg-slate-50 px-3 sm:px-5 py-3 shrink-0">
+                        <div className={`flex flex-col overflow-hidden flex-1 min-h-0 ${!isMobile ? 'rounded-2xl border border-slate-200 bg-white mt-0' : ''}`}>
+                            <div className={`flex items-center justify-between border-b border-slate-100 bg-slate-50 shrink-0 ${isMobile ? 'px-4 py-3' : 'px-5 py-3'}`}>
                                 <div>
-                                    <div className="text-sm font-semibold text-slate-800">Danh sách vật tư cần cấp</div>
-                                    <div className="text-xs text-slate-400">Tối thiểu 1 vật tư.</div>
+                                    <div className="text-sm font-semibold text-slate-800">Danh sách vật tư</div>
+                                    <div className="text-xs text-slate-400">Tối thiểu 1 vật tư</div>
                                 </div>
                                 <Tag color="blue">{fields.length} loại</Tag>
                             </div>
-
-                            {/* Column headers — desktop only */}
                             {!isMobile && (
                                 <div className="grid grid-cols-[minmax(0,2.5fr)_90px_130px_minmax(0,1.5fr)_40px] gap-3 border-b border-slate-100 bg-slate-50/50 px-5 py-2 text-[11px] font-semibold uppercase tracking-wider text-slate-400 shrink-0">
                                     <span>Tên vật tư *</span><span>ĐVT *</span><span>Số lượng *</span><span>Ghi chú</span><span />
                                 </div>
                             )}
-
-                            {/* Scrollable rows */}
                             <div className="overflow-y-auto flex-1">
                                 {fields.length === 0 && (
                                     <div className="flex flex-col items-center justify-center gap-2 py-12 text-slate-400">
-                                        <InboxOutlined style={{ fontSize: 32 }} />
-                                        <span className="text-sm">Chưa có vật tư nào</span>
+                                        <InboxOutlined style={{ fontSize: 32 }} /><span className="text-sm">Chưa có vật tư nào</span>
                                     </div>
                                 )}
                                 {fields.map((field, index) => (
                                     isMobile ? (
-                                        /* Mobile: card layout dọc */
-                                        <div key={field.key}
-                                            className="border-b border-slate-100 px-3 py-3 last:border-b-0">
+                                        <div key={field.key} className="border-b border-slate-100 px-4 py-3 last:border-b-0">
                                             <div className="flex items-center justify-between mb-2">
                                                 <span className="text-xs font-semibold text-slate-500">Vật tư #{index + 1}</span>
-                                                <Tooltip title="Xoá dòng">
-                                                    <Button type="text" danger size="small"
-                                                        disabled={fields.length === 1}
-                                                        icon={<DeleteOutlined />}
-                                                        onClick={() => remove(field.name)} />
-                                                </Tooltip>
+                                                <Button type="text" danger size="small" disabled={fields.length === 1} icon={<DeleteOutlined />} onClick={() => remove(field.name)} />
                                             </div>
                                             <div className="grid grid-cols-2 gap-2">
-                                                <Form.Item name={[field.name, 'materialName']} label="Tên vật tư" className="mb-0 col-span-2"
-                                                    rules={[{ required: true, message: 'Nhập tên' }]}>
-                                                    <Input placeholder={`Vật tư ${index + 1}`} maxLength={200} />
+                                                <Form.Item name={[field.name, 'materialName']} label="Tên vật tư" className="mb-0 col-span-2" rules={[{ required: true, message: 'Nhập tên' }]}>
+                                                    <Input placeholder={`Vật tư ${index + 1}`} maxLength={200} size="large" />
                                                 </Form.Item>
-                                                <Form.Item name={[field.name, 'unit']} label="ĐVT" className="mb-0"
-                                                    rules={[{ required: true, message: 'Nhập ĐVT' }]}>
-                                                    <Input placeholder="Cái, Kg..." maxLength={50} />
+                                                <Form.Item name={[field.name, 'unit']} label="ĐVT" className="mb-0" rules={[{ required: true, message: 'Nhập ĐVT' }]}>
+                                                    <Input placeholder="Cái, Kg..." maxLength={50} size="large" />
                                                 </Form.Item>
-                                                <Form.Item name={[field.name, 'quantityRequested']} label="Số lượng" className="mb-0"
-                                                    rules={[{ required: true, message: 'Nhập SL' }]}>
-                                                    <InputNumber<number> min={1} className="w-full"
-                                                        formatter={(v) => `${v ?? ''}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')}
-                                                        parser={parseNum} />
+                                                <Form.Item name={[field.name, 'quantityRequested']} label="Số lượng" className="mb-0" rules={[{ required: true, message: 'Nhập SL' }]}>
+                                                    <InputNumber<number> min={1} className="w-full" size="large" formatter={(v) => `${v ?? ''}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')} parser={parseNum} />
                                                 </Form.Item>
                                                 <Form.Item name={[field.name, 'note']} label="Ghi chú" className="mb-0 col-span-2">
                                                     <Input placeholder="Ghi chú..." maxLength={250} />
@@ -344,47 +223,31 @@ const FormDrawer: React.FC<{
                                             </div>
                                         </div>
                                     ) : (
-                                        /* Desktop: grid layout ngang */
-                                        <div key={field.key}
-                                            className="grid grid-cols-[minmax(0,2.5fr)_90px_130px_minmax(0,1.5fr)_40px] gap-3 border-b border-slate-100 px-5 py-3 last:border-b-0 hover:bg-blue-50/20 transition-colors">
-                                            <Form.Item name={[field.name, 'materialName']} className="mb-0"
-                                                rules={[{ required: true, message: 'Nhập tên' }]}>
+                                        <div key={field.key} className="grid grid-cols-[minmax(0,2.5fr)_90px_130px_minmax(0,1.5fr)_40px] gap-3 border-b border-slate-100 px-5 py-3 last:border-b-0 hover:bg-blue-50/20 transition-colors">
+                                            <Form.Item name={[field.name, 'materialName']} className="mb-0" rules={[{ required: true, message: 'Nhập tên' }]}>
                                                 <Input placeholder={`Vật tư ${index + 1}`} maxLength={200} />
                                             </Form.Item>
-                                            <Form.Item name={[field.name, 'unit']} className="mb-0"
-                                                rules={[{ required: true, message: 'Nhập ĐVT' }]}>
+                                            <Form.Item name={[field.name, 'unit']} className="mb-0" rules={[{ required: true, message: 'Nhập ĐVT' }]}>
                                                 <Input placeholder="Cái, Kg..." maxLength={50} />
                                             </Form.Item>
-                                            <Form.Item name={[field.name, 'quantityRequested']} className="mb-0"
-                                                rules={[{ required: true, message: 'Nhập SL' }]}>
-                                                <InputNumber<number> min={1} className="w-full"
-                                                    formatter={(v) => `${v ?? ''}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')}
-                                                    parser={parseNum} />
+                                            <Form.Item name={[field.name, 'quantityRequested']} className="mb-0" rules={[{ required: true, message: 'Nhập SL' }]}>
+                                                <InputNumber<number> min={1} className="w-full" formatter={(v) => `${v ?? ''}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')} parser={parseNum} />
                                             </Form.Item>
                                             <Form.Item name={[field.name, 'note']} className="mb-0">
                                                 <Input placeholder="Ghi chú..." maxLength={250} />
                                             </Form.Item>
                                             <div className="flex items-center justify-center">
                                                 <Tooltip title="Xoá dòng">
-                                                    <Button type="text" danger size="small"
-                                                        disabled={fields.length === 1}
-                                                        icon={<DeleteOutlined />}
-                                                        onClick={() => remove(field.name)} />
+                                                    <Button type="text" danger size="small" disabled={fields.length === 1} icon={<DeleteOutlined />} onClick={() => remove(field.name)} />
                                                 </Tooltip>
                                             </div>
                                         </div>
                                     )
                                 ))}
                             </div>
-
-                            {/* Sticky footer — nút thêm luôn hiển thị */}
-                            <div className="flex items-center justify-between border-t border-slate-200 bg-slate-50 px-3 sm:px-5 py-3 shrink-0">
-                                <Text type="secondary" className="text-xs">
-                                    Tổng: <strong>{fields.length}</strong> loại vật tư
-                                </Text>
-                                <Button icon={<PlusOutlined />} onClick={() => add(emptyItem())}>
-                                    Thêm dòng
-                                </Button>
+                            <div className={`flex items-center justify-between border-t border-slate-200 bg-slate-50 shrink-0 ${isMobile ? 'px-4 py-3' : 'px-5 py-3'}`}>
+                                <Text type="secondary" className="text-xs">Tổng: <strong>{fields.length}</strong> loại</Text>
+                                <Button icon={<PlusOutlined />} onClick={() => add(emptyItem())} block={isMobile} type={isMobile ? 'dashed' : 'default'}>Thêm vật tư</Button>
                             </div>
                         </div>
                     )}
@@ -427,6 +290,7 @@ const SupplyRequestPage: React.FC = () => {
     const [pagination, setPagination] = useState({ page: DEFAULT_PAGE, limit: DEFAULT_LIMIT });
     const [selectedId, setSelectedId] = useState<string | null>(null);
     const [formOpen, setFormOpen] = useState(false);
+    const [filterOpen, setFilterOpen] = useState(false);
     const [rejectTarget, setRejectTarget] = useState<PurchaseRequest | null>(null);
     const [rejectReason, setRejectReason] = useState('');
     const [approvingId, setApprovingId] = useState<string | null>(null);
@@ -659,7 +523,7 @@ const SupplyRequestPage: React.FC = () => {
 
             {/* Stats */}
             {isCS1Manager && (
-                <div className="grid grid-cols-3 gap-2 sm:grid-cols-3 lg:grid-cols-6">
+                <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
                     {[
                         { title: 'Tổng phiếu',     value: stats.total,       color: '#3b82f6', icon: <FileTextOutlined />,    tab: 'all' as SupplyRequestTab,    status: undefined },
                         { title: 'Chờ duyệt',       value: stats.pending,     color: '#f97316', icon: <ClockCircleOutlined />, tab: 'pending' as SupplyRequestTab, status: undefined },
@@ -682,23 +546,18 @@ const SupplyRequestPage: React.FC = () => {
             )}
 
             {/* Table card */}
-            <div className="rounded-2xl border border-slate-200 bg-white shadow-sm">
+            <div className="rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden">
                 {/* Tabs */}
-                <div className="border-b border-slate-100 px-5 pt-2">
-                    <div className="flex gap-1">
+                <div className="border-b border-slate-100 px-4 sm:px-5 pt-1">
+                    <div className="flex gap-0">
                         {([
-                            { key: 'mine', label: 'Phiếu của tôi' },
+                            { key: 'mine', label: 'Của tôi' },
                             ...(isCS1Manager ? [{ key: 'pending', label: `Chờ xử lý${stats.pending > 0 ? ` (${stats.pending})` : ''}` }] : []),
                             { key: 'all', label: 'Tất cả' },
                         ] as { key: SupplyRequestTab; label: string }[]).map((tab) => (
                             <button key={tab.key}
                                 onClick={() => { setActiveTab(tab.key); setPagination({ page: DEFAULT_PAGE, limit: DEFAULT_LIMIT }); }}
-                                className={[
-                                    'px-4 py-3 text-sm font-medium border-b-2 transition-colors',
-                                    activeTab === tab.key
-                                        ? 'border-blue-600 text-blue-600'
-                                        : 'border-transparent text-slate-500 hover:text-slate-700',
-                                ].join(' ')}>
+                                className={['px-3 sm:px-4 py-3 text-sm font-medium border-b-2 transition-colors whitespace-nowrap', activeTab === tab.key ? 'border-blue-600 text-blue-600' : 'border-transparent text-slate-500 hover:text-slate-700'].join(' ')}>
                                 {tab.label}
                             </button>
                         ))}
@@ -706,56 +565,100 @@ const SupplyRequestPage: React.FC = () => {
                 </div>
 
                 {/* Filters */}
-                <div className="flex flex-col sm:flex-row sm:flex-wrap items-stretch sm:items-center gap-2 sm:gap-3 border-b border-slate-100 px-3 sm:px-5 py-3">
-                    <Input prefix={<SearchOutlined className="text-slate-400" />}
-                        placeholder="Tìm mã phiếu, ghi chú..." allowClear
-                        value={draft.search}
-                        onChange={(e) => setDraft((p) => ({ ...p, search: e.target.value }))}
-                        className="w-full sm:w-60" />
-                    {isCS1Manager && (
-                        <Select placeholder="Cơ sở gửi" allowClear value={draft.fromPlantId}
-                            onChange={(v) => { setDraft((p) => ({ ...p, fromPlantId: v })); setFilters((p) => ({ ...p, fromPlantId: v })); setPagination((p) => ({ ...p, page: 1 })); }}
-                            options={plants.map((p: Plant) => ({ label: p.name, value: p.id }))}
-                            className="w-full sm:w-44" />
+                <div className="border-b border-slate-100 px-3 sm:px-5 py-3">
+                    {/* Mobile */}
+                    <div className="flex gap-2 sm:hidden">
+                        <Input prefix={<SearchOutlined className="text-slate-400" />} placeholder="Tìm mã phiếu..." allowClear
+                            value={draft.search} onChange={(e) => setDraft((p) => ({ ...p, search: e.target.value }))} className="flex-1" />
+                        <Button icon={<FilterOutlined />}
+                            type={(draft.fromPlantId || draft.status || draft.dateRange) ? 'primary' : 'default'}
+                            ghost={!!(draft.fromPlantId || draft.status || draft.dateRange)}
+                            onClick={() => setFilterOpen((v) => !v)} />
+                    </div>
+                    {filterOpen && (
+                        <div className="mt-2 flex flex-col gap-2 sm:hidden">
+                            {isCS1Manager && (
+                                <Select placeholder="Cơ sở gửi" allowClear value={draft.fromPlantId}
+                                    onChange={(v) => { setDraft((p) => ({ ...p, fromPlantId: v })); setFilters((p) => ({ ...p, fromPlantId: v })); setPagination((p) => ({ ...p, page: 1 })); }}
+                                    options={plants.map((p: Plant) => ({ label: p.name, value: p.id }))} className="w-full" />
+                            )}
+                            <Select placeholder="Trạng thái" allowClear value={draft.status}
+                                onChange={(v) => { setDraft((p) => ({ ...p, status: v })); setFilters((p) => ({ ...p, status: v })); setPagination((p) => ({ ...p, page: 1 })); }}
+                                options={STATUS_OPTIONS} className="w-full" />
+                            <RangePicker value={draft.dateRange}
+                                onChange={(dates) => { setDraft((p) => ({ ...p, dateRange: dates as any })); setFilters((p) => ({ ...p, startDate: dates?.[0]?.startOf('day').toISOString(), endDate: dates?.[1]?.endOf('day').toISOString() })); setPagination((p) => ({ ...p, page: 1 })); }}
+                                format="DD/MM/YYYY" className="w-full" inputReadOnly />
+                        </div>
                     )}
-                    <Select placeholder="Trạng thái" allowClear value={draft.status}
-                        onChange={(v) => { setDraft((p) => ({ ...p, status: v })); setFilters((p) => ({ ...p, status: v })); setPagination((p) => ({ ...p, page: 1 })); }}
-                        options={STATUS_OPTIONS} className="w-full sm:w-40" />
-                    <RangePicker value={draft.dateRange}
-                        onChange={(dates) => {
-                            setDraft((p) => ({ ...p, dateRange: dates as any }));
-                            setFilters((p) => ({
-                                ...p,
-                                startDate: dates?.[0]?.startOf('day').toISOString(),
-                                endDate: dates?.[1]?.endOf('day').toISOString(),
-                            }));
-                            setPagination((p) => ({ ...p, page: 1 }));
-                        }}
-                        format="DD/MM/YYYY" className="w-full sm:w-60" />
+                    {/* Desktop */}
+                    <div className="hidden sm:flex flex-wrap items-center gap-2">
+                        <Input prefix={<SearchOutlined className="text-slate-400" />} placeholder="Tìm mã phiếu, ghi chú..." allowClear
+                            value={draft.search} onChange={(e) => setDraft((p) => ({ ...p, search: e.target.value }))} className="w-60" />
+                        {isCS1Manager && (
+                            <Select placeholder="Cơ sở gửi" allowClear value={draft.fromPlantId}
+                                onChange={(v) => { setDraft((p) => ({ ...p, fromPlantId: v })); setFilters((p) => ({ ...p, fromPlantId: v })); setPagination((p) => ({ ...p, page: 1 })); }}
+                                options={plants.map((p: Plant) => ({ label: p.name, value: p.id }))} className="w-44" />
+                        )}
+                        <Select placeholder="Trạng thái" allowClear value={draft.status}
+                            onChange={(v) => { setDraft((p) => ({ ...p, status: v })); setFilters((p) => ({ ...p, status: v })); setPagination((p) => ({ ...p, page: 1 })); }}
+                            options={STATUS_OPTIONS} className="w-40" />
+                        <RangePicker value={draft.dateRange}
+                            onChange={(dates) => { setDraft((p) => ({ ...p, dateRange: dates as any })); setFilters((p) => ({ ...p, startDate: dates?.[0]?.startOf('day').toISOString(), endDate: dates?.[1]?.endOf('day').toISOString() })); setPagination((p) => ({ ...p, page: 1 })); }}
+                            format="DD/MM/YYYY" className="w-60" />
+                    </div>
                 </div>
 
-                {/* Table */}
-                <div className="px-2 sm:px-5 py-4">
-                    <Table
-                        columns={columns}
-                        dataSource={requests}
-                        rowKey="id"
-                        loading={isLoading || isFetching}
-                        size={isMobile ? 'small' : 'middle'}
-                        onRow={(record) => ({
-                            onClick: () => { setSelectedId(record.id); setApprovalQty({}); },
-                            className: 'cursor-pointer hover:bg-blue-50/30 transition-colors',
-                        })}
-                        pagination={{
-                            current: pagination.page, pageSize: pagination.limit, total: totalRequests,
-                            showSizeChanger: !isMobile,
-                            simple: isMobile,
-                            onChange: (page, limit) => setPagination({ page, limit }),
-                            showTotal: isMobile ? undefined : (total) => `${total} phiếu`,
-                        }}
-                        locale={{ emptyText: <Empty description="Không có phiếu nào" image={Empty.PRESENTED_IMAGE_SIMPLE} /> }}
-                    />
-                </div>
+                {/* Mobile card list */}
+                {isMobile ? (
+                    <div className="divide-y divide-slate-100">
+                        {(isLoading || isFetching) && requests.length === 0 ? (
+                            <div className="py-16 text-center text-slate-400 text-sm">Đang tải...</div>
+                        ) : requests.length === 0 ? (
+                            <div className="py-16"><Empty description="Không có phiếu nào" image={Empty.PRESENTED_IMAGE_SIMPLE} /></div>
+                        ) : (
+                            requests.map((record) => (
+                                <div key={record.id} onClick={() => { setSelectedId(record.id); setApprovalQty({}); }}
+                                    className="flex items-center gap-3 px-4 py-3.5 active:bg-slate-50 transition-colors cursor-pointer">
+                                    {/* Status dot */}
+                                    <div className="shrink-0 w-2 h-2 rounded-full mt-0.5"
+                                        style={{ backgroundColor: STATUS_META[record.status]?.color === 'default' ? '#94a3b8' : STATUS_META[record.status]?.color }} />
+                                    <div className="flex-1 min-w-0">
+                                        <div className="flex items-center justify-between gap-2 mb-0.5">
+                                            <span className="font-mono text-xs font-bold text-blue-700 truncate">{record.requestCode || '—'}</span>
+                                            <StatusTag status={record.status} />
+                                        </div>
+                                        <div className="text-sm font-medium text-slate-700 truncate">{record.fromPlant?.name || record.plant?.name || '—'}</div>
+                                        <div className="flex items-center gap-3 mt-0.5 text-xs text-slate-400">
+                                            <span>{fmtDate(record.requestDate || record.createdAt)}</span>
+                                            <span>·</span>
+                                            <span>{record.items?.length ?? 0} loại vật tư</span>
+                                            <span>·</span>
+                                            <span>{resolveUser(record.requestedBy)}</span>
+                                        </div>
+                                    </div>
+                                    <RightOutlined className="shrink-0 text-slate-300 text-xs" />
+                                </div>
+                            ))
+                        )}
+                        {/* Mobile pagination */}
+                        {totalRequests > 0 && (
+                            <div className="flex items-center justify-between px-4 py-3 text-sm text-slate-500 bg-slate-50">
+                                <Button size="small" disabled={pagination.page <= 1} onClick={() => setPagination((p) => ({ ...p, page: p.page - 1 }))}>← Trước</Button>
+                                <span className="text-xs text-slate-400">{pagination.page} / {Math.max(1, Math.ceil(totalRequests / pagination.limit))} · {totalRequests} phiếu</span>
+                                <Button size="small" disabled={pagination.page >= Math.ceil(totalRequests / pagination.limit)} onClick={() => setPagination((p) => ({ ...p, page: p.page + 1 }))}>Sau →</Button>
+                            </div>
+                        )}
+                    </div>
+                ) : (
+                    /* Desktop table */
+                    <div className="px-5 py-4">
+                        <Table columns={columns} dataSource={requests} rowKey="id" loading={isLoading || isFetching} size="middle"
+                            onRow={(record) => ({ onClick: () => { setSelectedId(record.id); setApprovalQty({}); }, className: 'cursor-pointer hover:bg-blue-50/30 transition-colors' })}
+                            pagination={{ current: pagination.page, pageSize: pagination.limit, total: totalRequests, showSizeChanger: true, onChange: (page, limit) => setPagination({ page, limit }), showTotal: (total) => `${total} phiếu` }}
+                            locale={{ emptyText: <Empty description="Không có phiếu nào" image={Empty.PRESENTED_IMAGE_SIMPLE} /> }}
+                        />
+                    </div>
+                )}
             </div>
 
             {/* Form Drawer */}
@@ -774,21 +677,20 @@ const SupplyRequestPage: React.FC = () => {
                 open={!!selectedId}
                 onClose={() => { setSelectedId(null); setApprovalQty({}); }}
                 width={isMobile ? '100%' : 820}
+                placement={isMobile ? 'bottom' : 'right'}
+                height={isMobile ? '92%' : undefined}
                 destroyOnHidden
-                styles={{ body: { padding: isMobile ? '12px' : undefined } }}
+                styles={{
+                    body: { padding: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden' },
+                    header: { padding: isMobile ? '12px 16px' : undefined },
+                }}
                 title={
                     <div className="flex items-center gap-3">
-                        <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-indigo-50 text-indigo-600">
-                            <FileTextOutlined />
-                        </div>
+                        <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-indigo-50 text-indigo-600"><FileTextOutlined /></div>
                         <div>
-                            <div className="font-semibold text-slate-900">
-                                Chi tiết phiếu đề xuất
-                                {selectedRequest?.requestCode && (
-                                    <span className="ml-2 font-mono text-sm text-blue-600">
-                                        #{selectedRequest.requestCode}
-                                    </span>
-                                )}
+                            <div className="font-semibold text-slate-900 text-sm sm:text-base">
+                                Chi tiết đề xuất
+                                {selectedRequest?.requestCode && <span className="ml-2 font-mono text-blue-600">#{selectedRequest.requestCode}</span>}
                             </div>
                             {selectedRequest && <StatusTag status={selectedRequest.status} />}
                         </div>
@@ -796,51 +698,25 @@ const SupplyRequestPage: React.FC = () => {
                 }
                 footer={selectedRequest && (
                     <div className={`flex gap-2 ${isMobile ? 'flex-col' : 'items-center justify-between'}`}>
-                        <Button icon={<DownloadOutlined />} onClick={() => exportXlsx(selectedRequest)}
-                            className={isMobile ? 'w-full' : ''}>
-                            Xuất Excel
-                        </Button>
+                        <Button icon={<DownloadOutlined />} onClick={() => exportXlsx(selectedRequest)} block={isMobile}>Xuất Excel</Button>
                         <div className={`flex gap-2 ${isMobile ? 'flex-col' : ''}`}>
                             {selectedRequest.status === 'pending' && isCS1Manager && (
                                 <>
-                                    <Button danger onClick={() => setRejectTarget(selectedRequest)}
-                                        className={isMobile ? 'w-full' : ''}>
-                                        Từ chối
-                                    </Button>
-                                    <Button type="primary" className={`bg-green-600 hover:!bg-green-700${isMobile ? ' w-full' : ''}`}
+                                    <Button danger onClick={() => setRejectTarget(selectedRequest)} block={isMobile}>Từ chối</Button>
+                                    <Button type="primary" className="bg-green-600 hover:!bg-green-700" block={isMobile}
                                         loading={approvingId === selectedRequest.id}
                                         onClick={() => {
-                                            const items = selectedRequest.items.map((r: any, idx: number) => ({
-                                                materialId: resolveId(r.materialId) ?? r.materialId,
-                                                quantityApproved: approvalQty[idx] ?? r.quantityRequested,
-                                            }));
-                                            Modal.confirm({
-                                                title: 'Duyệt phiếu đề xuất?',
-                                                content: 'Sau khi duyệt, bạn sẽ được chuyển sang trang tạo phiếu cấp phát.',
-                                                okText: 'Duyệt', okButtonProps: { className: 'bg-green-600' },
-                                                onOk: () => {
-                                                    setApprovingId(selectedRequest.id);
-                                                    return approveReq({ id: selectedRequest.id, payload: { items } });
-                                                },
-                                            });
+                                            const items = selectedRequest.items.map((r: any, idx: number) => ({ materialId: resolveId(r.materialId) ?? r.materialId, quantityApproved: approvalQty[idx] ?? r.quantityRequested }));
+                                            Modal.confirm({ title: 'Duyệt phiếu đề xuất?', content: 'Sau khi duyệt, bạn sẽ được chuyển sang trang tạo phiếu cấp phát.', okText: 'Duyệt', okButtonProps: { className: 'bg-green-600' }, onOk: () => { setApprovingId(selectedRequest.id); return approveReq({ id: selectedRequest.id, payload: { items } }); } });
                                         }}>
                                         <CheckCircleOutlined /> Duyệt phiếu
                                     </Button>
                                 </>
                             )}
                             {canConfirm && (
-                                <Button type="primary" loading={isConfirming}
-                                    className={`bg-green-600 hover:!bg-green-700${isMobile ? ' w-full' : ''}`}
-                                    onClick={() => {
-                                        if (!linkedDist?.id) return;
-                                        Modal.confirm({
-                                            title: 'Xác nhận đã nhận hàng?',
-                                            content: 'Thao tác này xác nhận cơ sở đã nhận đủ vật tư. Không thể hoàn tác.',
-                                            okText: 'Xác nhận', okButtonProps: { className: 'bg-green-600' },
-                                            onOk: () => confirmDist(linkedDist.id),
-                                        });
-                                    }}>
-                                    <CheckCircleOutlined /> Xác nhận đã nhận hàng
+                                <Button type="primary" className="bg-green-600 hover:!bg-green-700" block={isMobile} loading={isConfirming}
+                                    onClick={() => { if (!linkedDist?.id) return; Modal.confirm({ title: 'Xác nhận đã nhận hàng?', content: 'Thao tác này xác nhận cơ sở đã nhận đủ vật tư. Không thể hoàn tác.', okText: 'Xác nhận', okButtonProps: { className: 'bg-green-600' }, onOk: () => confirmDist(linkedDist.id) }); }}>
+                                    <CheckCircleOutlined /> Xác nhận nhận hàng
                                 </Button>
                             )}
                         </div>
@@ -848,144 +724,125 @@ const SupplyRequestPage: React.FC = () => {
                 )}
             >
                 {selectedRequest ? (
-                    <div className="flex flex-col gap-5">
-                        {/* Workflow steps */}
-                        {selectedRequest.status !== 'rejected' && selectedRequest.status !== 'cancelled' && (
-                            <div className="rounded-2xl border border-slate-200 bg-slate-50 px-6 py-4">
-                                <Steps
-                                    size="small"
-                                    current={getWorkflowStep(selectedRequest.status)}
-                                    items={WORKFLOW_STEPS.map((s) => ({ title: s.title }))}
-                                />
-                            </div>
-                        )}
-
-                        {/* Rejected banner */}
-                        {selectedRequest.status === 'rejected' && (
-                            <div className="flex gap-3 rounded-2xl border border-red-200 bg-red-50 p-4 text-red-700">
-                                <WarningOutlined className="mt-0.5 shrink-0" />
-                                <div>
-                                    <div className="font-semibold">Phiếu bị từ chối</div>
-                                    <div className="text-sm">{selectedRequest.rejectedReason || '—'}</div>
+                    <div className="flex-1 overflow-y-auto">
+                        <div className="flex flex-col gap-4 p-4 sm:p-5">
+                            {/* Workflow */}
+                            {selectedRequest.status !== 'rejected' && selectedRequest.status !== 'cancelled' && (
+                                <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 sm:px-6 py-4">
+                                    <Steps size="small" current={getWorkflowStep(selectedRequest.status)}
+                                        items={WORKFLOW_STEPS.map((s) => ({ title: s.title }))} />
                                 </div>
-                            </div>
-                        )}
+                            )}
 
-                        {/* In-progress banner */}
-                        {isInProgress && linkedDist?.status === 'distributed' && (
-                            <div className="flex gap-3 rounded-2xl border border-cyan-200 bg-cyan-50 p-4 text-cyan-700">
-                                <SendOutlined className="mt-0.5 shrink-0" />
-                                <div>
-                                    <div className="font-semibold">Hàng đang trên đường vận chuyển</div>
-                                    <div className="text-sm">Vui lòng xác nhận sau khi nhận đủ vật tư thực tế.</div>
+                            {/* Rejected banner */}
+                            {selectedRequest.status === 'rejected' && (
+                                <div className="flex gap-3 rounded-2xl border border-red-200 bg-red-50 p-4 text-red-700">
+                                    <WarningOutlined className="mt-0.5 shrink-0" />
+                                    <div><div className="font-semibold text-sm">Phiếu bị từ chối</div><div className="text-sm mt-0.5">{selectedRequest.rejectedReason || '—'}</div></div>
                                 </div>
-                            </div>
-                        )}
+                            )}
 
-                        {/* Info */}
-                        <div className="rounded-2xl border border-slate-200 bg-white p-5">
-                            <div className="mb-3 text-sm font-semibold text-slate-700">Thông tin phiếu</div>
-                            <Descriptions column={isMobile ? 1 : 2} size="small" labelStyle={{ color: '#94a3b8', fontWeight: 500 }}>
-                                <Descriptions.Item label="Mã phiếu">
-                                    <Text copyable className="font-mono font-semibold text-blue-700">
-                                        {selectedRequest.requestCode}
-                                    </Text>
-                                </Descriptions.Item>
-                                <Descriptions.Item label="Trạng thái">
-                                    <StatusTag status={selectedRequest.status} />
-                                </Descriptions.Item>
-                                <Descriptions.Item label="Cơ sở gửi">
-                                    {selectedRequest.fromPlant?.name || selectedRequest.plant?.name || '—'}
-                                </Descriptions.Item>
-                                <Descriptions.Item label="Ngày đề xuất">
-                                    {fmtDate(selectedRequest.requestDate || selectedRequest.createdAt)}
-                                </Descriptions.Item>
-                                <Descriptions.Item label="Người tạo">
-                                    {resolveUser(selectedRequest.requestedBy)}
-                                </Descriptions.Item>
-                                <Descriptions.Item label="Ngày tạo">
-                                    {fmtDateTime(selectedRequest.createdAt)}
-                                </Descriptions.Item>
-                                {selectedRequest.approvedBy && (
-                                    <Descriptions.Item label="Người duyệt">
-                                        {resolveUser(selectedRequest.approvedBy)}
-                                    </Descriptions.Item>
-                                )}
-                                {selectedRequest.approvedAt && (
-                                    <Descriptions.Item label="Ngày duyệt">
-                                        {fmtDateTime(selectedRequest.approvedAt)}
-                                    </Descriptions.Item>
-                                )}
-                                {selectedRequest.note && (
-                                    <Descriptions.Item label="Lý do / Mục đích" span={2}>
-                                        <Paragraph className="mb-0 text-slate-700">{selectedRequest.note}</Paragraph>
-                                    </Descriptions.Item>
-                                )}
-                            </Descriptions>
-                        </div>
+                            {/* In-progress banner */}
+                            {isInProgress && linkedDist?.status === 'distributed' && (
+                                <div className="flex gap-3 rounded-2xl border border-cyan-200 bg-cyan-50 p-4 text-cyan-700">
+                                    <SendOutlined className="mt-0.5 shrink-0" />
+                                    <div><div className="font-semibold text-sm">Hàng đang trên đường vận chuyển</div><div className="text-sm mt-0.5">Vui lòng xác nhận sau khi nhận đủ vật tư.</div></div>
+                                </div>
+                            )}
 
-                        {/* Items table */}
-                        <div className="rounded-2xl border border-slate-200 bg-white overflow-hidden">
-                            <div className="border-b border-slate-100 bg-slate-50 px-5 py-3 text-sm font-semibold text-slate-700">
-                                Danh sách vật tư ({selectedRequest.items?.length ?? 0} loại)
+                            {/* Info — mobile: list rows, desktop: Descriptions */}
+                            <div className="rounded-2xl border border-slate-200 bg-white overflow-hidden">
+                                <div className="border-b border-slate-100 bg-slate-50 px-4 py-2.5 text-xs font-semibold uppercase tracking-wider text-slate-400">Thông tin phiếu</div>
+                                {isMobile ? (
+                                    <div className="divide-y divide-slate-100">
+                                        {[
+                                            { label: 'Mã phiếu', value: <Text copyable className="font-mono font-bold text-blue-700 text-sm">{selectedRequest.requestCode}</Text> },
+                                            { label: 'Trạng thái', value: <StatusTag status={selectedRequest.status} /> },
+                                            { label: 'Cơ sở gửi', value: selectedRequest.fromPlant?.name || selectedRequest.plant?.name || '—' },
+                                            { label: 'Ngày đề xuất', value: fmtDate(selectedRequest.requestDate || selectedRequest.createdAt) },
+                                            { label: 'Người tạo', value: resolveUser(selectedRequest.requestedBy) },
+                                            ...(selectedRequest.approvedBy ? [{ label: 'Người duyệt', value: resolveUser(selectedRequest.approvedBy) }] : []),
+                                            ...(selectedRequest.approvedAt ? [{ label: 'Ngày duyệt', value: fmtDateTime(selectedRequest.approvedAt) }] : []),
+                                            ...(selectedRequest.note ? [{ label: 'Lý do', value: selectedRequest.note }] : []),
+                                        ].map(({ label, value }) => (
+                                            <div key={label} className="flex items-start justify-between gap-3 px-4 py-3">
+                                                <span className="text-xs text-slate-400 shrink-0 w-24">{label}</span>
+                                                <span className="text-sm text-slate-800 text-right flex-1">{value}</span>
+                                            </div>
+                                        ))}
+                                    </div>
+                                ) : (
+                                    <div className="p-5">
+                                        <Descriptions column={2} size="small" labelStyle={{ color: '#94a3b8', fontWeight: 500 }}>
+                                            <Descriptions.Item label="Mã phiếu"><Text copyable className="font-mono font-semibold text-blue-700">{selectedRequest.requestCode}</Text></Descriptions.Item>
+                                            <Descriptions.Item label="Trạng thái"><StatusTag status={selectedRequest.status} /></Descriptions.Item>
+                                            <Descriptions.Item label="Cơ sở gửi">{selectedRequest.fromPlant?.name || selectedRequest.plant?.name || '—'}</Descriptions.Item>
+                                            <Descriptions.Item label="Ngày đề xuất">{fmtDate(selectedRequest.requestDate || selectedRequest.createdAt)}</Descriptions.Item>
+                                            <Descriptions.Item label="Người tạo">{resolveUser(selectedRequest.requestedBy)}</Descriptions.Item>
+                                            <Descriptions.Item label="Ngày tạo">{fmtDateTime(selectedRequest.createdAt)}</Descriptions.Item>
+                                            {selectedRequest.approvedBy && <Descriptions.Item label="Người duyệt">{resolveUser(selectedRequest.approvedBy)}</Descriptions.Item>}
+                                            {selectedRequest.approvedAt && <Descriptions.Item label="Ngày duyệt">{fmtDateTime(selectedRequest.approvedAt)}</Descriptions.Item>}
+                                            {selectedRequest.note && <Descriptions.Item label="Lý do / Mục đích" span={2}><Paragraph className="mb-0 text-slate-700">{selectedRequest.note}</Paragraph></Descriptions.Item>}
+                                        </Descriptions>
+                                    </div>
+                                )}
                             </div>
-                            <Table
-                                dataSource={selectedRequest.items}
-                                rowKey={(_, idx) => String(idx)}
-                                pagination={false}
-                                size="small"
-                                className="[&_.ant-table-thead_th]:bg-slate-50"
-                                columns={[
-                                    {
-                                        title: '#', key: 'idx', width: 40, align: 'center' as const,
-                                        render: (_: any, __: any, idx: number) => (
-                                            <span className="text-xs text-slate-400">{idx + 1}</span>
-                                        ),
-                                    },
-                                    {
-                                        title: 'Tên vật tư đề xuất', key: 'name',
-                                        render: (_: any, r: any) => (
-                                            <span className="font-medium text-slate-800">{r.materialName || '—'}</span>
-                                        ),
-                                    },
-                                    { title: 'ĐVT', dataIndex: 'unit', width: 80 },
-                                    {
-                                        title: 'SL đề xuất', dataIndex: 'quantityRequested',
-                                        width: 100, align: 'right' as const,
-                                        render: (v: number) => <span className="font-semibold">{fmtNum(v)}</span>,
-                                    },
-                                    ...(isCS1Manager && selectedRequest.status === 'pending' ? [
-                                        {
-                                            title: 'SL duyệt', key: 'qtyA', width: 110,
-                                            render: (_: any, r: any, idx: number) => (
-                                                <InputNumber min={1} size="small" style={{ width: '100%' }}
-                                                    value={approvalQty[idx] ?? r.quantityRequested}
-                                                    onChange={(v) => setApprovalQty((p) => ({
-                                                        ...p, [idx]: v ?? r.quantityRequested,
-                                                    }))} />
-                                            ),
-                                        },
-                                    ] : [
-                                        {
-                                            title: 'SL duyệt', key: 'qtyA', width: 100, align: 'right' as const,
-                                            render: (_: any, r: any) => (
-                                                <span className={r.quantityApproved != null && r.quantityApproved < r.quantityRequested ? 'text-orange-600 font-semibold' : ''}>
-                                                    {fmtNum(r.quantityApproved ?? r.quantityRequested)}
-                                                </span>
-                                            ),
-                                        },
-                                    ]),
-                                    {
-                                        title: 'Ghi chú', dataIndex: 'note', width: 160,
-                                        render: (v?: string) => <span className="text-slate-400 text-sm">{v || '—'}</span>,
-                                    },
-                                ]}
-                            />
+
+                            {/* Items */}
+                            <div className="rounded-2xl border border-slate-200 bg-white overflow-hidden">
+                                <div className="border-b border-slate-100 bg-slate-50 px-4 py-2.5 text-xs font-semibold uppercase tracking-wider text-slate-400">
+                                    Danh sách vật tư · {selectedRequest.items?.length ?? 0} loại
+                                </div>
+                                {isMobile ? (
+                                    <div className="divide-y divide-slate-100">
+                                        {(selectedRequest.items ?? []).map((r: any, idx: number) => (
+                                            <div key={idx} className="px-4 py-3">
+                                                <div className="flex items-start justify-between gap-2 mb-1.5">
+                                                    <span className="text-sm font-semibold text-slate-800 flex-1">{r.materialName || '—'}</span>
+                                                    <span className="text-xs text-slate-400 shrink-0">{r.unit || '—'}</span>
+                                                </div>
+                                                <div className="flex items-center gap-4 text-xs text-slate-500">
+                                                    <span>Đề xuất: <strong className="text-slate-700">{fmtNum(r.quantityRequested)}</strong></span>
+                                                    {isCS1Manager && selectedRequest.status === 'pending' ? (
+                                                        <div className="flex items-center gap-1.5">
+                                                            <span>Duyệt:</span>
+                                                            <InputNumber min={1} size="small" style={{ width: 80 }}
+                                                                value={approvalQty[idx] ?? r.quantityRequested}
+                                                                onChange={(v) => setApprovalQty((p) => ({ ...p, [idx]: v ?? r.quantityRequested }))} />
+                                                        </div>
+                                                    ) : (
+                                                        <span className={r.quantityApproved != null && r.quantityApproved < r.quantityRequested ? 'text-orange-600 font-semibold' : ''}>
+                                                            Duyệt: <strong>{fmtNum(r.quantityApproved ?? r.quantityRequested)}</strong>
+                                                        </span>
+                                                    )}
+                                                </div>
+                                                {r.note && <div className="mt-1 text-xs text-slate-400 italic">{r.note}</div>}
+                                            </div>
+                                        ))}
+                                    </div>
+                                ) : (
+                                    <Table dataSource={selectedRequest.items} rowKey={(_, idx) => String(idx)} pagination={false} size="small"
+                                        className="[&_.ant-table-thead_th]:bg-slate-50"
+                                        columns={[
+                                            { title: '#', key: 'idx', width: 40, align: 'center' as const, render: (_: any, __: any, idx: number) => <span className="text-xs text-slate-400">{idx + 1}</span> },
+                                            { title: 'Tên vật tư', key: 'name', render: (_: any, r: any) => <span className="font-medium text-slate-800">{r.materialName || '—'}</span> },
+                                            { title: 'ĐVT', dataIndex: 'unit', width: 80 },
+                                            { title: 'SL đề xuất', dataIndex: 'quantityRequested', width: 100, align: 'right' as const, render: (v: number) => <span className="font-semibold">{fmtNum(v)}</span> },
+                                            ...(isCS1Manager && selectedRequest.status === 'pending' ? [{
+                                                title: 'SL duyệt', key: 'qtyA', width: 110,
+                                                render: (_: any, r: any, idx: number) => <InputNumber min={1} size="small" style={{ width: '100%' }} value={approvalQty[idx] ?? r.quantityRequested} onChange={(v) => setApprovalQty((p) => ({ ...p, [idx]: v ?? r.quantityRequested }))} />,
+                                            }] : [{
+                                                title: 'SL duyệt', key: 'qtyA', width: 100, align: 'right' as const,
+                                                render: (_: any, r: any) => <span className={r.quantityApproved != null && r.quantityApproved < r.quantityRequested ? 'text-orange-600 font-semibold' : ''}>{fmtNum(r.quantityApproved ?? r.quantityRequested)}</span>,
+                                            }]),
+                                            { title: 'Ghi chú', dataIndex: 'note', width: 160, render: (v?: string) => <span className="text-slate-400 text-sm">{v || '—'}</span> },
+                                        ]}
+                                    />
+                                )}
+                            </div>
                         </div>
                     </div>
-                ) : (
-                    <Empty description="Không có dữ liệu" />
-                )}
+                ) : <Empty description="Không có dữ liệu" className="py-20" />}
             </Drawer>
 
             {/* Reject Modal */}
