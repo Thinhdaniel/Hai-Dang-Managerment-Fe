@@ -1,5 +1,6 @@
 import api from '../lib/api';
 import type { Plant, PlantMachineStatsResponse } from '../types';
+import { sortPlantsNaturally } from '../utils/plantSort';
 
 const BASE = '/plants';
 
@@ -12,10 +13,19 @@ type PlantPayload = {
 };
 
 export const plantService = {
-    getAll: (params?: { search?: string }): Promise<Plant[]> => api.get<Plant[]>(BASE, { params }),
+    getAll: async (params?: { search?: string }): Promise<Plant[]> => {
+        const plants = await api.get<Plant[]>(BASE, { params });
+        return sortPlantsNaturally(plants);
+    },
 
-    getWithMachineCount: (params?: { search?: string }): Promise<PlantMachineStatsResponse> =>
-        api.get<PlantMachineStatsResponse>(`${BASE}/with-machine-count`, { params }),
+    getWithMachineCount: async (params?: { search?: string }): Promise<PlantMachineStatsResponse> => {
+        const response = await api.get<PlantMachineStatsResponse>(`${BASE}/with-machine-count`, { params });
+
+        return {
+            ...response,
+            facilities: sortPlantsNaturally(response.facilities),
+        };
+    },
 
     getById: (id: string): Promise<Plant> => api.get<Plant>(`${BASE}/${id}`),
 

@@ -1,15 +1,32 @@
-import React, { useState } from 'react';
-import { App, Button, Descriptions, Empty, Input, Modal, Spin, Steps, Timeline, Typography } from 'antd';
+import React, { useMemo, useState } from 'react';
+import {
+    Alert,
+    App,
+    Button,
+    Card,
+    Descriptions,
+    Empty,
+    Input,
+    Modal,
+    Spin,
+    Steps,
+    Table,
+    Tag,
+    Timeline,
+    Typography,
+    type TableColumnsType,
+} from 'antd';
 import {
     ArrowLeftOutlined,
     CheckCircleOutlined,
     CheckOutlined,
     CloseCircleOutlined,
     CloseOutlined,
+    DownloadOutlined,
     EnvironmentOutlined,
     FileTextOutlined,
     InfoCircleOutlined,
-    RightOutlined,
+    PictureOutlined,
     StopOutlined,
     SwapOutlined,
     TruckOutlined,
@@ -19,29 +36,79 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate, useParams } from 'react-router-dom';
 import dayjs from 'dayjs';
 import AppBreadcrumb from '../components/navigation/AppBreadcrumb';
-import TransferStatusBadge from '../components/transfer/TransferStatusBadge';
 import ConfirmAction from '../components/shared/ConfirmAction';
 import HandoverModal from '../components/transfer/HandoverModal';
+import TransferStatusBadge from '../components/transfer/TransferStatusBadge';
 import { useAuth } from '../core/contexts/AuthContext';
 import { hasManagerAccess } from '../core/lib/permissions';
 import { transferService } from '../core/services/transfer.service';
+import type { Asset, Transfer } from '../core/types';
 
 const { Text, Title } = Typography;
 
-const fmt = (v?: string) => (v ? dayjs(v).format('DD/MM/YYYY HH:mm') : '—');
-const fmtDate = (v?: string) => (v ? dayjs(v).format('DD/MM/YYYY') : '—');
+const formatDateTime = (value?: string) => (value ? dayjs(value).format('DD/MM/YYYY HH:mm') : '-');
+const formatDate = (value?: string) => (value ? dayjs(value).format('DD/MM/YYYY') : '-');
 
 const STEP_MAP: Record<string, number> = { pending: 0, approved: 1, completed: 2 };
 
-// Màu accent theo trạng thái
-const STATUS_ACCENT: Record<string, { bg: string; border: string; text: string; label: string }> = {
-    pending:   { bg: 'bg-amber-50',   border: 'border-amber-200',   text: 'text-amber-700',   label: 'Chờ duyệt' },
-    approved:  { bg: 'bg-sky-50',     border: 'border-sky-200',     text: 'text-sky-700',     label: 'Đã duyệt — Đang trên đường' },
-    completed: { bg: 'bg-emerald-50', border: 'border-emerald-200', text: 'text-emerald-700', label: 'Hoàn tất' },
-    rejected:  { bg: 'bg-rose-50',    border: 'border-rose-200',    text: 'text-rose-700',    label: 'Từ chối' },
-    cancelled: { bg: 'bg-slate-50',   border: 'border-slate-200',   text: 'text-slate-500',   label: 'Đã hủy' },
+const statusMeta: Record<string, { type: 'info' | 'success' | 'warning' | 'error'; message: string; description: string }> = {
+    pending: {
+        type: 'warning',
+        message: 'Lệnh đang chờ duyệt',
+        description: 'Máy chưa được cập nhật vị trí. Người quản lý cần duyệt lệnh trước khi vận chuyển.',
+    },
+    approved: {
+        type: 'info',
+        message: 'Lệnh đã duyệt, đang vận chuyển',
+        description: 'Khi bàn giao xong, xác nhận hoàn tất để cập nhật vị trí cho toàn bộ máy trong lệnh.',
+    },
+    completed: {
+        type: 'success',
+        message: 'Lệnh đã hoàn tất',
+        description: 'Vị trí của các máy trong lệnh đã được cập nhật theo điểm đến.',
+    },
+    rejected: {
+        type: 'error',
+        message: 'Lệnh đã bị từ chối',
+        description: 'Lệnh không còn hiệu lực. Kiểm tra lý do từ chối trong phần chi tiết xử lý.',
+    },
+    cancelled: {
+        type: 'info',
+        message: 'Lệnh đã hủy',
+        description: 'Lệnh không còn hiệu lực. Kiểm tra lý do hủy trong phần chi tiết xử lý.',
+    },
 };
 
+const assetStatusLabel: Record<string, string> = {
+    active: 'Đang hoạt động',
+    maintenance: 'Đang bảo trì',
+    broken: 'Lỗi / hỏng',
+    borrowing: 'Đang mượn',
+    storage: 'Tồn kho',
+};
+
+const assetStatusColor: Record<string, string> = {
+    active: 'green',
+    maintenance: 'gold',
+    broken: 'red',
+    borrowing: 'purple',
+    storage: 'default',
+};
+
+const getTransferAssets = (transfer: Transfer) => {
+    if (transfer.assets?.length) return transfer.assets;
+    return transfer.asset ? [transfer.asset] : [];
+};
+
+const getTransferAssetLabel = (transfer: Transfer) => {
+    const assets = getTransferAssets(transfer);
+    if (assets.length === 1) return assets[0].name;
+    if (assets.length > 1) return `${assets.length} máy`;
+    return 'Máy';
+};
+
+const getTransferCode = (transfer: Transfer) =>
+    `TRF-${new Date(transfer.createdAt).getFullYear()}-${transfer.id.slice(-4).toUpperCase()}`;
 
 const TransferDetail: React.FC = () => {
     const { id = '' } = useParams();
@@ -54,6 +121,7 @@ const TransferDetail: React.FC = () => {
     const [rejectModal, setRejectModal] = useState({ open: false, reason: '' });
     const [cancelModal, setCancelModal] = useState({ open: false, reason: '' });
     const [handoverOpen, setHandoverOpen] = useState(false);
+    const [exporting, setExporting] = useState(false);
 
     const { data: transfer, isLoading } = useQuery({
         queryKey: ['transfer', id],
@@ -70,356 +138,511 @@ const TransferDetail: React.FC = () => {
 
     const approveMutation = useMutation({
         mutationFn: () => transferService.approve(id),
-        onSuccess: () => { invalidate(); message.success('Đã duyệt lệnh điều chuyển'); },
+        onSuccess: () => {
+            invalidate();
+            message.success('Đã duyệt lệnh điều chuyển');
+        },
     });
+
     const completeMutation = useMutation({
         mutationFn: (payload: { receivedBy: string; handoverImages?: string[] }) =>
             transferService.complete(id, payload),
-        onSuccess: () => { invalidate(); message.success('Đã hoàn tất điều chuyển, vị trí thiết bị đã được cập nhật'); },
+        onSuccess: () => {
+            invalidate();
+            setHandoverOpen(false);
+            message.success('Đã hoàn tất điều chuyển và cập nhật vị trí máy');
+        },
     });
+
     const rejectMutation = useMutation({
         mutationFn: (reason: string) => transferService.reject(id, reason),
-        onSuccess: () => { invalidate(); message.success('Đã từ chối lệnh điều chuyển'); setRejectModal({ open: false, reason: '' }); },
+        onSuccess: () => {
+            invalidate();
+            message.success('Đã từ chối lệnh điều chuyển');
+            setRejectModal({ open: false, reason: '' });
+        },
     });
+
     const cancelMutation = useMutation({
         mutationFn: (reason: string) => transferService.cancel(id, reason),
-        onSuccess: () => { invalidate(); message.success('Đã hủy lệnh điều chuyển'); setCancelModal({ open: false, reason: '' }); },
+        onSuccess: () => {
+            invalidate();
+            message.success('Đã hủy lệnh điều chuyển');
+            setCancelModal({ open: false, reason: '' });
+        },
     });
 
-    if (isLoading) return (
-        <div className='flex min-h-[50vh] items-center justify-center'>
-            <Spin size='large' />
-        </div>
-    );
+    const assets = useMemo(() => (transfer ? getTransferAssets(transfer) : []), [transfer]);
 
-    if (!transfer) return <Empty description='Không tìm thấy lệnh điều chuyển' className='py-20' />;
+    const assetColumns: TableColumnsType<Asset> = [
+        {
+            title: 'Máy',
+            key: 'machine',
+            width: 280,
+            render: (_value, asset) => (
+                <div className='flex flex-col gap-1'>
+                    <Text strong>{asset.name}</Text>
+                    <div className='flex flex-wrap gap-1'>
+                        <Tag color='blue'>{asset.machineCode || '-'}</Tag>
+                        {asset.publicId ? <Tag>{asset.publicId}</Tag> : null}
+                    </div>
+                </div>
+            ),
+        },
+        {
+            title: 'Serial / Model',
+            key: 'serial',
+            width: 220,
+            render: (_value, asset) => (
+                <div className='flex flex-col gap-1'>
+                    <Text>{asset.serial || '-'}</Text>
+                    <Text type='secondary' className='text-xs'>
+                        {asset.model || asset.type || '-'}
+                    </Text>
+                </div>
+            ),
+        },
+        {
+            title: 'Nhãn hiệu',
+            key: 'brand',
+            width: 160,
+            render: (_value, asset) => asset.brand?.name || '-',
+        },
+        {
+            title: 'Vị trí hiện tại',
+            key: 'currentLocation',
+            width: 220,
+            render: (_value, asset) => (
+                <div className='flex flex-col gap-1'>
+                    <Text>{asset.plant?.name || '-'}</Text>
+                    <Text type='secondary' className='text-xs'>
+                        {asset.area || 'Chưa chỉ định khu vực'}
+                    </Text>
+                </div>
+            ),
+        },
+        {
+            title: 'Trạng thái máy',
+            dataIndex: 'status',
+            key: 'status',
+            width: 150,
+            render: (status: string) => (
+                <Tag color={assetStatusColor[status] || 'default'}>
+                    {assetStatusLabel[status] || status}
+                </Tag>
+            ),
+        },
+        {
+            title: '',
+            key: 'action',
+            width: 110,
+            align: 'right',
+            render: (_value, asset) => (
+                <Button size='small' onClick={() => navigate(`/assets/${asset.id}`)}>
+                    Xem máy
+                </Button>
+            ),
+        },
+    ];
 
-    const accent = STATUS_ACCENT[transfer.status] ?? STATUS_ACCENT.pending;
-    const stepIndex = STEP_MAP[transfer.status] ?? -1;
-    const isActive = !['rejected', 'cancelled', 'completed'].includes(transfer.status);
-    const transferCode = `TRF-${new Date(transfer.createdAt).getFullYear()}-${transfer.id.slice(-4).toUpperCase()}`;
+    if (isLoading) {
+        return (
+            <div className='flex min-h-[50vh] items-center justify-center'>
+                <Spin size='large' />
+            </div>
+        );
+    }
 
-    // Timeline items
+    if (!transfer) {
+        return <Empty description='Không tìm thấy lệnh điều chuyển' className='py-20' />;
+    }
+
+    const stepIndex = STEP_MAP[transfer.status] ?? 0;
+    const isClosed = ['rejected', 'cancelled', 'completed'].includes(transfer.status);
+    const transferCode = getTransferCode(transfer);
+    const status = statusMeta[transfer.status] || statusMeta.pending;
+    const canExportStockOut = ['approved', 'completed'].includes(transfer.status);
+
+    const handleExportStockOut = async () => {
+        try {
+            setExporting(true);
+            await transferService.exportStockOutXlsx(transfer.id, transferCode);
+        } catch {
+            message.error('Không thể xuất phiếu xuất kho');
+        } finally {
+            setExporting(false);
+        }
+    };
+
     const timelineItems = [
         {
             dot: <FileTextOutlined className='text-slate-400' />,
             children: (
                 <div>
-                    <div className='text-xs font-semibold text-slate-400'>Tạo lệnh</div>
-                    <div className='text-sm font-medium text-slate-700'>{fmt(transfer.createdAt)}</div>
+                    <Text type='secondary' className='text-xs font-semibold'>
+                        Tạo lệnh
+                    </Text>
+                    <div className='font-medium text-slate-800'>{formatDateTime(transfer.createdAt)}</div>
                 </div>
             ),
         },
-        ...(transfer.approvedAt ? [{
-            dot: transfer.status === 'rejected'
-                ? <CloseCircleOutlined className='text-rose-500' />
-                : <CheckOutlined className='text-sky-500' />,
-            children: (
-                <div>
-                    <div className={`text-xs font-semibold ${transfer.status === 'rejected' ? 'text-rose-400' : 'text-sky-400'}`}>
-                        {transfer.status === 'rejected' ? 'Từ chối' : 'Duyệt lệnh'}
-                    </div>
-                    <div className='text-sm font-medium text-slate-700'>{fmt(transfer.approvedAt)}</div>
-                    {transfer.rejectReason && (
-                        <div className='mt-1 text-xs text-rose-500'>Lý do: {transfer.rejectReason}</div>
-                    )}
-                </div>
-            ),
-        }] : []),
-        ...(transfer.completedAt ? [{
-            dot: <CheckCircleOutlined className='text-emerald-500' />,
-            children: (
-                <div>
-                    <div className='text-xs font-semibold text-emerald-400'>Hoàn tất</div>
-                    <div className='text-sm font-medium text-slate-700'>{fmt(transfer.completedAt)}</div>
-                    {transfer.receivedBy && (
-                        <div className='mt-1 text-xs text-slate-500'>Người nhận: {transfer.receivedBy}</div>
-                    )}
-                </div>
-            ),
-        }] : []),
-        ...(transfer.cancelledAt ? [{
-            dot: <StopOutlined className='text-slate-400' />,
-            children: (
-                <div>
-                    <div className='text-xs font-semibold text-slate-400'>Hủy lệnh</div>
-                    <div className='text-sm font-medium text-slate-700'>{fmt(transfer.cancelledAt)}</div>
-                    {transfer.cancelReason && (
-                        <div className='mt-1 text-xs text-slate-500'>Lý do: {transfer.cancelReason}</div>
-                    )}
-                </div>
-            ),
-        }] : []),
+        ...(transfer.approvedAt
+            ? [
+                  {
+                      dot:
+                          transfer.status === 'rejected' ? (
+                              <CloseCircleOutlined className='text-rose-500' />
+                          ) : (
+                              <CheckOutlined className='text-blue-500' />
+                          ),
+                      children: (
+                          <div>
+                              <Text type={transfer.status === 'rejected' ? 'danger' : 'secondary'} className='text-xs font-semibold'>
+                                  {transfer.status === 'rejected' ? 'Từ chối' : 'Duyệt lệnh'}
+                              </Text>
+                              <div className='font-medium text-slate-800'>{formatDateTime(transfer.approvedAt)}</div>
+                              {transfer.rejectReason ? (
+                                  <Text type='danger' className='text-xs'>
+                                      Lý do: {transfer.rejectReason}
+                                  </Text>
+                              ) : null}
+                          </div>
+                      ),
+                  },
+              ]
+            : []),
+        ...(transfer.completedAt
+            ? [
+                  {
+                      dot: <CheckCircleOutlined className='text-emerald-500' />,
+                      children: (
+                          <div>
+                              <Text type='success' className='text-xs font-semibold'>
+                                  Hoàn tất bàn giao
+                              </Text>
+                              <div className='font-medium text-slate-800'>{formatDateTime(transfer.completedAt)}</div>
+                              {transfer.receivedBy ? (
+                                  <Text type='secondary' className='text-xs'>
+                                      Người nhận: {transfer.receivedBy}
+                                  </Text>
+                              ) : null}
+                          </div>
+                      ),
+                  },
+              ]
+            : []),
+        ...(transfer.cancelledAt
+            ? [
+                  {
+                      dot: <StopOutlined className='text-slate-400' />,
+                      children: (
+                          <div>
+                              <Text type='secondary' className='text-xs font-semibold'>
+                                  Hủy lệnh
+                              </Text>
+                              <div className='font-medium text-slate-800'>{formatDateTime(transfer.cancelledAt)}</div>
+                              {transfer.cancelReason ? (
+                                  <Text type='secondary' className='text-xs'>
+                                      Lý do: {transfer.cancelReason}
+                                  </Text>
+                              ) : null}
+                          </div>
+                      ),
+                  },
+              ]
+            : []),
     ];
-
 
     return (
         <div className='flex w-full max-w-full flex-col gap-6 overflow-hidden'>
-
-            {/* ── Header ── */}
-            <section className='overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm'>
-                <div className='flex flex-col gap-5 p-6 md:p-8'>
-                    {/* Top row */}
-                    <div className='flex flex-col items-start justify-between gap-4 md:flex-row'>
-                        <div className='flex min-w-0 flex-col gap-2'>
+            <Card variant='outlined'>
+                <div className='flex flex-col gap-5'>
+                    <div className='flex flex-col items-start justify-between gap-4 lg:flex-row lg:items-start'>
+                        <div className='flex min-w-0 flex-col gap-3'>
                             <AppBreadcrumb />
                             <Button
                                 icon={<ArrowLeftOutlined />}
-                                size='small'
                                 onClick={() => navigate('/transfers')}
-                                className='w-fit rounded-lg border-slate-200 text-slate-500'
+                                className='w-fit'
                             >
                                 Quay lại danh sách
                             </Button>
-                            <div className='flex flex-wrap items-center gap-2.5 pt-1'>
-                                <Title level={4} className='!mb-0'>
-                                    Lệnh điều chuyển
+                            <div className='flex flex-wrap items-center gap-3'>
+                                <Title level={3} className='!mb-0'>
+                                    Chi tiết lệnh điều chuyển
                                 </Title>
-                                <code className='rounded-md bg-indigo-50 px-2.5 py-1 font-mono text-sm font-bold text-indigo-700'>
+                                <Tag color='geekblue' className='font-mono text-sm'>
                                     {transferCode}
-                                </code>
+                                </Tag>
                                 <TransferStatusBadge status={transfer.status} />
                             </div>
                             <div className='flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-slate-500'>
-                                <span>Tạo lúc: <strong className='text-slate-700'>{fmt(transfer.createdAt)}</strong></span>
-                                {transfer.asset?.machineCode && (
-                                    <span>Mã máy: <strong className='text-slate-700'>{transfer.asset.machineCode}</strong></span>
-                                )}
+                                <span>
+                                    Ngày tạo: <strong className='text-slate-800'>{formatDateTime(transfer.createdAt)}</strong>
+                                </span>
+                                <span>
+                                    Số máy: <strong className='text-slate-800'>{assets.length || 1}</strong>
+                                </span>
+                                <span>
+                                    Ngày điều chuyển: <strong className='text-slate-800'>{formatDate(transfer.transferDate)}</strong>
+                                </span>
                             </div>
                         </div>
 
-                        {/* Actions */}
-                        <div className='flex flex-shrink-0 flex-wrap items-center gap-2'>
-                            {transfer.status === 'pending' && canManage && (
+                        <div className='flex flex-wrap items-center gap-2'>
+                            {canExportStockOut ? (
+                                <Button icon={<DownloadOutlined />} loading={exporting} onClick={handleExportStockOut}>
+                                    Xuất phiếu xuất kho
+                                </Button>
+                            ) : null}
+                            {transfer.status === 'pending' && canManage ? (
                                 <ConfirmAction
                                     intent='warning'
                                     title='Duyệt lệnh điều chuyển'
-                                    description='Xác nhận duyệt? Thiết bị sẽ chuyển sang trạng thái đang vận chuyển.'
+                                    description='Sau khi duyệt, lệnh chuyển sang trạng thái đang vận chuyển.'
                                     okLabel='Duyệt'
                                     onConfirm={() => approveMutation.mutate()}
                                 >
-                                    <Button icon={<CheckOutlined />} loading={approveMutation.isPending} className='rounded-lg border-amber-300 bg-amber-50 font-medium text-amber-700 hover:bg-amber-100'>
+                                    <Button icon={<CheckOutlined />} loading={approveMutation.isPending}>
                                         Duyệt lệnh
                                     </Button>
                                 </ConfirmAction>
-                            )}
-                            {transfer.status === 'approved' && canManage && (
-                                <Button type='primary' icon={<CheckCircleOutlined />} onClick={() => setHandoverOpen(true)} className='rounded-lg bg-emerald-600 font-medium hover:!bg-emerald-700'>
-                                    Xác nhận hoàn tất
+                            ) : null}
+                            {transfer.status === 'approved' && canManage ? (
+                                <Button
+                                    type='primary'
+                                    icon={<CheckCircleOutlined />}
+                                    onClick={() => setHandoverOpen(true)}
+                                    loading={completeMutation.isPending}
+                                >
+                                    Hoàn tất bàn giao
                                 </Button>
-                            )}
-                            {['pending', 'approved'].includes(transfer.status) && canManage && (
-                                <Button icon={<CloseOutlined />} danger onClick={() => setRejectModal({ open: true, reason: '' })} className='rounded-lg font-medium'>
+                            ) : null}
+                            {['pending', 'approved'].includes(transfer.status) && canManage ? (
+                                <Button danger icon={<CloseOutlined />} onClick={() => setRejectModal({ open: true, reason: '' })}>
                                     Từ chối
                                 </Button>
-                            )}
-                            {transfer.status === 'pending' && (
-                                <Button icon={<StopOutlined />} onClick={() => setCancelModal({ open: true, reason: '' })} className='rounded-lg font-medium text-slate-600'>
+                            ) : null}
+                            {transfer.status === 'pending' ? (
+                                <Button icon={<StopOutlined />} onClick={() => setCancelModal({ open: true, reason: '' })}>
                                     Hủy lệnh
                                 </Button>
-                            )}
-                            <Button icon={<SwapOutlined />} onClick={() => navigate(`/assets/${transfer.assetId}`)} className='rounded-lg'>
-                                Xem thiết bị
-                            </Button>
+                            ) : null}
                         </div>
                     </div>
 
-                    {/* Status banner */}
-                    <div className={`flex items-center gap-3 rounded-xl border px-4 py-3 ${accent.bg} ${accent.border}`}>
-                        {transfer.status === 'approved' && <TruckOutlined className={`text-lg ${accent.text}`} />}
-                        {transfer.status === 'pending' && <InfoCircleOutlined className={`text-lg ${accent.text}`} />}
-                        {transfer.status === 'completed' && <CheckCircleOutlined className={`text-lg ${accent.text}`} />}
-                        {transfer.status === 'rejected' && <CloseCircleOutlined className={`text-lg ${accent.text}`} />}
-                        {transfer.status === 'cancelled' && <StopOutlined className={`text-lg ${accent.text}`} />}
-                        <span className={`text-sm font-semibold ${accent.text}`}>{accent.label}</span>
-                        {transfer.status === 'approved' && (
-                            <span className='ml-1 text-sm text-sky-600'>
-                                — {transfer.asset?.name || 'Thiết bị'} đang được vận chuyển từ <strong>{transfer.fromPlant?.name}</strong> đến <strong>{transfer.toPlant?.name}</strong>
-                            </span>
-                        )}
-                        {transfer.status === 'completed' && transfer.completedAt && (
-                            <span className='ml-1 text-sm text-emerald-600'>lúc {fmt(transfer.completedAt)}</span>
-                        )}
-                    </div>
+                    <Alert
+                        showIcon
+                        type={status.type}
+                        title={status.message}
+                        description={status.description}
+                    />
 
-                    {/* Progress steps — chỉ hiện khi đang active */}
-                    {isActive && (
+                    {!isClosed ? (
                         <Steps
                             current={stepIndex}
                             size='small'
-                            className='pt-1'
+                            responsive
                             items={[
-                                { title: 'Chờ duyệt', description: fmt(transfer.createdAt) },
-                                { title: 'Đang vận chuyển', description: transfer.approvedAt ? fmt(transfer.approvedAt) : 'Chưa duyệt' },
-                                { title: 'Hoàn tất', description: transfer.completedAt ? fmt(transfer.completedAt) : 'Chờ xác nhận' },
+                                { title: 'Chờ duyệt', description: formatDateTime(transfer.createdAt) },
+                                { title: 'Đang vận chuyển', description: transfer.approvedAt ? formatDateTime(transfer.approvedAt) : 'Chưa duyệt' },
+                                { title: 'Hoàn tất', description: transfer.completedAt ? formatDateTime(transfer.completedAt) : 'Chờ bàn giao' },
                             ]}
                         />
-                    )}
+                    ) : null}
                 </div>
-            </section>
+            </Card>
 
-
-            {/* ── Body ── */}
-            <div className='grid grid-cols-1 gap-6 lg:grid-cols-3'>
-
-                {/* Left — main content */}
-                <div className='flex flex-col gap-6 lg:col-span-2'>
-
-                    {/* Lộ trình */}
-                    <div className='rounded-2xl border border-slate-200 bg-white p-6 shadow-sm'>
-                        <div className='mb-4 flex items-center gap-2'>
-                            <EnvironmentOutlined className='text-slate-400' />
-                            <h3 className='font-bold text-slate-800'>Lộ trình điều chuyển</h3>
-                        </div>
-                        <div className='flex items-stretch gap-3'>
-                            <div className='flex-1 rounded-xl border border-slate-100 bg-slate-50 p-4'>
-                                <div className='mb-1 text-[11px] font-bold uppercase tracking-wider text-slate-400'>Xuất phát</div>
-                                <div className='text-base font-bold text-slate-800'>{transfer.fromPlant?.name || '—'}</div>
-                                <div className='mt-0.5 text-sm text-slate-500'>{transfer.fromArea || 'Chưa chỉ định khu vực'}</div>
-                                {transfer.fromPlant?.address && (
-                                    <div className='mt-1 text-xs text-slate-400'>{transfer.fromPlant.address}</div>
-                                )}
+            <div className='grid grid-cols-1 gap-6 xl:grid-cols-3'>
+                <div className='flex flex-col gap-6 xl:col-span-2'>
+                    <Card
+                        variant='outlined'
+                        title={
+                            <div className='flex items-center gap-2'>
+                                <EnvironmentOutlined />
+                                <span>Lộ trình điều chuyển</span>
                             </div>
-                            <div className='flex flex-col items-center justify-center gap-1 px-1'>
-                                <div className={`h-2 w-2 rounded-full ${transfer.status === 'approved' ? 'bg-sky-400' : 'bg-slate-300'}`} />
-                                <div className={`h-8 w-0.5 ${transfer.status === 'approved' ? 'bg-sky-300' : 'bg-slate-200'}`} />
-                                <RightOutlined className={`text-xs ${transfer.status === 'approved' ? 'text-sky-400' : 'text-slate-300'}`} />
-                                <div className={`h-8 w-0.5 ${transfer.status === 'approved' ? 'bg-sky-300' : 'bg-slate-200'}`} />
-                                <div className={`h-2 w-2 rounded-full ${transfer.status === 'completed' ? 'bg-emerald-400' : transfer.status === 'approved' ? 'bg-sky-400' : 'bg-slate-300'}`} />
+                        }
+                    >
+                        <div className='grid grid-cols-1 gap-4 md:grid-cols-[1fr_auto_1fr] md:items-stretch'>
+                            <div className='rounded-2xl border border-slate-200 bg-slate-50 p-5'>
+                                <Text type='secondary' className='text-xs font-bold uppercase tracking-wide'>
+                                    Xuất phát
+                                </Text>
+                                <div className='mt-2 text-lg font-bold text-slate-900'>{transfer.fromPlant?.name || '-'}</div>
+                                <div className='text-sm text-slate-600'>{transfer.fromArea || 'Chưa chỉ định khu vực'}</div>
+                                {transfer.fromPlant?.address ? (
+                                    <div className='mt-2 text-xs text-slate-500'>{transfer.fromPlant.address}</div>
+                                ) : null}
                             </div>
-                            <div className={`flex-1 rounded-xl border p-4 ${transfer.status === 'completed' ? 'border-emerald-100 bg-emerald-50' : transfer.status === 'approved' ? 'border-sky-100 bg-sky-50' : 'border-slate-100 bg-slate-50'}`}>
-                                <div className={`mb-1 text-[11px] font-bold uppercase tracking-wider ${transfer.status === 'completed' ? 'text-emerald-400' : transfer.status === 'approved' ? 'text-sky-400' : 'text-slate-400'}`}>
+                            <div className='flex items-center justify-center text-blue-600'>
+                                <div className='flex h-12 w-12 items-center justify-center rounded-full bg-blue-50'>
+                                    <TruckOutlined className='text-xl' />
+                                </div>
+                            </div>
+                            <div className='rounded-2xl border border-blue-100 bg-blue-50 p-5'>
+                                <Text type='secondary' className='text-xs font-bold uppercase tracking-wide'>
                                     Điểm đến
-                                </div>
-                                <div className='text-base font-bold text-slate-800'>{transfer.toPlant?.name || '—'}</div>
-                                <div className='mt-0.5 text-sm text-slate-500'>{transfer.toArea || 'Chưa chỉ định khu vực'}</div>
-                                {transfer.toPlant?.address && (
-                                    <div className='mt-1 text-xs text-slate-400'>{transfer.toPlant.address}</div>
-                                )}
+                                </Text>
+                                <div className='mt-2 text-lg font-bold text-slate-900'>{transfer.toPlant?.name || '-'}</div>
+                                <div className='text-sm text-slate-600'>{transfer.toArea || 'Chưa chỉ định khu vực'}</div>
+                                {transfer.toPlant?.address ? (
+                                    <div className='mt-2 text-xs text-slate-500'>{transfer.toPlant.address}</div>
+                                ) : null}
                             </div>
                         </div>
-                        {transfer.status === 'approved' && (
-                            <div className='mt-3 flex items-center gap-2 rounded-lg border border-sky-100 bg-sky-50 px-3 py-2'>
-                                <TruckOutlined className='text-sky-500' />
-                                <span className='text-sm font-medium text-sky-700'>Thiết bị đang trên đường vận chuyển</span>
-                            </div>
-                        )}
-                    </div>
+                    </Card>
 
-                    {/* Chi tiết lệnh */}
-                    <div className='rounded-2xl border border-slate-200 bg-white p-6 shadow-sm'>
-                        <div className='mb-4 flex items-center gap-2'>
-                            <FileTextOutlined className='text-slate-400' />
-                            <h3 className='font-bold text-slate-800'>Chi tiết lệnh</h3>
-                        </div>
+                    <Card
+                        variant='outlined'
+                        title={
+                            <div className='flex items-center gap-2'>
+                                <SwapOutlined />
+                                <span>Danh sách máy trong lệnh</span>
+                            </div>
+                        }
+                        extra={<Tag color='blue'>{assets.length || 1} máy</Tag>}
+                    >
+                        {assets.length ? (
+                            <Table<Asset>
+                                rowKey='id'
+                                columns={assetColumns}
+                                dataSource={assets}
+                                pagination={false}
+                                scroll={{ x: 1120 }}
+                                size='middle'
+                            />
+                        ) : (
+                            <Empty description='Không có dữ liệu máy trong lệnh' />
+                        )}
+                    </Card>
+
+                    <Card
+                        variant='outlined'
+                        title={
+                            <div className='flex items-center gap-2'>
+                                <FileTextOutlined />
+                                <span>Nội dung lệnh</span>
+                            </div>
+                        }
+                    >
                         <Descriptions
-                            column={{ xs: 1, sm: 2 }}
                             layout='vertical'
-                            className='[&_.ant-descriptions-item-content]:font-medium [&_.ant-descriptions-item-content]:text-slate-800 [&_.ant-descriptions-item-label]:text-xs [&_.ant-descriptions-item-label]:font-semibold [&_.ant-descriptions-item-label]:uppercase [&_.ant-descriptions-item-label]:tracking-wider [&_.ant-descriptions-item-label]:text-slate-400'
-                        >
-                            <Descriptions.Item label='Ngày điều chuyển'>{fmtDate(transfer.transferDate)}</Descriptions.Item>
-                            <Descriptions.Item label='Trạng thái'><TransferStatusBadge status={transfer.status} /></Descriptions.Item>
-                            <Descriptions.Item label='Lý do điều chuyển' span={2}>{transfer.reason}</Descriptions.Item>
-                            {transfer.note && (
-                                <Descriptions.Item label='Ghi chú' span={2}>{transfer.note}</Descriptions.Item>
-                            )}
-                            {transfer.receivedBy && (
-                                <Descriptions.Item label='Người nhận bàn giao' span={2}>
-                                    <span className='flex items-center gap-1.5'>
-                                        <UserOutlined className='text-slate-400' />
-                                        {transfer.receivedBy}
-                                    </span>
-                                </Descriptions.Item>
-                            )}
-                            {transfer.rejectReason && (
-                                <Descriptions.Item label='Lý do từ chối' span={2}>
-                                    <span className='font-semibold text-rose-600'>{transfer.rejectReason}</span>
-                                </Descriptions.Item>
-                            )}
-                            {transfer.cancelReason && (
-                                <Descriptions.Item label='Lý do hủy' span={2}>
-                                    <span className='text-slate-500'>{transfer.cancelReason}</span>
-                                </Descriptions.Item>
-                            )}
-                        </Descriptions>
-
-                        {/* Ảnh xác nhận bàn giao */}
-                        {transfer.handoverImages && transfer.handoverImages.length > 0 && (
-                            <div className='mt-5 border-t border-slate-100 pt-5'>
-                                <div className='mb-3 flex items-center gap-2'>
-                                    <span className='text-xs font-bold uppercase tracking-wider text-slate-400'>Ảnh xác nhận bàn giao</span>
-                                    <span className='rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-semibold text-emerald-700'>
-                                        {transfer.handoverImages.length} ảnh
-                                    </span>
-                                </div>
-                                <div className='flex flex-wrap gap-3'>
-                                    {transfer.handoverImages.map((url, idx) => (
-                                        <a
-                                            key={idx}
-                                            href={url}
-                                            target='_blank'
-                                            rel='noopener noreferrer'
-                                            className='group relative block h-28 w-28 overflow-hidden rounded-xl border-2 border-slate-100 transition-all hover:border-emerald-300 hover:shadow-md'
-                                        >
-                                            <img
-                                                src={url}
-                                                alt={`Ảnh bàn giao ${idx + 1}`}
-                                                className='h-full w-full object-cover transition-transform group-hover:scale-105'
-                                            />
-                                            <div className='absolute inset-0 flex items-center justify-center bg-black/0 transition-colors group-hover:bg-black/20'>
-                                                <span className='text-xs font-bold text-white opacity-0 transition-opacity group-hover:opacity-100'>Xem</span>
-                                            </div>
-                                        </a>
-                                    ))}
-                                </div>
-                            </div>
-                        )}
-                    </div>
+                            column={{ xs: 1, sm: 2 }}
+                            bordered
+                            size='small'
+                            items={[
+                                { key: 'transferDate', label: 'Ngày điều chuyển', children: formatDate(transfer.transferDate) },
+                                { key: 'status', label: 'Trạng thái', children: <TransferStatusBadge status={transfer.status} /> },
+                                { key: 'assetCount', label: 'Số máy', children: getTransferAssetLabel(transfer) },
+                                { key: 'createdAt', label: 'Ngày tạo', children: formatDateTime(transfer.createdAt) },
+                                { key: 'reason', label: 'Lý do điều chuyển', span: 2, children: transfer.reason || '-' },
+                                { key: 'note', label: 'Ghi chú', span: 2, children: transfer.note || '-' },
+                                {
+                                    key: 'receivedBy',
+                                    label: 'Người nhận bàn giao',
+                                    span: 2,
+                                    children: transfer.receivedBy ? (
+                                        <span className='inline-flex items-center gap-2'>
+                                            <UserOutlined />
+                                            {transfer.receivedBy}
+                                        </span>
+                                    ) : (
+                                        '-'
+                                    ),
+                                },
+                                ...(transfer.rejectReason
+                                    ? [{ key: 'rejectReason', label: 'Lý do từ chối', span: 2, children: <Text type='danger'>{transfer.rejectReason}</Text> }]
+                                    : []),
+                                ...(transfer.cancelReason
+                                    ? [{ key: 'cancelReason', label: 'Lý do hủy', span: 2, children: transfer.cancelReason }]
+                                    : []),
+                            ]}
+                        />
+                    </Card>
                 </div>
 
-                {/* Right — sidebar */}
-                <div className='flex flex-col gap-4'>
-
-                    {/* Thiết bị */}
-                    <div className='rounded-xl border border-slate-200 bg-white p-5 shadow-sm'>
-                        <p className='mb-3 text-[11px] font-bold uppercase tracking-wider text-slate-400'>Thiết bị</p>
-                        <div className='flex flex-col gap-2'>
-                            <div className='text-base font-bold text-slate-800'>{transfer.asset?.name || '—'}</div>
-                            <div className='flex flex-wrap gap-1.5'>
-                                {transfer.asset?.machineCode && (
-                                    <code className='rounded bg-blue-50 px-2 py-0.5 font-mono text-xs font-semibold text-blue-700'>
-                                        {transfer.asset.machineCode}
-                                    </code>
-                                )}
-                                {transfer.asset?.type && (
-                                    <span className='rounded bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-600'>
-                                        {transfer.asset.type}
-                                    </span>
-                                )}
+                <div className='flex flex-col gap-6'>
+                    <Card
+                        variant='outlined'
+                        title={
+                            <div className='flex items-center gap-2'>
+                                <InfoCircleOutlined />
+                                <span>Tóm tắt</span>
                             </div>
-                            {transfer.asset?.brand?.name && (
-                                <Text type='secondary' className='text-sm'>{transfer.asset.brand.name}</Text>
-                            )}
-                            <Button
-                                size='small'
-                                icon={<SwapOutlined />}
-                                onClick={() => navigate(`/assets/${transfer.assetId}`)}
-                                className='mt-1 w-fit rounded-lg'
-                            >
-                                Xem thiết bị
-                            </Button>
+                        }
+                    >
+                        <div className='grid grid-cols-2 gap-3'>
+                            <div className='rounded-xl bg-slate-50 p-4'>
+                                <Text type='secondary' className='text-xs'>
+                                    Mã lệnh
+                                </Text>
+                                <div className='mt-1 font-mono font-bold text-slate-900'>{transferCode}</div>
+                            </div>
+                            <div className='rounded-xl bg-slate-50 p-4'>
+                                <Text type='secondary' className='text-xs'>
+                                    Số máy
+                                </Text>
+                                <div className='mt-1 text-xl font-bold text-slate-900'>{assets.length || 1}</div>
+                            </div>
+                            <div className='col-span-2 rounded-xl bg-slate-50 p-4'>
+                                <Text type='secondary' className='text-xs'>
+                                    Tuyến chuyển
+                                </Text>
+                                <div className='mt-1 font-semibold text-slate-900'>
+                                    {transfer.fromPlant?.name || '-'} → {transfer.toPlant?.name || '-'}
+                                </div>
+                            </div>
                         </div>
-                    </div>
+                    </Card>
 
-                    {/* Timeline xử lý */}
-                    <div className='rounded-xl border border-slate-200 bg-white p-5 shadow-sm'>
-                        <p className='mb-4 text-[11px] font-bold uppercase tracking-wider text-slate-400'>Lịch sử xử lý</p>
+                    <Card
+                        variant='outlined'
+                        title={
+                            <div className='flex items-center gap-2'>
+                                <CheckCircleOutlined />
+                                <span>Lịch sử xử lý</span>
+                            </div>
+                        }
+                    >
                         <Timeline items={timelineItems} />
-                    </div>
+                    </Card>
+
+                    <Card
+                        variant='outlined'
+                        title={
+                            <div className='flex items-center gap-2'>
+                                <PictureOutlined />
+                                <span>Ảnh bàn giao</span>
+                            </div>
+                        }
+                        extra={transfer.handoverImages?.length ? <Tag color='green'>{transfer.handoverImages.length} ảnh</Tag> : null}
+                    >
+                        {transfer.handoverImages?.length ? (
+                            <div className='grid grid-cols-2 gap-3'>
+                                {transfer.handoverImages.map((url, index) => (
+                                    <a
+                                        key={`${url}-${index}`}
+                                        href={url}
+                                        target='_blank'
+                                        rel='noopener noreferrer'
+                                        className='block overflow-hidden rounded-xl border border-slate-200 bg-slate-50'
+                                    >
+                                        <img
+                                            src={url}
+                                            alt={`Ảnh bàn giao ${index + 1}`}
+                                            className='h-32 w-full object-cover transition-transform hover:scale-105'
+                                        />
+                                    </a>
+                                ))}
+                            </div>
+                        ) : (
+                            <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description='Chưa có ảnh bàn giao' />
+                        )}
+                    </Card>
                 </div>
             </div>
 
-            {/* Modal từ chối */}
             <Modal
                 open={rejectModal.open}
                 title='Từ chối lệnh điều chuyển'
@@ -429,20 +652,20 @@ const TransferDetail: React.FC = () => {
                 onOk={() => rejectMutation.mutate(rejectModal.reason.trim())}
                 onCancel={() => setRejectModal({ open: false, reason: '' })}
                 destroyOnHidden
+                mask={{ closable: false }}
             >
                 <p className='mb-3 text-sm text-slate-600'>
-                    Thiết bị: <strong>{transfer.asset?.name || transfer.assetId}</strong>
+                    Lệnh này gồm <strong>{assets.length || 1} máy</strong>. Nhập lý do từ chối để lưu vào lịch sử xử lý.
                 </p>
                 <Input.TextArea
-                    rows={3}
+                    rows={4}
                     placeholder='Nhập lý do từ chối...'
                     value={rejectModal.reason}
-                    onChange={(e) => setRejectModal((prev) => ({ ...prev, reason: e.target.value }))}
+                    onChange={(event) => setRejectModal((prev) => ({ ...prev, reason: event.target.value }))}
                     autoFocus
                 />
             </Modal>
 
-            {/* Modal hủy lệnh */}
             <Modal
                 open={cancelModal.open}
                 title='Hủy lệnh điều chuyển'
@@ -452,25 +675,28 @@ const TransferDetail: React.FC = () => {
                 onOk={() => cancelMutation.mutate(cancelModal.reason.trim())}
                 onCancel={() => setCancelModal({ open: false, reason: '' })}
                 destroyOnHidden
+                mask={{ closable: false }}
             >
                 <p className='mb-3 text-sm text-slate-600'>
-                    Thiết bị: <strong>{transfer.asset?.name || transfer.assetId}</strong>
+                    Lệnh này gồm <strong>{assets.length || 1} máy</strong>. Nhập lý do hủy để lưu vào lịch sử xử lý.
                 </p>
                 <Input.TextArea
-                    rows={3}
+                    rows={4}
                     placeholder='Nhập lý do hủy...'
                     value={cancelModal.reason}
-                    onChange={(e) => setCancelModal((prev) => ({ ...prev, reason: e.target.value }))}
+                    onChange={(event) => setCancelModal((prev) => ({ ...prev, reason: event.target.value }))}
                     autoFocus
                 />
             </Modal>
 
             <HandoverModal
                 open={handoverOpen}
-                assetName={transfer.asset?.name}
+                assetName={getTransferAssetLabel(transfer)}
                 submitting={completeMutation.isPending}
                 onClose={() => setHandoverOpen(false)}
-                onSubmit={async (payload) => { await completeMutation.mutateAsync(payload); }}
+                onSubmit={async (payload) => {
+                    await completeMutation.mutateAsync(payload);
+                }}
             />
         </div>
     );

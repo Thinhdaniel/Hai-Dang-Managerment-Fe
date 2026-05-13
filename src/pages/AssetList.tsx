@@ -106,6 +106,7 @@ const AssetList: React.FC = () => {
     const [isTransferModalOpen, setIsTransferModalOpen] = useState(false);
     const [editingAsset, setEditingAsset] = useState<Asset | null>(null);
     const [transferTarget, setTransferTarget] = useState<Asset | null>(null);
+    const [transferTargets, setTransferTargets] = useState<Asset[]>([]);
     const [qrAsset, setQrAsset] = useState<Asset | null>(null);
     const [qrLoadingAssetId, setQrLoadingAssetId] = useState<string | null>(null);
     const [filters, setFilters] = useState(() => createDefaultFilters(initialSearch));
@@ -204,7 +205,9 @@ const AssetList: React.FC = () => {
         mutationFn: transferService.create,
         onSuccess: (_transfer, payload) => {
             queryClient.invalidateQueries({ queryKey: ['transfers'] });
-            queryClient.invalidateQueries({ queryKey: ['asset', payload.assetId] });
+            [...(payload.assetIds ?? []), payload.assetId]
+                .filter(Boolean)
+                .forEach((assetId) => queryClient.invalidateQueries({ queryKey: ['asset', assetId] }));
             queryClient.invalidateQueries({ queryKey: ['assets'] });
         },
     });
@@ -266,6 +269,29 @@ const AssetList: React.FC = () => {
 
     const handleOpenTransfer = (asset: Asset) => {
         setTransferTarget(asset);
+        setTransferTargets([asset]);
+        setIsTransferModalOpen(true);
+    };
+
+    const handleOpenSelectedTransfer = () => {
+        const blocked = selectedAssets.filter((asset) => asset.hasOpenTransfer);
+        if (blocked.length) {
+            message.warning(`Không thể điều chuyển vì có máy đang có lệnh mở: ${blocked.map((asset) => asset.name).join(', ')}`);
+            return;
+        }
+
+        const [firstAsset] = selectedAssets;
+        const hasDifferentSource = selectedAssets.some(
+            (asset) => asset.plantId !== firstAsset.plantId || (asset.area || '') !== (firstAsset.area || '')
+        );
+
+        if (hasDifferentSource) {
+            message.warning('Chỉ có thể tạo một lệnh cho các máy cùng cơ sở và cùng khu vực hiện tại');
+            return;
+        }
+
+        setTransferTarget(firstAsset);
+        setTransferTargets(selectedAssets);
         setIsTransferModalOpen(true);
     };
 
@@ -321,6 +347,8 @@ const AssetList: React.FC = () => {
         message.success('Đã tạo lệnh điều chuyển thiết bị');
         setIsTransferModalOpen(false);
         setTransferTarget(null);
+        setTransferTargets([]);
+        setSelectedRowKeys([]);
     };
 
     const columns: TableColumnsType<Asset> = [
@@ -597,9 +625,9 @@ const AssetList: React.FC = () => {
                             <Tooltip title={selectedAssets[0]?.hasOpenTransfer ? 'Thiết bị đang có lệnh điều chuyển chờ xử lý' : ''}>
                                 <Button
                                     size='small'
-                                    disabled={selectedAssets.length !== 1 || selectedAssets[0]?.hasOpenTransfer}
+                                    disabled={selectedAssets.length === 0}
                                     className='rounded-md'
-                                    onClick={() => selectedAssets[0] && !selectedAssets[0].hasOpenTransfer && handleOpenTransfer(selectedAssets[0])}
+                                    onClick={handleOpenSelectedTransfer}
                                 >
                                     Điều chuyển
                                 </Button>
@@ -687,11 +715,13 @@ const AssetList: React.FC = () => {
                     <TransferModal
                         open={isTransferModalOpen}
                         asset={transferTarget}
+                        assets={transferTargets}
                         plants={plants}
                         submitting={createTransferMutation.isPending}
                         onClose={() => {
                             setIsTransferModalOpen(false);
                             setTransferTarget(null);
+                            setTransferTargets([]);
                         }}
                         onSubmit={handleTransferSubmit}
                     />

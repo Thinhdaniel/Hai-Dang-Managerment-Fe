@@ -1,29 +1,28 @@
-import { Button, Drawer, Layout, Tooltip, Typography, Badge } from 'antd';
+import { Badge, Button, Drawer, Layout, Tooltip, Typography } from 'antd';
 import {
     AppstoreOutlined,
     BarChartOutlined,
+    BellOutlined,
     BuildOutlined,
     ClusterOutlined,
     DashboardOutlined,
     DatabaseOutlined,
     DeploymentUnitOutlined,
     FileAddOutlined,
+    FormOutlined,
     InboxOutlined,
     MenuFoldOutlined,
     MenuUnfoldOutlined,
-    ShopOutlined,
     SendOutlined,
+    ShopOutlined,
     ShoppingCartOutlined,
     SwapOutlined,
     TagsOutlined,
     TeamOutlined,
-    BellOutlined,
-    FormOutlined,
 } from '@ant-design/icons';
-import { useLocation, useNavigate } from 'react-router-dom';
 import type { ReactNode } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../core/contexts/AuthContext';
-import { hasManagerAccess } from '../../core/lib/permissions';
 import { useNotificationContext } from '../../core/contexts/NotificationContext';
 
 const { Sider } = Layout;
@@ -32,6 +31,7 @@ const { Text } = Typography;
 type NavigationItem = {
     path: string;
     label: string;
+    description?: string;
     icon: ReactNode;
     matchMode?: 'exact' | 'prefix';
 };
@@ -50,7 +50,76 @@ const navigationSections: NavigationSection[] = [
             {
                 path: '/dashboard',
                 label: 'Bảng điều khiển',
+                description: 'Tình hình vận hành',
                 icon: <DashboardOutlined />,
+            },
+            {
+                path: '/materials/reports',
+                label: 'Báo cáo vật tư',
+                description: 'Chi phí, tồn kho, NCC',
+                icon: <BarChartOutlined />,
+                matchMode: 'exact',
+            },
+        ],
+    },
+    {
+        key: 'material-operations',
+        label: 'Vận hành vật tư',
+        items: [
+            {
+                path: '/materials/inventory',
+                label: 'Tồn kho',
+                description: 'Số lượng theo cơ sở',
+                icon: <InboxOutlined />,
+                matchMode: 'exact',
+            },
+            {
+                path: '/materials/distributions',
+                label: 'Cấp phát',
+                description: 'Phiếu xuất và nhận hàng',
+                icon: <SendOutlined />,
+                matchMode: 'exact',
+            },
+            {
+                path: '/materials/supply-requests',
+                label: 'Đề xuất cấp vật tư',
+                description: 'Yêu cầu từ các cơ sở',
+                icon: <FormOutlined />,
+                matchMode: 'exact',
+            },
+        ],
+    },
+    {
+        key: 'material-purchasing',
+        label: 'Mua sắm vật tư',
+        items: [
+            {
+                path: '/materials/purchase-requests',
+                label: 'Đề xuất mua',
+                description: 'Tổng hợp nhu cầu mua',
+                icon: <FileAddOutlined />,
+                matchMode: 'exact',
+            },
+            {
+                path: '/materials/purchase-orders',
+                label: 'Đặt hàng',
+                description: 'PO và nhận hàng',
+                icon: <ShoppingCartOutlined />,
+                matchMode: 'exact',
+            },
+            {
+                path: '/materials/suppliers',
+                label: 'Nhà cung cấp',
+                description: 'Thông tin NCC',
+                icon: <ShopOutlined />,
+                matchMode: 'exact',
+            },
+            {
+                path: '/materials',
+                label: 'Danh mục vật tư',
+                description: 'Mã, nhóm, đơn vị tính',
+                icon: <DatabaseOutlined />,
+                matchMode: 'exact',
             },
         ],
     },
@@ -61,102 +130,56 @@ const navigationSections: NavigationSection[] = [
             {
                 path: '/assets',
                 label: 'Máy',
+                description: 'Danh sách máy',
                 icon: <AppstoreOutlined />,
             },
             {
                 path: '/transfers',
                 label: 'Chuyển máy',
+                description: 'Điều chuyển giữa cơ sở',
                 icon: <SwapOutlined />,
             },
             {
                 path: '/borrowings',
                 label: 'Mượn / Trả',
+                description: 'Theo dõi mượn trả',
                 icon: <DeploymentUnitOutlined />,
-            },
-            {
-                path: '/brands',
-                label: 'Nhãn hiệu',
-                icon: <TagsOutlined />,
             },
             {
                 path: '/maintenances',
                 label: 'Bảo trì',
+                description: 'Lịch và lịch sử bảo trì',
                 icon: <BuildOutlined />,
+            },
+            {
+                path: '/brands',
+                label: 'Nhãn hiệu',
+                description: 'Hãng và model máy',
+                icon: <TagsOutlined />,
             },
         ],
     },
     {
-        key: 'other',
-        label: 'Khác',
+        key: 'administration',
+        label: 'Thiết lập',
         items: [
-            {
-                path: '/storage',
-                label: 'Kho',
-                icon: <InboxOutlined />,
-            },
             {
                 path: '/plants',
                 label: 'Cơ sở',
+                description: 'Nhà máy, xưởng, kho',
                 icon: <ClusterOutlined />,
             },
             {
                 path: '/users',
                 label: 'Người dùng',
+                description: 'Tài khoản và phân quyền',
                 icon: <TeamOutlined />,
             },
-        ],
-    },
-    {
-        key: 'material-management',
-        label: 'Quản lý Vật tư',
-        items: [
             {
-                path: '/materials',
-                label: 'Danh mục vật tư',
-                icon: <DatabaseOutlined />,
-                matchMode: 'exact',
-            },
-            {
-                path: '/materials/suppliers',
-                label: 'Nhà cung cấp',
-                icon: <ShopOutlined />,
-                matchMode: 'exact',
-            },
-            {
-                path: '/materials/inventory',
-                label: 'Tồn kho',
+                path: '/storage',
+                label: 'Kho',
+                description: 'Khu vực lưu trữ',
                 icon: <InboxOutlined />,
-                matchMode: 'exact',
-            },
-            {
-                path: '/materials/purchase-requests',
-                label: 'Đề xuất mua',
-                icon: <FileAddOutlined />,
-                matchMode: 'exact',
-            },
-            {
-                path: '/materials/supply-requests',
-                label: 'Đề xuất cấp vật tư',
-                icon: <FormOutlined />,
-                matchMode: 'exact',
-            },
-            {
-                path: '/materials/purchase-orders',
-                label: 'Đặt hàng',
-                icon: <ShoppingCartOutlined />,
-                matchMode: 'exact',
-            },
-            {
-                path: '/materials/distributions',
-                label: 'Cấp phát',
-                icon: <SendOutlined />,
-                matchMode: 'exact',
-            },
-            {
-                path: '/materials/reports',
-                label: 'Báo cáo',
-                icon: <BarChartOutlined />,
-                matchMode: 'exact',
             },
         ],
     },
@@ -198,16 +221,16 @@ const SidebarNavButton = ({
 }) => {
     const button = (
         <button
-            type='button'
+            type="button"
             onClick={onSelect}
-            className={`group flex w-full items-center gap-3 rounded-[22px] px-3 py-3 text-left transition-all ${
+            className={`group flex w-full items-center gap-3 rounded-2xl px-2.5 py-2.5 text-left transition-all ${
                 active
-                    ? 'bg-gradient-to-r from-blue-50 via-white to-sky-50 text-blue-700 shadow-[0_14px_26px_rgba(37,99,235,0.12)] ring-1 ring-blue-200/80'
+                    ? 'bg-blue-50 text-blue-700 shadow-sm ring-1 ring-blue-200/80'
                     : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
             } ${collapsed ? 'justify-center px-2.5' : ''}`}
         >
             <span
-                className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border text-[18px] transition-all ${
+                className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border text-[17px] transition-all ${
                     active
                         ? 'border-blue-200 bg-white text-blue-600 shadow-sm'
                         : 'border-slate-200 bg-white/80 text-slate-500 group-hover:border-slate-300 group-hover:text-slate-700'
@@ -217,8 +240,15 @@ const SidebarNavButton = ({
             </span>
             {!collapsed ? (
                 <>
-                    <span className='min-w-0 flex-1 truncate text-[14px] font-semibold'>{item.label}</span>
-                    {active ? <span className='h-2.5 w-2.5 rounded-full bg-blue-500 shadow-sm' /> : null}
+                    <span className="min-w-0 flex-1">
+                        <span className="block truncate text-[14px] font-semibold leading-5">{item.label}</span>
+                        {item.description ? (
+                            <span className="mt-0.5 block truncate text-[11px] font-medium text-slate-400 group-hover:text-slate-500">
+                                {item.description}
+                            </span>
+                        ) : null}
+                    </span>
+                    {active ? <span className="h-8 w-1 rounded-full bg-blue-500 shadow-sm" /> : null}
                 </>
             ) : null}
         </button>
@@ -229,7 +259,7 @@ const SidebarNavButton = ({
     }
 
     return (
-        <Tooltip placement='right' title={item.label}>
+        <Tooltip placement="right" title={item.label}>
             {button}
         </Tooltip>
     );
@@ -255,14 +285,16 @@ const AppSidebar: React.FC<AppSidebarProps> = ({
         Boolean(mainPlantId && user?.plantId === mainPlantId) &&
         (user?.role === 'admin' || user?.role === 'manager');
 
-    const visibleSections = navigationSections.map((section) => ({
-        ...section,
-        items: section.items.filter(
-            (item) =>
-                (item.path !== '/materials/purchase-requests' && item.path !== '/materials/purchase-orders') ||
-                isCS1Manager
-        ),
-    }));
+    const visibleSections = navigationSections
+        .map((section) => ({
+            ...section,
+            items: section.items.filter(
+                (item) =>
+                    (item.path !== '/materials/purchase-requests' && item.path !== '/materials/purchase-orders') ||
+                    isCS1Manager
+            ),
+        }))
+        .filter((section) => section.items.length > 0);
 
     const handleSelect = (path: string) => {
         navigate(path);
@@ -273,36 +305,36 @@ const AppSidebar: React.FC<AppSidebarProps> = ({
     };
 
     const renderSidebarContent = (isCollapsed: boolean, onToggleCollapse?: () => void) => (
-        <div className='flex h-full flex-col rounded-r-[28px] border-r border-slate-200/80 bg-[rgba(255,255,255,0.94)] shadow-[14px_0_40px_rgba(15,23,42,0.06)] backdrop-blur-xl'>
-            <div className={`border-b border-slate-100 px-4 py-5 ${isCollapsed ? 'px-3' : ''}`}>
+        <div className="flex h-full flex-col rounded-r-[24px] border-r border-slate-200/80 bg-[rgba(255,255,255,0.96)] shadow-[10px_0_32px_rgba(15,23,42,0.06)] backdrop-blur-xl">
+            <div className={`border-b border-slate-100 px-4 py-4 ${isCollapsed ? 'px-3' : ''}`}>
                 <div className={`flex items-center ${isCollapsed ? 'justify-center' : 'gap-3'}`}>
-                    <div className='flex h-12 w-12 shrink-0 items-center justify-center rounded-[20px] bg-gradient-to-br from-blue-600 to-sky-400 text-sm font-bold tracking-[0.28em] text-white shadow-[0_16px_30px_rgba(37,99,235,0.26)]'>
+                    <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-blue-600 text-sm font-bold tracking-[0.24em] text-white shadow-[0_12px_24px_rgba(37,99,235,0.24)]">
                         HD
                     </div>
                     {!isCollapsed ? (
-                        <div className='min-w-0'>
-                            <Text className='mb-0 block text-[15px] font-bold text-slate-900'>Hai Dang Ops</Text>
-                            <Text className='block text-xs text-slate-500'>Quản lý vận hành</Text>
+                        <div className="min-w-0">
+                            <Text className="mb-0 block text-[15px] font-bold text-slate-900">Hai Dang Ops</Text>
+                            <Text className="block text-xs text-slate-500">Quản lý vận hành</Text>
                         </div>
                     ) : null}
                 </div>
             </div>
 
-            <div className='flex-1 overflow-y-auto px-3 py-4'>
-                <div className='space-y-5'>
+            <div className="flex-1 overflow-y-auto px-3 py-3">
+                <div className="space-y-4">
                     {visibleSections.map((section) => (
-                        <section key={section.key} className='space-y-2'>
+                        <section key={section.key} className="space-y-2">
                             {!isCollapsed ? (
-                                <div className='px-2'>
-                                    <Text className='text-[11px] font-semibold tracking-[0.2em] text-slate-400 uppercase'>
+                                <div className="px-2">
+                                    <Text className="text-[11px] font-bold tracking-[0.16em] text-slate-400 uppercase">
                                         {section.label}
                                     </Text>
                                 </div>
                             ) : (
-                                <div className='mx-auto h-px w-8 bg-slate-200/80' />
+                                <div className="mx-auto h-px w-8 bg-slate-200/80" />
                             )}
 
-                            <div className='space-y-1.5'>
+                            <div className="space-y-1">
                                 {section.items.map((item) => (
                                     <SidebarNavButton
                                         key={item.path}
@@ -319,9 +351,9 @@ const AppSidebar: React.FC<AppSidebarProps> = ({
             </div>
 
             <div className={`border-t border-slate-100 p-3 ${isCollapsed ? 'flex justify-center' : ''}`}>
-                <Badge count={unreadCount} size='small' offset={isCollapsed ? [-2, 2] : undefined}>
+                <Badge count={unreadCount} size="small" offset={isCollapsed ? [-2, 2] : undefined}>
                     <Button
-                        type='text'
+                        type="text"
                         icon={<BellOutlined />}
                         onClick={() => navigate('/dashboard')}
                         className={`h-11 rounded-2xl border border-slate-200 bg-white/88 font-semibold text-slate-700 shadow-sm hover:!border-blue-200 hover:!bg-blue-50 hover:!text-blue-700 ${
@@ -336,7 +368,7 @@ const AppSidebar: React.FC<AppSidebarProps> = ({
             {onToggleCollapse ? (
                 <div className={`border-t border-slate-100 p-3 ${isCollapsed ? 'flex justify-center' : ''}`}>
                     <Button
-                        type='text'
+                        type="text"
                         icon={isCollapsed ? <MenuUnfoldOutlined /> : <MenuFoldOutlined />}
                         onClick={onToggleCollapse}
                         className={`h-11 rounded-2xl border border-slate-200 bg-white/88 font-semibold text-slate-700 shadow-sm hover:!border-blue-200 hover:!bg-blue-50 hover:!text-blue-700 ${
@@ -353,11 +385,11 @@ const AppSidebar: React.FC<AppSidebarProps> = ({
     if (!isDesktop) {
         return (
             <Drawer
-                placement='left'
+                placement="left"
                 open={mobileOpen}
                 onClose={onMobileClose}
                 closable={false}
-                width={304}
+                size={320}
                 styles={{
                     body: { padding: 0 },
                     content: {
@@ -382,7 +414,7 @@ const AppSidebar: React.FC<AppSidebarProps> = ({
             collapsed={collapsed}
             collapsedWidth={collapsedWidth}
             width={width}
-            className='!fixed !bottom-0 !left-0 !bg-transparent'
+            className="!fixed !bottom-0 !left-0 !bg-transparent"
             style={{ top: headerOffset, height: `calc(100vh - ${headerOffset}px)` }}
         >
             {renderSidebarContent(collapsed)}

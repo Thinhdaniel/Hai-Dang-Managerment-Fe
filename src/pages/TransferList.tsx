@@ -5,6 +5,7 @@ import {
     CheckCircleOutlined,
     CheckOutlined,
     CloseOutlined,
+    DownloadOutlined,
     EyeOutlined,
     ReloadOutlined,
     SearchOutlined,
@@ -39,6 +40,22 @@ const createDefaultFilters = () => ({
 const buildTransferCode = (transfer: Transfer) =>
     `TRF-${new Date(transfer.createdAt).getFullYear()}-${transfer.id.slice(-4).toUpperCase()}`;
 
+const getTransferAssets = (transfer: Transfer) => transfer.assets?.length ? transfer.assets : transfer.asset ? [transfer.asset] : [];
+
+const getTransferAssetLabel = (transfer: Transfer) => {
+    const assets = getTransferAssets(transfer);
+    if (assets.length === 1) return assets[0].name;
+    if (assets.length > 1) return `${assets.length} máy`;
+    return '-';
+};
+
+const getTransferAssetCodes = (transfer: Transfer) => {
+    const assets = getTransferAssets(transfer);
+    if (assets.length === 1) return assets[0].machineCode || transfer.assetId;
+    if (assets.length > 1) return assets.map((asset) => asset.machineCode).filter(Boolean).join(', ') || `${assets.length} máy`;
+    return transfer.assetId;
+};
+
 const TransferList: React.FC = () => {
     const navigate = useNavigate();
     const { role } = useAuth();
@@ -51,6 +68,7 @@ const TransferList: React.FC = () => {
     const [completingTransferId, setCompletingTransferId] = useState<string | null>(null);
     const [rejectingTransferId, setRejectingTransferId] = useState<string | null>(null);
     const [cancellingTransferId, setCancellingTransferId] = useState<string | null>(null);
+    const [exportingTransferId, setExportingTransferId] = useState<string | null>(null);
     const [rejectModal, setRejectModal] = useState<{ open: boolean; transfer: Transfer | null; reason: string }>({
         open: false, transfer: null, reason: '',
     });
@@ -185,6 +203,17 @@ const TransferList: React.FC = () => {
         }
     };
 
+    const handleExportStockOut = async (transfer: Transfer) => {
+        try {
+            setExportingTransferId(transfer.id);
+            await transferService.exportStockOutXlsx(transfer.id, buildTransferCode(transfer));
+        } catch {
+            message.error('Không thể xuất phiếu xuất kho');
+        } finally {
+            setExportingTransferId(null);
+        }
+    };
+
     const columns: TableColumnsType<Transfer> = [
         {
             title: 'MÃ LỆNH',
@@ -201,9 +230,9 @@ const TransferList: React.FC = () => {
             key: 'asset',
             render: (_value, record) => (
                 <div className='flex flex-col gap-0.5'>
-                    <span className='text-[14px] font-semibold text-slate-800'>{record.asset?.name || '-'}</span>
+                    <span className='text-[14px] font-semibold text-slate-800'>{getTransferAssetLabel(record)}</span>
                     <span className='font-mono text-xs font-medium text-slate-500'>
-                        Mã máy: <span className='text-slate-600'>{record.asset?.machineCode || record.assetId}</span>
+                        Mã máy: <span className='text-slate-600'>{getTransferAssetCodes(record)}</span>
                     </span>
                 </div>
             ),
@@ -261,7 +290,7 @@ const TransferList: React.FC = () => {
         {
             title: 'THAO TÁC',
             key: 'action',
-            width: 190,
+            width: 230,
             align: 'right',
             render: (_value, record) => (
                 <div className='flex items-center justify-end gap-1.5' onClick={(e) => e.stopPropagation()}>
@@ -273,11 +302,22 @@ const TransferList: React.FC = () => {
                             onClick={() => navigate(`/transfers/${record.id}`)}
                         />
                     </Tooltip>
+                    {['approved', 'completed'].includes(record.status) ? (
+                        <Tooltip title='Xuất phiếu xuất kho'>
+                            <Button
+                                type='text'
+                                icon={<DownloadOutlined />}
+                                loading={exportingTransferId === record.id}
+                                className='flex h-8 w-8 items-center justify-center rounded-md bg-green-50 text-green-600 transition-colors hover:bg-green-100 hover:text-green-700'
+                                onClick={() => handleExportStockOut(record)}
+                            />
+                        </Tooltip>
+                    ) : null}
                     {record.status === 'pending' && canManageTransfers ? (
                         <ConfirmAction
                             intent='warning'
                             title='Duyệt lệnh điều chuyển'
-                            description={`Xác nhận duyệt lệnh điều chuyển máy "${record.asset?.name || record.assetId}"?`}
+                            description={`Xác nhận duyệt lệnh điều chuyển "${getTransferAssetLabel(record)}"?`}
                             okLabel='Duyệt'
                             onConfirm={() => handleApprove(record)}
                         >
@@ -295,7 +335,7 @@ const TransferList: React.FC = () => {
                         <ConfirmAction
                             intent='primary'
                             title='Hoàn tất điều chuyển'
-                            description={`Xác nhận hoàn tất và cập nhật vị trí máy "${record.asset?.name || record.assetId}"?`}
+                            description={`Xác nhận hoàn tất và cập nhật vị trí cho "${getTransferAssetLabel(record)}"?`}
                             okLabel='Hoàn tất'
                             onConfirm={() => handleComplete(record)}
                         >
@@ -478,7 +518,7 @@ const TransferList: React.FC = () => {
                 destroyOnHidden
             >
                 <p className='mb-3 text-sm text-slate-600'>
-                    Thiết bị: <strong>{rejectModal.transfer?.asset?.name || rejectModal.transfer?.assetId}</strong>
+                    Máy: <strong>{rejectModal.transfer ? getTransferAssetLabel(rejectModal.transfer) : '-'}</strong>
                 </p>
                 <Input.TextArea
                     rows={3}
@@ -500,7 +540,7 @@ const TransferList: React.FC = () => {
                 destroyOnHidden
             >
                 <p className='mb-3 text-sm text-slate-600'>
-                    Thiết bị: <strong>{cancelModal.transfer?.asset?.name || cancelModal.transfer?.assetId}</strong>
+                    Máy: <strong>{cancelModal.transfer ? getTransferAssetLabel(cancelModal.transfer) : '-'}</strong>
                 </p>
                 <Input.TextArea
                     rows={3}
@@ -512,7 +552,7 @@ const TransferList: React.FC = () => {
 
             <HandoverModal
                 open={Boolean(handoverTransfer)}
-                assetName={handoverTransfer?.asset?.name}
+                assetName={handoverTransfer ? getTransferAssetLabel(handoverTransfer) : undefined}
                 submitting={completeMutation.isPending}
                 onClose={() => setHandoverTransfer(null)}
                 onSubmit={handleHandoverSubmit}

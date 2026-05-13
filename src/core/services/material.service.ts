@@ -455,6 +455,11 @@ export interface MaterialReportQueryParams {
     plantId?: string;
     startDate?: string;
     endDate?: string;
+    materialId?: string;
+    category?: string;
+    supplierId?: string;
+    status?: string;
+    groupBy?: 'day' | 'week' | 'month' | 'quarter';
 }
 
 export interface MaterialCostByPeriodQueryParams extends MaterialReportQueryParams {
@@ -465,6 +470,12 @@ export interface MaterialCostByPeriodQueryParams extends MaterialReportQueryPara
 export interface MaterialReportSummary {
     totalMaterials?: number;
     totalMonthlyCost?: number;
+    totalPurchaseCost?: number;
+    totalDistributionCost?: number;
+    totalRefund?: number;
+    totalNetPurchaseCost?: number;
+    totalPriceVariance?: number;
+    distributionRecordCount?: number;
     pendingRequestCount?: number;
     totalCostThisMonth?: number;
     pendingPurchaseRequests?: number;
@@ -530,6 +541,8 @@ export interface PriceComparisonReportRow {
     requestCodes?: string[];
     estimatedTotal?: number;
     actualTotal?: number;
+    refundTotal?: number;
+    netActual?: number;
     difference?: number;
     orderedAt?: string;
     receivedAt?: string;

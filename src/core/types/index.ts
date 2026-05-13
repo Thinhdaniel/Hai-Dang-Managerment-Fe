@@ -187,6 +187,8 @@ export interface Transfer {
     id: string;
     assetId: string;
     asset?: Asset;
+    assetIds?: string[];
+    assets?: Asset[];
     fromPlantId: string;
     fromPlant?: Plant;
     fromArea?: string;
@@ -213,7 +215,8 @@ export interface Transfer {
 }
 
 export interface CreateTransferPayload {
-    assetId: string;
+    assetId?: string;
+    assetIds?: string[];
     toPlantId: string;
     toArea?: string;
     reason: string;
