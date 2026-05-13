@@ -3,6 +3,7 @@ import { Grid, Layout } from 'antd';
 import { Outlet } from 'react-router-dom';
 import AppHeader from './AppHeader';
 import AppSidebar from './AppSidebar';
+import HelpAssistant from '../help/HelpAssistant';
 
 const { Content } = Layout;
 const { useBreakpoint } = Grid;
@@ -66,6 +67,8 @@ const AppLayout: React.FC = () => {
                     </Content>
                 </Layout>
             </Layout>
+
+            <HelpAssistant />
         </Layout>
     );
 };

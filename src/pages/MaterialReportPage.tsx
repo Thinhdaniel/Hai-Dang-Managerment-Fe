@@ -11,6 +11,7 @@ import {
     Descriptions,
     Drawer,
     Empty,
+    Grid,
     Input,
     Modal,
     Row,
@@ -81,6 +82,7 @@ import {
 
 const { RangePicker } = DatePicker;
 const { Text } = Typography;
+const { useBreakpoint } = Grid;
 
 type GroupBy = NonNullable<MaterialReportQueryParams['groupBy']>;
 type QuickRange = 'this_month' | 'quarter' | 'six_months' | 'year' | 'custom';
@@ -163,7 +165,9 @@ const renderStatus = (status?: string) => {
 export default function MaterialReportPage() {
     const { message } = App.useApp();
     const { user } = useAuth();
+    const screens = useBreakpoint();
     const isManager = hasManagerAccess(user?.role);
+    const isMobile = !screens.md;
     const [quickRange, setQuickRange] = useState<QuickRange>('this_month');
     const [filters, setFilters] = useState<ReportFilters>(DEFAULT_FILTERS);
     const [appliedFilters, setAppliedFilters] = useState<ReportFilters>(DEFAULT_FILTERS);
@@ -397,7 +401,7 @@ export default function MaterialReportPage() {
                 title="Báo cáo vật tư"
                 subtitle={`Kỳ ${appliedFilters.dateRange[0].format('DD/MM/YYYY')} - ${appliedFilters.dateRange[1].format('DD/MM/YYYY')} · ${activeFilterCount} bộ lọc đang áp dụng`}
                 actions={
-                    <Space wrap>
+                    <Space wrap className="report-header-actions">
                         <Button icon={<ReloadOutlined />} onClick={handleRefresh} loading={isLoading}>
                             Làm mới
                         </Button>
@@ -410,6 +414,7 @@ export default function MaterialReportPage() {
 
             <Card className="report-filter-card" variant="outlined">
                 <div className="report-filter-toolbar">
+                    <div className="report-quick-range-scroll">
                     <Segmented
                         value={quickRange}
                         onChange={handleQuickRangeChange}
@@ -421,7 +426,8 @@ export default function MaterialReportPage() {
                             { label: 'Tùy chỉnh', value: 'custom' },
                         ]}
                     />
-                    <Space wrap>
+                    </div>
+                    <Space wrap className="report-filter-actions">
                         <Badge count={activeFilterCount} size="small">
                             <Button icon={<FilterOutlined />} onClick={handleApplyFilters}>
                                 Áp dụng
@@ -540,7 +546,7 @@ export default function MaterialReportPage() {
 
             <Row gutter={[16, 16]}>
                 {kpis.map((kpi) => (
-                    <Col key={kpi.title} xs={24} sm={12} xl={8} xxl={4}>
+                    <Col key={kpi.title} xs={12} sm={12} xl={8} xxl={4}>
                         <Card className="report-kpi-card" loading={summaryQuery.isLoading} variant="outlined">
                             <div className="report-kpi-head">
                                 <Tooltip title={kpi.hint}>
@@ -604,7 +610,10 @@ export default function MaterialReportPage() {
 
             <Card className="report-main-card" variant="outlined">
                 <Tabs
+                    className="report-tabs"
                     destroyOnHidden
+                    tabBarGutter={isMobile ? 8 : 16}
+                    size={isMobile ? 'small' : 'middle'}
                     items={[
                         {
                             key: 'overview',
@@ -943,11 +952,11 @@ function DistributionTab({
     const rows = data?.byPlant ?? [];
     const total = rows.reduce((sum, row) => sum + row.totalWithVat, 0);
     const columns: ColumnsType<DistributionCostByPlant> = [
-        { title: 'Cơ sở nhận', dataIndex: 'plantName', ellipsis: true },
-        { title: 'Số phiếu', dataIndex: 'count', width: 110, align: 'right' },
-        { title: 'Tiền hàng', dataIndex: 'totalAmount', width: 150, align: 'right', render: (value) => fmtCurrency(value) },
+        { title: 'Cơ sở nhận', dataIndex: 'plantName', ellipsis: true, width: 180 },
+        { title: 'Số phiếu', dataIndex: 'count', width: 100, align: 'right', responsive: ['md'] },
+        { title: 'Tiền hàng', dataIndex: 'totalAmount', width: 145, align: 'right', responsive: ['lg'], render: (value) => fmtCurrency(value) },
         { title: 'Tổng có VAT', dataIndex: 'totalWithVat', width: 160, align: 'right', sorter: (a, b) => a.totalWithVat - b.totalWithVat, render: (value) => fmtCurrency(value) },
-        { title: 'Tỷ trọng', width: 120, align: 'right', render: (_, row) => (total ? `${((row.totalWithVat / total) * 100).toFixed(1)}%` : '-') },
+        { title: 'Tỷ trọng', width: 105, align: 'right', responsive: ['sm'], render: (_, row) => (total ? `${((row.totalWithVat / total) * 100).toFixed(1)}%` : '-') },
     ];
 
     return (
@@ -970,11 +979,13 @@ function DistributionTab({
             <Col xs={24} xl={10}>
                 <SectionCard title="Chi phí theo cơ sở nhận">
                     <Table
+                        className="report-distribution-plant-table"
                         rowKey={(row) => row.plantId}
                         loading={loading}
                         columns={columns}
                         dataSource={rows}
                         size="small"
+                        scroll={{ x: 360 }}
                         pagination={{ pageSize: 8 }}
                         onRow={(record) => ({
                             onClick: () => onOpenDetail({ type: 'distribution', title: record.plantName, record }),
@@ -1079,12 +1090,16 @@ function SectionCard({ title, extra, children }: { title: string; extra?: React.
 function ChartFrame({ empty, height = 340, children }: { empty: boolean; height?: number; children: React.ReactNode }) {
     if (empty) {
         return (
-            <div className="report-empty-chart" style={{ height }}>
+            <div className="report-chart-frame report-empty-chart" style={{ height }}>
                 <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="Không có dữ liệu trong kỳ đã chọn" />
             </div>
         );
     }
-    return <div style={{ height }}>{children}</div>;
+    return (
+        <div className="report-chart-frame" style={{ height }}>
+            {children}
+        </div>
+    );
 }
 
 function ReportSkeleton() {
@@ -1193,6 +1208,18 @@ const REPORT_PAGE_STYLE = `
     flex-wrap: wrap;
     margin-bottom: 16px;
 }
+.report-quick-range-scroll {
+    max-width: 100%;
+    overflow-x: auto;
+    padding-bottom: 2px;
+}
+.report-quick-range-scroll .ant-segmented {
+    min-width: max-content;
+}
+.report-filter-actions,
+.report-header-actions {
+    flex-shrink: 0;
+}
 .report-filter-grid {
     align-items: end;
 }
@@ -1234,6 +1261,21 @@ const REPORT_PAGE_STYLE = `
     display: flex;
     align-items: center;
     justify-content: center;
+}
+.report-chart-frame {
+    min-width: 0;
+}
+.report-tabs .ant-tabs-nav {
+    margin-bottom: 16px;
+}
+.report-tabs .ant-tabs-nav-wrap {
+    overflow-x: auto;
+}
+.report-tabs .ant-tabs-tab {
+    white-space: nowrap;
+}
+.report-distribution-plant-table {
+    min-width: 0;
 }
 .report-row-danger td {
     background: #fff1f0;
@@ -1319,5 +1361,120 @@ const REPORT_PAGE_STYLE = `
     color: #475569;
     font-weight: 700;
     white-space: nowrap;
+}
+@media (max-width: 767px) {
+    .report-page {
+        gap: 12px;
+    }
+    .report-header-actions {
+        width: 100%;
+        justify-content: stretch;
+    }
+    .report-header-actions .ant-space-item,
+    .report-header-actions .ant-btn {
+        flex: 1 1 0;
+    }
+    .report-filter-card .ant-card-body,
+    .report-main-card .ant-card-body,
+    .report-section-card .ant-card-body {
+        padding: 12px;
+    }
+    .report-kpi-card .ant-card-body {
+        padding: 12px;
+        min-height: 132px;
+    }
+    .report-filter-toolbar {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr);
+        gap: 10px;
+        margin-bottom: 12px;
+    }
+    .report-filter-actions {
+        display: grid;
+        grid-template-columns: 1fr auto;
+        width: 100%;
+    }
+    .report-filter-actions .ant-badge,
+    .report-filter-actions .ant-btn {
+        width: 100%;
+    }
+    .report-filter-label {
+        margin-bottom: 5px;
+    }
+    .report-kpi-head {
+        gap: 8px;
+        margin-bottom: 6px;
+    }
+    .report-kpi-title {
+        font-size: 11px;
+        line-height: 1.25;
+    }
+    .report-kpi-icon {
+        width: 32px;
+        height: 32px;
+        font-size: 16px;
+    }
+    .report-kpi-card .ant-statistic-content {
+        font-size: 18px !important;
+        line-height: 1.25;
+        word-break: break-word;
+    }
+    .report-kpi-card .ant-statistic-content-suffix {
+        display: block;
+        margin-inline-start: 0;
+        margin-top: 2px;
+        font-size: 11px;
+    }
+    .report-main-card .ant-tabs-tab {
+        padding: 8px 4px;
+        font-size: 12px;
+    }
+    .report-section-card .ant-card-head {
+        min-height: 42px;
+        padding: 0 12px;
+    }
+    .report-section-card .ant-card-extra {
+        margin-inline-start: 8px;
+    }
+    .report-section-title {
+        font-size: 13px;
+    }
+    .report-chart-frame {
+        height: 260px !important;
+        overflow: hidden;
+    }
+    .report-detail-search {
+        max-width: none;
+    }
+    .report-rank-row {
+        grid-template-columns: 28px minmax(0, 1fr);
+        gap: 10px;
+        padding: 10px;
+    }
+    .report-rank-value {
+        grid-column: 2;
+        font-size: 12px;
+        white-space: normal;
+    }
+    .report-rank-name {
+        font-size: 13px;
+    }
+    .report-stack {
+        gap: 12px;
+    }
+    .report-main-card .ant-table-wrapper,
+    .report-section-card .ant-table-wrapper {
+        margin-inline: -12px;
+    }
+    .report-main-card .ant-table,
+    .report-section-card .ant-table {
+        font-size: 12px;
+    }
+    .report-section-card .report-distribution-plant-table {
+        margin-inline: 0;
+    }
+    .report-distribution-plant-table .ant-table-cell {
+        padding: 8px 10px !important;
+    }
 }
 `;
