@@ -1,7 +1,10 @@
 import api from '../lib/api';
 import type { HelpTopic } from '../help/helpKnowledge';
 
-export type AiHelpContextTopic = Pick<HelpTopic, 'title' | 'summary' | 'category' | 'steps' | 'notes'>;
+export type AiHelpContextTopic = Pick<
+    HelpTopic,
+    'title' | 'summary' | 'category' | 'prerequisites' | 'steps' | 'checkpoints' | 'commonMistakes' | 'notes'
+>;
 
 export type AiHelpRequest = {
     question: string;

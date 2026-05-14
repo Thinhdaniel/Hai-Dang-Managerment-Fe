@@ -55,7 +55,10 @@ const toAiContextTopic = (topic: HelpTopic) => ({
     title: topic.title,
     summary: topic.summary,
     category: topic.category,
+    prerequisites: topic.prerequisites,
     steps: topic.steps,
+    checkpoints: topic.checkpoints,
+    commonMistakes: topic.commonMistakes,
     notes: topic.notes,
 });
 
@@ -90,6 +93,20 @@ const TopicDetail = ({ topic, onClose }: { topic: HelpTopic; onClose: () => void
             </div>
 
             <div className='space-y-4 px-4 py-4'>
+                {topic.prerequisites?.length ? (
+                    <div className='rounded-xl border border-blue-100 bg-blue-50 px-3 py-3'>
+                        <div className='mb-2 flex items-center gap-2 text-[12px] font-bold uppercase tracking-wide text-blue-700'>
+                            <CheckCircleOutlined />
+                            Điều kiện trước khi thao tác
+                        </div>
+                        <ul className='m-0 list-disc space-y-1.5 pl-4 text-[13px] leading-6 text-blue-950'>
+                            {topic.prerequisites.map((item) => (
+                                <li key={item}>{item}</li>
+                            ))}
+                        </ul>
+                    </div>
+                ) : null}
+
                 <div>
                     <div className='mb-2 flex items-center gap-2 text-[12px] font-bold uppercase tracking-wide text-slate-500'>
                         <FileSearchOutlined />
@@ -101,6 +118,34 @@ const TopicDetail = ({ topic, onClose }: { topic: HelpTopic; onClose: () => void
                         ))}
                     </ol>
                 </div>
+
+                {topic.checkpoints?.length ? (
+                    <div className='rounded-xl border border-emerald-100 bg-emerald-50 px-3 py-3'>
+                        <div className='mb-2 flex items-center gap-2 text-[12px] font-bold uppercase tracking-wide text-emerald-700'>
+                            <CheckCircleOutlined />
+                            Sau khi làm xong cần kiểm tra
+                        </div>
+                        <ul className='m-0 list-disc space-y-1.5 pl-4 text-[13px] leading-6 text-emerald-950'>
+                            {topic.checkpoints.map((item) => (
+                                <li key={item}>{item}</li>
+                            ))}
+                        </ul>
+                    </div>
+                ) : null}
+
+                {topic.commonMistakes?.length ? (
+                    <div className='rounded-xl border border-rose-100 bg-rose-50 px-3 py-3'>
+                        <div className='mb-2 flex items-center gap-2 text-[12px] font-bold uppercase tracking-wide text-rose-700'>
+                            <BulbOutlined />
+                            Lỗi hay gặp và cách tránh
+                        </div>
+                        <ul className='m-0 list-disc space-y-1.5 pl-4 text-[13px] leading-6 text-rose-950'>
+                            {topic.commonMistakes.map((item) => (
+                                <li key={item}>{item}</li>
+                            ))}
+                        </ul>
+                    </div>
+                ) : null}
 
                 {topic.notes?.length ? (
                     <div className='rounded-xl border border-amber-100 bg-amber-50 px-3 py-3'>
@@ -279,7 +324,7 @@ const HelpAssistant = () => {
             const response = await aiHelpService.ask({
                 question: cleanQuery,
                 route: pathname,
-                contextTopics: topics.slice(0, 3).map(toAiContextTopic),
+                contextTopics: topics.slice(0, 4).map(toAiContextTopic),
             });
 
             setMessages((current) =>
@@ -446,4 +491,3 @@ const HelpAssistant = () => {
 };
 
 export default HelpAssistant;
-
