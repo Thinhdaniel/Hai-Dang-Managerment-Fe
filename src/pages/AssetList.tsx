@@ -101,6 +101,7 @@ const AssetList: React.FC = () => {
     const canManageAssets = isAdmin(role);
     const canExportImport = hasManagerAccess(role);
     const [selectedRowKeys, setSelectedRowKeys] = useState<React.Key[]>([]);
+    const [selectedAssetMap, setSelectedAssetMap] = useState<Record<string, Asset>>({});
     const [isFormModalOpen, setIsFormModalOpen] = useState(false);
     const [isImportModalOpen, setIsImportModalOpen] = useState(false);
     const [isTransferModalOpen, setIsTransferModalOpen] = useState(false);
@@ -140,7 +141,7 @@ const AssetList: React.FC = () => {
         queryKey: ['asset-names'],
         queryFn: () => assetService.getNames(),
         staleTime: 5 * 60 * 1000,
-    });// Stats base — uses committed filters without status/pagination for per-status counts
+    }); // Stats base — uses committed filters without status/pagination for per-status counts
     const statsFiltersBase = useMemo(
         () => ({
             search: filters.search,
@@ -222,8 +223,11 @@ const AssetList: React.FC = () => {
 
     const assets = useMemo(() => assetResponse?.data ?? [], [assetResponse?.data]);
     const selectedAssets = useMemo(
-        () => assets.filter((asset) => selectedRowKeys.includes(asset.id)),
-        [assets, selectedRowKeys]
+        () =>
+            selectedRowKeys
+                .map((key) => selectedAssetMap[String(key)] ?? assets.find((asset) => asset.id === String(key)))
+                .filter((asset): asset is Asset => Boolean(asset)),
+        [assets, selectedAssetMap, selectedRowKeys]
     );
 
     const assetSummary = useMemo(
@@ -257,6 +261,37 @@ const AssetList: React.FC = () => {
         setFilters(resetValue);
     };
 
+    const handleSelectionChange = (keys: React.Key[], rows: Asset[]) => {
+        const nextKeySet = new Set(keys.map(String));
+
+        setSelectedRowKeys(keys);
+        setSelectedAssetMap((prev) => {
+            const next = Object.fromEntries(Object.entries(prev).filter(([id]) => nextKeySet.has(id))) as Record<
+                string,
+                Asset
+            >;
+
+            assets.forEach((asset) => {
+                if (nextKeySet.has(asset.id)) {
+                    next[asset.id] = asset;
+                }
+            });
+
+            rows.forEach((asset) => {
+                if (nextKeySet.has(asset.id)) {
+                    next[asset.id] = asset;
+                }
+            });
+
+            return next;
+        });
+    };
+
+    const clearSelectedAssets = () => {
+        setSelectedRowKeys([]);
+        setSelectedAssetMap({});
+    };
+
     const handleOpenCreate = () => {
         setEditingAsset(null);
         setIsFormModalOpen(true);
@@ -276,7 +311,9 @@ const AssetList: React.FC = () => {
     const handleOpenSelectedTransfer = () => {
         const blocked = selectedAssets.filter((asset) => asset.hasOpenTransfer);
         if (blocked.length) {
-            message.warning(`Không thể điều chuyển vì có máy đang có lệnh mở: ${blocked.map((asset) => asset.name).join(', ')}`);
+            message.warning(
+                `Không thể điều chuyển vì có máy đang có lệnh mở: ${blocked.map((asset) => asset.name).join(', ')}`
+            );
             return;
         }
 
@@ -318,7 +355,7 @@ const AssetList: React.FC = () => {
 
     const handleDeleteSelected = async () => {
         await Promise.all(selectedRowKeys.map((id) => deleteMutation.mutateAsync(String(id))));
-        setSelectedRowKeys([]);
+        clearSelectedAssets();
         message.success('Đã xóa các thiết bị đã chọn');
     };
 
@@ -348,7 +385,7 @@ const AssetList: React.FC = () => {
         setIsTransferModalOpen(false);
         setTransferTarget(null);
         setTransferTargets([]);
-        setSelectedRowKeys([]);
+        clearSelectedAssets();
     };
 
     const columns: TableColumnsType<Asset> = [
@@ -390,9 +427,7 @@ const AssetList: React.FC = () => {
                     <span className='inline-flex w-fit items-center rounded bg-indigo-50 px-2 py-0.5 font-mono text-xs font-semibold text-indigo-700'>
                         {value || record.type || '-'}
                     </span>
-                    {record.type && value && (
-                        <span className='text-xs text-slate-400'>{record.type}</span>
-                    )}
+                    {record.type && value && <span className='text-xs text-slate-400'>{record.type}</span>}
                 </div>
             ),
         },
@@ -455,15 +490,21 @@ const AssetList: React.FC = () => {
                             />
                         </Tooltip>
                     ) : null}
-                    <Tooltip title={record.hasOpenTransfer ? 'Thiết bị đang có lệnh điều chuyển chờ xử lý' : 'Điều chuyển thiết bị'}>
+                    <Tooltip
+                        title={
+                            record.hasOpenTransfer
+                                ? 'Thiết bị đang có lệnh điều chuyển chờ xử lý'
+                                : 'Điều chuyển thiết bị'
+                        }
+                    >
                         <Button
                             type='text'
                             disabled={record.hasOpenTransfer}
                             icon={<SwapOutlined />}
                             className={`flex h-8 w-8 items-center justify-center rounded-md transition-colors ${
-                                record.hasOpenTransfer 
-                                ? 'bg-slate-50 text-slate-300 cursor-not-allowed' 
-                                : 'bg-sky-50 text-sky-600 hover:bg-sky-100 hover:text-sky-700'
+                                record.hasOpenTransfer
+                                    ? 'cursor-not-allowed bg-slate-50 text-slate-300'
+                                    : 'bg-sky-50 text-sky-600 hover:bg-sky-100 hover:text-sky-700'
                             }`}
                             onClick={(e) => {
                                 e.stopPropagation();
@@ -520,14 +561,27 @@ const AssetList: React.FC = () => {
                     actions={
                         canExportImport ? (
                             <Space wrap size={8}>
-                                <Button icon={<DownloadOutlined />} onClick={handleExport} className='rounded-lg border-slate-200 text-slate-600'>
+                                <Button
+                                    icon={<DownloadOutlined />}
+                                    onClick={handleExport}
+                                    className='rounded-lg border-slate-200 text-slate-600'
+                                >
                                     Export Excel
                                 </Button>
-                                <Button icon={<InboxOutlined />} onClick={() => setIsImportModalOpen(true)} className='rounded-lg border-slate-200 text-slate-600'>
+                                <Button
+                                    icon={<InboxOutlined />}
+                                    onClick={() => setIsImportModalOpen(true)}
+                                    className='rounded-lg border-slate-200 text-slate-600'
+                                >
                                     Import Excel
                                 </Button>
                                 {canManageAssets ? (
-                                    <Button type='primary' icon={<PlusOutlined />} onClick={handleOpenCreate} className='rounded-lg bg-blue-600 hover:!bg-blue-700'>
+                                    <Button
+                                        type='primary'
+                                        icon={<PlusOutlined />}
+                                        onClick={handleOpenCreate}
+                                        className='rounded-lg bg-blue-600 hover:!bg-blue-700'
+                                    >
                                         Thêm thiết bị
                                     </Button>
                                 ) : null}
@@ -549,7 +603,9 @@ const AssetList: React.FC = () => {
                 ].map(({ label, value, accent }) => (
                     <div key={label} className='al-stat flex min-w-[100px] flex-1 flex-col gap-0.5 bg-white px-5 py-4'>
                         <span className='text-[11px] font-medium text-slate-400'>{label}</span>
-                        <span className='text-base font-bold' style={{ color: accent ?? 'oklch(0.18 0.012 250)' }}>{value}</span>
+                        <span className='text-base font-bold' style={{ color: accent ?? 'oklch(0.18 0.012 250)' }}>
+                            {value}
+                        </span>
                     </div>
                 ))}
             </div>
@@ -581,7 +637,7 @@ const AssetList: React.FC = () => {
                     value={draftFilters.brandId}
                     onChange={(value) => setDraftFilters((prev) => ({ ...prev, brandId: value }))}
                     options={brands.map((b) => ({ value: b.id, label: b.name }))}
-                    optionFilterProp="label"
+                    optionFilterProp='label'
                 />
                 <Select
                     placeholder='Trạng thái'
@@ -591,7 +647,7 @@ const AssetList: React.FC = () => {
                     onChange={(value) => setDraftFilters((prev) => ({ ...prev, status: value }))}
                     options={Object.entries(statusMeta).map(([value, meta]) => ({ value, label: meta.label }))}
                 />
-                <div className='flex-1 min-w-[220px]'>
+                <div className='min-w-[220px] flex-1'>
                     <Input
                         prefix={<SearchOutlined className='text-slate-400' />}
                         placeholder='Tên máy, mã máy, serial, model...'
@@ -603,7 +659,12 @@ const AssetList: React.FC = () => {
                     />
                 </div>
                 <div className='flex gap-2'>
-                    <Button type='primary' icon={<SearchOutlined />} onClick={applyFilters} className='rounded-lg bg-blue-600 hover:!bg-blue-700'>
+                    <Button
+                        type='primary'
+                        icon={<SearchOutlined />}
+                        onClick={applyFilters}
+                        className='rounded-lg bg-blue-600 hover:!bg-blue-700'
+                    >
                         Tìm
                     </Button>
                     <Button icon={<ReloadOutlined />} onClick={resetFilters} className='rounded-lg text-slate-500'>
@@ -622,7 +683,13 @@ const AssetList: React.FC = () => {
                             thiết bị đang chọn
                         </div>
                         <div className='flex gap-2'>
-                            <Tooltip title={selectedAssets[0]?.hasOpenTransfer ? 'Thiết bị đang có lệnh điều chuyển chờ xử lý' : ''}>
+                            <Tooltip
+                                title={
+                                    selectedAssets[0]?.hasOpenTransfer
+                                        ? 'Thiết bị đang có lệnh điều chuyển chờ xử lý'
+                                        : ''
+                                }
+                            >
                                 <Button
                                     size='small'
                                     disabled={selectedAssets.length === 0}
@@ -639,19 +706,22 @@ const AssetList: React.FC = () => {
                                     okLabel='Xóa tất cả'
                                     onConfirm={handleDeleteSelected}
                                 >
-                                    <Button size='small' danger className='rounded-md'>Xóa đã chọn</Button>
+                                    <Button size='small' danger className='rounded-md'>
+                                        Xóa đã chọn
+                                    </Button>
                                 </ConfirmAction>
                             ) : null}
                         </div>
                     </div>
                 )}
 
-                <div className='[&_.ant-table-row]:group [&_.ant-table]:!bg-white [&_.ant-table-row:hover_td]:!bg-blue-50/30 [&_.ant-table-thead_th]:!bg-slate-50 [&_.ant-table-thead_th]:!text-[11px] [&_.ant-table-thead_th]:!font-bold [&_.ant-table-thead_th]:!tracking-[0.07em] [&_.ant-table-thead_th]:!text-slate-400 [&_.ant-table-cell]:!transition-colors [&_.ant-table-cell]:!duration-100'>
+                <div className='[&_.ant-table-row]:group [&_.ant-table]:!bg-white [&_.ant-table-cell]:!transition-colors [&_.ant-table-cell]:!duration-100 [&_.ant-table-row:hover_td]:!bg-blue-50/30 [&_.ant-table-thead_th]:!bg-slate-50 [&_.ant-table-thead_th]:!text-[11px] [&_.ant-table-thead_th]:!font-bold [&_.ant-table-thead_th]:!tracking-[0.07em] [&_.ant-table-thead_th]:!text-slate-400'>
                     <Table<Asset>
                         rowKey='id'
                         rowSelection={{
                             selectedRowKeys,
-                            onChange: setSelectedRowKeys,
+                            onChange: handleSelectionChange,
+                            preserveSelectedRowKeys: true,
                             columnWidth: 44,
                         }}
                         columns={columns}
