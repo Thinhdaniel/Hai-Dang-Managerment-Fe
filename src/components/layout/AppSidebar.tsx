@@ -281,9 +281,13 @@ const AppSidebar: React.FC<AppSidebarProps> = ({
     const { user } = useAuth();
 
     const mainPlantId = import.meta.env.VITE_MAIN_PLANT_ID as string | undefined;
-    const isCS1Manager =
-        Boolean(mainPlantId && user?.plantId === mainPlantId) &&
-        (user?.role === 'admin' || user?.role === 'manager');
+    const procurementPlantIds = String(import.meta.env.VITE_PROCUREMENT_PLANT_IDS || mainPlantId || '')
+        .split(',')
+        .map((id) => id.trim())
+        .filter(Boolean);
+    const isProcurementManager =
+        Boolean(user?.plantId && procurementPlantIds.includes(user.plantId)) &&
+        (user?.role === 'admin' || user?.role === 'manager' || user?.role === 'director');
 
     const visibleSections = navigationSections
         .map((section) => ({
@@ -291,7 +295,7 @@ const AppSidebar: React.FC<AppSidebarProps> = ({
             items: section.items.filter(
                 (item) =>
                     (item.path !== '/materials/purchase-requests' && item.path !== '/materials/purchase-orders') ||
-                    isCS1Manager
+                    isProcurementManager
             ),
         }))
         .filter((section) => section.items.length > 0);

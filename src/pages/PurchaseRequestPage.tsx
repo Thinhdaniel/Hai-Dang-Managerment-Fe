@@ -97,6 +97,7 @@ const MONTH_OPTIONS = Array.from({ length: 12 }, (_, i) => ({ value: i + 1, labe
 
 type ItemRow = {
     key: string;
+    materialId?: string;
     materialName: string;
     plantId: string;
     proposedBy: string;
@@ -117,7 +118,7 @@ type ItemRow = {
 
 const newRow = (): ItemRow => ({
     key: String(Date.now() + Math.random()),
-    materialName: '', plantId: '', proposedBy: '',
+    materialId: undefined, materialName: '', plantId: '', proposedBy: '',
     quantityRequested: 1, unit: '', quantityOrdered: 1,
     unitPrice: 0, vatRate: 8,
     orderDate: undefined, receivedDate: undefined,
@@ -173,7 +174,7 @@ const ModalForm: React.FC<ModalFormProps> = ({ open, initial, plants, mainPlantI
 
     const matOptions = useMemo(() => {
         const list = Array.isArray(matResp) ? matResp : (matResp as any)?.data ?? [];
-        return list.map((m: any) => ({ value: m.name, label: `${m.code} — ${m.name}`, unit: m.unit }));
+        return list.map((m: any) => ({ value: m.name, label: `${m.code} — ${m.name}`, unit: m.unit, materialId: m.id }));
     }, [matResp]);
 
     const supplierOptions = useMemo(() => {
@@ -189,8 +190,9 @@ const ModalForm: React.FC<ModalFormProps> = ({ open, initial, plants, mainPlantI
             setItems(initial.items.map((it) =>
                 computeRow({
                     key: String(Math.random()),
+                    materialId: it.materialId,
                     materialName: it.materialName ?? '',
-                    plantId: mainPlantId,
+                    plantId: it.plantId ?? mainPlantId,
                     proposedBy: it.proposedBy ?? '',
                     quantityRequested: it.quantityRequested,
                     unit: it.unit ?? '',
@@ -243,6 +245,7 @@ const ModalForm: React.FC<ModalFormProps> = ({ open, initial, plants, mainPlantI
         requestYear: year,
         status,
         items: items.map((r) => ({
+            materialId: r.materialId,
             materialName: r.materialName,
             unit: r.unit,
             proposedBy: r.proposedBy,
@@ -259,6 +262,7 @@ const ModalForm: React.FC<ModalFormProps> = ({ open, initial, plants, mainPlantI
             receivedDate: r.receivedDate?.toISOString(),
             supplierId: r.supplierId,
             supplierName: r.supplierName,
+            catalogStatus: r.materialId ? 'matched' : 'unmatched',
         })),
     });
 
@@ -276,8 +280,8 @@ const ModalForm: React.FC<ModalFormProps> = ({ open, initial, plants, mainPlantI
           render: (_: any, r: ItemRow) => (
             <AutoComplete size="small" value={r.materialName} options={matOptions} style={{ width: 200, ...es(`${r.key}-name`) }}
                 onSearch={setMatSearch}
-                onChange={(v) => setItems((p) => patchRow(p, r.key, { materialName: v }))}
-                onSelect={(v, opt: any) => setItems((p) => patchRow(p, r.key, { materialName: v, unit: opt.unit ?? '' }))}
+                onChange={(v) => setItems((p) => patchRow(p, r.key, { materialName: v, materialId: undefined }))}
+                onSelect={(v, opt: any) => setItems((p) => patchRow(p, r.key, { materialName: v, materialId: opt.materialId, unit: opt.unit ?? '' }))}
                 placeholder="Tên vật tư" />
           ) },
         { title: <span>Cơ sở <Text type="danger">*</Text></span>, key: 'plant', width: 130,
@@ -391,8 +395,8 @@ const ModalForm: React.FC<ModalFormProps> = ({ open, initial, plants, mainPlantI
                                     <div className="text-xs text-slate-400 mb-1">Tên vật tư <Text type="danger">*</Text></div>
                                     <AutoComplete size="large" value={r.materialName} options={matOptions} style={{ width: '100%', ...(errors.has(`${r.key}-name`) ? { borderColor: '#ff4d4f' } : {}) }}
                                         onSearch={setMatSearch}
-                                        onChange={(v) => setItems((p) => patchRow(p, r.key, { materialName: v }))}
-                                        onSelect={(v, opt: any) => setItems((p) => patchRow(p, r.key, { materialName: v, unit: opt.unit ?? '' }))}
+                                        onChange={(v) => setItems((p) => patchRow(p, r.key, { materialName: v, materialId: undefined }))}
+                                        onSelect={(v, opt: any) => setItems((p) => patchRow(p, r.key, { materialName: v, materialId: opt.materialId, unit: opt.unit ?? '' }))}
                                         placeholder="Tên vật tư" />
                                 </div>
                                 <div>
@@ -676,12 +680,17 @@ const PurchaseRequestPage: React.FC = () => {
     const queryClient = useQueryClient();
 
     const mainPlantId = import.meta.env.VITE_MAIN_PLANT_ID as string;
+    const procurementPlantIds = String(import.meta.env.VITE_PROCUREMENT_PLANT_IDS || mainPlantId || '')
+        .split(',')
+        .map((id) => id.trim())
+        .filter(Boolean);
+    const currentPurchasePlantId = user?.plantId || mainPlantId;
     const CS1_MANAGER_ROLES = ['admin', 'manager', 'director'];
     const CS1_DIRECTOR_ROLES = ['admin', 'director'];
 
-    const isCS1Manager = Boolean(mainPlantId && user?.plantId === mainPlantId) &&
+    const isCS1Manager = Boolean(user?.plantId && procurementPlantIds.includes(user.plantId)) &&
         CS1_MANAGER_ROLES.includes(user?.role ?? '');
-    const isCS1Director = Boolean(mainPlantId && user?.plantId === mainPlantId) &&
+    const isCS1Director = Boolean(user?.plantId && procurementPlantIds.includes(user.plantId)) &&
         CS1_DIRECTOR_ROLES.includes(user?.role ?? '');
 
     if (!isCS1Manager) return <Navigate to="/" replace />;
@@ -1006,7 +1015,7 @@ const PurchaseRequestPage: React.FC = () => {
                 )}
             </div>
 
-            <ModalForm open={modalOpen} initial={editingRecord} plants={plants} mainPlantId={mainPlantId}
+            <ModalForm open={modalOpen} initial={editingRecord} plants={plants} mainPlantId={currentPurchasePlantId}
                 submitting={createMut.isPending || updateMut.isPending}
                 onClose={() => { setModalOpen(false); setEditingRecord(null); }}
                 onSave={handleSave} />

@@ -35,7 +35,7 @@ export type PurchaseRequestStatus =
     | 'in_progress'
     | 'distributed'
     | 'cancelled';
-export type PurchaseOrderStatus = 'draft' | 'sent' | 'confirmed' | 'ordered' | 'received' | 'cancelled';
+export type PurchaseOrderStatus = 'draft' | 'sent' | 'confirmed' | 'ordered' | 'partially_received' | 'received' | 'cancelled';
 export type DistributionStatus = 'draft' | 'pending' | 'processing' | 'distributed' | 'confirmed';
 export type DistributionType = 'facility_transfer' | 'internal_issue';
 export type InventoryTransactionType = 'import' | 'export' | 'adjust' | 'adjustment';
@@ -49,6 +49,7 @@ export interface Material {
     unit: string;
     minStockLevel?: number;
     description?: string;
+    trackInventory?: boolean;
     isActive: boolean;
     totalCurrentStock?: number;
     lowStock?: boolean;
@@ -64,6 +65,7 @@ export interface MaterialPayload {
     unit: string;
     minStockLevel?: number;
     description?: string;
+    trackInventory?: boolean;
     isActive?: boolean;
 }
 
@@ -111,6 +113,7 @@ export interface PurchaseRequestItem {
     unit?: string;
     proposedBy?: string;
     purpose?: string;
+    plantId?: string;
     quantityRequested: number;
     quantityApproved?: number;
     quantityOrdered?: number;
@@ -127,6 +130,7 @@ export interface PurchaseRequestItem {
     estimatedTotal?: number;
     supplierId?: string;
     supplier?: MaterialSupplier;
+    catalogStatus?: 'matched' | 'unmatched' | 'ignored';
     note?: string;
 }
 
@@ -143,8 +147,10 @@ export interface PurchaseRequestItemPayload {
     vatRate?: number;
     orderDate?: string;
     receivedDate?: string;
+    supplierId?: string;
     supplierName?: string;
     supplierNote?: string;
+    catalogStatus?: 'matched' | 'unmatched' | 'ignored';
     note?: string;
 }
 
@@ -229,6 +235,9 @@ export interface PurchaseOrderItem {
     unit?: string;
     quantityRequested?: number;
     quantityOrdered?: number;
+    quantityReceived?: number;
+    quantityMissing?: number;
+    receiveStatus?: 'pending' | 'partially_received' | 'received';
     quantity?: number; // backward compat alias
     unitPrice?: number;
     totalPrice?: number;
@@ -240,6 +249,10 @@ export interface PurchaseOrderItem {
     plantName?: string;
     proposedBy?: string;
     purpose?: string;
+    catalogStatus?: 'matched' | 'unmatched' | 'ignored';
+    quantityInventoried?: number;
+    inventoryStatus?: 'pending' | 'applied' | 'skipped';
+    inventorySkipReason?: string;
     note?: string;
 }
 
@@ -258,6 +271,7 @@ export interface PurchaseOrder {
     orderCode?: string;
     purchaseRequestIds?: string[];
     purchaseRequestCodes?: string[];
+    plantId?: string;
     // backward compat
     requestIds?: string[];
     requests?: PurchaseRequest[];
@@ -306,8 +320,28 @@ export interface PurchaseOrderQueryParams {
 
 export interface ReceivePurchaseOrderPayload {
     plantId?: string;
+    items?: Array<{ index: number; quantityReceived: number; markShortage?: boolean; note?: string }>;
+    shortageAllocations?: Array<{ shortageId: string; quantityReceived: number; note?: string }>;
     receivedAt?: string;
     note?: string;
+}
+
+export interface PurchaseShortage {
+    id: string;
+    originalPurchaseOrderId: string;
+    originalPurchaseOrderCode?: string;
+    originalItemIndex: number;
+    supplierId?: string;
+    supplierName?: string;
+    materialId?: string;
+    materialName: string;
+    unit?: string;
+    quantityMissing: number;
+    quantityResolved: number;
+    quantityOutstanding: number;
+    status: 'outstanding' | 'partially_settled' | 'settled' | 'cancelled';
+    createdAt?: string;
+    updatedAt?: string;
 }
 
 export interface MaterialInventory {
@@ -708,8 +742,20 @@ export const purchaseOrderService = {
     confirm: (id: string): Promise<PurchaseOrder> =>
         api.patch<PurchaseOrder>(`${PURCHASE_ORDERS_BASE}/${id}/confirm`),
 
-    receive: (id: string): Promise<PurchaseOrder> =>
-        api.patch<PurchaseOrder>(`${PURCHASE_ORDERS_BASE}/${id}/receive`),
+    receive: (id: string, data: ReceivePurchaseOrderPayload): Promise<PurchaseOrder> =>
+        api.patch<PurchaseOrder, ReceivePurchaseOrderPayload>(`${PURCHASE_ORDERS_BASE}/${id}/receive`, data),
+
+    linkItemMaterial: (id: string, index: number, materialId: string): Promise<PurchaseOrder> =>
+        api.patch<PurchaseOrder, { materialId: string }>(`${PURCHASE_ORDERS_BASE}/${id}/items/${index}/link-material`, { materialId }),
+
+    createItemMaterial: (id: string, index: number, data: Partial<MaterialPayload>): Promise<PurchaseOrder> =>
+        api.post<PurchaseOrder, Partial<MaterialPayload>>(`${PURCHASE_ORDERS_BASE}/${id}/items/${index}/create-material`, data),
+
+    ignoreItemInventory: (id: string, index: number, reason?: string): Promise<PurchaseOrder> =>
+        api.patch<PurchaseOrder, { reason?: string }>(`${PURCHASE_ORDERS_BASE}/${id}/items/${index}/ignore-inventory`, { reason }),
+
+    getShortages: (params?: { status?: 'open' | string; supplierId?: string; materialId?: string; limit?: number }): Promise<PurchaseShortage[]> =>
+        api.get<PurchaseShortage[]>(`${PURCHASE_ORDERS_BASE}/shortages`, { params }),
 
     remove: (id: string): Promise<void> =>
         api.delete(`${PURCHASE_ORDERS_BASE}/${id}`),

@@ -52,7 +52,9 @@ const TransferHistorySection = ({
             render: (_value, record) => (
                 <div className='flex items-center gap-3'>
                     <div className='flex flex-col gap-0.5'>
-                        <span className='text-[13px] font-semibold text-slate-700'>{record.fromPlant?.name || '-'}</span>
+                        <span className='text-[13px] font-semibold text-slate-700'>
+                            {record.fromPlant?.name || '-'}
+                        </span>
                         <span className='text-xs font-medium text-slate-500'>{renderArea(record.fromArea)}</span>
                     </div>
                     <div className='text-slate-300'>
@@ -147,7 +149,7 @@ const TransferHistorySection = ({
                             </Tooltip>
                         </ConfirmAction>
                     ) : null}
-                    {['pending', 'approved'].includes(record.status) && onReject ? (
+                    {record.status === 'pending' && onReject ? (
                         <ConfirmAction
                             intent='danger'
                             title='Từ chối lệnh điều chuyển'

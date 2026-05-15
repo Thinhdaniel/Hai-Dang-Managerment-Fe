@@ -40,7 +40,8 @@ const createDefaultFilters = () => ({
 const buildTransferCode = (transfer: Transfer) =>
     `TRF-${new Date(transfer.createdAt).getFullYear()}-${transfer.id.slice(-4).toUpperCase()}`;
 
-const getTransferAssets = (transfer: Transfer) => transfer.assets?.length ? transfer.assets : transfer.asset ? [transfer.asset] : [];
+const getTransferAssets = (transfer: Transfer) =>
+    transfer.assets?.length ? transfer.assets : transfer.asset ? [transfer.asset] : [];
 
 const getTransferAssetLabel = (transfer: Transfer) => {
     const assets = getTransferAssets(transfer);
@@ -52,13 +53,21 @@ const getTransferAssetLabel = (transfer: Transfer) => {
 const getTransferAssetCodes = (transfer: Transfer) => {
     const assets = getTransferAssets(transfer);
     if (assets.length === 1) return assets[0].machineCode || transfer.assetId;
-    if (assets.length > 1) return assets.map((asset) => asset.machineCode).filter(Boolean).join(', ') || `${assets.length} máy`;
+    if (assets.length > 1)
+        return (
+            assets
+                .map((asset) => asset.machineCode)
+                .filter(Boolean)
+                .join(', ') || `${assets.length} máy`
+        );
     return transfer.assetId;
 };
 
+const getTransferFromPlantId = (transfer: Transfer) => transfer.fromPlantId || transfer.fromPlant?.id;
+
 const TransferList: React.FC = () => {
     const navigate = useNavigate();
-    const { role } = useAuth();
+    const { role, user } = useAuth();
     const queryClient = useQueryClient();
     const { message } = App.useApp();
 
@@ -70,10 +79,14 @@ const TransferList: React.FC = () => {
     const [cancellingTransferId, setCancellingTransferId] = useState<string | null>(null);
     const [exportingTransferId, setExportingTransferId] = useState<string | null>(null);
     const [rejectModal, setRejectModal] = useState<{ open: boolean; transfer: Transfer | null; reason: string }>({
-        open: false, transfer: null, reason: '',
+        open: false,
+        transfer: null,
+        reason: '',
     });
     const [cancelModal, setCancelModal] = useState<{ open: boolean; transfer: Transfer | null; reason: string }>({
-        open: false, transfer: null, reason: '',
+        open: false,
+        transfer: null,
+        reason: '',
     });
     const [handoverTransfer, setHandoverTransfer] = useState<Transfer | null>(null);
     const canManageTransfers = hasManagerAccess(role);
@@ -144,6 +157,8 @@ const TransferList: React.FC = () => {
     });
 
     const transfers = transferResponse?.data ?? [];
+    const canRejectOrCancelTransfer = (transfer: Transfer) =>
+        canManageTransfers && (!user?.plantId || getTransferFromPlantId(transfer) === user.plantId);
 
     const applyFilters = () => setFilters({ ...draftFilters, search: draftFilters.search.trim(), page: 1 });
 
@@ -181,6 +196,7 @@ const TransferList: React.FC = () => {
 
     const handleReject = async () => {
         if (!rejectModal.transfer || !rejectModal.reason.trim()) return;
+        if (rejectModal.transfer.status !== 'pending' || !canRejectOrCancelTransfer(rejectModal.transfer)) return;
         try {
             setRejectingTransferId(rejectModal.transfer.id);
             await rejectMutation.mutateAsync({ id: rejectModal.transfer.id, reason: rejectModal.reason.trim() });
@@ -193,6 +209,7 @@ const TransferList: React.FC = () => {
 
     const handleCancel = async () => {
         if (!cancelModal.transfer || !cancelModal.reason.trim()) return;
+        if (cancelModal.transfer.status !== 'pending' || !canRejectOrCancelTransfer(cancelModal.transfer)) return;
         try {
             setCancellingTransferId(cancelModal.transfer.id);
             await cancelMutation.mutateAsync({ id: cancelModal.transfer.id, reason: cancelModal.reason.trim() });
@@ -243,12 +260,19 @@ const TransferList: React.FC = () => {
             render: (_value, record) => (
                 <div className='flex items-center gap-3'>
                     <div className='flex flex-col gap-0.5'>
-                        <span className='text-[13px] font-semibold text-slate-700'>{record.fromPlant?.name || '-'}</span>
+                        <span className='text-[13px] font-semibold text-slate-700'>
+                            {record.fromPlant?.name || '-'}
+                        </span>
                         <span className='text-xs font-medium text-slate-500'>{record.fromArea || 'Chưa chỉ định'}</span>
                     </div>
                     <div className='text-slate-300'>
                         <svg className='h-4 w-4' fill='none' stroke='currentColor' viewBox='0 0 24 24'>
-                            <path strokeLinecap='round' strokeLinejoin='round' strokeWidth='2' d='M14 5l7 7m0 0l-7 7m7-7H3' />
+                            <path
+                                strokeLinecap='round'
+                                strokeLinejoin='round'
+                                strokeWidth='2'
+                                d='M14 5l7 7m0 0l-7 7m7-7H3'
+                            />
                         </svg>
                     </div>
                     <div className='flex flex-col gap-0.5'>
@@ -280,10 +304,24 @@ const TransferList: React.FC = () => {
             key: 'reason',
             render: (value: string, record) => (
                 <div className='flex flex-col gap-1'>
-                    <span className='line-clamp-1 text-sm font-medium text-slate-700' title={value}>{value}</span>
-                    {record.note ? <Text type='secondary' className='line-clamp-1 text-xs' title={record.note}>{record.note}</Text> : null}
-                    {record.rejectReason ? <span className='line-clamp-1 text-xs font-medium text-rose-600' title={record.rejectReason}>{record.rejectReason}</span> : null}
-                    {record.cancelReason ? <span className='line-clamp-1 text-xs font-medium text-slate-400' title={record.cancelReason}>{record.cancelReason}</span> : null}
+                    <span className='line-clamp-1 text-sm font-medium text-slate-700' title={value}>
+                        {value}
+                    </span>
+                    {record.note ? (
+                        <Text type='secondary' className='line-clamp-1 text-xs' title={record.note}>
+                            {record.note}
+                        </Text>
+                    ) : null}
+                    {record.rejectReason ? (
+                        <span className='line-clamp-1 text-xs font-medium text-rose-600' title={record.rejectReason}>
+                            {record.rejectReason}
+                        </span>
+                    ) : null}
+                    {record.cancelReason ? (
+                        <span className='line-clamp-1 text-xs font-medium text-slate-400' title={record.cancelReason}>
+                            {record.cancelReason}
+                        </span>
+                    ) : null}
                 </div>
             ),
         },
@@ -349,7 +387,7 @@ const TransferList: React.FC = () => {
                             </Tooltip>
                         </ConfirmAction>
                     ) : null}
-                    {['pending', 'approved'].includes(record.status) && canManageTransfers ? (
+                    {record.status === 'pending' && canRejectOrCancelTransfer(record) ? (
                         <Tooltip title='Từ chối'>
                             <Button
                                 type='text'
@@ -360,7 +398,7 @@ const TransferList: React.FC = () => {
                             />
                         </Tooltip>
                     ) : null}
-                    {record.status === 'pending' ? (
+                    {record.status === 'pending' && canRejectOrCancelTransfer(record) ? (
                         <Tooltip title='Hủy lệnh'>
                             <Button
                                 type='text'
@@ -395,20 +433,51 @@ const TransferList: React.FC = () => {
             {/* Stats Cards */}
             <div className='grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4'>
                 {[
-                    { label: 'Tổng lệnh', value: totalStats, color: 'blue', sub: 'Toàn bộ lịch sử', icon: <AppstoreOutlined /> },
-                    { label: 'Chờ duyệt', value: pendingStats, color: 'amber', sub: 'Lệnh đang chờ xử lý', icon: <ClockCircleOutlined /> },
-                    { label: 'Đã duyệt / Đang chuyển', value: approvedStats, color: 'sky', sub: 'Thiết bị đang trên đường', icon: <SwapOutlined /> },
-                    { label: 'Hoàn tất', value: completedStats, color: 'emerald', sub: 'Đã cập nhật vị trí mới', icon: <CheckCircleOutlined /> },
+                    {
+                        label: 'Tổng lệnh',
+                        value: totalStats,
+                        color: 'blue',
+                        sub: 'Toàn bộ lịch sử',
+                        icon: <AppstoreOutlined />,
+                    },
+                    {
+                        label: 'Chờ duyệt',
+                        value: pendingStats,
+                        color: 'amber',
+                        sub: 'Lệnh đang chờ xử lý',
+                        icon: <ClockCircleOutlined />,
+                    },
+                    {
+                        label: 'Đã duyệt / Đang chuyển',
+                        value: approvedStats,
+                        color: 'sky',
+                        sub: 'Thiết bị đang trên đường',
+                        icon: <SwapOutlined />,
+                    },
+                    {
+                        label: 'Hoàn tất',
+                        value: completedStats,
+                        color: 'emerald',
+                        sub: 'Đã cập nhật vị trí mới',
+                        icon: <CheckCircleOutlined />,
+                    },
                 ].map(({ label, value, color, sub, icon }) => (
-                    <div key={label} className='group relative overflow-hidden rounded-xl border border-slate-200 bg-white p-5 shadow-sm transition-shadow hover:shadow-md'>
+                    <div
+                        key={label}
+                        className='group relative overflow-hidden rounded-xl border border-slate-200 bg-white p-5 shadow-sm transition-shadow hover:shadow-md'
+                    >
                         <div className={`absolute top-0 bottom-0 left-0 w-1 rounded-l-xl bg-${color}-500`} />
                         <div className='flex items-start justify-between'>
                             <div>
-                                <div className='mb-1 text-xs font-bold uppercase tracking-wider text-slate-500'>{label}</div>
+                                <div className='mb-1 text-xs font-bold tracking-wider text-slate-500 uppercase'>
+                                    {label}
+                                </div>
                                 <div className='text-3xl font-bold text-slate-800'>{value}</div>
                                 <div className={`mt-2 text-xs font-medium text-${color}-600`}>{sub}</div>
                             </div>
-                            <div className={`flex h-12 w-12 items-center justify-center rounded-xl bg-${color}-50 text-2xl text-${color}-600 transition-transform group-hover:scale-110`}>
+                            <div
+                                className={`flex h-12 w-12 items-center justify-center rounded-xl bg-${color}-50 text-2xl text-${color}-600 transition-transform group-hover:scale-110`}
+                            >
                                 {icon}
                             </div>
                         </div>
@@ -465,10 +534,21 @@ const TransferList: React.FC = () => {
                         />
                     </div>
                     <div className='flex w-full gap-2 lg:w-auto'>
-                        <Button type='primary' icon={<SearchOutlined />} onClick={applyFilters} size='large' className='flex-1 rounded-lg border-none bg-blue-600 font-medium shadow-sm hover:bg-blue-700 lg:flex-none'>
+                        <Button
+                            type='primary'
+                            icon={<SearchOutlined />}
+                            onClick={applyFilters}
+                            size='large'
+                            className='flex-1 rounded-lg border-none bg-blue-600 font-medium shadow-sm hover:bg-blue-700 lg:flex-none'
+                        >
                             Tìm kiếm
                         </Button>
-                        <Button icon={<ReloadOutlined />} onClick={resetFilters} size='large' className='flex-1 rounded-lg font-medium text-slate-600 hover:text-slate-800 lg:flex-none'>
+                        <Button
+                            icon={<ReloadOutlined />}
+                            onClick={resetFilters}
+                            size='large'
+                            className='flex-1 rounded-lg font-medium text-slate-600 hover:text-slate-800 lg:flex-none'
+                        >
                             Làm mới
                         </Button>
                     </div>

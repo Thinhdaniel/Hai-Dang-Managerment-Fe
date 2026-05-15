@@ -41,6 +41,7 @@ import ConfirmAction from '../components/shared/ConfirmAction';
 import PageHeader from '../components/shared/PageHeader';
 import { useAuth } from '../core/contexts/AuthContext';
 import {
+    materialService,
     materialSupplierService,
     purchaseOrderService,
     purchaseRequestService,
@@ -50,7 +51,10 @@ import {
     type PurchaseOrderItemUpdate,
     type PurchaseOrderQueryParams,
     type PurchaseOrderStatus,
+    type PurchaseShortage,
     type PurchaseRequest,
+    type ReceivePurchaseOrderPayload,
+    type MaterialPayload,
 } from '../core/services/material.service';
 import type { PaginatedResponse, User } from '../core/types';
 
@@ -81,6 +85,7 @@ const STATUS_META: Record<string, { color: string; label: string; icon: React.Re
     draft:     { color: 'default',    label: 'Bản nháp',        icon: null },
     confirmed: { color: 'warning',    label: 'Đã xác nhận',     icon: <ClockCircleOutlined /> },
     ordered:   { color: 'processing', label: 'Đang đặt hàng',   icon: <ShoppingOutlined /> },
+    partially_received: { color: 'cyan', label: 'Nhận một phần', icon: <InboxOutlined /> },
     received:  { color: 'success',    label: 'Đã nhận hàng',    icon: <CheckCircleOutlined /> },
     cancelled: { color: 'error',      label: 'Đã huỷ',          icon: <CloseCircleOutlined /> },
 };
@@ -204,7 +209,7 @@ type DrawerProps = {
     isCS1Director: boolean;
     onClose: () => void;
     onConfirm: (id: string) => void;
-    onReceive: (id: string) => void;
+    onReceive: (id: string, payload: ReceivePurchaseOrderPayload) => Promise<void>;
     onDelete: (id: string) => void;
     onExport: (id: string, code: string) => void;
     confirmingId: string | null;
@@ -226,6 +231,15 @@ const DetailDrawer: React.FC<DrawerProps> = ({
         materialId?: string; materialName: string; unit: string;
         quantityReturned: number; unitPrice: number; vatRate: number; reason: string;
     }>>([]);
+    const [receiveOpen, setReceiveOpen] = useState(false);
+    const [receiveItems, setReceiveItems] = useState<Record<number, number>>({});
+    const [receiveShortageMarks, setReceiveShortageMarks] = useState<Record<number, boolean>>({});
+    const [shortageAllocations, setShortageAllocations] = useState<Record<string, number>>({});
+    const [catalogTarget, setCatalogTarget] = useState<{ index: number; item: PurchaseOrderItem } | null>(null);
+    const [catalogMode, setCatalogMode] = useState<'link' | 'create'>('link');
+    const [materialSearch, setMaterialSearch] = useState('');
+    const [selectedMaterialId, setSelectedMaterialId] = useState<string>();
+    const [materialDraft, setMaterialDraft] = useState<Partial<MaterialPayload>>({ trackInventory: true });
 
     const returnMut = useMutation({
         mutationFn: returnRecordService.create,
@@ -241,11 +255,64 @@ const DetailDrawer: React.FC<DrawerProps> = ({
     });
 
     // Lấy danh sách phiếu trả của PO này
+    const linkMaterialMut = useMutation({
+        mutationFn: ({ index, materialId }: { index: number; materialId: string }) =>
+            purchaseOrderService.linkItemMaterial(record!.id, index, materialId),
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['purchase-orders'] });
+            if (record) queryClient.invalidateQueries({ queryKey: ['purchase-order', record.id] });
+            message.success('Da gan vat tu vao danh muc');
+            setCatalogTarget(null);
+        },
+        onError: (e: any) => message.error(e?.message || 'Khong the gan vat tu'),
+    });
+
+    const createMaterialMut = useMutation({
+        mutationFn: ({ index, data }: { index: number; data: Partial<MaterialPayload> }) =>
+            purchaseOrderService.createItemMaterial(record!.id, index, data),
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['purchase-orders'] });
+            queryClient.invalidateQueries({ queryKey: ['materials'] });
+            if (record) queryClient.invalidateQueries({ queryKey: ['purchase-order', record.id] });
+            message.success('Da tao vat tu tu dong mua');
+            setCatalogTarget(null);
+        },
+        onError: (e: any) => message.error(e?.message || 'Khong the tao vat tu'),
+    });
+
+    const ignoreInventoryMut = useMutation({
+        mutationFn: ({ index, reason }: { index: number; reason?: string }) =>
+            purchaseOrderService.ignoreItemInventory(record!.id, index, reason),
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['purchase-orders'] });
+            if (record) queryClient.invalidateQueries({ queryKey: ['purchase-order', record.id] });
+            message.success('Da bo qua quan ton cho dong vat tu');
+        },
+        onError: (e: any) => message.error(e?.message || 'Khong the bo qua quan ton'),
+    });
+
     const { data: returnRecords = [] } = useQuery({
         queryKey: ['returns', record?.id],
         queryFn: () => returnRecordService.getByPurchaseOrder(record!.id),
         enabled: !!record?.id && record?.status === 'received',
     });
+
+    const { data: shortageResp = [] } = useQuery({
+        queryKey: ['purchase-shortages', 'open', record?.id],
+        queryFn: () => purchaseOrderService.getShortages({ status: 'open', limit: 200 }),
+        enabled: Boolean(record?.id && receiveOpen),
+    });
+
+    const { data: materialResp } = useQuery({
+        queryKey: ['materials', 'catalog-link', materialSearch],
+        queryFn: () => materialService.getAll({ search: materialSearch, isActive: true, limit: 50 }),
+        enabled: Boolean(catalogTarget && catalogMode === 'link'),
+    });
+
+    const materialOptions = useMemo(() => {
+        const list = Array.isArray(materialResp) ? materialResp : (materialResp as any)?.data ?? [];
+        return list.map((m: any) => ({ value: m.id, label: `${m.code || 'NO-CODE'} - ${m.name}` }));
+    }, [materialResp]);
 
     // Map materialId → { totalReturned, reasons }
     const returnedMap = useMemo(() => {
@@ -261,6 +328,81 @@ const DetailDrawer: React.FC<DrawerProps> = ({
         });
         return map;
     }, [returnRecords]);
+
+    const getReturnItemKey = (item: Pick<PurchaseOrderItem, 'materialId' | 'materialName'> | { materialId?: string; materialName?: string }) =>
+        String(item.materialId ?? item.materialName ?? '');
+
+    const getReturnRemaining = (item: PurchaseOrderItem) => {
+        const key = getReturnItemKey(item);
+        const received = Number(item.quantityReceived ?? item.quantityOrdered ?? item.quantityRequested ?? 0);
+        const returned = returnedMap.get(key)?.qty ?? 0;
+        return Math.max(0, Number((received - returned).toFixed(2)));
+    };
+
+    const getSelectedReturnRemaining = (item: { materialId?: string; materialName?: string; quantityReturned: number }) => {
+        const key = getReturnItemKey(item);
+        const sourceItem = record?.items.find((poItem) => getReturnItemKey(poItem) === key);
+        return sourceItem ? getReturnRemaining(sourceItem) : item.quantityReturned;
+    };
+
+    const openShortages = useMemo<PurchaseShortage[]>(() => {
+        if (!record) return [];
+        const supplierIds = new Set(record.items.map((item) => item.supplierId).filter(Boolean));
+        const materialNames = new Set(record.items.map((item) => item.materialName).filter(Boolean));
+        return (shortageResp as PurchaseShortage[]).filter((shortage) => {
+            if (shortage.originalPurchaseOrderId === record.id) return false;
+            const sameSupplier = shortage.supplierId ? supplierIds.has(shortage.supplierId) : true;
+            const sameMaterial = materialNames.has(shortage.materialName);
+            return sameSupplier && sameMaterial && (shortage.quantityOutstanding ?? 0) > 0;
+        });
+    }, [record, shortageResp]);
+
+    const receiveRows = useMemo(() => {
+        if (!record) return [];
+        return record.items.map((item, index) => {
+            const ordered = item.quantityOrdered ?? item.quantityRequested ?? 0;
+            const received = item.quantityReceived ?? 0;
+            const remaining = Math.max(0, ordered - received);
+            return { ...item, index, ordered, received, remaining };
+        });
+    }, [record]);
+
+    const resetReceiveForm = () => {
+        setReceiveItems({});
+        setReceiveShortageMarks({});
+        setShortageAllocations({});
+    };
+
+    const handleReceiveSubmit = async () => {
+        if (!record) return;
+
+        const items = Object.entries(receiveItems)
+            .map(([index, quantityReceived]) => ({
+                index: Number(index),
+                quantityReceived: Number(quantityReceived ?? 0),
+                markShortage: Boolean(receiveShortageMarks[Number(index)]),
+            }))
+            .filter((item) => item.quantityReceived > 0 || item.markShortage);
+        Object.entries(receiveShortageMarks).forEach(([index, markShortage]) => {
+            if (!markShortage || items.some((item) => item.index === Number(index))) return;
+            items.push({ index: Number(index), quantityReceived: 0, markShortage: true });
+        });
+        const allocations = Object.entries(shortageAllocations)
+            .map(([shortageId, quantityReceived]) => ({ shortageId, quantityReceived: Number(quantityReceived ?? 0) }))
+            .filter((item) => item.quantityReceived > 0);
+
+        if (!items.length && !allocations.length) {
+            message.warning('Vui lòng nhập số lượng thực nhận hoặc hàng bù');
+            return;
+        }
+
+        await onReceive(record.id, {
+            items,
+            shortageAllocations: allocations,
+        });
+        setReceiveOpen(false);
+        resetReceiveForm();
+    };
 
     const totalRefunded = (returnRecords as any[]).reduce((s: number, r: any) => s + (r.totalRefundWithVat ?? 0), 0);
 
@@ -289,6 +431,8 @@ const DetailDrawer: React.FC<DrawerProps> = ({
     React.useEffect(() => {
         setEditedItems({});
         setHasEdit(false);
+        resetReceiveForm();
+        setReceiveOpen(false);
     }, [record?.id]);
 
     const canEdit = record && record.status === 'draft' && isCS1Manager;
@@ -302,6 +446,32 @@ const DetailDrawer: React.FC<DrawerProps> = ({
         if (!record) return;
         const items = Object.values(editedItems);
         updateMut.mutate({ id: record.id, data: { items } });
+    };
+
+    const openCatalogModal = (index: number, item: PurchaseOrderItem, mode: 'link' | 'create') => {
+        setCatalogTarget({ index, item });
+        setCatalogMode(mode);
+        setSelectedMaterialId(undefined);
+        setMaterialSearch(item.materialName || '');
+        setMaterialDraft({
+            name: item.materialName || '',
+            unit: item.unit || '',
+            trackInventory: true,
+        });
+    };
+
+    const handleCatalogSubmit = () => {
+        if (!catalogTarget) return;
+        if (catalogMode === 'link') {
+            if (!selectedMaterialId) {
+                message.warning('Vui long chon vat tu trong danh muc');
+                return;
+            }
+            linkMaterialMut.mutate({ index: catalogTarget.index, materialId: selectedMaterialId });
+            return;
+        }
+
+        createMaterialMut.mutate({ index: catalogTarget.index, data: materialDraft });
     };
 
     // Compute display items with edits applied
@@ -343,6 +513,11 @@ const DetailDrawer: React.FC<DrawerProps> = ({
                 <div>
                     <div style={{ fontWeight: 600 }}>{r.materialName}</div>
                     <div style={{ fontSize: 11, color: '#888' }}>{r.purchaseRequestCode}</div>
+                    {r.catalogStatus === 'unmatched' && <Tag color="orange" style={{ fontSize: 10, marginTop: 2 }}>Chua co danh muc</Tag>}
+                    {r.catalogStatus === 'ignored' && <Tag color="default" style={{ fontSize: 10, marginTop: 2 }}>Khong quan ton</Tag>}
+                    {r.inventoryStatus === 'pending' && Number(r.quantityReceived ?? 0) > Number(r.quantityInventoried ?? 0) && (
+                        <Tag color="gold" style={{ fontSize: 10, marginTop: 2 }}>Cho cong ton</Tag>
+                    )}
                     {ret && (
                         <Tooltip title={ret.reasons.length ? `Lý do: ${ret.reasons.join('; ')}` : 'Đã trả hàng'}>
                             <Tag color="red" style={{ fontSize: 10, marginTop: 2, cursor: 'help' }}>
@@ -357,6 +532,13 @@ const DetailDrawer: React.FC<DrawerProps> = ({
         { title: 'Người ĐX', dataIndex: 'proposedBy', key: 'proposedBy', width: 110 },
         { title: 'Mục đích', dataIndex: 'purpose', key: 'purpose', width: 140 },
         { title: 'SL ĐX', dataIndex: 'quantityRequested', key: 'qtyR', width: 70, align: 'right', render: fmtNum },
+        { title: 'Đã nhận', key: 'qtyReceived', width: 80, align: 'right',
+          render: (_: any, r: any) => fmtNum(r.quantityReceived ?? 0) },
+        { title: 'Còn thiếu', key: 'qtyMissing', width: 86, align: 'right',
+          render: (_: any, r: any) => {
+            const missing = r.quantityMissing ?? Math.max(0, (r.quantityOrdered ?? 0) - (r.quantityReceived ?? 0));
+            return missing > 0 ? <Text type="danger">{fmtNum(missing)}</Text> : <Text type="success">0</Text>;
+          } },
         { title: 'ĐVT', dataIndex: 'unit', key: 'unit', width: 60 },
         { title: 'SL đặt', key: 'qtyO', width: 90, align: 'center',
           render: (_: any, r: any) => canEdit
@@ -390,6 +572,27 @@ const DetailDrawer: React.FC<DrawerProps> = ({
                 onChange={(v, opt: any) => patchItem(r._idx, { supplierId: v, supplierName: opt?.label })} />
             : (r.supplierName || '-') },
         { title: 'Ghi chú', dataIndex: 'note', key: 'note', width: 140 },
+        { title: 'Danh mục', key: 'catalog', width: 150,
+          render: (_: any, r: any) => (
+            <Space size={2} wrap>
+                {r.catalogStatus !== 'matched' && (
+                    <>
+                        <Button size="small" onClick={() => openCatalogModal(r._idx, r, 'link')}>Gắn</Button>
+                        <Button size="small" onClick={() => openCatalogModal(r._idx, r, 'create')}>Tạo</Button>
+                    </>
+                )}
+                {r.catalogStatus !== 'ignored' && (
+                    <Button
+                        size="small"
+                        danger
+                        loading={ignoreInventoryMut.isPending}
+                        onClick={() => ignoreInventoryMut.mutate({ index: r._idx, reason: 'Vật tư không quản tồn' })}
+                    >
+                        Bỏ tồn
+                    </Button>
+                )}
+            </Space>
+          ) },
     ];
 
     const meta = record ? STATUS_META[record.status] : null;
@@ -417,13 +620,13 @@ const DetailDrawer: React.FC<DrawerProps> = ({
                             </Button>
                         </ConfirmAction>
                     )}
-                    {['confirmed', 'ordered'].includes(record.status) && isCS1Director && (
+                    {['confirmed', 'ordered', 'partially_received'].includes(record.status) && isCS1Director && (
                         <ConfirmAction intent="primary" title="Xác nhận nhận hàng?"
-                            description="Tồn kho CS1 sẽ được cập nhật tự động. Hành động không thể hoàn tác."
-                            okLabel="Xác nhận nhận hàng" onConfirm={() => onReceive(record.id)}>
+                            description="Tồn kho cơ sở mua sẽ được cập nhật tự động với các vật tư đã chuẩn hóa."
+                            okLabel="Mở form nhận hàng" onConfirm={() => { resetReceiveForm(); setReceiveOpen(true); }}>
                             <Button icon={<InboxOutlined />} loading={receivingId === record.id}
                                 style={{ borderColor: '#0284c7', color: '#0284c7' }}>
-                                Xác nhận nhận hàng
+                                Nhận hàng
                             </Button>
                         </ConfirmAction>
                     )}
@@ -497,6 +700,185 @@ const DetailDrawer: React.FC<DrawerProps> = ({
             )}
         </Drawer>
 
+        <Modal
+            open={receiveOpen}
+            onCancel={() => { setReceiveOpen(false); resetReceiveForm(); }}
+            title="Nhập số lượng thực nhận"
+            width={980}
+            okText="Cập nhật nhận hàng"
+            confirmLoading={receivingId === record?.id}
+            onOk={handleReceiveSubmit}
+            destroyOnHidden
+        >
+            <div className="flex flex-col gap-4 py-2">
+                <Alert
+                    type="info"
+                    showIcon
+                    message="Chỉ nhập số lượng thực nhận trong lần giao này. Dòng nhận thiếu sẽ được ghi vào sổ nợ hàng NCC."
+                />
+                <Table
+                    dataSource={receiveRows}
+                    rowKey="index"
+                    pagination={false}
+                    size="small"
+                    scroll={{ x: 'max-content' }}
+                    columns={[
+                        { title: 'Vật tư', dataIndex: 'materialName', width: 190 },
+                        { title: 'NCC', dataIndex: 'supplierName', width: 150, render: (v: string) => v || '-' },
+                        { title: 'Đặt', dataIndex: 'ordered', width: 80, align: 'right' as const, render: fmtNum },
+                        { title: 'Đã nhận', dataIndex: 'received', width: 90, align: 'right' as const, render: fmtNum },
+                        { title: 'Còn lại', dataIndex: 'remaining', width: 90, align: 'right' as const, render: (v: number) => v > 0 ? <Text type="danger">{fmtNum(v)}</Text> : <Text type="success">0</Text> },
+                        {
+                            title: 'Nhận lần này',
+                            key: 'receiveNow',
+                            width: 130,
+                            render: (_: any, row: any) => (
+                                <InputNumber
+                                    min={0}
+                                    max={row.remaining}
+                                    value={receiveItems[row.index] ?? 0}
+                                    style={{ width: 120 }}
+                                    onChange={(value) => setReceiveItems((prev) => ({ ...prev, [row.index]: Number(value ?? 0) }))}
+                                />
+                            ),
+                        },
+                        {
+                            title: 'Ghi thiếu',
+                            key: 'markShortage',
+                            width: 95,
+                            render: (_: any, row: any) => (
+                                <Checkbox
+                                    checked={Boolean(receiveShortageMarks[row.index])}
+                                    disabled={row.remaining <= 0}
+                                    onChange={(event) => setReceiveShortageMarks((prev) => ({ ...prev, [row.index]: event.target.checked }))}
+                                />
+                            ),
+                        },
+                        { title: 'ĐVT', dataIndex: 'unit', width: 70 },
+                    ]}
+                />
+
+                <div>
+                    <div className="mb-2 text-sm font-semibold text-slate-700">Hàng bù cho nợ cũ cùng NCC/vật tư</div>
+                    <Table
+                        dataSource={openShortages}
+                        rowKey="id"
+                        pagination={false}
+                        size="small"
+                        locale={{ emptyText: <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="Không có nợ hàng phù hợp" /> }}
+                        scroll={{ x: 'max-content' }}
+                        columns={[
+                            { title: 'Đơn gốc', dataIndex: 'originalPurchaseOrderCode', width: 130 },
+                            { title: 'Vật tư', dataIndex: 'materialName', width: 190 },
+                            { title: 'NCC', dataIndex: 'supplierName', width: 150, render: (v: string) => v || '-' },
+                            { title: 'Còn nợ', dataIndex: 'quantityOutstanding', width: 90, align: 'right' as const, render: (v: number) => <Text type="danger">{fmtNum(v)}</Text> },
+                            {
+                                title: 'Bù lần này',
+                                key: 'allocation',
+                                width: 130,
+                                render: (_: any, row: PurchaseShortage) => (
+                                    <InputNumber
+                                        min={0}
+                                        max={row.quantityOutstanding}
+                                        value={shortageAllocations[row.id] ?? 0}
+                                        style={{ width: 120 }}
+                                        onChange={(value) => setShortageAllocations((prev) => ({ ...prev, [row.id]: Number(value ?? 0) }))}
+                                    />
+                                ),
+                            },
+                            { title: 'ĐVT', dataIndex: 'unit', width: 70 },
+                        ]}
+                    />
+                </div>
+            </div>
+        </Modal>
+
+        <Modal
+            open={Boolean(catalogTarget)}
+            onCancel={() => setCatalogTarget(null)}
+            title={catalogMode === 'link' ? 'Gắn vật tư vào danh mục' : 'Tạo vật tư từ đơn mua'}
+            width={620}
+            okText={catalogMode === 'link' ? 'Gắn vật tư' : 'Tạo và gắn'}
+            confirmLoading={linkMaterialMut.isPending || createMaterialMut.isPending}
+            onOk={handleCatalogSubmit}
+            destroyOnHidden
+        >
+            <div className="flex flex-col gap-3 py-2">
+                {catalogTarget?.item && (
+                    <Alert
+                        type="info"
+                        showIcon
+                        message={`${catalogTarget.item.materialName || ''} - ${catalogTarget.item.unit || ''}`}
+                    />
+                )}
+                <Select
+                    value={catalogMode}
+                    style={{ width: 220 }}
+                    options={[
+                        { value: 'link', label: 'Gắn vật tư có sẵn' },
+                        { value: 'create', label: 'Tạo vật tư mới' },
+                    ]}
+                    onChange={(value) => setCatalogMode(value)}
+                />
+                {catalogMode === 'link' ? (
+                    <Select
+                        showSearch
+                        allowClear
+                        value={selectedMaterialId}
+                        options={materialOptions}
+                        style={{ width: '100%' }}
+                        placeholder="Tìm vật tư trong danh mục"
+                        filterOption={false}
+                        onSearch={setMaterialSearch}
+                        onChange={setSelectedMaterialId}
+                    />
+                ) : (
+                    <div className="grid grid-cols-2 gap-3">
+                        <Input
+                            placeholder="Mã vật tư"
+                            value={materialDraft.code}
+                            onChange={(e) => setMaterialDraft((prev) => ({ ...prev, code: e.target.value }))}
+                        />
+                        <Input
+                            placeholder="Tên vật tư"
+                            value={materialDraft.name}
+                            onChange={(e) => setMaterialDraft((prev) => ({ ...prev, name: e.target.value }))}
+                        />
+                        <Input
+                            placeholder="Đơn vị tính"
+                            value={materialDraft.unit}
+                            onChange={(e) => setMaterialDraft((prev) => ({ ...prev, unit: e.target.value }))}
+                        />
+                        <Input
+                            placeholder="Nhóm vật tư"
+                            value={materialDraft.category}
+                            onChange={(e) => setMaterialDraft((prev) => ({ ...prev, category: e.target.value }))}
+                        />
+                        <InputNumber
+                            min={0}
+                            style={{ width: '100%' }}
+                            placeholder="Tồn tối thiểu"
+                            value={materialDraft.minStockLevel}
+                            onChange={(value) => setMaterialDraft((prev) => ({ ...prev, minStockLevel: value ?? 0 }))}
+                        />
+                        <Checkbox
+                            checked={materialDraft.trackInventory !== false}
+                            onChange={(e) => setMaterialDraft((prev) => ({ ...prev, trackInventory: e.target.checked }))}
+                        >
+                            Quản tồn
+                        </Checkbox>
+                        <Input.TextArea
+                            className="col-span-2"
+                            rows={2}
+                            placeholder="Mô tả"
+                            value={materialDraft.description}
+                            onChange={(e) => setMaterialDraft((prev) => ({ ...prev, description: e.target.value }))}
+                        />
+                    </div>
+                )}
+            </div>
+        </Modal>
+
         {/* Return Modal */}
         <Modal
             open={returnOpen}
@@ -507,6 +889,23 @@ const DetailDrawer: React.FC<DrawerProps> = ({
             okButtonProps={{ danger: true, loading: returnMut.isPending, disabled: !returnItems.length }}
             onOk={() => {
                 if (!record) return;
+                const requestedByKey = new Map<string, number>();
+                for (const item of returnItems) {
+                    const key = getReturnItemKey(item);
+                    requestedByKey.set(key, Number(((requestedByKey.get(key) ?? 0) + Number(item.quantityReturned ?? 0)).toFixed(2)));
+                }
+                for (const [key, requestedQty] of requestedByKey.entries()) {
+                    const sourceItem = record.items.find((item) => getReturnItemKey(item) === key);
+                    if (!sourceItem) {
+                        message.error('Vật tư trả không nằm trong đơn mua');
+                        return;
+                    }
+                    const remaining = getReturnRemaining(sourceItem);
+                    if (requestedQty > remaining) {
+                        message.error(`Số lượng trả của ${sourceItem.materialName} vượt quá số lượng còn được trả (${fmtNum(remaining)})`);
+                        return;
+                    }
+                }
                 returnMut.mutate({
                     purchaseOrderId: record.id,
                     items: returnItems.map((i) => ({
@@ -529,20 +928,24 @@ const DetailDrawer: React.FC<DrawerProps> = ({
                     <div className="rounded-lg border border-blue-100 bg-blue-50 p-3 text-sm text-blue-700">
                         Chọn mặt hàng cần trả từ đơn hàng <strong>{record?.orderCode}</strong>:
                         <div className="mt-2 flex flex-wrap gap-2">
-                            {(record?.items ?? []).map((item, idx) => (
-                                <Button key={idx} size="small"
-                                    onClick={() => setReturnItems((p) => [...p, {
-                                        materialId: item.materialId,
-                                        materialName: item.materialName || '',
-                                        unit: item.unit || '',
-                                        quantityReturned: item.quantityOrdered ?? item.quantityRequested ?? 1,
-                                        unitPrice: item.unitPrice ?? 0,
-                                        vatRate: item.vatRate ?? 0,
-                                        reason: '',
-                                    }])}>
-                                    + {item.materialName}{item.supplierName ? ` (${item.supplierName})` : ''}
-                                </Button>
-                            ))}
+                            {(record?.items ?? []).map((item, idx) => {
+                                const remaining = getReturnRemaining(item);
+                                return (
+                                    <Button key={idx} size="small"
+                                        disabled={remaining <= 0}
+                                        onClick={() => setReturnItems((p) => [...p, {
+                                            materialId: item.materialId,
+                                            materialName: item.materialName || '',
+                                            unit: item.unit || '',
+                                            quantityReturned: remaining || 1,
+                                            unitPrice: item.unitPrice ?? 0,
+                                            vatRate: item.vatRate ?? 0,
+                                            reason: '',
+                                        }])}>
+                                        + {item.materialName}{item.supplierName ? ` (${item.supplierName})` : ''} - còn {fmtNum(remaining)}
+                                    </Button>
+                                );
+                            })}
                         </div>
                     </div>
                 )}
@@ -561,12 +964,13 @@ const DetailDrawer: React.FC<DrawerProps> = ({
                             <tbody>
                                 {returnItems.map((item, idx) => {
                                     const refund = Number(((item.quantityReturned * item.unitPrice) * (1 + item.vatRate / 100)).toFixed(0));
+                                    const maxReturnQty = getSelectedReturnRemaining(item);
                                     return (
                                         <tr key={idx} className="border-t border-slate-100">
                                             <td className="px-3 py-2 font-medium">{item.materialName}</td>
                                             <td className="px-3 py-2">{item.unit}</td>
                                             <td className="px-3 py-2">
-                                                <InputNumber min={1} size="small" style={{ width: 80 }}
+                                                <InputNumber min={1} max={maxReturnQty || undefined} size="small" style={{ width: 80 }}
                                                     value={item.quantityReturned}
                                                     onChange={(v) => setReturnItems((p) => p.map((r, i) => i === idx ? { ...r, quantityReturned: v ?? 1 } : r))} />
                                             </td>
@@ -635,9 +1039,13 @@ const PurchaseOrderPage: React.FC = () => {
     const queryClient = useQueryClient();
 
     const mainPlantId = import.meta.env.VITE_MAIN_PLANT_ID as string;
-    const isCS1Manager = Boolean(mainPlantId && user?.plantId === mainPlantId) &&
+    const procurementPlantIds = String(import.meta.env.VITE_PROCUREMENT_PLANT_IDS || mainPlantId || '')
+        .split(',')
+        .map((id) => id.trim())
+        .filter(Boolean);
+    const isCS1Manager = Boolean(user?.plantId && procurementPlantIds.includes(user.plantId)) &&
         ['admin', 'manager', 'director'].includes(user?.role ?? '');
-    const isCS1Director = Boolean(mainPlantId && user?.plantId === mainPlantId) &&
+    const isCS1Director = Boolean(user?.plantId && procurementPlantIds.includes(user.plantId)) &&
         ['admin', 'director'].includes(user?.role ?? '');
 
     if (!isCS1Manager) return <Navigate to="/" replace />;
@@ -669,16 +1077,17 @@ const PurchaseOrderPage: React.FC = () => {
     const { data: statsResp } = useQuery({
         queryKey: ['purchase-orders', 'stats'],
         queryFn: async () => {
-            const [all, draft, active, received] = await Promise.all([
+            const [all, draft, confirmed, partial, received] = await Promise.all([
                 purchaseOrderService.getAll({ limit: 1 }),
                 purchaseOrderService.getAll({ status: 'draft', limit: 1 }),
                 purchaseOrderService.getAll({ status: 'confirmed', limit: 1 }),
+                purchaseOrderService.getAll({ status: 'partially_received', limit: 1 }),
                 purchaseOrderService.getAll({ status: 'received', limit: 1 }),
             ]);
             return {
                 total: normResp(all, 1, 1).total,
                 draft: normResp(draft, 1, 1).total,
-                active: normResp(active, 1, 1).total,
+                active: normResp(confirmed, 1, 1).total + normResp(partial, 1, 1).total,
                 received: normResp(received, 1, 1).total,
             };
         },
@@ -693,7 +1102,10 @@ const PurchaseOrderPage: React.FC = () => {
 
     const createMut = useMutation({ mutationFn: purchaseOrderService.create });
     const confirmMut = useMutation({ mutationFn: purchaseOrderService.confirm });
-    const receiveMut = useMutation({ mutationFn: purchaseOrderService.receive });
+    const receiveMut = useMutation({
+        mutationFn: ({ id, payload }: { id: string; payload: ReceivePurchaseOrderPayload }) =>
+            purchaseOrderService.receive(id, payload),
+    });
     const deleteMut = useMutation({ mutationFn: purchaseOrderService.remove });
 
     const handleCreate = async (purchaseRequestIds: string[], note: string) => {
@@ -716,13 +1128,14 @@ const PurchaseOrderPage: React.FC = () => {
         finally { setConfirmingId(null); }
     };
 
-    const handleReceive = async (id: string) => {
+    const handleReceive = async (id: string, payload: ReceivePurchaseOrderPayload) => {
         try {
             setReceivingId(id);
-            await receiveMut.mutateAsync(id);
+            await receiveMut.mutateAsync({ id, payload });
             await invalidate(id);
+            await queryClient.invalidateQueries({ queryKey: ['purchase-shortages'] });
             await queryClient.invalidateQueries({ queryKey: ['materials', 'inventory'] });
-            notification.success({ message: 'Nhận hàng thành công!', description: 'Tồn kho CS1 đã được cập nhật.' });
+            notification.success({ message: 'Nhận hàng thành công!', description: 'Tồn kho cơ sở mua đã được cập nhật cho các vật tư đủ điều kiện.' });
         } catch (e: any) { message.error(e?.message ?? 'Lỗi'); }
         finally { setReceivingId(null); }
     };
@@ -790,9 +1203,9 @@ const PurchaseOrderPage: React.FC = () => {
                         </ConfirmAction>
                     </Tooltip>
                 )}
-                {['confirmed', 'ordered'].includes(r.status) && isCS1Director && (
+                {['confirmed', 'ordered', 'partially_received'].includes(r.status) && isCS1Director && (
                     <Tooltip title="Nhận hàng">
-                        <ConfirmAction intent="primary" title="Xác nhận nhận hàng?" description="Tồn kho sẽ được cập nhật." okLabel="Nhận hàng" onConfirm={() => handleReceive(r.id)}>
+                        <ConfirmAction intent="primary" title="Mở chi tiết đơn?" description="Mở chi tiết để nhập số lượng thực nhận." okLabel="Mở chi tiết" onConfirm={() => setSelectedId(r.id)}>
                             <Button type="text" size="small" icon={<InboxOutlined />} style={{ color: '#0284c7' }} />
                         </ConfirmAction>
                     </Tooltip>

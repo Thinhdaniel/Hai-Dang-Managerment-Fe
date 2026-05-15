@@ -51,7 +51,10 @@ const formatDate = (value?: string) => (value ? dayjs(value).format('DD/MM/YYYY'
 
 const STEP_MAP: Record<string, number> = { pending: 0, approved: 1, completed: 2 };
 
-const statusMeta: Record<string, { type: 'info' | 'success' | 'warning' | 'error'; message: string; description: string }> = {
+const statusMeta: Record<
+    string,
+    { type: 'info' | 'success' | 'warning' | 'error'; message: string; description: string }
+> = {
     pending: {
         type: 'warning',
         message: 'Lệnh đang chờ duyệt',
@@ -110,10 +113,12 @@ const getTransferAssetLabel = (transfer: Transfer) => {
 const getTransferCode = (transfer: Transfer) =>
     `TRF-${new Date(transfer.createdAt).getFullYear()}-${transfer.id.slice(-4).toUpperCase()}`;
 
+const getTransferFromPlantId = (transfer: Transfer) => transfer.fromPlantId || transfer.fromPlant?.id;
+
 const TransferDetail: React.FC = () => {
     const { id = '' } = useParams();
     const navigate = useNavigate();
-    const { role } = useAuth();
+    const { role, user } = useAuth();
     const queryClient = useQueryClient();
     const { message } = App.useApp();
     const canManage = hasManagerAccess(role);
@@ -227,9 +232,7 @@ const TransferDetail: React.FC = () => {
             key: 'status',
             width: 150,
             render: (status: string) => (
-                <Tag color={assetStatusColor[status] || 'default'}>
-                    {assetStatusLabel[status] || status}
-                </Tag>
+                <Tag color={assetStatusColor[status] || 'default'}>{assetStatusLabel[status] || status}</Tag>
             ),
         },
         {
@@ -262,6 +265,8 @@ const TransferDetail: React.FC = () => {
     const transferCode = getTransferCode(transfer);
     const status = statusMeta[transfer.status] || statusMeta.pending;
     const canExportStockOut = ['approved', 'completed'].includes(transfer.status);
+    const canRejectOrCancelTransfer =
+        canManage && (!user?.plantId || getTransferFromPlantId(transfer) === user.plantId);
 
     const handleExportStockOut = async () => {
         try {
@@ -297,7 +302,10 @@ const TransferDetail: React.FC = () => {
                           ),
                       children: (
                           <div>
-                              <Text type={transfer.status === 'rejected' ? 'danger' : 'secondary'} className='text-xs font-semibold'>
+                              <Text
+                                  type={transfer.status === 'rejected' ? 'danger' : 'secondary'}
+                                  className='text-xs font-semibold'
+                              >
                                   {transfer.status === 'rejected' ? 'Từ chối' : 'Duyệt lệnh'}
                               </Text>
                               <div className='font-medium text-slate-800'>{formatDateTime(transfer.approvedAt)}</div>
@@ -378,13 +386,15 @@ const TransferDetail: React.FC = () => {
                             </div>
                             <div className='flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-slate-500'>
                                 <span>
-                                    Ngày tạo: <strong className='text-slate-800'>{formatDateTime(transfer.createdAt)}</strong>
+                                    Ngày tạo:{' '}
+                                    <strong className='text-slate-800'>{formatDateTime(transfer.createdAt)}</strong>
                                 </span>
                                 <span>
                                     Số máy: <strong className='text-slate-800'>{assets.length || 1}</strong>
                                 </span>
                                 <span>
-                                    Ngày điều chuyển: <strong className='text-slate-800'>{formatDate(transfer.transferDate)}</strong>
+                                    Ngày điều chuyển:{' '}
+                                    <strong className='text-slate-800'>{formatDate(transfer.transferDate)}</strong>
                                 </span>
                             </div>
                         </div>
@@ -418,25 +428,27 @@ const TransferDetail: React.FC = () => {
                                     Hoàn tất bàn giao
                                 </Button>
                             ) : null}
-                            {['pending', 'approved'].includes(transfer.status) && canManage ? (
-                                <Button danger icon={<CloseOutlined />} onClick={() => setRejectModal({ open: true, reason: '' })}>
+                            {transfer.status === 'pending' && canRejectOrCancelTransfer ? (
+                                <Button
+                                    danger
+                                    icon={<CloseOutlined />}
+                                    onClick={() => setRejectModal({ open: true, reason: '' })}
+                                >
                                     Từ chối
                                 </Button>
                             ) : null}
-                            {transfer.status === 'pending' ? (
-                                <Button icon={<StopOutlined />} onClick={() => setCancelModal({ open: true, reason: '' })}>
+                            {transfer.status === 'pending' && canRejectOrCancelTransfer ? (
+                                <Button
+                                    icon={<StopOutlined />}
+                                    onClick={() => setCancelModal({ open: true, reason: '' })}
+                                >
                                     Hủy lệnh
                                 </Button>
                             ) : null}
                         </div>
                     </div>
 
-                    <Alert
-                        showIcon
-                        type={status.type}
-                        title={status.message}
-                        description={status.description}
-                    />
+                    <Alert showIcon type={status.type} title={status.message} description={status.description} />
 
                     {!isClosed ? (
                         <Steps
@@ -445,8 +457,18 @@ const TransferDetail: React.FC = () => {
                             responsive
                             items={[
                                 { title: 'Chờ duyệt', description: formatDateTime(transfer.createdAt) },
-                                { title: 'Đang vận chuyển', description: transfer.approvedAt ? formatDateTime(transfer.approvedAt) : 'Chưa duyệt' },
-                                { title: 'Hoàn tất', description: transfer.completedAt ? formatDateTime(transfer.completedAt) : 'Chờ bàn giao' },
+                                {
+                                    title: 'Đang vận chuyển',
+                                    description: transfer.approvedAt
+                                        ? formatDateTime(transfer.approvedAt)
+                                        : 'Chưa duyệt',
+                                },
+                                {
+                                    title: 'Hoàn tất',
+                                    description: transfer.completedAt
+                                        ? formatDateTime(transfer.completedAt)
+                                        : 'Chờ bàn giao',
+                                },
                             ]}
                         />
                     ) : null}
@@ -466,11 +488,15 @@ const TransferDetail: React.FC = () => {
                     >
                         <div className='grid grid-cols-1 gap-4 md:grid-cols-[1fr_auto_1fr] md:items-stretch'>
                             <div className='rounded-2xl border border-slate-200 bg-slate-50 p-5'>
-                                <Text type='secondary' className='text-xs font-bold uppercase tracking-wide'>
+                                <Text type='secondary' className='text-xs font-bold tracking-wide uppercase'>
                                     Xuất phát
                                 </Text>
-                                <div className='mt-2 text-lg font-bold text-slate-900'>{transfer.fromPlant?.name || '-'}</div>
-                                <div className='text-sm text-slate-600'>{transfer.fromArea || 'Chưa chỉ định khu vực'}</div>
+                                <div className='mt-2 text-lg font-bold text-slate-900'>
+                                    {transfer.fromPlant?.name || '-'}
+                                </div>
+                                <div className='text-sm text-slate-600'>
+                                    {transfer.fromArea || 'Chưa chỉ định khu vực'}
+                                </div>
                                 {transfer.fromPlant?.address ? (
                                     <div className='mt-2 text-xs text-slate-500'>{transfer.fromPlant.address}</div>
                                 ) : null}
@@ -481,11 +507,15 @@ const TransferDetail: React.FC = () => {
                                 </div>
                             </div>
                             <div className='rounded-2xl border border-blue-100 bg-blue-50 p-5'>
-                                <Text type='secondary' className='text-xs font-bold uppercase tracking-wide'>
+                                <Text type='secondary' className='text-xs font-bold tracking-wide uppercase'>
                                     Điểm đến
                                 </Text>
-                                <div className='mt-2 text-lg font-bold text-slate-900'>{transfer.toPlant?.name || '-'}</div>
-                                <div className='text-sm text-slate-600'>{transfer.toArea || 'Chưa chỉ định khu vực'}</div>
+                                <div className='mt-2 text-lg font-bold text-slate-900'>
+                                    {transfer.toPlant?.name || '-'}
+                                </div>
+                                <div className='text-sm text-slate-600'>
+                                    {transfer.toArea || 'Chưa chỉ định khu vực'}
+                                </div>
                                 {transfer.toPlant?.address ? (
                                     <div className='mt-2 text-xs text-slate-500'>{transfer.toPlant.address}</div>
                                 ) : null}
@@ -532,11 +562,24 @@ const TransferDetail: React.FC = () => {
                             bordered
                             size='small'
                             items={[
-                                { key: 'transferDate', label: 'Ngày điều chuyển', children: formatDate(transfer.transferDate) },
-                                { key: 'status', label: 'Trạng thái', children: <TransferStatusBadge status={transfer.status} /> },
+                                {
+                                    key: 'transferDate',
+                                    label: 'Ngày điều chuyển',
+                                    children: formatDate(transfer.transferDate),
+                                },
+                                {
+                                    key: 'status',
+                                    label: 'Trạng thái',
+                                    children: <TransferStatusBadge status={transfer.status} />,
+                                },
                                 { key: 'assetCount', label: 'Số máy', children: getTransferAssetLabel(transfer) },
                                 { key: 'createdAt', label: 'Ngày tạo', children: formatDateTime(transfer.createdAt) },
-                                { key: 'reason', label: 'Lý do điều chuyển', span: 2, children: transfer.reason || '-' },
+                                {
+                                    key: 'reason',
+                                    label: 'Lý do điều chuyển',
+                                    span: 2,
+                                    children: transfer.reason || '-',
+                                },
                                 { key: 'note', label: 'Ghi chú', span: 2, children: transfer.note || '-' },
                                 {
                                     key: 'receivedBy',
@@ -552,10 +595,24 @@ const TransferDetail: React.FC = () => {
                                     ),
                                 },
                                 ...(transfer.rejectReason
-                                    ? [{ key: 'rejectReason', label: 'Lý do từ chối', span: 2, children: <Text type='danger'>{transfer.rejectReason}</Text> }]
+                                    ? [
+                                          {
+                                              key: 'rejectReason',
+                                              label: 'Lý do từ chối',
+                                              span: 2,
+                                              children: <Text type='danger'>{transfer.rejectReason}</Text>,
+                                          },
+                                      ]
                                     : []),
                                 ...(transfer.cancelReason
-                                    ? [{ key: 'cancelReason', label: 'Lý do hủy', span: 2, children: transfer.cancelReason }]
+                                    ? [
+                                          {
+                                              key: 'cancelReason',
+                                              label: 'Lý do hủy',
+                                              span: 2,
+                                              children: transfer.cancelReason,
+                                          },
+                                      ]
                                     : []),
                             ]}
                         />
@@ -616,7 +673,11 @@ const TransferDetail: React.FC = () => {
                                 <span>Ảnh bàn giao</span>
                             </div>
                         }
-                        extra={transfer.handoverImages?.length ? <Tag color='green'>{transfer.handoverImages.length} ảnh</Tag> : null}
+                        extra={
+                            transfer.handoverImages?.length ? (
+                                <Tag color='green'>{transfer.handoverImages.length} ảnh</Tag>
+                            ) : null
+                        }
                     >
                         {transfer.handoverImages?.length ? (
                             <div className='grid grid-cols-2 gap-3'>
@@ -648,8 +709,15 @@ const TransferDetail: React.FC = () => {
                 title='Từ chối lệnh điều chuyển'
                 okText='Xác nhận từ chối'
                 cancelText='Hủy'
-                okButtonProps={{ danger: true, loading: rejectMutation.isPending, disabled: !rejectModal.reason.trim() }}
-                onOk={() => rejectMutation.mutate(rejectModal.reason.trim())}
+                okButtonProps={{
+                    danger: true,
+                    loading: rejectMutation.isPending,
+                    disabled: !rejectModal.reason.trim() || transfer.status !== 'pending' || !canRejectOrCancelTransfer,
+                }}
+                onOk={() => {
+                    if (transfer.status !== 'pending' || !canRejectOrCancelTransfer) return;
+                    rejectMutation.mutate(rejectModal.reason.trim());
+                }}
                 onCancel={() => setRejectModal({ open: false, reason: '' })}
                 destroyOnHidden
                 mask={{ closable: false }}
@@ -671,8 +739,15 @@ const TransferDetail: React.FC = () => {
                 title='Hủy lệnh điều chuyển'
                 okText='Xác nhận hủy'
                 cancelText='Đóng'
-                okButtonProps={{ danger: true, loading: cancelMutation.isPending, disabled: !cancelModal.reason.trim() }}
-                onOk={() => cancelMutation.mutate(cancelModal.reason.trim())}
+                okButtonProps={{
+                    danger: true,
+                    loading: cancelMutation.isPending,
+                    disabled: !cancelModal.reason.trim() || transfer.status !== 'pending' || !canRejectOrCancelTransfer,
+                }}
+                onOk={() => {
+                    if (transfer.status !== 'pending' || !canRejectOrCancelTransfer) return;
+                    cancelMutation.mutate(cancelModal.reason.trim());
+                }}
                 onCancel={() => setCancelModal({ open: false, reason: '' })}
                 destroyOnHidden
                 mask={{ closable: false }}
