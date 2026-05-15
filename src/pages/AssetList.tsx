@@ -28,7 +28,8 @@ import { normalizeSearchTerm } from '../core/lib/search';
 import { brandService, plantService } from '../core/services';
 import { assetService } from '../core/services/asset.service';
 import { transferService } from '../core/services/transfer.service';
-import type { Asset, AssetStatus, CreateTransferPayload } from '../core/types';
+import { ASSET_OWNERSHIP_LABEL, ASSET_OWNERSHIP_OPTIONS, isReturnedToPartner } from '../core/constants';
+import { AssetOwnershipType, AssetStatus, type Asset, type CreateTransferPayload } from '../core/types';
 
 const AssetFormModal = lazy(() => import('../components/AssetFormModal'));
 const AssetImportModal = lazy(() => import('../components/AssetImportModal'));
@@ -66,6 +67,28 @@ const statusMeta: Record<AssetStatus, { bg: string; text: string; border: string
         dot: 'bg-slate-500',
         label: 'Tồn kho',
     },
+    returned_to_partner: {
+        bg: 'bg-slate-100',
+        text: 'text-slate-600',
+        border: 'border-slate-300',
+        dot: 'bg-slate-400',
+        label: 'Đã trả đối tác',
+    },
+};
+
+const ownershipMeta: Record<AssetOwnershipType, { label: string; className: string }> = {
+    owned: {
+        label: ASSET_OWNERSHIP_LABEL.owned,
+        className: 'border-emerald-200 bg-emerald-50 text-emerald-700',
+    },
+    partner_borrowed: {
+        label: ASSET_OWNERSHIP_LABEL.partner_borrowed,
+        className: 'border-violet-200 bg-violet-50 text-violet-700',
+    },
+    rental: {
+        label: ASSET_OWNERSHIP_LABEL.rental,
+        className: 'border-amber-200 bg-amber-50 text-amber-700',
+    },
 };
 
 const PAGE_ANIM = `
@@ -88,6 +111,7 @@ const createDefaultFilters = (search = '') => ({
     plantId: undefined as string | undefined,
     brandId: undefined as string | undefined,
     name: undefined as string | undefined,
+    ownershipType: undefined as AssetOwnershipType | undefined,
 });
 
 const AssetList: React.FC = () => {
@@ -148,11 +172,30 @@ const AssetList: React.FC = () => {
             plantId: filters.plantId,
             brandId: filters.brandId,
             name: filters.name,
+            ownershipType: filters.ownershipType,
+            page: 1,
+            limit: 1,
+        }),
+        [filters.search, filters.plantId, filters.brandId, filters.name, filters.ownershipType]
+    );
+
+    const ownedStatsFiltersBase = useMemo(
+        () => ({
+            search: filters.search,
+            plantId: filters.plantId,
+            brandId: filters.brandId,
+            name: filters.name,
+            ownershipType: AssetOwnershipType.OWNED,
             page: 1,
             limit: 1,
         }),
         [filters.search, filters.plantId, filters.brandId, filters.name]
     );
+
+    const { data: statOwned } = useQuery({
+        queryKey: ['asset-stat', 'owned', ownedStatsFiltersBase],
+        queryFn: () => assetService.getAll(ownedStatsFiltersBase),
+    });
 
     const { data: statActive } = useQuery({
         queryKey: ['asset-stat', 'active', statsFiltersBase],
@@ -173,6 +216,11 @@ const AssetList: React.FC = () => {
     const { data: statStorage } = useQuery({
         queryKey: ['asset-stat', 'storage', statsFiltersBase],
         queryFn: () => assetService.getAll({ ...statsFiltersBase, status: 'storage' as AssetStatus }),
+    });
+    const { data: statReturnedToPartner } = useQuery({
+        queryKey: ['asset-stat', 'returned-to-partner', statsFiltersBase],
+        queryFn: () =>
+            assetService.getAll({ ...statsFiltersBase, status: AssetStatus.RETURNED_TO_PARTNER as AssetStatus }),
     });
 
     const createMutation = useMutation({
@@ -237,11 +285,20 @@ const AssetList: React.FC = () => {
             broken: statBroken?.total ?? 0,
             borrowing: statBorrowing?.total ?? 0,
             storage: statStorage?.total ?? 0,
+            returnedToPartner: statReturnedToPartner?.total ?? 0,
+            owned: statOwned?.total ?? 0,
             get total() {
-                return this.active + this.maintenance + this.broken + this.borrowing + this.storage;
+                return (
+                    this.active +
+                    this.maintenance +
+                    this.broken +
+                    this.borrowing +
+                    this.storage +
+                    this.returnedToPartner
+                );
             },
         }),
-        [statActive, statMaintenance, statBroken, statBorrowing, statStorage]
+        [statActive, statMaintenance, statBroken, statBorrowing, statStorage, statReturnedToPartner, statOwned]
     );
 
     const applyFilters = () => {
@@ -303,12 +360,25 @@ const AssetList: React.FC = () => {
     };
 
     const handleOpenTransfer = (asset: Asset) => {
+        if (isReturnedToPartner(asset.status)) {
+            message.warning('Máy đã trả đối tác, không thể tạo lệnh điều chuyển');
+            return;
+        }
+
         setTransferTarget(asset);
         setTransferTargets([asset]);
         setIsTransferModalOpen(true);
     };
 
     const handleOpenSelectedTransfer = () => {
+        const returnedPartnerAssets = selectedAssets.filter((asset) => isReturnedToPartner(asset.status));
+        if (returnedPartnerAssets.length) {
+            message.warning(
+                `Không thể điều chuyển máy đã trả đối tác: ${returnedPartnerAssets.map((asset) => asset.name).join(', ')}`
+            );
+            return;
+        }
+
         const blocked = selectedAssets.filter((asset) => asset.hasOpenTransfer);
         if (blocked.length) {
             message.warning(
@@ -454,6 +524,21 @@ const AssetList: React.FC = () => {
             },
         },
         {
+            title: 'NGUỒN GỐC',
+            dataIndex: 'ownershipType',
+            key: 'ownershipType',
+            render: (ownershipType: AssetOwnershipType = AssetOwnershipType.OWNED) => {
+                const meta = ownershipMeta[ownershipType] ?? ownershipMeta.owned;
+                return (
+                    <span
+                        className={`inline-flex rounded-md border px-2.5 py-1 text-xs font-semibold ${meta.className}`}
+                    >
+                        {meta.label}
+                    </span>
+                );
+            },
+        },
+        {
             title: 'CƠ SỞ',
             dataIndex: ['plant', 'name'],
             key: 'plant',
@@ -492,23 +577,26 @@ const AssetList: React.FC = () => {
                     ) : null}
                     <Tooltip
                         title={
-                            record.hasOpenTransfer
-                                ? 'Thiết bị đang có lệnh điều chuyển chờ xử lý'
-                                : 'Điều chuyển thiết bị'
+                            isReturnedToPartner(record.status)
+                                ? 'Máy đã trả đối tác, không thể điều chuyển'
+                                : record.hasOpenTransfer
+                                  ? 'Thiết bị đang có lệnh điều chuyển chờ xử lý'
+                                  : 'Điều chuyển thiết bị'
                         }
                     >
                         <Button
                             type='text'
-                            disabled={record.hasOpenTransfer}
+                            disabled={record.hasOpenTransfer || isReturnedToPartner(record.status)}
                             icon={<SwapOutlined />}
                             className={`flex h-8 w-8 items-center justify-center rounded-md transition-colors ${
-                                record.hasOpenTransfer
+                                record.hasOpenTransfer || isReturnedToPartner(record.status)
                                     ? 'cursor-not-allowed bg-slate-50 text-slate-300'
                                     : 'bg-sky-50 text-sky-600 hover:bg-sky-100 hover:text-sky-700'
                             }`}
                             onClick={(e) => {
                                 e.stopPropagation();
-                                if (!record.hasOpenTransfer) handleOpenTransfer(record);
+                                if (!record.hasOpenTransfer && !isReturnedToPartner(record.status))
+                                    handleOpenTransfer(record);
                             }}
                         />
                     </Tooltip>
@@ -594,12 +682,14 @@ const AssetList: React.FC = () => {
             {/* Stats count strip — reflects current applied filter */}
             <div className='al-s flex flex-wrap gap-px overflow-hidden rounded-xl border border-slate-200 bg-slate-200'>
                 {[
-                    { label: 'Tổng cộng', value: assetSummary.total },
+                    { label: 'Trong bộ lọc', value: assetSummary.total },
+                    { label: 'Máy Hải Đăng', value: assetSummary.owned, accent: 'oklch(0.36 0.12 160)' },
                     { label: 'Hoạt động', value: assetSummary.active, accent: 'oklch(0.42 0.14 145)' },
                     { label: 'Bảo trì', value: assetSummary.maintenance, accent: 'oklch(0.46 0.14 70)' },
                     { label: 'Lỗi / hỏng', value: assetSummary.broken, accent: 'oklch(0.44 0.16 25)' },
                     { label: 'Đang mượn', value: assetSummary.borrowing, accent: 'oklch(0.44 0.14 280)' },
                     { label: 'Tồn kho', value: assetSummary.storage, accent: 'oklch(0.48 0.04 250)' },
+                    { label: 'Đã trả đối tác', value: assetSummary.returnedToPartner, accent: 'oklch(0.46 0.02 250)' },
                 ].map(({ label, value, accent }) => (
                     <div key={label} className='al-stat flex min-w-[100px] flex-1 flex-col gap-0.5 bg-white px-5 py-4'>
                         <span className='text-[11px] font-medium text-slate-400'>{label}</span>
@@ -621,7 +711,7 @@ const AssetList: React.FC = () => {
                     options={plants.map((plant) => ({ value: plant.id, label: plant.name }))}
                 />
                 <Select
-                    showSearch
+                    showSearch={{ optionFilterProp: 'label' }}
                     placeholder='Tên máy'
                     className='min-w-[148px]'
                     allowClear
@@ -630,14 +720,13 @@ const AssetList: React.FC = () => {
                     options={names.map((n) => ({ value: n, label: n }))}
                 />
                 <Select
-                    showSearch
+                    showSearch={{ optionFilterProp: 'label' }}
                     placeholder='Nhãn hiệu'
                     className='min-w-[148px]'
                     allowClear
                     value={draftFilters.brandId}
                     onChange={(value) => setDraftFilters((prev) => ({ ...prev, brandId: value }))}
                     options={brands.map((b) => ({ value: b.id, label: b.name }))}
-                    optionFilterProp='label'
                 />
                 <Select
                     placeholder='Trạng thái'
@@ -646,6 +735,14 @@ const AssetList: React.FC = () => {
                     value={draftFilters.status}
                     onChange={(value) => setDraftFilters((prev) => ({ ...prev, status: value }))}
                     options={Object.entries(statusMeta).map(([value, meta]) => ({ value, label: meta.label }))}
+                />
+                <Select
+                    placeholder='Nguồn gốc'
+                    className='min-w-[160px]'
+                    allowClear
+                    value={draftFilters.ownershipType}
+                    onChange={(value) => setDraftFilters((prev) => ({ ...prev, ownershipType: value }))}
+                    options={ASSET_OWNERSHIP_OPTIONS}
                 />
                 <div className='min-w-[220px] flex-1'>
                     <Input
@@ -687,12 +784,17 @@ const AssetList: React.FC = () => {
                                 title={
                                     selectedAssets[0]?.hasOpenTransfer
                                         ? 'Thiết bị đang có lệnh điều chuyển chờ xử lý'
-                                        : ''
+                                        : selectedAssets.some((asset) => isReturnedToPartner(asset.status))
+                                          ? 'Có máy đã trả đối tác trong danh sách chọn'
+                                          : ''
                                 }
                             >
                                 <Button
                                     size='small'
-                                    disabled={selectedAssets.length === 0}
+                                    disabled={
+                                        selectedAssets.length === 0 ||
+                                        selectedAssets.some((asset) => isReturnedToPartner(asset.status))
+                                    }
                                     className='rounded-md'
                                     onClick={handleOpenSelectedTransfer}
                                 >
@@ -723,6 +825,9 @@ const AssetList: React.FC = () => {
                             onChange: handleSelectionChange,
                             preserveSelectedRowKeys: true,
                             columnWidth: 44,
+                            getCheckboxProps: (record) => ({
+                                disabled: isReturnedToPartner(record.status),
+                            }),
                         }}
                         columns={columns}
                         dataSource={assets}

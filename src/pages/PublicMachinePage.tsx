@@ -17,6 +17,7 @@ const statusMeta: Record<AssetStatus, { label: string; className: string }> = {
     broken: { label: 'Hỏng', className: 'border-rose-200 bg-rose-50 text-rose-700' },
     borrowing: { label: 'Đang mượn', className: 'border-indigo-200 bg-indigo-50 text-indigo-700' },
     storage: { label: 'Lưu kho', className: 'border-slate-200 bg-slate-100 text-slate-700' },
+    returned_to_partner: { label: 'Đã trả đối tác', className: 'border-slate-200 bg-slate-100 text-slate-600' },
 };
 
 const PublicMachinePage: React.FC = () => {
@@ -65,10 +66,10 @@ const PublicMachinePage: React.FC = () => {
                         />
                     </div>
                     <div className='flex flex-col'>
-                        <span className='text-[10px] font-bold uppercase tracking-wider text-slate-500'>
+                        <span className='text-[10px] font-bold tracking-wider text-slate-500 uppercase'>
                             Công ty TNHH May Xuất Khẩu
                         </span>
-                        <span className='text-sm font-black uppercase tracking-wide text-blue-700'>Hải Đăng</span>
+                        <span className='text-sm font-black tracking-wide text-blue-700 uppercase'>Hải Đăng</span>
                     </div>
                 </div>
             </div>
@@ -82,15 +83,17 @@ const PublicMachinePage: React.FC = () => {
                             <div className='mb-4 flex items-start justify-between gap-4'>
                                 <div className='flex items-center gap-2 rounded-full border border-blue-100 bg-blue-50 px-3 py-1.5'>
                                     <QrcodeOutlined className='text-blue-600' />
-                                    <span className='text-[10px] font-bold uppercase tracking-wider text-blue-700'>
+                                    <span className='text-[10px] font-bold tracking-wider text-blue-700 uppercase'>
                                         Thông tin thiết bị
                                     </span>
                                 </div>
-                                <Tag className={`m-0 rounded-full border px-3 py-1 text-sm font-bold ${status.className}`}>
+                                <Tag
+                                    className={`m-0 rounded-full border px-3 py-1 text-sm font-bold ${status.className}`}
+                                >
                                     {status.label}
                                 </Tag>
                             </div>
-                            <h1 className='mb-2 text-2xl font-extrabold leading-snug text-slate-900'>{data.name}</h1>
+                            <h1 className='mb-2 text-2xl leading-snug font-extrabold text-slate-900'>{data.name}</h1>
                             <p className='font-mono text-sm font-medium text-slate-500'>ID: {data.publicId}</p>
                         </div>
 
@@ -102,7 +105,7 @@ const PublicMachinePage: React.FC = () => {
                                     <BarcodeOutlined className='text-xl' />
                                 </div>
                                 <div className='flex flex-col'>
-                                    <span className='text-[11px] font-bold uppercase tracking-wider text-slate-500'>
+                                    <span className='text-[11px] font-bold tracking-wider text-slate-500 uppercase'>
                                         Mã máy
                                     </span>
                                     <span className='font-mono text-base font-bold text-slate-900'>
@@ -117,7 +120,7 @@ const PublicMachinePage: React.FC = () => {
                                     <SafetyCertificateOutlined className='text-xl' />
                                 </div>
                                 <div className='flex flex-col'>
-                                    <span className='text-[11px] font-bold uppercase tracking-wider text-slate-500'>
+                                    <span className='text-[11px] font-bold tracking-wider text-slate-500 uppercase'>
                                         Serial Number
                                     </span>
                                     <span className='font-mono text-base font-medium text-slate-800'>
@@ -132,7 +135,7 @@ const PublicMachinePage: React.FC = () => {
                                     <BuildOutlined className='text-xl' />
                                 </div>
                                 <div className='flex flex-col'>
-                                    <span className='text-[11px] font-bold uppercase tracking-wider text-slate-500'>
+                                    <span className='text-[11px] font-bold tracking-wider text-slate-500 uppercase'>
                                         Model
                                     </span>
                                     <span className='text-base font-medium text-slate-800'>{data.model || '-'}</span>
@@ -145,7 +148,7 @@ const PublicMachinePage: React.FC = () => {
                                     <EnvironmentOutlined className='text-xl' />
                                 </div>
                                 <div className='flex flex-col'>
-                                    <span className='text-[11px] font-bold uppercase tracking-wider text-slate-500'>
+                                    <span className='text-[11px] font-bold tracking-wider text-slate-500 uppercase'>
                                         Vị trí / Cơ sở
                                     </span>
                                     <span className='text-base font-medium text-slate-800'>
@@ -162,7 +165,7 @@ const PublicMachinePage: React.FC = () => {
                     {/* Footer */}
                     <div className='mt-2 text-center'>
                         <p className='text-xs font-medium text-slate-400'>Hệ thống Quản lý Thiết bị & Tài sản</p>
-                        <p className='mt-1 text-[10px] font-bold uppercase tracking-widest text-slate-400'>
+                        <p className='mt-1 text-[10px] font-bold tracking-widest text-slate-400 uppercase'>
                             Hải Đăng Garment © 2026
                         </p>
                     </div>

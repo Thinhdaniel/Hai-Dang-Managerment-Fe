@@ -1,4 +1,12 @@
-import { AssetStatus, BorrowingStatus, BorrowingType, MaintenanceType, TransferStatus, UserRole } from '../types';
+import {
+    AssetOwnershipType,
+    AssetStatus,
+    BorrowingStatus,
+    BorrowingType,
+    MaintenanceType,
+    TransferStatus,
+    UserRole,
+} from '../types';
 
 // ===== ASSET STATUS =====
 export const ASSET_STATUS_LABEL: Record<AssetStatus, string> = {
@@ -7,6 +15,7 @@ export const ASSET_STATUS_LABEL: Record<AssetStatus, string> = {
     [AssetStatus.BROKEN]: 'Máy lỗi',
     [AssetStatus.BORROWING]: 'Đang mượn',
     [AssetStatus.STORAGE]: 'Tồn kho',
+    [AssetStatus.RETURNED_TO_PARTNER]: 'Đã trả đối tác',
 };
 
 export const ASSET_STATUS_COLOR: Record<AssetStatus, string> = {
@@ -15,6 +24,7 @@ export const ASSET_STATUS_COLOR: Record<AssetStatus, string> = {
     [AssetStatus.BROKEN]: 'error',
     [AssetStatus.BORROWING]: 'purple',
     [AssetStatus.STORAGE]: 'default',
+    [AssetStatus.RETURNED_TO_PARTNER]: 'default',
 };
 
 export const ASSET_STATUS_HEX: Record<AssetStatus, string> = {
@@ -23,6 +33,7 @@ export const ASSET_STATUS_HEX: Record<AssetStatus, string> = {
     [AssetStatus.BROKEN]: '#f5222d',
     [AssetStatus.BORROWING]: '#722ed1',
     [AssetStatus.STORAGE]: '#8c8c8c',
+    [AssetStatus.RETURNED_TO_PARTNER]: '#64748b',
 };
 
 // Status flow transitions
@@ -32,7 +43,24 @@ export const ASSET_STATUS_TRANSITIONS: Record<AssetStatus, AssetStatus[]> = {
     [AssetStatus.BROKEN]: [AssetStatus.MAINTENANCE],
     [AssetStatus.BORROWING]: [AssetStatus.ACTIVE],
     [AssetStatus.STORAGE]: [AssetStatus.ACTIVE],
+    [AssetStatus.RETURNED_TO_PARTNER]: [],
 };
+
+export const ASSET_OWNERSHIP_LABEL: Record<AssetOwnershipType, string> = {
+    [AssetOwnershipType.OWNED]: 'Máy Hải Đăng',
+    [AssetOwnershipType.PARTNER_BORROWED]: 'Mượn đối tác',
+    [AssetOwnershipType.RENTAL]: 'Máy thuê',
+};
+
+export const ASSET_OWNERSHIP_OPTIONS = Object.entries(ASSET_OWNERSHIP_LABEL).map(([value, label]) => ({
+    value,
+    label,
+}));
+
+export const isReturnedToPartner = (status?: AssetStatus) => status === AssetStatus.RETURNED_TO_PARTNER;
+
+export const isOwnedAsset = (ownershipType?: AssetOwnershipType) =>
+    !ownershipType || ownershipType === AssetOwnershipType.OWNED;
 
 // ===== MAINTENANCE TYPE =====
 export const MAINTENANCE_TYPE_LABEL: Record<MaintenanceType, string> = {

@@ -39,6 +39,7 @@ import { assetService } from '../core/services/asset.service';
 import { borrowingService } from '../core/services/borrowing.service';
 import { maintenanceService } from '../core/services/maintenance.service';
 import { transferService } from '../core/services/transfer.service';
+import { ASSET_OWNERSHIP_LABEL, isReturnedToPartner } from '../core/constants';
 import type { Asset, AssetStatus, Borrowing, CreateTransferPayload, Maintenance, Transfer } from '../core/types';
 
 const AssetFormModal = lazy(() => import('../components/AssetFormModal'));
@@ -53,6 +54,7 @@ const STATUS_CFG: Record<AssetStatus, { label: string; color: string; badge: str
     broken: { label: 'Lỗi / hỏng', color: 'red', badge: 'error' },
     borrowing: { label: 'Đang mượn', color: 'purple', badge: 'processing' },
     storage: { label: 'Tồn kho', color: 'default', badge: 'default' },
+    returned_to_partner: { label: 'Đã trả đối tác', color: 'default', badge: 'default' },
 };
 
 const MAINT_LABEL: Record<string, string> = {
@@ -82,7 +84,7 @@ const MetricCard = ({ title, value, icon }: { title: string; value: React.ReactN
     <Card variant='outlined' className='h-full'>
         <div className='flex items-start justify-between gap-3'>
             <div>
-                <Text type='secondary' className='text-xs font-semibold uppercase tracking-wide'>
+                <Text type='secondary' className='text-xs font-semibold tracking-wide uppercase'>
                     {title}
                 </Text>
                 <div className='mt-2 text-xl font-bold text-slate-900'>{value}</div>
@@ -171,8 +173,13 @@ const AssetDetail: React.FC = () => {
     });
 
     const completeTransferMutation = useMutation({
-        mutationFn: ({ transferId, payload }: { transferId: string; payload: { receivedBy: string; handoverImages?: string[] } }) =>
-            transferService.complete(transferId, payload),
+        mutationFn: ({
+            transferId,
+            payload,
+        }: {
+            transferId: string;
+            payload: { receivedBy: string; handoverImages?: string[] };
+        }) => transferService.complete(transferId, payload),
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ['transfers', 'asset', id] });
             queryClient.invalidateQueries({ queryKey: ['transfers'] });
@@ -267,15 +274,18 @@ const AssetDetail: React.FC = () => {
     const status = STATUS_CFG[currentStatus as AssetStatus] || STATUS_CFG.active;
     const openTransfer = transfers.find((transfer: Transfer) => ['pending', 'approved'].includes(transfer.status));
     const hasOpenTransfer = asset.hasOpenTransfer || Boolean(openTransfer);
+    const returnedToPartner = isReturnedToPartner(asset.status);
+    const transferDisabledReason = returnedToPartner
+        ? 'Máy đã trả đối tác, không thể điều chuyển'
+        : hasOpenTransfer
+          ? 'Máy đang có lệnh điều chuyển chưa hoàn tất'
+          : '';
+    const ownershipLabel = ASSET_OWNERSHIP_LABEL[asset.ownershipType] || ASSET_OWNERSHIP_LABEL.owned;
 
     const overviewContent = (
         <div className='grid grid-cols-1 gap-6 xl:grid-cols-3'>
             <div className='flex flex-col gap-6 xl:col-span-2'>
-                <Card
-                    variant='outlined'
-                    title='Thông tin máy'
-                    extra={<Tag color={status.color}>{status.label}</Tag>}
-                >
+                <Card variant='outlined' title='Thông tin máy' extra={<Tag color={status.color}>{status.label}</Tag>}>
                     <Descriptions
                         layout='vertical'
                         bordered
@@ -290,7 +300,12 @@ const AssetDetail: React.FC = () => {
                             { key: 'brand', label: 'Nhãn hiệu', children: asset.brand?.name || '-' },
                             { key: 'plant', label: 'Cơ sở', children: asset.plant?.name || '-' },
                             { key: 'area', label: 'Khu vực', children: renderArea(asset.area) },
-                            { key: 'status', label: 'Trạng thái', children: <Tag color={status.color}>{status.label}</Tag> },
+                            {
+                                key: 'status',
+                                label: 'Trạng thái',
+                                children: <Tag color={status.color}>{status.label}</Tag>,
+                            },
+                            { key: 'ownershipType', label: 'Nguồn gốc máy', children: ownershipLabel },
                             { key: 'purchaseDate', label: 'Ngày mua', children: formatDate(asset.purchaseDate) },
                             { key: 'purchasePrice', label: 'Giá trị', children: formatMoney(asset.purchasePrice) },
                             { key: 'createdAt', label: 'Ngày nhập hệ thống', children: formatDate(asset.createdAt) },
@@ -304,7 +319,7 @@ const AssetDetail: React.FC = () => {
                         <div className='grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3'>
                             {Object.entries(asset.specifications).map(([key, value]) => (
                                 <div key={key} className='rounded-xl border border-slate-200 bg-slate-50 p-4'>
-                                    <Text type='secondary' className='text-xs font-semibold uppercase tracking-wide'>
+                                    <Text type='secondary' className='text-xs font-semibold tracking-wide uppercase'>
                                         {key}
                                     </Text>
                                     <div className='mt-2 font-bold text-slate-900'>{String(value)}</div>
@@ -345,12 +360,22 @@ const AssetDetail: React.FC = () => {
                 <MetricCard title='Giá trị' value={formatMoney(asset.purchasePrice)} icon={<WalletOutlined />} />
                 <Card variant='outlined' title='Thao tác nhanh'>
                     <div className='flex flex-col gap-2'>
-                        <Tooltip title={hasOpenTransfer ? 'Máy đang có lệnh điều chuyển chưa hoàn tất' : ''}>
-                            <Button block icon={<SwapOutlined />} disabled={hasOpenTransfer} onClick={() => setIsTransferOpen(true)}>
+                        <Tooltip title={transferDisabledReason}>
+                            <Button
+                                block
+                                icon={<SwapOutlined />}
+                                disabled={Boolean(transferDisabledReason)}
+                                onClick={() => setIsTransferOpen(true)}
+                            >
                                 Tạo lệnh điều chuyển
                             </Button>
                         </Tooltip>
-                        <Button block icon={<RollbackOutlined />} onClick={() => navigate(`/borrowings/new?assetId=${asset.id}`)}>
+                        <Button
+                            block
+                            icon={<RollbackOutlined />}
+                            disabled={returnedToPartner}
+                            onClick={() => navigate(`/borrowings/new?assetId=${asset.id}`)}
+                        >
                             Tạo giao dịch mượn / thuê
                         </Button>
                         {canManage ? (
@@ -369,15 +394,28 @@ const AssetDetail: React.FC = () => {
             {maintenances.length ? (
                 <div className='divide-y divide-slate-100'>
                     {maintenances.map((item: Maintenance) => (
-                        <div key={item.id} className='flex flex-col gap-3 py-4 md:flex-row md:items-start md:justify-between'>
+                        <div
+                            key={item.id}
+                            className='flex flex-col gap-3 py-4 md:flex-row md:items-start md:justify-between'
+                        >
                             <div className='flex flex-col gap-1'>
                                 <div className='flex flex-wrap items-center gap-2'>
                                     <Text strong>{item.description || item.type}</Text>
-                                    <Tag color={item.status === 'completed' ? 'green' : item.status === 'overdue' ? 'red' : 'gold'}>
+                                    <Tag
+                                        color={
+                                            item.status === 'completed'
+                                                ? 'green'
+                                                : item.status === 'overdue'
+                                                  ? 'red'
+                                                  : 'gold'
+                                        }
+                                    >
                                         {MAINT_LABEL[item.status || 'pending'] || item.status}
                                     </Tag>
                                 </div>
-                                {item.technician ? <Text type='secondary'>Kỹ thuật viên: {item.technician}</Text> : null}
+                                {item.technician ? (
+                                    <Text type='secondary'>Kỹ thuật viên: {item.technician}</Text>
+                                ) : null}
                                 {item.cost ? <Text strong>{formatMoney(item.cost)}</Text> : null}
                                 {item.note ? <Text type='secondary'>{item.note}</Text> : null}
                             </div>
@@ -403,7 +441,11 @@ const AssetDetail: React.FC = () => {
             variant='outlined'
             title='Lịch sử giao dịch'
             extra={
-                <Button size='small' icon={<RollbackOutlined />} onClick={() => navigate(`/borrowings/new?assetId=${asset.id}`)}>
+                <Button
+                    size='small'
+                    icon={<RollbackOutlined />}
+                    onClick={() => navigate(`/borrowings/new?assetId=${asset.id}`)}
+                >
                     Tạo giao dịch
                 </Button>
             }
@@ -456,7 +498,9 @@ const AssetDetail: React.FC = () => {
                                     {formatDate(item.date)}
                                 </Text>
                                 <div className='mt-1 font-bold text-slate-900'>{item.title}</div>
-                                {item.description ? <div className='text-sm text-slate-600'>{item.description}</div> : null}
+                                {item.description ? (
+                                    <div className='text-sm text-slate-600'>{item.description}</div>
+                                ) : null}
                                 {item.meta ? <Tag className='mt-2'>{item.meta}</Tag> : null}
                             </div>
                         ),
@@ -491,21 +535,36 @@ const AssetDetail: React.FC = () => {
                                         Đang điều chuyển
                                     </Tag>
                                 ) : null}
+                                <Tag>{ownershipLabel}</Tag>
                             </div>
                             <div className='flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-slate-500'>
-                                <span>Serial: <strong className='text-slate-800'>{asset.serial || '-'}</strong></span>
-                                <span>Model: <strong className='text-slate-800'>{asset.model || '-'}</strong></span>
-                                <span>Cơ sở: <strong className='text-slate-800'>{asset.plant?.name || '-'}</strong></span>
+                                <span>
+                                    Serial: <strong className='text-slate-800'>{asset.serial || '-'}</strong>
+                                </span>
+                                <span>
+                                    Model: <strong className='text-slate-800'>{asset.model || '-'}</strong>
+                                </span>
+                                <span>
+                                    Cơ sở: <strong className='text-slate-800'>{asset.plant?.name || '-'}</strong>
+                                </span>
                             </div>
                         </div>
 
                         <div className='flex flex-wrap items-center gap-2'>
-                            <Tooltip title={hasOpenTransfer ? 'Máy đang có lệnh điều chuyển chưa hoàn tất' : ''}>
-                                <Button icon={<SwapOutlined />} disabled={hasOpenTransfer} onClick={() => setIsTransferOpen(true)}>
+                            <Tooltip title={transferDisabledReason}>
+                                <Button
+                                    icon={<SwapOutlined />}
+                                    disabled={Boolean(transferDisabledReason)}
+                                    onClick={() => setIsTransferOpen(true)}
+                                >
                                     Điều chuyển
                                 </Button>
                             </Tooltip>
-                            <Button icon={<RollbackOutlined />} onClick={() => navigate(`/borrowings/new?assetId=${asset.id}`)}>
+                            <Button
+                                icon={<RollbackOutlined />}
+                                disabled={returnedToPartner}
+                                onClick={() => navigate(`/borrowings/new?assetId=${asset.id}`)}
+                            >
                                 Tạo giao dịch
                             </Button>
                             {canManage ? (
@@ -526,10 +585,14 @@ const AssetDetail: React.FC = () => {
                                 value={currentStatus}
                                 size='small'
                                 shape='round'
-                                options={Object.entries(STATUS_CFG).map(([value, config]) => ({
-                                    value: value as AssetStatus,
-                                    label: config.label,
-                                }))}
+                                options={Object.entries(STATUS_CFG)
+                                    .filter(
+                                        ([value]) => !isReturnedToPartner(value as AssetStatus) || returnedToPartner
+                                    )
+                                    .map(([value, config]) => ({
+                                        value: value as AssetStatus,
+                                        label: config.label,
+                                    }))}
                                 onChange={handleStatusChange}
                             />
                         </div>
@@ -557,7 +620,7 @@ const AssetDetail: React.FC = () => {
                                 }
                                 approvingTransferId={approvingId}
                                 completingTransferId={completingId}
-                                onCreate={() => setIsTransferOpen(true)}
+                                onCreate={returnedToPartner ? undefined : () => setIsTransferOpen(true)}
                                 onApprove={canManage ? handleApprove : undefined}
                                 onComplete={canManage ? setHandoverTransfer : undefined}
                             />

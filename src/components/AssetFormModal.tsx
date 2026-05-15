@@ -8,7 +8,8 @@ import {
     ToolOutlined,
 } from '@ant-design/icons';
 import dayjs from 'dayjs';
-import { AssetStatus } from '../core/types';
+import { ASSET_OWNERSHIP_OPTIONS } from '../core/constants';
+import { AssetOwnershipType, AssetStatus } from '../core/types';
 import type { Asset, Brand, Plant } from '../core/types';
 
 const { Text } = Typography;
@@ -23,6 +24,7 @@ type AssetFormValues = {
     plantId: string;
     area?: string;
     status: AssetStatus;
+    ownershipType: AssetOwnershipType;
     purchaseDate?: ReturnType<typeof dayjs>;
     purchasePrice?: number;
     specificationsText?: string;
@@ -44,15 +46,14 @@ const statusOptions: { value: AssetStatus; label: string }[] = [
     { value: AssetStatus.BROKEN, label: 'Lỗi / hỏng' },
     { value: AssetStatus.BORROWING, label: 'Đang mượn' },
     { value: AssetStatus.STORAGE, label: 'Tồn kho' },
+    { value: AssetStatus.RETURNED_TO_PARTNER, label: 'Đã trả đối tác' },
 ];
 
 const SectionTitle = ({ icon, title, description }: { icon: React.ReactNode; title: string; description: string }) => (
     <div className='mb-4 flex items-start gap-3'>
-        <div className='flex h-9 w-9 items-center justify-center rounded-xl bg-slate-900 text-white'>
-            {icon}
-        </div>
+        <div className='flex h-9 w-9 items-center justify-center rounded-xl bg-slate-900 text-white'>{icon}</div>
         <div>
-            <div className='text-sm font-bold uppercase tracking-wide text-slate-900'>{title}</div>
+            <div className='text-sm font-bold tracking-wide text-slate-900 uppercase'>{title}</div>
             <Text type='secondary' className='text-xs'>
                 {description}
             </Text>
@@ -71,7 +72,7 @@ const AssetFormModal: React.FC<AssetFormModalProps> = ({ open, onClose, initialV
 
         if (!initialValues) {
             form.resetFields();
-            form.setFieldsValue({ status: AssetStatus.ACTIVE });
+            form.setFieldsValue({ status: AssetStatus.ACTIVE, ownershipType: AssetOwnershipType.OWNED });
             return;
         }
 
@@ -85,6 +86,7 @@ const AssetFormModal: React.FC<AssetFormModalProps> = ({ open, onClose, initialV
             plantId: initialValues.plantId,
             area: initialValues.area,
             status: initialValues.status,
+            ownershipType: initialValues.ownershipType ?? AssetOwnershipType.OWNED,
             purchaseDate: initialValues.purchaseDate ? dayjs(initialValues.purchaseDate) : undefined,
             purchasePrice: initialValues.purchasePrice,
             specificationsText:
@@ -95,10 +97,7 @@ const AssetFormModal: React.FC<AssetFormModalProps> = ({ open, onClose, initialV
         });
     }, [open, initialValues, form]);
 
-    const brandOptions = useMemo(
-        () => brands.map((brand) => ({ label: brand.name, value: brand.id })),
-        [brands]
-    );
+    const brandOptions = useMemo(() => brands.map((brand) => ({ label: brand.name, value: brand.id })), [brands]);
 
     const plantOptions = useMemo(
         () =>
@@ -139,6 +138,7 @@ const AssetFormModal: React.FC<AssetFormModalProps> = ({ open, onClose, initialV
                 plantId: values.plantId,
                 area: values.area?.trim(),
                 status: values.status,
+                ownershipType: values.ownershipType,
                 purchaseDate: values.purchaseDate ? values.purchaseDate.format('YYYY-MM-DD') : undefined,
                 purchasePrice: values.purchasePrice,
                 specifications,
@@ -187,7 +187,7 @@ const AssetFormModal: React.FC<AssetFormModalProps> = ({ open, onClose, initialV
                 requiredMark='optional'
                 scrollToFirstError={{ focus: true }}
                 clearOnDestroy
-                initialValues={{ status: AssetStatus.ACTIVE }}
+                initialValues={{ status: AssetStatus.ACTIVE, ownershipType: AssetOwnershipType.OWNED }}
                 validateTrigger='onBlur'
                 className='mt-6'
             >
@@ -261,7 +261,7 @@ const AssetFormModal: React.FC<AssetFormModalProps> = ({ open, onClose, initialV
                             title='Vị trí và trạng thái'
                             description='Cơ sở lấy từ dữ liệu hệ thống; không cố định trong giao diện.'
                         />
-                        <div className='grid grid-cols-1 gap-4 md:grid-cols-3'>
+                        <div className='grid grid-cols-1 gap-4 md:grid-cols-4'>
                             <Form.Item
                                 name='plantId'
                                 label='Cơ sở'
@@ -283,6 +283,13 @@ const AssetFormModal: React.FC<AssetFormModalProps> = ({ open, onClose, initialV
                                 rules={[{ required: true, message: 'Vui lòng chọn trạng thái' }]}
                             >
                                 <Select options={statusOptions} placeholder='Chọn trạng thái' />
+                            </Form.Item>
+                            <Form.Item
+                                name='ownershipType'
+                                label='Nguồn gốc máy'
+                                rules={[{ required: true, message: 'Vui lòng chọn nguồn gốc máy' }]}
+                            >
+                                <Select options={ASSET_OWNERSHIP_OPTIONS} placeholder='Chọn nguồn gốc' />
                             </Form.Item>
                         </div>
                     </Card>

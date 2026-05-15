@@ -1,7 +1,8 @@
-import { useEffect } from 'react';
+import { useEffect, useMemo } from 'react';
 import { Button, DatePicker, Form, Input, InputNumber, Select, Typography } from 'antd';
 import dayjs from 'dayjs';
-import { BorrowingType, type Asset, type CreateBorrowingPayload } from '../../core/types';
+import { isOwnedAsset, isReturnedToPartner } from '../../core/constants';
+import { AssetOwnershipType, BorrowingType, type Asset, type CreateBorrowingPayload } from '../../core/types';
 import { borrowingTypeMeta, borrowingTypeOptions } from '../../core/constants/transactions';
 
 const { Text, Title } = Typography;
@@ -29,8 +30,8 @@ type TransactionFormProps = {
 
 const typeDescriptions: Record<BorrowingType, string> = {
     internal: 'Thiết bị được cấp cho công nhân hoặc tổ sản xuất sử dụng nội bộ.',
-    external: 'Công ty đang mượn thiết bị từ đối tác hoặc đơn vị bên ngoài.',
-    rental: 'Thiết bị được thuê có phát sinh chi phí sử dụng.',
+    external: 'Công ty đang mượn thiết bị từ đối tác hoặc đơn vị bên ngoài, không tính vào đội máy Hải Đăng.',
+    rental: 'Thiết bị được thuê có phát sinh chi phí sử dụng, không tính vào đội máy Hải Đăng.',
 };
 
 const sectionClassName = 'rounded-2xl border border-slate-200 bg-white p-5 shadow-sm';
@@ -46,6 +47,23 @@ const TransactionForm = ({
 }: TransactionFormProps) => {
     const [form] = Form.useForm<TransactionFormValues>();
     const type = Form.useWatch('type', form) ?? BorrowingType.INTERNAL;
+    const selectableAssets = useMemo(
+        () =>
+            assets.filter((asset) => {
+                if (type === BorrowingType.INTERNAL) {
+                    return isOwnedAsset(asset.ownershipType) && !isReturnedToPartner(asset.status);
+                }
+
+                if (type === BorrowingType.EXTERNAL) {
+                    return (
+                        asset.ownershipType === AssetOwnershipType.PARTNER_BORROWED || isReturnedToPartner(asset.status)
+                    );
+                }
+
+                return asset.ownershipType === AssetOwnershipType.RENTAL || isReturnedToPartner(asset.status);
+            }),
+        [assets, type]
+    );
 
     useEffect(() => {
         form.setFieldsValue({
@@ -67,7 +85,7 @@ const TransactionForm = ({
             cost: undefined,
             location: form.getFieldValue('location'),
             note: form.getFieldValue('note'),
-            assetId: form.getFieldValue('assetId'),
+            assetId: undefined,
             borrowTime: form.getFieldValue('borrowTime'),
             type: changedValues.type,
         });
@@ -104,17 +122,12 @@ const TransactionForm = ({
                 </div>
 
                 <div className='grid grid-cols-1 gap-4 lg:grid-cols-2'>
-                    <Form.Item
-                        label=''
-                        name='assetId'
-                        rules={[{ required: true, message: 'Vui lòng chọn thiết bị' }]}
-                    >
+                    <Form.Item label='' name='assetId' rules={[{ required: true, message: 'Vui lòng chọn thiết bị' }]}>
                         <Select
-                            showSearch
+                            showSearch={{ optionFilterProp: 'label' }}
                             size='large'
-                            optionFilterProp='label'
                             placeholder='Chọn thiết bị'
-                            options={assets.map((asset) => ({
+                            options={selectableAssets.map((asset) => ({
                                 value: asset.id,
                                 label: `${asset.machineCode} - ${asset.name}`,
                             }))}
@@ -220,7 +233,7 @@ const TransactionForm = ({
                             name='cost'
                             rules={[{ required: true, message: 'Vui lòng nhập chi phí thuê' }]}
                         >
-                            <InputNumber size='large' min={0} step={1000} placeholder='Nhập chi phí' addonAfter='VND' />
+                            <InputNumber size='large' min={0} step={1000} placeholder='Nhập chi phí' suffix='VND' />
                         </Form.Item>
                     </div>
                 ) : null}

@@ -88,6 +88,7 @@ const assetStatusLabel: Record<string, string> = {
     broken: 'Lỗi / hỏng',
     borrowing: 'Đang mượn',
     storage: 'Tồn kho',
+    returned_to_partner: 'Đã trả đối tác',
 };
 
 const assetStatusColor: Record<string, string> = {
@@ -96,6 +97,7 @@ const assetStatusColor: Record<string, string> = {
     broken: 'red',
     borrowing: 'purple',
     storage: 'default',
+    returned_to_partner: 'default',
 };
 
 const getTransferAssets = (transfer: Transfer) => {

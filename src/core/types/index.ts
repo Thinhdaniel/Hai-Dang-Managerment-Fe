@@ -5,6 +5,13 @@ export enum AssetStatus {
     BROKEN = 'broken',
     BORROWING = 'borrowing',
     STORAGE = 'storage',
+    RETURNED_TO_PARTNER = 'returned_to_partner',
+}
+
+export enum AssetOwnershipType {
+    OWNED = 'owned',
+    PARTNER_BORROWED = 'partner_borrowed',
+    RENTAL = 'rental',
 }
 
 export enum MaintenanceType {
@@ -100,6 +107,7 @@ export interface Asset {
     plant?: Plant;
     area?: string;
     status: AssetStatus;
+    ownershipType: AssetOwnershipType;
     purchaseDate?: string;
     purchasePrice?: number;
     specifications?: Record<string, string | number>;
@@ -116,6 +124,7 @@ export interface AssetFilter extends PaginationParams {
     search?: string;
     name?: string;
     status?: AssetStatus;
+    ownershipType?: AssetOwnershipType;
     plantId?: string;
     model?: string;
     type?: string;
@@ -131,6 +140,7 @@ export interface AssetImportRow {
         model?: string;
         type?: string;
         status?: string;
+        ownershipType?: string;
         brand?: string;
         plant?: string;
     };
@@ -411,6 +421,7 @@ export interface PublicMachine {
     serialNumber?: string;
     model?: string;
     status: AssetStatus;
+    ownershipType?: AssetOwnershipType;
     facility?: {
         name: string;
         code?: string;

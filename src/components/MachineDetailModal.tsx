@@ -20,6 +20,7 @@ const MachineDetailModal: React.FC<MachineDetailModalProps> = ({ open, onClose, 
             broken: 'error',
             borrowing: 'purple',
             storage: 'default',
+            returned_to_partner: 'default',
         };
         const labels: any = {
             active: 'Đang hoạt động',
@@ -27,6 +28,7 @@ const MachineDetailModal: React.FC<MachineDetailModalProps> = ({ open, onClose, 
             broken: 'Lỗi',
             borrowing: 'Đang mượn',
             storage: 'Tồn kho',
+            returned_to_partner: 'Đã trả đối tác',
         };
         return <Badge status={colors[status]} text={labels[status]} />;
     };
@@ -35,7 +37,7 @@ const MachineDetailModal: React.FC<MachineDetailModalProps> = ({ open, onClose, 
         <Row gutter={24}>
             <Col span={14}>
                 <Title level={5}>Thông tin cơ bản</Title>
-                <Descriptions column={1} labelStyle={{ width: 120, color: '#8c8c8c' }} size='small'>
+                <Descriptions column={1} styles={{ label: { width: 120, color: '#8c8c8c' } }} size='small'>
                     <Descriptions.Item label='Loại máy'>{machineData.type}</Descriptions.Item>
                     <Descriptions.Item label='Nhãn hiệu'>Fanuc (Sample)</Descriptions.Item>
                     <Descriptions.Item label='Năm sản xuất'>2020</Descriptions.Item>
