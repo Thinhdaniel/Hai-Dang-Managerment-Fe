@@ -2,6 +2,7 @@ import api from '../lib/api';
 import type { Brand, CreateUserPayload, Notification, PaginatedResponse, UpdateUserPayload, User, UserListParams } from '../types';
 export { dashboardService } from './dashboard.service';
 export { plantService } from './plant.service';
+export { facilityCostReportService } from './report.service';
 
 export type UserListApiResponse = User[] | PaginatedResponse<User>;
 

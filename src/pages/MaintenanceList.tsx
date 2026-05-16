@@ -33,6 +33,7 @@ import {
 } from '@ant-design/icons';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import dayjs, { type Dayjs } from 'dayjs';
+import { useLocation } from 'react-router-dom';
 import PageHeader from '../components/shared/PageHeader';
 import ConfirmAction from '../components/shared/ConfirmAction';
 import LazyBoundary from '../components/shared/LazyBoundary';
@@ -65,12 +66,34 @@ const createDefaultFilters = () => ({
     page: 1,
     limit: 10,
     search: '',
+    assetId: undefined as string | undefined,
     status: undefined as MaintenanceFilter['status'],
     repairMode: undefined as MaintenanceRepairMode | undefined,
     type: undefined as MaintenanceType | undefined,
     plantId: undefined as string | undefined,
     dateRange: undefined as [Dayjs, Dayjs] | undefined,
 });
+
+const createFiltersFromSearch = (search: string) => {
+    const params = new URLSearchParams(search);
+    const startDate = params.get('startDate');
+    const endDate = params.get('endDate');
+    const dateRange =
+        startDate && endDate && dayjs(startDate).isValid() && dayjs(endDate).isValid()
+            ? ([dayjs(startDate), dayjs(endDate)] as [Dayjs, Dayjs])
+            : undefined;
+
+    return {
+        ...createDefaultFilters(),
+        search: params.get('search') ?? '',
+        assetId: params.get('assetId') ?? undefined,
+        status: (params.get('status') || undefined) as MaintenanceFilter['status'],
+        repairMode: (params.get('repairMode') || undefined) as MaintenanceRepairMode | undefined,
+        type: (params.get('type') || undefined) as MaintenanceType | undefined,
+        plantId: params.get('plantId') ?? undefined,
+        dateRange,
+    };
+};
 
 const typeLabel: Record<string, string> = {
     periodic: 'Định kỳ',
@@ -121,10 +144,12 @@ const MaintenanceList: React.FC = () => {
     const queryClient = useQueryClient();
     const { role } = useAuth();
     const { message } = App.useApp();
+    const location = useLocation();
     const canManage = hasManagerAccess(role);
+    const initialFilters = useMemo(() => createFiltersFromSearch(location.search), [location.search]);
 
-    const [filters, setFilters] = useState(() => createDefaultFilters());
-    const [draftFilters, setDraftFilters] = useState(() => createDefaultFilters());
+    const [filters, setFilters] = useState(initialFilters);
+    const [draftFilters, setDraftFilters] = useState(initialFilters);
     const [createOpen, setCreateOpen] = useState(false);
     const [detailTarget, setDetailTarget] = useState<Maintenance | null>(null);
     const [completeTarget, setCompleteTarget] = useState<Maintenance | null>(null);
@@ -149,6 +174,7 @@ const MaintenanceList: React.FC = () => {
             page: filters.page,
             limit: filters.limit,
             search: filters.search || undefined,
+            assetId: filters.assetId,
             status: filters.status,
             repairMode: filters.repairMode,
             type: filters.type,

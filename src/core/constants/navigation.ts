@@ -140,4 +140,11 @@ export const PAGE_META: PageMeta[] = [
         breadcrumbs: ['Dashboard', 'Quản lý vật tư', 'Báo cáo'],
         searchPlaceholder: 'Tìm theo vật tư, nhà cung cấp...',
     },
+    {
+        path: '/reports/facility-costs',
+        title: 'Báo Cáo Chi Phí Cơ Sở',
+        subtitle: 'Tổng hợp chi phí vận hành theo công thức cấp phát vật tư cộng chi phí sửa ngoài đã hoàn tất.',
+        breadcrumbs: ['Dashboard', 'Báo cáo', 'Chi phí cơ sở'],
+        searchPlaceholder: 'Tìm theo cơ sở, máy hoặc kỳ báo cáo...',
+    },
 ];

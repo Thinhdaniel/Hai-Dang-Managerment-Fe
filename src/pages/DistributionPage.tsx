@@ -139,6 +139,38 @@ const resolveErr = (e: unknown, fallback: string) =>
         ? (e as any).message
         : fallback;
 
+const createFiltersFromSearch = (search: string): { filters: FilterState; draft: DraftFilterState } => {
+    const params = new URLSearchParams(search);
+    const startDate = params.get('startDate') ?? undefined;
+    const endDate = params.get('endDate') ?? undefined;
+    const dateRange =
+        startDate && endDate && dayjs(startDate).isValid() && dayjs(endDate).isValid()
+            ? ([dayjs(startDate), dayjs(endDate)] as DateRangeValue)
+            : null;
+    const searchValue = params.get('search') ?? '';
+    const toPlantId = params.get('toPlantId') ?? params.get('plantId') ?? undefined;
+    const distributionType = (params.get('distributionType') as DistributionType) ?? undefined;
+    const status = (params.get('status') as DistributionStatus) ?? undefined;
+
+    return {
+        filters: {
+            search: normalizeSearchTerm(searchValue),
+            toPlantId,
+            distributionType,
+            status,
+            startDate,
+            endDate,
+        },
+        draft: {
+            search: searchValue,
+            toPlantId,
+            distributionType,
+            status,
+            dateRange,
+        },
+    };
+};
+
 
 // ── Status Steps ──────────────────────────────────────────────────────────────
 const StatusSteps: React.FC<{ status: DistributionStatus }> = ({ status }) => {
@@ -163,6 +195,7 @@ const DistributionPage: React.FC = () => {
     const { user, role } = useAuth();
     const location = useLocation();
     const locationState = (location.state as any) || {};
+    const initialFilters = useMemo(() => createFiltersFromSearch(location.search), [location.search]);
 
     // Pre-fill from SupplyRequest navigate state
     const prefillSRId = locationState.supplyRequestId as string | undefined;
@@ -172,8 +205,8 @@ const DistributionPage: React.FC = () => {
         user!.plantId === MAIN_PLANT_ID &&
         (role === 'admin' || role === 'manager' || role === 'director');
 
-    const [filters, setFilters] = useState<FilterState>({ search: '', toPlantId: undefined, distributionType: undefined, status: undefined });
-    const [draft, setDraft] = useState<DraftFilterState>({ search: '', toPlantId: undefined, distributionType: undefined, status: undefined, dateRange: null });
+    const [filters, setFilters] = useState<FilterState>(initialFilters.filters);
+    const [draft, setDraft] = useState<DraftFilterState>(initialFilters.draft);
     const [pagination, setPagination] = useState({ page: DEFAULT_PAGE, limit: DEFAULT_LIMIT });
     const [selectedId, setSelectedId] = useState<string | null>(null);
     const [createOpen, setCreateOpen] = useState(false);
@@ -613,10 +646,10 @@ const DistributionPage: React.FC = () => {
                     </div>
                     {filterOpen && (
                         <div className='mt-2 flex flex-col gap-2 sm:hidden'>
-                            <Select showSearch allowClear placeholder='Cơ sở nhận' className='w-full'
+                            <Select showSearch={{ optionFilterProp: 'label' }} allowClear placeholder='Cơ sở nhận' className='w-full'
                                 value={draft.toPlantId}
                                 onChange={(v) => { setDraft((d) => ({ ...d, toPlantId: v })); setPagination((p) => ({ ...p, page: DEFAULT_PAGE })); setFilters((f) => ({ ...f, toPlantId: v })); }}
-                                options={(plants as Plant[]).map((p) => ({ value: p.id, label: p.name }))} optionFilterProp='label' />
+                                options={(plants as Plant[]).map((p) => ({ value: p.id, label: p.name }))} />
                             <Select allowClear placeholder='Loại phiếu' className='w-full'
                                 value={draft.distributionType}
                                 onChange={(v) => { setDraft((d) => ({ ...d, distributionType: v })); setPagination((p) => ({ ...p, page: DEFAULT_PAGE })); setFilters((f) => ({ ...f, distributionType: v })); }}
@@ -640,10 +673,10 @@ const DistributionPage: React.FC = () => {
                         <Input allowClear prefix={<SearchOutlined className='text-slate-400' />}
                             placeholder='Tìm mã phiếu, mã đề xuất...' style={{ width: 220 }}
                             value={draft.search} onChange={(e) => setDraft((d) => ({ ...d, search: e.target.value }))} />
-                        <Select showSearch allowClear placeholder='Cơ sở nhận' style={{ width: 180 }}
+                        <Select showSearch={{ optionFilterProp: 'label' }} allowClear placeholder='Cơ sở nhận' style={{ width: 180 }}
                             value={draft.toPlantId}
                             onChange={(v) => { setDraft((d) => ({ ...d, toPlantId: v })); setPagination((p) => ({ ...p, page: DEFAULT_PAGE })); setFilters((f) => ({ ...f, toPlantId: v })); }}
-                            options={(plants as Plant[]).map((p) => ({ value: p.id, label: p.name }))} optionFilterProp='label' />
+                            options={(plants as Plant[]).map((p) => ({ value: p.id, label: p.name }))} />
                         <Select allowClear placeholder='Loại phiếu' style={{ width: 150 }}
                             value={draft.distributionType}
                             onChange={(v) => { setDraft((d) => ({ ...d, distributionType: v })); setPagination((p) => ({ ...p, page: DEFAULT_PAGE })); setFilters((f) => ({ ...f, distributionType: v })); }}
@@ -779,9 +812,8 @@ const DistributionPage: React.FC = () => {
                         </div>
                     ) : 'Chi tiết phiếu cấp phát'
                 }
-                width={isMobile ? '100%' : 1020}
                 placement={isMobile ? 'bottom' : 'right'}
-                height={isMobile ? '92%' : undefined}
+                size={isMobile ? '92%' : 1020}
                 open={Boolean(selectedId)}
                 onClose={() => setSelectedId(null)}
                 destroyOnHidden
@@ -1112,7 +1144,7 @@ const EditDistributionPriceModal: React.FC<EditDistributionPriceModalProps> = ({
 
     if (isMobile) {
         return (
-            <Drawer open={open} onClose={onClose} placement='bottom' height='92%' destroyOnClose
+            <Drawer open={open} onClose={onClose} placement='bottom' size='92%' destroyOnHidden
                 title={`Cập nhật giá — ${distribution.distributionCode || ''}`}
                 styles={{ body: { padding: '16px', overflowY: 'auto' }, footer: { padding: '12px 16px' } }}
                 footer={footerEl}>
@@ -1123,7 +1155,7 @@ const EditDistributionPriceModal: React.FC<EditDistributionPriceModalProps> = ({
 
     return (
         <Modal open={open} title={`Cập nhật giá — ${distribution.distributionCode || ''}`}
-            width={1000} centered maskClosable={false} destroyOnClose onCancel={onClose}
+            width={1000} centered mask={{ closable: false }} destroyOnHidden onCancel={onClose}
             okText='Lưu cập nhật' cancelText='Huỷ' confirmLoading={updateMutation.isPending} onOk={handleOk}
             footer={() => footerEl}>
             {tableEl}
@@ -1169,11 +1201,11 @@ const CreateFromSRDrawer: React.FC<CreateFromSRDrawerProps> = ({
                     </div>
                 </div>
             }
-            width={520}
+            size={520}
             open={open}
             onClose={onClose}
             destroyOnHidden
-            maskClosable={false}
+            mask={{ closable: false }}
             footer={null}
         >
             <div className='flex flex-col gap-4'>
@@ -1182,10 +1214,9 @@ const CreateFromSRDrawer: React.FC<CreateFromSRDrawerProps> = ({
                         Chọn phiếu đề xuất đã duyệt <span className='text-red-500'>*</span>
                     </div>
                     <Select
-                        showSearch
+                        showSearch={{ optionFilterProp: 'label' }}
                         className='w-full'
                         placeholder='Tìm mã đề xuất...'
-                        optionFilterProp='label'
                         value={selectedSRId}
                         onChange={setSelectedSRId}
                         options={srOptions}

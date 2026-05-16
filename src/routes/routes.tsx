@@ -25,6 +25,7 @@ const SupplyRequestPage = lazy(() => import('../pages/SupplyRequestPage'));
 const PurchaseOrderPage = lazy(() => import('../pages/PurchaseOrderPage'));
 const DistributionPage = lazy(() => import('../pages/DistributionPage'));
 const MaterialReportPage = lazy(() => import('../pages/MaterialReportPage'));
+const FacilityCostReportPage = lazy(() => import('../pages/FacilityCostReportPage'));
 const LoginPage = lazy(() => import('../pages/LoginPage'));
 const ForgotPasswordPage = lazy(() => import('../pages/ForgotPasswordPage'));
 const ResetPasswordPage = lazy(() => import('../pages/ResetPasswordPage'));
@@ -81,6 +82,7 @@ export const router = createBrowserRouter([
             { path: 'materials/purchase-orders', element: withSuspense(<PurchaseOrderPage />) },
             { path: 'materials/distributions', element: withSuspense(<DistributionPage />) },
             { path: 'materials/reports', element: withSuspense(<MaterialReportPage />) },
+            { path: 'reports/facility-costs', element: withSuspense(<FacilityCostReportPage />) },
         ],
     },
     {

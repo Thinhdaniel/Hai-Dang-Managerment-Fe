@@ -4,6 +4,7 @@ import {
     BarChartOutlined,
     BellOutlined,
     BuildOutlined,
+    CalculatorOutlined,
     ClusterOutlined,
     DashboardOutlined,
     DatabaseOutlined,
@@ -52,6 +53,13 @@ const navigationSections: NavigationSection[] = [
                 label: 'Bảng điều khiển',
                 description: 'Tình hình vận hành',
                 icon: <DashboardOutlined />,
+            },
+            {
+                path: '/reports/facility-costs',
+                label: 'Báo cáo chi phí',
+                description: 'Vật tư cấp phát và sửa ngoài',
+                icon: <CalculatorOutlined />,
+                matchMode: 'exact',
             },
             {
                 path: '/materials/reports',
