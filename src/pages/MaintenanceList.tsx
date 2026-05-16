@@ -98,6 +98,8 @@ const fmtMoney = (value = 0) =>
     new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND', maximumFractionDigits: 0 }).format(value);
 
 const toIso = (value?: Dayjs) => (value ? value.toISOString() : undefined);
+const sumCostItems = (items?: { amount?: number | null }[]) =>
+    Number((items ?? []).reduce((sum, item) => sum + Number(item?.amount ?? 0), 0).toFixed(2));
 const buildMaintenanceCode = (item: Maintenance) =>
     `MNT-${new Date(item.createdAt || item.startDate).getFullYear()}-${item.id.slice(-5).toUpperCase()}`;
 const getRepairModeLabel = (value?: string) => (value === 'external' ? 'Sửa ngoài' : 'Nội bộ');
@@ -129,6 +131,18 @@ const MaintenanceList: React.FC = () => {
     const [rejectTarget, setRejectTarget] = useState<Maintenance | null>(null);
     const [rejectReason, setRejectReason] = useState('');
     const [completeForm] = Form.useForm<CompleteFormValues>();
+    const watchedCostItems = Form.useWatch(['externalRepair', 'costItems'], completeForm);
+    const watchedInternalCost = Form.useWatch('cost', completeForm);
+
+    const completeCostPreview = useMemo(() => {
+        if (completeTarget?.repairMode === 'external') {
+            return sumCostItems(watchedCostItems as { amount?: number | null }[] | undefined);
+        }
+        return Number(watchedInternalCost ?? 0);
+    }, [completeTarget?.repairMode, watchedCostItems, watchedInternalCost]);
+
+    const completeEstimateCost = completeTarget?.externalRepair?.estimateCost ?? 0;
+    const completeCostDiff = completeCostPreview - completeEstimateCost;
 
     const requestParams = useMemo(
         () => ({
@@ -236,8 +250,7 @@ const MaintenanceList: React.FC = () => {
         const costItems = values.externalRepair?.costItems?.filter((item) => item?.name || item?.amount);
         const cost =
             completeTarget.repairMode === 'external'
-                ? values.externalRepair?.actualCost ??
-                  costItems?.reduce((sum, item) => sum + Number(item.amount ?? 0), 0)
+                ? sumCostItems(costItems)
                 : values.cost;
 
         await completeMutation.mutateAsync({
@@ -765,6 +778,40 @@ const MaintenanceList: React.FC = () => {
 
                     {completeTarget?.repairMode === 'external' ? (
                         <>
+                            <div className='mb-4 grid grid-cols-1 gap-3 rounded-lg border border-slate-200 bg-slate-50 p-3 md:grid-cols-3'>
+                                <div>
+                                    <Text type='secondary' className='text-xs font-semibold uppercase'>
+                                        Dự kiến
+                                    </Text>
+                                    <div className='mt-1 text-base font-bold text-slate-800'>
+                                        {fmtMoney(completeEstimateCost)}
+                                    </div>
+                                </div>
+                                <div>
+                                    <Text type='secondary' className='text-xs font-semibold uppercase'>
+                                        Thực tế
+                                    </Text>
+                                    <div className='mt-1 text-lg font-bold text-emerald-700'>
+                                        {fmtMoney(completeCostPreview)}
+                                    </div>
+                                </div>
+                                <div>
+                                    <Text type='secondary' className='text-xs font-semibold uppercase'>
+                                        Chênh lệch
+                                    </Text>
+                                    <div
+                                        className={`mt-1 text-base font-bold ${
+                                            completeCostDiff > 0
+                                                ? 'text-rose-600'
+                                                : completeCostDiff < 0
+                                                  ? 'text-emerald-700'
+                                                  : 'text-slate-800'
+                                        }`}
+                                    >
+                                        {fmtMoney(completeCostDiff)}
+                                    </div>
+                                </div>
+                            </div>
                             <div className='grid grid-cols-1 gap-3 md:grid-cols-2'>
                                 <Form.Item name={['externalRepair', 'returnedAt']} label='Ngày nhận máy về'>
                                     <DatePicker className='w-full' format='DD/MM/YYYY' />
@@ -807,15 +854,25 @@ const MaintenanceList: React.FC = () => {
                             </Form.List>
                         </>
                     ) : (
-                        <Form.Item name='cost' label='Chi phí phát sinh'>
-                            <InputNumber<number>
-                                min={0}
-                                className='w-full'
-                                formatter={(value) => `${value ?? ''}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')}
-                                parser={(value) => Number(String(value ?? '').replace(/\D/g, ''))}
-                                suffix='VND'
-                            />
-                        </Form.Item>
+                        <>
+                            <div className='mb-4 rounded-lg border border-slate-200 bg-slate-50 p-3'>
+                                <Text type='secondary' className='text-xs font-semibold uppercase'>
+                                    Chi phí phát sinh
+                                </Text>
+                                <div className='mt-1 text-lg font-bold text-emerald-700'>
+                                    {fmtMoney(completeCostPreview)}
+                                </div>
+                            </div>
+                            <Form.Item name='cost' label='Chi phí phát sinh'>
+                                <InputNumber<number>
+                                    min={0}
+                                    className='w-full'
+                                    formatter={(value) => `${value ?? ''}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')}
+                                    parser={(value) => Number(String(value ?? '').replace(/\D/g, ''))}
+                                    suffix='VND'
+                                />
+                            </Form.Item>
+                        </>
                     )}
 
                     <Form.Item name='note' label='Ghi chú hoàn tất'>
