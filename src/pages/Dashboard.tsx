@@ -4,9 +4,9 @@ import {
     AppstoreOutlined,
     CheckCircleOutlined,
     ClusterOutlined,
+    DollarOutlined,
     ReloadOutlined,
     ToolOutlined,
-    WarningOutlined,
 } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import DashboardFacilityDistributionCard from '../components/dashboard/DashboardFacilityDistributionCard';
@@ -26,15 +26,23 @@ const emptyOverview: DashboardOverviewResponse = {
         totalFacilities: 0,
         unassignedMachines: 0,
     },
+    maintenanceCost: {
+        externalRepairCostThisMonth: 0,
+        externalRepairCompletedThisMonth: 0,
+        externalRepairPendingApproval: 0,
+        externalRepairInProgress: 0,
+    },
     facilityStats: [],
     recentActivities: [],
 };
 
 const toPercent = (value: number, total: number) => (total > 0 ? Math.round((value / total) * 100) : 0);
+const formatMoney = (value = 0) =>
+    new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND', maximumFractionDigits: 0 }).format(value);
 
 const Dashboard: React.FC = () => {
     const { data = emptyOverview, isLoading, isFetching, refetch, dataUpdatedAt } = useDashboardOverview();
-    const { summary, facilityStats, recentActivities } = data;
+    const { summary, maintenanceCost = emptyOverview.maintenanceCost, facilityStats, recentActivities } = data;
 
     const summaryCards = useMemo(
         () => [
@@ -53,21 +61,21 @@ const Dashboard: React.FC = () => {
                 caption: `${toPercent(summary.activeMachines, summary.totalMachines)}% đội máy sẵn sàng`,
             },
             {
-                title: 'Bảo trì',
+                title: 'Máy đang bảo trì',
                 value: summary.maintenanceMachines,
                 icon: <ToolOutlined />,
                 accent: '#d97706',
-                caption: `${toPercent(summary.maintenanceMachines, summary.totalMachines)}% cần chú ý theo lịch`,
+                caption: `${maintenanceCost?.externalRepairInProgress ?? 0} máy sửa ngoài đang xử lý`,
             },
             {
-                title: 'Không hoạt động',
-                value: summary.inactiveMachines,
-                icon: <WarningOutlined />,
-                accent: '#dc2626',
-                caption: 'Trạng thái hỏng và lưu trữ',
+                title: 'Chi phí sửa ngoài',
+                value: formatMoney(maintenanceCost?.externalRepairCostThisMonth ?? 0),
+                icon: <DollarOutlined />,
+                accent: '#16a34a',
+                caption: `${maintenanceCost?.externalRepairPendingApproval ?? 0} phiếu chờ duyệt`,
             },
         ],
-        [summary]
+        [summary, maintenanceCost]
     );
 
     const lastUpdatedLabel = dataUpdatedAt ? dayjs(dataUpdatedAt).format('DD/MM/YYYY HH:mm') : '--';
@@ -76,7 +84,7 @@ const Dashboard: React.FC = () => {
         <div className='flex w-full max-w-full flex-col gap-6 overflow-hidden'>
             <PageHeader
                 title='Bảng điều khiển vận hành'
-                subtitle='Tổng quan trung tâm về tình trạng máy móc, tải trọng cơ sở và hoạt động gần đây trên toàn công ty.'
+                subtitle='Tổng quan tình trạng máy móc, tải cơ sở, sửa chữa và hoạt động gần đây trên toàn công ty.'
                 actions={
                     <Space wrap size={12}>
                         <Button

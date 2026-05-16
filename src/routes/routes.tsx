@@ -9,6 +9,7 @@ const Dashboard = lazy(() => import('../pages/Dashboard'));
 const AssetList = lazy(() => import('../pages/AssetList'));
 const AssetDetail = lazy(() => import('../pages/AssetDetail'));
 const BrandList = lazy(() => import('../pages/BrandList'));
+const MaintenanceList = lazy(() => import('../pages/MaintenanceList'));
 const TransferList = lazy(() => import('../pages/TransferList'));
 const TransferDetail = lazy(() => import('../pages/TransferDetail'));
 const BorrowingList = lazy(() => import('../pages/BorrowingList'));
@@ -63,7 +64,7 @@ export const router = createBrowserRouter([
             { path: 'assets', element: withSuspense(<AssetList />) },
             { path: 'assets/:id', element: withSuspense(<AssetDetail />) },
             { path: 'brands', element: withSuspense(<BrandList />) },
-            { path: 'maintenances', element: withSuspense(<ComingSoonPage />) },
+            { path: 'maintenances', element: withSuspense(<MaintenanceList />) },
             { path: 'transfers', element: withSuspense(<TransferList />) },
             { path: 'transfers/:id', element: withSuspense(<TransferDetail />) },
             { path: 'borrowings', element: withSuspense(<BorrowingList />) },

@@ -43,6 +43,7 @@ import { ASSET_OWNERSHIP_LABEL, isReturnedToPartner } from '../core/constants';
 import type { Asset, AssetStatus, Borrowing, CreateTransferPayload, Maintenance, Transfer } from '../core/types';
 
 const AssetFormModal = lazy(() => import('../components/AssetFormModal'));
+const MaintenanceFormModal = lazy(() => import('../components/MaintenanceFormModal'));
 const TransferModal = lazy(() => import('../components/transfer/TransferModal'));
 const HandoverModal = lazy(() => import('../components/transfer/HandoverModal'));
 
@@ -105,6 +106,7 @@ const AssetDetail: React.FC = () => {
     const canManage = hasManagerAccess(role);
 
     const [isFormOpen, setIsFormOpen] = useState(false);
+    const [isMaintenanceOpen, setIsMaintenanceOpen] = useState(false);
     const [isTransferOpen, setIsTransferOpen] = useState(false);
     const [statusDraft, setStatusDraft] = useState<AssetStatus | undefined>();
     const [approvingId, setApprovingId] = useState<string | null>(null);
@@ -159,6 +161,16 @@ const AssetDetail: React.FC = () => {
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ['transfers', 'asset', id] });
             queryClient.invalidateQueries({ queryKey: ['transfers'] });
+            invalidateAsset();
+        },
+    });
+
+    const createMaintenanceMutation = useMutation({
+        mutationFn: maintenanceService.create,
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['maintenances', 'asset', id] });
+            queryClient.invalidateQueries({ queryKey: ['maintenances'] });
+            queryClient.invalidateQueries({ queryKey: ['dashboard'] });
             invalidateAsset();
         },
     });
@@ -228,6 +240,12 @@ const AssetDetail: React.FC = () => {
         await createTransferMutation.mutateAsync(payload);
         message.success('Đã tạo lệnh điều chuyển');
         setIsTransferOpen(false);
+    };
+
+    const handleCreateMaintenance = async (payload: Parameters<typeof maintenanceService.create>[0]) => {
+        await createMaintenanceMutation.mutateAsync(payload);
+        message.success('Đã tạo phiếu bảo trì');
+        setIsMaintenanceOpen(false);
     };
 
     const handleStatusChange = async (value: AssetStatus) => {
@@ -377,6 +395,14 @@ const AssetDetail: React.FC = () => {
                             onClick={() => navigate(`/borrowings/new?assetId=${asset.id}`)}
                         >
                             Tạo giao dịch mượn / thuê
+                        </Button>
+                        <Button
+                            block
+                            icon={<ToolOutlined />}
+                            disabled={returnedToPartner}
+                            onClick={() => setIsMaintenanceOpen(true)}
+                        >
+                            Tạo phiếu bảo trì
                         </Button>
                         {canManage ? (
                             <Button block type='primary' icon={<EditOutlined />} onClick={() => setIsFormOpen(true)}>
@@ -567,6 +593,13 @@ const AssetDetail: React.FC = () => {
                             >
                                 Tạo giao dịch
                             </Button>
+                            <Button
+                                icon={<ToolOutlined />}
+                                disabled={returnedToPartner}
+                                onClick={() => setIsMaintenanceOpen(true)}
+                            >
+                                Bảo trì
+                            </Button>
                             {canManage ? (
                                 <Button type='primary' icon={<EditOutlined />} onClick={() => setIsFormOpen(true)}>
                                     Chỉnh sửa
@@ -662,6 +695,19 @@ const AssetDetail: React.FC = () => {
                         submitting={createTransferMutation.isPending}
                         onClose={() => setIsTransferOpen(false)}
                         onSubmit={handleCreateTransfer}
+                    />
+                </LazyBoundary>
+            ) : null}
+
+            {isMaintenanceOpen ? (
+                <LazyBoundary mode='overlay'>
+                    <MaintenanceFormModal
+                        open
+                        assets={[asset]}
+                        initialAssetId={asset.id}
+                        submitting={createMaintenanceMutation.isPending}
+                        onClose={() => setIsMaintenanceOpen(false)}
+                        onSubmit={handleCreateMaintenance}
                     />
                 </LazyBoundary>
             ) : null}

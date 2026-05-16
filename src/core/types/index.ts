@@ -20,6 +20,11 @@ export enum MaintenanceType {
     INSPECTION = 'inspection',
 }
 
+export enum MaintenanceRepairMode {
+    INTERNAL = 'internal',
+    EXTERNAL = 'external',
+}
+
 export enum TransferStatus {
     PENDING = 'pending',
     APPROVED = 'approved',
@@ -171,12 +176,30 @@ export interface Maintenance {
     assetId: string;
     asset?: Asset;
     type: MaintenanceType;
-    status?: 'pending' | 'in_progress' | 'completed' | 'overdue';
+    repairMode?: MaintenanceRepairMode;
+    status?: 'pending' | 'in_progress' | 'completed' | 'overdue' | 'cancelled';
+    approvalStatus?: 'none' | 'pending' | 'approved' | 'rejected';
     description: string;
     startDate: string;
     endDate?: string;
     technician?: string;
     cost?: number;
+    externalRepair?: {
+        vendorName?: string;
+        sentOutAt?: string;
+        expectedReturnAt?: string;
+        returnedAt?: string;
+        estimateCost?: number;
+        actualCost?: number;
+        invoiceNo?: string;
+        invoiceImageUrl?: string;
+        costItems?: { name?: string; amount?: number; note?: string }[];
+        approvedBy?: string;
+        approvedAt?: string;
+        rejectedBy?: string;
+        rejectedAt?: string;
+        rejectReason?: string;
+    };
     note?: string;
     createdBy: string;
     createdAt: string;
@@ -187,9 +210,31 @@ export interface MaintenanceFilter extends PaginationParams {
     search?: string;
     assetId?: string;
     type?: MaintenanceType;
+    repairMode?: MaintenanceRepairMode;
+    status?: Maintenance['status'];
+    approvalStatus?: Maintenance['approvalStatus'];
     plantId?: string;
     startDate?: string;
     endDate?: string;
+}
+
+export interface MaintenanceReport {
+    summary: {
+        totalExternalRepairCost: number;
+        externalRepairCount: number;
+        pendingApprovalCount: number;
+        inProgressCount: number;
+    };
+    costByPeriod: { period: string; totalCost: number }[];
+    costByPlant: { plantId?: string; plantName: string; totalCost: number; count: number }[];
+    topAssets: {
+        assetId: string;
+        assetName: string;
+        machineCode?: string;
+        plantName?: string;
+        totalCost: number;
+        count: number;
+    }[];
 }
 
 // ===== TRANSFER (Điều chuyển) =====
@@ -356,6 +401,13 @@ export interface DashboardOverviewSummary {
     unassignedMachines: number;
 }
 
+export interface DashboardMaintenanceCost {
+    externalRepairCostThisMonth: number;
+    externalRepairCompletedThisMonth: number;
+    externalRepairPendingApproval: number;
+    externalRepairInProgress: number;
+}
+
 export interface DashboardFacilityStat {
     facilityId: string;
     facilityName: string;
@@ -395,6 +447,7 @@ export interface DashboardRecentActivity {
 
 export interface DashboardOverviewResponse {
     summary: DashboardOverviewSummary;
+    maintenanceCost?: DashboardMaintenanceCost;
     facilityStats: DashboardFacilityStat[];
     recentActivities: DashboardRecentActivity[];
 }
