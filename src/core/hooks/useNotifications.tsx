@@ -4,7 +4,7 @@ import { notificationService } from '../services/notification.service';
 import { socketService } from '../services/socket.service';
 import { notification as antNotification } from 'antd';
 import { useAuth } from '../contexts/AuthContext';
-import { queryClient } from '../../App';
+import { queryClient } from '../queryClient';
 
 // Socket event names
 const NOTIFICATION_EVENTS = {

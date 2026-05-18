@@ -32,6 +32,7 @@ const ResetPasswordPage = lazy(() => import('../pages/ResetPasswordPage'));
 const PublicMachinePage = lazy(() => import('../pages/PublicMachinePage'));
 const ComingSoonPage = lazy(() => import('../pages/ComingSoonPage'));
 const NotFoundPage = lazy(() => import('../pages/NotFoundPage'));
+const RouteErrorPage = lazy(() => import('../pages/RouteErrorPage'));
 
 const withSuspense = (element: ReactNode) => <LazyBoundary>{element}</LazyBoundary>;
 
@@ -59,6 +60,7 @@ export const router = createBrowserRouter([
                 <AppLayout />
             </ProtectedRoute>
         ),
+        errorElement: withSuspense(<RouteErrorPage />),
         children: [
             { index: true, element: <Navigate to='/dashboard' replace /> },
             { path: 'dashboard', element: withSuspense(<Dashboard />) },

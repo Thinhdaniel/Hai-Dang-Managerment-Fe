@@ -59,7 +59,7 @@ export interface Material {
 }
 
 export interface MaterialPayload {
-    code: string;
+    code?: string;
     name: string;
     category?: string;
     unit: string;
@@ -400,7 +400,7 @@ export interface InventoryTransactionQueryParams {
 
 export interface DistributionItem {
     id?: string;
-    materialId: string;
+    materialId?: string;
     material?: Material;
     materialName?: string;
     unit?: string;
@@ -411,17 +411,25 @@ export interface DistributionItem {
     vatRate?: number;
     vatAmount?: number;
     totalWithVat?: number;
+    catalogStatus?: 'matched' | 'unmatched' | 'ignored';
+    quantityInventoried?: number;
+    inventoryStatus?: 'pending' | 'applied' | 'skipped';
+    inventorySkipReason?: string;
     adjustReason?: string;
     note?: string;
 }
 
 export interface DistributionItemPayload {
-    materialId: string;
+    materialId?: string;
+    materialName?: string;
+    unit?: string;
     quantity: number;
     quantityRequested?: number;
     quantityDistributed?: number;
     unitPrice?: number;
     vatRate?: number;
+    catalogStatus?: 'matched' | 'unmatched' | 'ignored';
+    inventorySkipReason?: string;
     adjustReason?: string;
     note?: string;
 }

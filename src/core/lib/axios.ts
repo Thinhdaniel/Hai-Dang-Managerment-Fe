@@ -1,6 +1,7 @@
 import axios, { AxiosHeaders, type InternalAxiosRequestConfig } from 'axios';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000/api';
+const API_TIMEOUT_MS = Number(import.meta.env.VITE_API_TIMEOUT_MS || 60000);
 const ACCESS_TOKEN_KEY = 'access_token';
 const REFRESH_ENDPOINT = '/auth/refresh-token';
 const AUTH_SKIP_REFRESH_PATHS = [
@@ -23,7 +24,7 @@ type PendingRequest = {
 
 const axiosInstance = axios.create({
     baseURL: API_BASE_URL,
-    timeout: 30000,
+    timeout: API_TIMEOUT_MS,
     withCredentials: true,
     headers: {
         'Content-Type': 'application/json',
@@ -32,7 +33,7 @@ const axiosInstance = axios.create({
 
 const refreshClient = axios.create({
     baseURL: API_BASE_URL,
-    timeout: 30000,
+    timeout: API_TIMEOUT_MS,
     withCredentials: true,
     headers: {
         'Content-Type': 'application/json',

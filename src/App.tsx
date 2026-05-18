@@ -1,11 +1,10 @@
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { QueryClientProvider } from '@tanstack/react-query';
 import { App as AntdApp, ConfigProvider } from 'antd';
 import { router } from './routes/routes';
 import { RouterProvider } from 'react-router-dom';
 import { AuthProvider } from './core/contexts/AuthContext';
 import { NotificationProvider } from './core/contexts/NotificationContext';
-
-export const queryClient = new QueryClient();
+import { queryClient } from './core/queryClient';
 
 function App() {
     return (

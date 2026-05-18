@@ -21,6 +21,7 @@ type ItemRow = {
     key: string;
     srItemIndex: number;
     srItemName: string;
+    srItemUnit: string;
     quantityRequested: number;
     materialId: string;
     materialName: string;
@@ -32,6 +33,8 @@ type ItemRow = {
     totalPrice: number;
     vatAmount: number;
     totalWithVat: number;
+    catalogStatus: 'matched' | 'unmatched' | 'ignored';
+    inventorySkipReason: string;
 };
 
 const compute = (r: ItemRow): ItemRow => {
@@ -69,7 +72,7 @@ const SupplyDistributionModal: React.FC<Props> = ({
         enabled: open && Boolean(supplyRequestId),
     });
 
-    const { data: materialsRaw = [] } = useQuery({
+    const { data: materialsRaw = [], refetch: refetchMaterials } = useQuery({
         queryKey: ['materials', 'with-stock-cs1'],
         queryFn: () =>
             materialService.getAll({ includeStock: true, limit: 1000, isActive: true } as any)
@@ -88,6 +91,7 @@ const SupplyDistributionModal: React.FC<Props> = ({
                     key: makeKey(),
                     srItemIndex: idx,
                     srItemName: it.materialName ?? '',
+                    srItemUnit: it.unit ?? '',
                     quantityRequested: it.quantityApproved ?? it.quantityRequested,
                     materialId: '',
                     materialName: it.materialName ?? '',
@@ -95,6 +99,8 @@ const SupplyDistributionModal: React.FC<Props> = ({
                     quantity: it.quantityApproved ?? it.quantityRequested,
                     unitPrice: 0, vatRate: 8, note: '',
                     totalPrice: 0, vatAmount: 0, totalWithVat: 0,
+                    catalogStatus: it.materialId ? 'matched' : 'unmatched',
+                    inventorySkipReason: '',
                 })
             )
         );
@@ -117,17 +123,40 @@ const SupplyDistributionModal: React.FC<Props> = ({
         onError: (e: any) => message.error(e?.message ?? 'Có lỗi xảy ra'),
     });
 
+    const createMaterialMutation = useMutation({
+        mutationFn: (row: ItemRow) =>
+            materialService.create({
+                name: (row.materialName || row.srItemName).trim(),
+                unit: (row.unit || row.srItemUnit).trim(),
+                trackInventory: true,
+                isActive: true,
+            }),
+        onSuccess: async (material, row) => {
+            await refetchMaterials();
+            setItems((p) => patch(p, row.key, {
+                materialId: material.id,
+                materialName: material.name,
+                unit: material.unit,
+                catalogStatus: 'matched',
+                inventorySkipReason: '',
+            }));
+            message.success('Da tao vat tu va gan vao dong cap phat');
+        },
+        onError: (e: any) => message.error(e?.message ?? 'Khong tao duoc vat tu'),
+    });
+
     const addRow = (srItemIndex: number) => {
         const ref = items.find((r) => r.srItemIndex === srItemIndex);
         setItems((prev) => [
             ...prev,
             compute({
                 key: makeKey(), srItemIndex,
-                srItemName: ref?.srItemName ?? '',
+                srItemName: ref?.srItemName ?? '', srItemUnit: ref?.srItemUnit ?? '',
                 quantityRequested: ref?.quantityRequested ?? 0,
                 materialId: '', materialName: '', unit: '',
                 quantity: 0, unitPrice: 0, vatRate: 8, note: '',
                 totalPrice: 0, vatAmount: 0, totalWithVat: 0,
+                catalogStatus: 'unmatched', inventorySkipReason: '',
             }),
         ]);
     };
@@ -143,7 +172,9 @@ const SupplyDistributionModal: React.FC<Props> = ({
     };
 
     const handleSubmit = async () => {
-        const missingMat = items.filter((r) => !r.materialId);
+        const missingMat = items.filter((r) => !r.materialId && r.catalogStatus !== 'ignored');
+        const invalidIgnored = items.filter((r) => r.catalogStatus === 'ignored' && !(r.materialName || r.srItemName).trim());
+        if (invalidIgnored.length) { message.error('Dong bo qua ton van can co ten vat tu'); return; }
         if (missingMat.length) { message.error(`${missingMat.length} dòng chưa chọn vật tư kho`); return; }
         const invalidQty = items.filter((r) => r.quantity <= 0);
         if (invalidQty.length) { message.error('Số lượng cấp phải lớn hơn 0'); return; }
@@ -155,9 +186,13 @@ const SupplyDistributionModal: React.FC<Props> = ({
             distributedAt: distributedAt.toISOString(),
             note: note.trim() || undefined,
             items: items.map((r) => ({
-                materialId: r.materialId, materialName: r.materialName, unit: r.unit,
+                materialId: r.materialId || undefined,
+                materialName: (r.materialName || r.srItemName).trim(),
+                unit: (r.unit || r.srItemUnit).trim(),
                 quantity: r.quantity, quantityRequested: r.quantityRequested,
                 unitPrice: r.unitPrice, vatRate: r.vatRate,
+                catalogStatus: r.materialId ? 'matched' : r.catalogStatus,
+                inventorySkipReason: r.catalogStatus === 'ignored' ? (r.inventorySkipReason.trim() || 'Khong theo doi ton kho') : undefined,
                 adjustReason: r.note.trim() || undefined,
             })),
         });
@@ -168,6 +203,7 @@ const SupplyDistributionModal: React.FC<Props> = ({
         label: `${m.code ? `[${m.code}] ` : ''}${m.name}`,
         unit: m.unit,
         stock: m.cs1CurrentStock ?? null,
+        trackInventory: m.trackInventory !== false,
     }));
 
     const srItems: PurchaseRequestItem[] = sr?.items ?? [];
@@ -178,8 +214,8 @@ const SupplyDistributionModal: React.FC<Props> = ({
             onCancel={onClose}
             width={1100}
             centered
-            maskClosable={false}
-            destroyOnClose
+            mask={{ closable: false }}
+            destroyOnHidden
             styles={{ body: { padding: 0, maxHeight: '80vh', overflowY: 'auto' } }}
             title={
                 <div className="flex items-center gap-3 px-2 py-1">
@@ -361,9 +397,10 @@ const SupplyDistributionModal: React.FC<Props> = ({
                                                         <tr key={row.key} className="hover:bg-blue-50/20 transition-colors">
                                                             <td className="px-4 py-2">
                                                                 <Select
-                                                                    showSearch optionFilterProp="label"
+                                                                    allowClear showSearch={{ optionFilterProp: 'label' }}
                                                                     placeholder="Chọn vật tư kho..." size="small"
                                                                     style={{ width: '100%' }}
+                                                                    disabled={row.catalogStatus === 'ignored'}
                                                                     value={row.materialId || undefined}
                                                                     options={materialOptions}
                                                                     optionRender={(opt) => {
@@ -384,12 +421,41 @@ const SupplyDistributionModal: React.FC<Props> = ({
                                                                     onChange={(v) => {
                                                                         const mat = materials.find((m: any) => m.id === v);
                                                                         setItems((p) => patch(p, row.key, {
-                                                                            materialId: v,
+                                                                            materialId: v || '',
                                                                             materialName: mat?.name ?? '',
                                                                             unit: mat?.unit ?? row.unit,
+                                                                            catalogStatus: v ? 'matched' : 'unmatched',
+                                                                            inventorySkipReason: '',
                                                                         }));
                                                                     }}
                                                                 />
+                                                                <div className="mt-1 flex items-center gap-1">
+                                                                    <Button
+                                                                        size="small"
+                                                                        icon={<PlusOutlined />}
+                                                                        loading={createMaterialMutation.isPending}
+                                                                        disabled={row.catalogStatus === 'ignored' || !(row.materialName || row.srItemName).trim() || !(row.unit || row.srItemUnit).trim()}
+                                                                        onClick={() => createMaterialMutation.mutate(row)}
+                                                                    >
+                                                                        Tao VT
+                                                                    </Button>
+                                                                    <Button
+                                                                        size="small"
+                                                                        type={row.catalogStatus === 'ignored' ? 'primary' : 'default'}
+                                                                        onClick={() => setItems((p) => patch(p, row.key, {
+                                                                            materialId: '',
+                                                                            materialName: row.materialName || row.srItemName,
+                                                                            unit: row.unit || row.srItemUnit,
+                                                                            catalogStatus: row.catalogStatus === 'ignored' ? 'unmatched' : 'ignored',
+                                                                            inventorySkipReason: row.catalogStatus === 'ignored' ? '' : 'Khong theo doi ton kho',
+                                                                        }))}
+                                                                    >
+                                                                        {row.catalogStatus === 'ignored' ? 'Theo ton' : 'Bo ton'}
+                                                                    </Button>
+                                                                </div>
+                                                                {row.catalogStatus === 'ignored' ? (
+                                                                    <Tag color="orange" className="!mt-1 !text-[10px]">Khong tru ton</Tag>
+                                                                ) : null}
                                                             </td>
                                                             <td className="px-2 py-2 text-center text-xs text-slate-500">{row.unit || '—'}</td>
                                                             <td className="px-2 py-2">
@@ -477,12 +543,12 @@ const SupplyDistributionModal: React.FC<Props> = ({
                                             <div className="text-[11px] font-medium uppercase tracking-wide text-slate-400">Thành tiền</div>
                                             <div className="text-sm font-semibold text-slate-700">{fmtVND(totals.price)}</div>
                                         </div>
-                                        <Divider type="vertical" className="!h-8" />
+                                        <Divider vertical className="!h-8" />
                                         <div className="text-center">
                                             <div className="text-[11px] font-medium uppercase tracking-wide text-slate-400">Tổng VAT</div>
                                             <div className="text-sm font-semibold text-slate-700">{fmtVND(totals.vat)}</div>
                                         </div>
-                                        <Divider type="vertical" className="!h-8" />
+                                        <Divider vertical className="!h-8" />
                                         <div className="text-center">
                                             <div className="text-[11px] font-medium uppercase tracking-wide text-slate-400">Tổng cộng</div>
                                             <div className="text-xl font-bold text-blue-700">{fmtVND(totals.total)}</div>
