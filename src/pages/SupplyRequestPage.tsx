@@ -40,12 +40,13 @@ type FilterState = { search: string; fromPlantId?: string; status?: PurchaseRequ
 type DraftFilterState = { search: string; fromPlantId?: string; status?: PurchaseRequestStatus; dateRange: DateRangeValue | null };
 type FormItemValue = { materialName?: string; unit?: string; quantityRequested?: number; note?: string };
 type FormValues = { fromPlantId?: string; note?: string; requestDate?: any; items: FormItemValue[] };
-type Stats = { total: number; pending: number; approved: number; in_progress: number; distributed: number; rejected: number };
+type Stats = { total: number; pending: number; approved: number; in_progress: number; partially_distributed: number; distributed: number; rejected: number };
 
 const STATUS_META: Record<string, { color: string; label: string; icon: React.ReactNode }> = {
     pending:     { color: 'orange',  label: 'Chờ duyệt',    icon: <ClockCircleOutlined /> },
     approved:    { color: 'blue',    label: 'Đã duyệt',      icon: <CheckCircleOutlined /> },
     in_progress: { color: 'cyan',    label: 'Đang cấp phát', icon: <SyncOutlined spin /> },
+    partially_distributed: { color: 'gold', label: 'Cấp thiếu', icon: <WarningOutlined /> },
     distributed: { color: 'green',   label: 'Đã nhận hàng',  icon: <CheckCircleOutlined /> },
     rejected:    { color: 'red',     label: 'Từ chối',        icon: <CloseCircleOutlined /> },
     cancelled:   { color: 'default', label: 'Đã hủy',         icon: <CloseCircleOutlined /> },
@@ -55,6 +56,7 @@ const STATUS_OPTIONS: Array<{ value: PurchaseRequestStatus; label: string }> = [
     { value: 'pending',                              label: 'Chờ duyệt' },
     { value: 'approved',                             label: 'Đã duyệt' },
     { value: 'in_progress' as PurchaseRequestStatus, label: 'Đang cấp phát' },
+    { value: 'partially_distributed' as PurchaseRequestStatus, label: 'Cấp thiếu' },
     { value: 'distributed',                          label: 'Đã nhận hàng' },
     { value: 'rejected',                             label: 'Từ chối' },
 ];
@@ -63,6 +65,7 @@ const WORKFLOW_STEPS = [
     { title: 'Tạo phiếu', status: 'pending' },
     { title: 'Duyệt',     status: 'approved' },
     { title: 'Cấp phát',  status: 'in_progress' },
+    { title: 'Cấp bù',    status: 'partially_distributed' },
     { title: 'Nhận hàng', status: 'distributed' },
 ];
 
@@ -342,7 +345,7 @@ const SupplyRequestPage: React.FC = () => {
     const selectedRequest = requests.find((r) => r.id === selectedId) ?? null;
 
     const stats = useMemo<Stats>(() => {
-        const base: Stats = { total: 0, pending: 0, approved: 0, in_progress: 0, distributed: 0, rejected: 0 };
+        const base: Stats = { total: 0, pending: 0, approved: 0, in_progress: 0, partially_distributed: 0, distributed: 0, rejected: 0 };
         if (!statsRes) return base;
         const items: PurchaseRequest[] = Array.isArray(statsRes) ? statsRes : (statsRes as any).data ?? [];
         const total = Array.isArray(statsRes) ? items.length : (statsRes as any).total ?? 0;
@@ -350,6 +353,7 @@ const SupplyRequestPage: React.FC = () => {
             if (r.status === 'pending') acc.pending++;
             if (r.status === 'approved') acc.approved++;
             if ((r.status as string) === 'in_progress') acc.in_progress++;
+            if ((r.status as string) === 'partially_distributed') acc.partially_distributed++;
             if (r.status === 'distributed') acc.distributed++;
             if (r.status === 'rejected') acc.rejected++;
             return acc;
@@ -357,7 +361,7 @@ const SupplyRequestPage: React.FC = () => {
     }, [statsRes]);
 
     // Linked distribution for in_progress requests
-    const isInProgress = (selectedRequest?.status as string) === 'in_progress';
+    const isInProgress = ['in_progress', 'partially_distributed'].includes(String(selectedRequest?.status));
     const { data: linkedDistRes } = useQuery({
         queryKey: ['distributions', 'by-sr', selectedId],
         queryFn: () => distributionService.getAll({ supplyRequestId: selectedId!, limit: 1, page: 1 }),
@@ -523,12 +527,13 @@ const SupplyRequestPage: React.FC = () => {
 
             {/* Stats */}
             {isCS1Manager && (
-                <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
+                <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-7">
                     {[
                         { title: 'Tổng phiếu',     value: stats.total,       color: '#3b82f6', icon: <FileTextOutlined />,    tab: 'all' as SupplyRequestTab,    status: undefined },
                         { title: 'Chờ duyệt',       value: stats.pending,     color: '#f97316', icon: <ClockCircleOutlined />, tab: 'pending' as SupplyRequestTab, status: undefined },
                         { title: 'Đã duyệt',        value: stats.approved,    color: '#6366f1', icon: <CheckCircleOutlined />, tab: 'all' as SupplyRequestTab,    status: 'approved' as PurchaseRequestStatus },
                         { title: 'Đang cấp phát',   value: stats.in_progress, color: '#06b6d4', icon: <SyncOutlined />,        tab: 'all' as SupplyRequestTab,    status: 'in_progress' as PurchaseRequestStatus },
+                        { title: 'Cấp thiếu',        value: stats.partially_distributed, color: '#eab308', icon: <WarningOutlined />, tab: 'all' as SupplyRequestTab, status: 'partially_distributed' as PurchaseRequestStatus },
                         { title: 'Đã nhận hàng',    value: stats.distributed, color: '#22c55e', icon: <CheckCircleOutlined />, tab: 'all' as SupplyRequestTab,    status: 'distributed' as PurchaseRequestStatus },
                         { title: 'Từ chối',         value: stats.rejected,    color: '#ef4444', icon: <CloseCircleOutlined />, tab: 'all' as SupplyRequestTab,    status: 'rejected' as PurchaseRequestStatus },
                     ].map((s) => (

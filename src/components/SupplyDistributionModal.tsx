@@ -1,13 +1,36 @@
 import React, { useMemo, useState } from 'react';
 import dayjs, { type Dayjs } from 'dayjs';
 import {
-    App, Button, DatePicker, Divider, Input, InputNumber,
-    Modal, Select, Skeleton, Space, Tag, Tooltip, Typography,
+    Alert,
+    App,
+    Button,
+    DatePicker,
+    Input,
+    InputNumber,
+    Modal,
+    Progress,
+    Select,
+    Space,
+    Table,
+    Tag,
+    Tooltip,
+    Typography,
+    type TableColumnsType,
 } from 'antd';
-import { DeleteOutlined, InfoCircleOutlined, PlusOutlined, SendOutlined, ShopOutlined } from '@ant-design/icons';
+import {
+    CheckCircleOutlined,
+    DeleteOutlined,
+    InfoCircleOutlined,
+    PlusOutlined,
+    SendOutlined,
+    StopOutlined,
+} from '@ant-design/icons';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
-    distributionService, materialService, supplyRequestService,
+    distributionService,
+    materialService,
+    supplyRequestService,
+    type Material,
     type PurchaseRequestItem,
 } from '../core/services/material.service';
 
@@ -23,6 +46,7 @@ type ItemRow = {
     srItemName: string;
     srItemUnit: string;
     quantityRequested: number;
+    quantityApproved: number;
     materialId: string;
     materialName: string;
     unit: string;
@@ -34,19 +58,9 @@ type ItemRow = {
     vatAmount: number;
     totalWithVat: number;
     catalogStatus: 'matched' | 'unmatched' | 'ignored';
+    fulfillmentStatus: 'fulfilled' | 'partial' | 'not_supplied';
     inventorySkipReason: string;
 };
-
-const compute = (r: ItemRow): ItemRow => {
-    const totalPrice = r.quantity * r.unitPrice;
-    const vatAmount = totalPrice * (r.vatRate / 100);
-    return { ...r, totalPrice, vatAmount, totalWithVat: totalPrice + vatAmount };
-};
-
-const patch = (rows: ItemRow[], key: string, p: Partial<ItemRow>): ItemRow[] =>
-    rows.map((r) => (r.key === key ? compute({ ...r, ...p }) : r));
-
-const makeKey = () => `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
 
 interface Props {
     open: boolean;
@@ -57,14 +71,99 @@ interface Props {
     onSuccess: () => void;
 }
 
-const SupplyDistributionModal: React.FC<Props> = ({
-    open, supplyRequestId, fromPlantId, toPlantId, onClose, onSuccess,
-}) => {
+const makeKey = () => `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+
+const normalizeText = (value?: string) =>
+    (value || '')
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .replace(/đ/g, 'd')
+        .replace(/Đ/g, 'D')
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, ' ')
+        .trim();
+
+const scoreMaterial = (query: string, material: Material) => {
+    const source = normalizeText(query);
+    const name = normalizeText(material.name);
+    const code = normalizeText(material.code);
+    if (!source || !name) return 0;
+    if (name === source || code === source) return 100;
+    if (name.includes(source) || source.includes(name)) return 86;
+
+    const sourceTokens = source.split(' ').filter(Boolean);
+    const nameTokens = new Set(name.split(' ').filter(Boolean));
+    const matched = sourceTokens.filter((token) => nameTokens.has(token)).length;
+    const tokenScore = sourceTokens.length ? Math.round((matched / sourceTokens.length) * 72) : 0;
+    const prefixBonus = sourceTokens.some((token) => name.startsWith(token)) ? 10 : 0;
+    return Math.min(85, tokenScore + prefixBonus);
+};
+
+const getStock = (material?: any) => {
+    if (!material) return null;
+    return typeof material.cs1CurrentStock === 'number' ? material.cs1CurrentStock : null;
+};
+
+const compute = (row: ItemRow): ItemRow => {
+    const totalPrice = Number((row.quantity * row.unitPrice).toFixed(2));
+    const vatAmount = Number((totalPrice * (row.vatRate / 100)).toFixed(2));
+    return { ...row, totalPrice, vatAmount, totalWithVat: Number((totalPrice + vatAmount).toFixed(2)) };
+};
+
+const patchRows = (rows: ItemRow[], key: string, patch: Partial<ItemRow>): ItemRow[] =>
+    rows.map((row) => (row.key === key ? compute({ ...row, ...patch }) : row));
+
+const findBestMaterial = (item: PurchaseRequestItem, materials: any[]) => {
+    const query = item.materialName || '';
+    const sameUnit = (material: any) =>
+        normalizeText(material.unit) && normalizeText(material.unit) === normalizeText(item.unit);
+
+    return materials
+        .map((material) => {
+            const score = scoreMaterial(query, material) + (sameUnit(material) ? 12 : 0) + ((getStock(material) ?? 0) > 0 ? 8 : 0);
+            return { material, score };
+        })
+        .filter((entry) => entry.score >= 68)
+        .sort((a, b) => b.score - a.score)[0]?.material;
+};
+
+const buildInitialRows = (items: PurchaseRequestItem[], materials: any[]) =>
+    items.map((item, idx) => {
+        const approved = Number(item.quantityApproved ?? item.quantityRequested ?? 0);
+        const best = findBestMaterial(item, materials);
+        const stock = getStock(best);
+        const quantity = best && typeof stock === 'number' ? Math.min(approved, Math.max(0, stock)) : approved;
+
+        return compute({
+            key: makeKey(),
+            srItemIndex: idx,
+            srItemName: item.materialName ?? '',
+            srItemUnit: item.unit ?? '',
+            quantityRequested: Number(item.quantityRequested ?? 0),
+            quantityApproved: approved,
+            materialId: best?.id ?? '',
+            materialName: best?.name ?? item.materialName ?? '',
+            unit: best?.unit ?? item.unit ?? '',
+            quantity,
+            unitPrice: 0,
+            vatRate: 8,
+            note: '',
+            totalPrice: 0,
+            vatAmount: 0,
+            totalWithVat: 0,
+            catalogStatus: best ? 'matched' : 'unmatched',
+            fulfillmentStatus: quantity > 0 && quantity < approved ? 'partial' : quantity === 0 ? 'not_supplied' : 'fulfilled',
+            inventorySkipReason: '',
+        });
+    });
+
+const SupplyDistributionModal: React.FC<Props> = ({ open, supplyRequestId, fromPlantId, toPlantId, onClose, onSuccess }) => {
     const { message } = App.useApp();
     const queryClient = useQueryClient();
     const [distributedAt, setDistributedAt] = useState<Dayjs>(dayjs());
     const [note, setNote] = useState('');
-    const [items, setItems] = useState<ItemRow[]>([]);
+    const [rows, setRows] = useState<ItemRow[]>([]);
+    const [initializedKey, setInitializedKey] = useState('');
 
     const { data: sr, isLoading: srLoading } = useQuery({
         queryKey: ['supply-request', supplyRequestId],
@@ -75,52 +174,40 @@ const SupplyDistributionModal: React.FC<Props> = ({
     const { data: materialsRaw = [], refetch: refetchMaterials } = useQuery({
         queryKey: ['materials', 'with-stock-cs1'],
         queryFn: () =>
-            materialService.getAll({ includeStock: true, limit: 1000, isActive: true } as any)
-                .then((r: any) => (Array.isArray(r) ? r : r.data ?? [])),
+            materialService
+                .getAll({ includeStock: true, limit: 1000, isActive: true } as any)
+                .then((res: any) => (Array.isArray(res) ? res : res.data ?? [])),
         enabled: open,
         staleTime: 60_000,
     });
-    const materials: any[] = materialsRaw as any[];
+
+    const materials = materialsRaw as any[];
+    const srItems: PurchaseRequestItem[] = sr?.items ?? [];
+    const currentInitKey = `${open ? '1' : '0'}:${supplyRequestId}:${srItems.length}:${materials.length}`;
 
     React.useEffect(() => {
-        if (!open) { setNote(''); setDistributedAt(dayjs()); setItems([]); return; }
-        if (!sr) return;
-        setItems(
-            (sr.items ?? []).map((it: PurchaseRequestItem, idx: number) =>
-                compute({
-                    key: makeKey(),
-                    srItemIndex: idx,
-                    srItemName: it.materialName ?? '',
-                    srItemUnit: it.unit ?? '',
-                    quantityRequested: it.quantityApproved ?? it.quantityRequested,
-                    materialId: '',
-                    materialName: it.materialName ?? '',
-                    unit: it.unit ?? '',
-                    quantity: it.quantityApproved ?? it.quantityRequested,
-                    unitPrice: 0, vatRate: 8, note: '',
-                    totalPrice: 0, vatAmount: 0, totalWithVat: 0,
-                    catalogStatus: it.materialId ? 'matched' : 'unmatched',
-                    inventorySkipReason: '',
-                })
-            )
-        );
-    }, [open, sr]);
+        if (!open) {
+            setNote('');
+            setDistributedAt(dayjs());
+            setRows([]);
+            setInitializedKey('');
+            return;
+        }
+        if (!sr || initializedKey === currentInitKey) return;
+        setRows(buildInitialRows(sr.items ?? [], materials));
+        setInitializedKey(currentInitKey);
+    }, [open, sr, materials, initializedKey, currentInitKey]);
 
-    const totals = useMemo(() => ({
-        price: items.reduce((s, r) => s + r.totalPrice, 0),
-        vat: items.reduce((s, r) => s + r.vatAmount, 0),
-        total: items.reduce((s, r) => s + r.totalWithVat, 0),
-    }), [items]);
-
-    const { mutateAsync: createDist, isPending } = useMutation({
+    const createDistMutation = useMutation({
         mutationFn: distributionService.create,
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ['materials', 'distributions'] });
             queryClient.invalidateQueries({ queryKey: ['materials', 'supply-requests'] });
-            message.success('Tạo phiếu cấp phát thành công!');
+            queryClient.invalidateQueries({ queryKey: ['materials', 'supply-shortages'] });
+            message.success('Tạo phiếu cấp phát thành công');
             onSuccess();
         },
-        onError: (e: any) => message.error(e?.message ?? 'Có lỗi xảy ra'),
+        onError: (error: any) => message.error(error?.message ?? 'Không tạo được phiếu cấp phát'),
     });
 
     const createMaterialMutation = useMutation({
@@ -133,433 +220,454 @@ const SupplyDistributionModal: React.FC<Props> = ({
             }),
         onSuccess: async (material, row) => {
             await refetchMaterials();
-            setItems((p) => patch(p, row.key, {
-                materialId: material.id,
-                materialName: material.name,
-                unit: material.unit,
-                catalogStatus: 'matched',
-                inventorySkipReason: '',
-            }));
-            message.success('Da tao vat tu va gan vao dong cap phat');
+            setRows((prev) =>
+                patchRows(prev, row.key, {
+                    materialId: material.id,
+                    materialName: material.name,
+                    unit: material.unit,
+                    catalogStatus: 'matched',
+                    fulfillmentStatus: row.quantity > 0 ? 'fulfilled' : 'not_supplied',
+                    inventorySkipReason: '',
+                })
+            );
+            message.success('Đã tạo và gán vật tư kho');
         },
-        onError: (e: any) => message.error(e?.message ?? 'Khong tao duoc vat tu'),
+        onError: (error: any) => message.error(error?.message ?? 'Không tạo được vật tư'),
     });
 
+    const rowsByItem = useMemo(
+        () =>
+            srItems.map((_, idx) => {
+                const itemRows = rows.filter((row) => row.srItemIndex === idx);
+                const approved = Number(srItems[idx]?.quantityApproved ?? srItems[idx]?.quantityRequested ?? 0);
+                const distributed = itemRows.reduce((sum, row) => sum + Number(row.quantity ?? 0), 0);
+                return {
+                    rows: itemRows,
+                    approved,
+                    distributed,
+                    shortage: Math.max(0, approved - distributed),
+                    over: distributed > approved,
+                };
+            }),
+        [rows, srItems]
+    );
+
+    const totals = useMemo(
+        () => ({
+            price: rows.reduce((sum, row) => sum + row.totalPrice, 0),
+            vat: rows.reduce((sum, row) => sum + row.vatAmount, 0),
+            total: rows.reduce((sum, row) => sum + row.totalWithVat, 0),
+            distributed: rows.reduce((sum, row) => sum + row.quantity, 0),
+            shortage: rowsByItem.reduce((sum, group) => sum + group.shortage, 0),
+        }),
+        [rows, rowsByItem]
+    );
+
+    const getMaterialOptions = (row: ItemRow) =>
+        materials
+            .map((material: any) => {
+                const score =
+                    scoreMaterial(row.srItemName, material) +
+                    (normalizeText(material.unit) === normalizeText(row.srItemUnit) ? 12 : 0) +
+                    ((getStock(material) ?? 0) > 0 ? 8 : 0);
+                return {
+                    value: material.id,
+                    label: `${material.code ? `[${material.code}] ` : ''}${material.name}`,
+                    material,
+                    score,
+                    stock: getStock(material),
+                };
+            })
+            .sort((a, b) => b.score - a.score || String(a.label).localeCompare(String(b.label), 'vi'));
+
     const addRow = (srItemIndex: number) => {
-        const ref = items.find((r) => r.srItemIndex === srItemIndex);
-        setItems((prev) => [
+        const group = rowsByItem[srItemIndex];
+        const ref = rows.find((row) => row.srItemIndex === srItemIndex);
+        setRows((prev) => [
             ...prev,
             compute({
-                key: makeKey(), srItemIndex,
-                srItemName: ref?.srItemName ?? '', srItemUnit: ref?.srItemUnit ?? '',
-                quantityRequested: ref?.quantityRequested ?? 0,
-                materialId: '', materialName: '', unit: '',
-                quantity: 0, unitPrice: 0, vatRate: 8, note: '',
-                totalPrice: 0, vatAmount: 0, totalWithVat: 0,
-                catalogStatus: 'unmatched', inventorySkipReason: '',
+                key: makeKey(),
+                srItemIndex,
+                srItemName: ref?.srItemName ?? srItems[srItemIndex]?.materialName ?? '',
+                srItemUnit: ref?.srItemUnit ?? srItems[srItemIndex]?.unit ?? '',
+                quantityRequested: ref?.quantityRequested ?? Number(srItems[srItemIndex]?.quantityRequested ?? 0),
+                quantityApproved: ref?.quantityApproved ?? Number(srItems[srItemIndex]?.quantityApproved ?? srItems[srItemIndex]?.quantityRequested ?? 0),
+                materialId: '',
+                materialName: '',
+                unit: '',
+                quantity: group?.shortage ?? 0,
+                unitPrice: 0,
+                vatRate: 8,
+                note: '',
+                totalPrice: 0,
+                vatAmount: 0,
+                totalWithVat: 0,
+                catalogStatus: 'unmatched',
+                fulfillmentStatus: 'partial',
+                inventorySkipReason: '',
             }),
         ]);
     };
 
     const removeRow = (key: string) => {
-        const row = items.find((r) => r.key === key);
+        const row = rows.find((item) => item.key === key);
         if (!row) return;
-        if (items.filter((r) => r.srItemIndex === row.srItemIndex).length <= 1) {
-            message.warning('Mỗi vật tư đề xuất cần ít nhất 1 dòng cấp phát');
+        if (rows.filter((item) => item.srItemIndex === row.srItemIndex).length <= 1) {
+            message.warning('Mỗi dòng đề xuất cần giữ ít nhất một dòng xử lý');
             return;
         }
-        setItems((p) => p.filter((r) => r.key !== key));
+        setRows((prev) => prev.filter((item) => item.key !== key));
     };
 
-    const handleSubmit = async () => {
-        const missingMat = items.filter((r) => !r.materialId && r.catalogStatus !== 'ignored');
-        const invalidIgnored = items.filter((r) => r.catalogStatus === 'ignored' && !(r.materialName || r.srItemName).trim());
-        if (invalidIgnored.length) { message.error('Dong bo qua ton van can co ten vat tu'); return; }
-        if (missingMat.length) { message.error(`${missingMat.length} dòng chưa chọn vật tư kho`); return; }
-        const invalidQty = items.filter((r) => r.quantity <= 0);
-        if (invalidQty.length) { message.error('Số lượng cấp phải lớn hơn 0'); return; }
-        const invalidPrice = items.filter((r) => r.unitPrice < 0);
-        if (invalidPrice.length) { message.error('Đơn giá không hợp lệ'); return; }
-
-        await createDist({
-            supplyRequestId, fromPlantId, toPlantId,
-            distributedAt: distributedAt.toISOString(),
-            note: note.trim() || undefined,
-            items: items.map((r) => ({
-                materialId: r.materialId || undefined,
-                materialName: (r.materialName || r.srItemName).trim(),
-                unit: (r.unit || r.srItemUnit).trim(),
-                quantity: r.quantity, quantityRequested: r.quantityRequested,
-                unitPrice: r.unitPrice, vatRate: r.vatRate,
-                catalogStatus: r.materialId ? 'matched' : r.catalogStatus,
-                inventorySkipReason: r.catalogStatus === 'ignored' ? (r.inventorySkipReason.trim() || 'Khong theo doi ton kho') : undefined,
-                adjustReason: r.note.trim() || undefined,
-            })),
+    const markNotSupplied = (srItemIndex: number) => {
+        setRows((prev) => {
+            const targetRows = prev.filter((row) => row.srItemIndex === srItemIndex);
+            const first = targetRows[0];
+            const next = prev.filter((row) => row.srItemIndex !== srItemIndex);
+            return [
+                ...next,
+                compute({
+                    ...(first ?? buildInitialRows([srItems[srItemIndex]], materials)[0]),
+                    key: first?.key ?? makeKey(),
+                    srItemIndex,
+                    materialId: '',
+                    materialName: srItems[srItemIndex]?.materialName ?? first?.srItemName ?? '',
+                    unit: srItems[srItemIndex]?.unit ?? first?.srItemUnit ?? '',
+                    quantity: 0,
+                    unitPrice: 0,
+                    catalogStatus: 'ignored',
+                    fulfillmentStatus: 'not_supplied',
+                    inventorySkipReason: 'Chua the cap trong dot nay',
+                    note: first?.note || 'Chua the cap trong dot nay',
+                }),
+            ].sort((a, b) => a.srItemIndex - b.srItemIndex);
         });
     };
 
-    const materialOptions = materials.map((m: any) => ({
-        value: m.id,
-        label: `${m.code ? `[${m.code}] ` : ''}${m.name}`,
-        unit: m.unit,
-        stock: m.cs1CurrentStock ?? null,
-        trackInventory: m.trackInventory !== false,
-    }));
+    const handleSubmit = async () => {
+        for (const [idx, group] of rowsByItem.entries()) {
+            if (group.over) {
+                message.error(`Dòng ${idx + 1}: số lượng cấp vượt số lượng duyệt`);
+                return;
+            }
+            if (group.shortage > 0 && !group.rows.some((row) => row.note.trim())) {
+                message.error(`Dòng ${idx + 1}: vui lòng nhập lý do cấp thiếu hoặc chưa cấp`);
+                return;
+            }
+        }
 
-    const srItems: PurchaseRequestItem[] = sr?.items ?? [];
+        const missingMaterial = rows.filter((row) => row.quantity > 0 && !row.materialId && row.catalogStatus !== 'ignored');
+        if (missingMaterial.length) {
+            message.error(`${missingMaterial.length} dòng chưa chọn vật tư kho`);
+            return;
+        }
+
+        const invalidQty = rows.filter((row) => row.quantity < 0 || (row.quantity === 0 && row.fulfillmentStatus !== 'not_supplied'));
+        if (invalidQty.length) {
+            message.error('Số lượng cấp không hợp lệ');
+            return;
+        }
+
+        await createDistMutation.mutateAsync({
+            supplyRequestId,
+            fromPlantId,
+            toPlantId,
+            distributedAt: distributedAt.toISOString(),
+            note: note.trim() || undefined,
+            items: rows.map((row) => {
+                const group = rowsByItem[row.srItemIndex];
+                const isNotSupplied = row.fulfillmentStatus === 'not_supplied' || row.quantity === 0;
+                return {
+                    materialId: row.materialId || undefined,
+                    materialName: (row.materialName || row.srItemName).trim(),
+                    unit: (row.unit || row.srItemUnit).trim(),
+                    quantity: row.quantity,
+                    quantityRequested: row.quantityApproved,
+                    quantityDistributed: row.quantity,
+                    quantityShortage: group?.shortage ?? 0,
+                    sourceRequestItemIndex: row.srItemIndex,
+                    fulfillmentStatus: isNotSupplied ? 'not_supplied' : group?.shortage ? 'partial' : 'fulfilled',
+                    unitPrice: row.unitPrice,
+                    vatRate: row.vatRate,
+                    catalogStatus: isNotSupplied ? 'ignored' : row.materialId ? 'matched' : row.catalogStatus,
+                    inventorySkipReason: isNotSupplied ? row.inventorySkipReason || 'Chua the cap trong dot nay' : undefined,
+                    adjustReason: row.note.trim() || undefined,
+                    note: row.note.trim() || undefined,
+                };
+            }),
+        });
+    };
+
+    const buildColumns = (groupIndex: number): TableColumnsType<ItemRow> => [
+        {
+            title: 'Vật tư cấp thực tế',
+            key: 'material',
+            width: 320,
+            render: (_value, row) => (
+                <div className="flex flex-col gap-1">
+                    <Select
+                        allowClear
+                        showSearch={{ optionFilterProp: 'label' }}
+                        placeholder="Chọn vật tư kho"
+                        disabled={row.fulfillmentStatus === 'not_supplied'}
+                        value={row.materialId || undefined}
+                        options={getMaterialOptions(row)}
+                        optionRender={(option) => {
+                            const data = option.data as any;
+                            const stock = data.stock;
+                            const isSuggested = data.score >= 68;
+                            return (
+                                <div className="flex items-center justify-between gap-2">
+                                    <span className="min-w-0 flex-1 truncate text-xs">{option.label}</span>
+                                    <Space size={4}>
+                                        {isSuggested && <Tag color="blue" className="!m-0 !text-[10px]">Gợi ý</Tag>}
+                                        <Tag color={stock === null ? 'default' : stock > 0 ? 'success' : 'warning'} className="!m-0 !text-[10px]">
+                                            {stock === null ? 'Chưa có tồn' : `Tồn ${fmt(stock)}`}
+                                        </Tag>
+                                    </Space>
+                                </div>
+                            );
+                        }}
+                        onChange={(value) => {
+                            const material = materials.find((item: any) => item.id === value);
+                            setRows((prev) =>
+                                patchRows(prev, row.key, {
+                                    materialId: value || '',
+                                    materialName: material?.name ?? '',
+                                    unit: material?.unit ?? row.unit,
+                                    catalogStatus: value ? 'matched' : 'unmatched',
+                                    fulfillmentStatus: row.quantity > 0 ? 'fulfilled' : 'not_supplied',
+                                    inventorySkipReason: '',
+                                })
+                            );
+                        }}
+                    />
+                    <Space size={6}>
+                        <Button
+                            size="small"
+                            icon={<PlusOutlined />}
+                            loading={createMaterialMutation.isPending}
+                            disabled={row.fulfillmentStatus === 'not_supplied' || !(row.materialName || row.srItemName).trim() || !(row.unit || row.srItemUnit).trim()}
+                            onClick={() => createMaterialMutation.mutate(row)}
+                        >
+                            Tạo VT
+                        </Button>
+                        {row.fulfillmentStatus === 'not_supplied' && <Tag color="red" className="!m-0">Không cấp đợt này</Tag>}
+                    </Space>
+                </div>
+            ),
+        },
+        {
+            title: 'ĐVT',
+            key: 'unit',
+            width: 70,
+            align: 'center',
+            render: (_value, row) => row.unit || row.srItemUnit || '-',
+        },
+        {
+            title: 'Tồn CS1',
+            key: 'stock',
+            width: 90,
+            align: 'right',
+            render: (_value, row) => {
+                const stock = getStock(materials.find((item: any) => item.id === row.materialId));
+                return stock === null ? <span className="text-slate-400">-</span> : <span className={stock > 0 ? 'text-emerald-600' : 'text-orange-500'}>{fmt(stock)}</span>;
+            },
+        },
+        {
+            title: 'SL cấp',
+            key: 'quantity',
+            width: 95,
+            align: 'right',
+            render: (_value, row) => (
+                <InputNumber
+                    min={0}
+                    controls={false}
+                    value={row.quantity}
+                    disabled={row.fulfillmentStatus === 'not_supplied'}
+                    style={{ width: '100%' }}
+                    onChange={(value) => setRows((prev) => patchRows(prev, row.key, { quantity: Number(value ?? 0) }))}
+                />
+            ),
+        },
+        {
+            title: 'Đơn giá',
+            key: 'unitPrice',
+            width: 120,
+            align: 'right',
+            render: (_value, row) => (
+                <InputNumber
+                    min={0}
+                    controls={false}
+                    value={row.unitPrice}
+                    disabled={row.fulfillmentStatus === 'not_supplied'}
+                    style={{ width: '100%' }}
+                    formatter={(value) => `${value}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')}
+                    parser={(value) => Number(String(value).replace(/,/g, '')) as any}
+                    onChange={(value) => setRows((prev) => patchRows(prev, row.key, { unitPrice: Number(value ?? 0) }))}
+                />
+            ),
+        },
+        {
+            title: 'VAT',
+            key: 'vat',
+            width: 78,
+            align: 'right',
+            render: (_value, row) => (
+                <InputNumber
+                    min={0}
+                    max={100}
+                    controls={false}
+                    value={row.vatRate}
+                    disabled={row.fulfillmentStatus === 'not_supplied'}
+                    style={{ width: '100%' }}
+                    formatter={(value) => `${value}%`}
+                    parser={(value) => Number(String(value).replace('%', '')) as any}
+                    onChange={(value) => setRows((prev) => patchRows(prev, row.key, { vatRate: Number(value ?? 0) }))}
+                />
+            ),
+        },
+        {
+            title: 'Tổng tiền',
+            key: 'total',
+            width: 120,
+            align: 'right',
+            render: (_value, row) => <span className="font-semibold text-slate-900">{row.totalWithVat ? fmt(row.totalWithVat) : '-'}</span>,
+        },
+        {
+            title: 'Ghi chú / lý do thiếu',
+            key: 'note',
+            width: 230,
+            render: (_value, row) => (
+                <Input
+                    value={row.note}
+                    placeholder={rowsByItem[groupIndex]?.shortage ? 'Bắt buộc nếu cấp thiếu' : 'Ghi chú'}
+                    onChange={(event) => setRows((prev) => patchRows(prev, row.key, { note: event.target.value }))}
+                />
+            ),
+        },
+        {
+            title: '',
+            key: 'actions',
+            width: 52,
+            align: 'center',
+            render: (_value, row) => (
+                <Tooltip title="Xóa dòng">
+                    <Button type="text" danger icon={<DeleteOutlined />} onClick={() => removeRow(row.key)} />
+                </Tooltip>
+            ),
+        },
+    ];
 
     return (
         <Modal
             open={open}
             onCancel={onClose}
-            width={1100}
+            width={1280}
             centered
             mask={{ closable: false }}
             destroyOnHidden
-            styles={{ body: { padding: 0, maxHeight: '80vh', overflowY: 'auto' } }}
+            styles={{ body: { padding: 0, maxHeight: '82vh', overflowY: 'auto' } }}
             title={
-                <div className="flex items-center gap-3 px-2 py-1">
-                    <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-blue-50 text-blue-600">
+                <div className="flex items-center gap-3 px-1 py-0.5">
+                    <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-blue-50 text-blue-600">
                         <SendOutlined />
                     </div>
                     <div>
                         <div className="text-base font-semibold text-slate-900">Tạo phiếu cấp phát vật tư</div>
                         <div className="text-xs text-slate-400">
-                            Căn cứ đề xuất:{' '}
-                            <span className="font-mono font-semibold text-blue-600">{sr?.requestCode ?? '...'}</span>
+                            Căn cứ đề xuất <span className="font-mono font-semibold text-blue-600">{sr?.requestCode ?? '...'}</span>
                         </div>
                     </div>
                 </div>
             }
             footer={
-                <div className="flex items-center justify-between border-t border-slate-100 px-2 pt-3">
-                    {/* Totals */}
-                    <div className="flex items-center gap-6">
-                        <div className="text-center">
-                            <div className="text-[11px] font-medium uppercase tracking-wide text-slate-400">Thành tiền</div>
-                            <div className="text-sm font-semibold text-slate-700">{fmtVND(totals.price)}</div>
-                        </div>
-                        <div className="h-8 w-px bg-slate-200" />
-                        <div className="text-center">
-                            <div className="text-[11px] font-medium uppercase tracking-wide text-slate-400">Tổng VAT</div>
-                            <div className="text-sm font-semibold text-slate-700">{fmtVND(totals.vat)}</div>
-                        </div>
-                        <div className="h-8 w-px bg-slate-200" />
-                        <div className="text-center">
-                            <div className="text-[11px] font-medium uppercase tracking-wide text-slate-400">Tổng cộng</div>
-                            <div className="text-lg font-bold text-blue-700">{fmtVND(totals.total)}</div>
-                        </div>
+                <div className="flex items-center justify-between border-t border-slate-100 px-1 pt-3">
+                    <div className="grid grid-cols-4 gap-4 text-sm">
+                        <div><Text type="secondary">SL cấp</Text><div className="font-semibold">{fmt(totals.distributed)}</div></div>
+                        <div><Text type="secondary">SL thiếu</Text><div className={totals.shortage ? 'font-semibold text-orange-600' : 'font-semibold text-emerald-600'}>{fmt(totals.shortage)}</div></div>
+                        <div><Text type="secondary">Tiền VAT</Text><div className="font-semibold">{fmtVND(totals.vat)}</div></div>
+                        <div><Text type="secondary">Tổng cộng</Text><div className="font-bold text-blue-700">{fmtVND(totals.total)}</div></div>
                     </div>
                     <Space>
-                        <Button onClick={onClose}>Huỷ</Button>
-                        <Button
-                            type="primary" icon={<SendOutlined />}
-                            loading={isPending} onClick={handleSubmit}
-                            className="bg-blue-600 hover:!bg-blue-700"
-                        >
+                        <Button onClick={onClose}>Hủy</Button>
+                        <Button type="primary" icon={<SendOutlined />} loading={createDistMutation.isPending} onClick={handleSubmit}>
                             Tạo phiếu cấp phát
                         </Button>
                     </Space>
                 </div>
             }
         >
-            {srLoading ? (
-                <div className="p-6">
-                    <Skeleton active paragraph={{ rows: 4 }} />
-                </div>
-            ) : (
-                <div className="flex flex-col">
-                    {/* ── Section 1: Thông tin phiếu ── */}
-                    <div className="border-b border-slate-100 bg-slate-50 px-6 py-4">
-                        <div className="mb-3 flex items-center gap-2 text-xs font-semibold uppercase tracking-widest text-slate-400">
-                            <InfoCircleOutlined /> Thông tin phiếu
-                        </div>
-                        <div className="grid grid-cols-4 gap-4">
-                            <div>
-                                <div className="mb-1 text-xs font-medium text-slate-500">Căn cứ đề xuất</div>
-                                <Input
-                                    disabled value={sr?.requestCode ?? ''}
-                                    className="font-mono font-semibold"
-                                />
-                            </div>
-                            <div>
-                                <div className="mb-1 text-xs font-medium text-slate-500">Từ kho (CS1)</div>
-                                <Input disabled value="Cơ sở chính (CS1)" />
-                            </div>
-                            <div>
-                                <div className="mb-1 text-xs font-medium text-slate-500">Đến cơ sở</div>
-                                <Input
-                                    disabled
-                                    value={sr?.fromPlant?.name ?? sr?.plant?.name ?? '—'}
-                                    className="font-medium"
-                                />
-                            </div>
-                            <div>
-                                <div className="mb-1 text-xs font-medium text-slate-500">
-                                    Ngày cấp phát <span className="text-red-500">*</span>
-                                </div>
-                                <DatePicker
-                                    className="w-full" value={distributedAt} format="DD/MM/YYYY"
-                                    onChange={(v) => v && setDistributedAt(v)}
-                                />
-                            </div>
-                        </div>
-                        <div className="mt-3">
-                            <div className="mb-1 text-xs font-medium text-slate-500">Ghi chú phiếu</div>
-                            <Input.TextArea
-                                rows={2} value={note}
-                                onChange={(e) => setNote(e.target.value)}
-                                placeholder="Ghi chú chung cho phiếu cấp phát (không bắt buộc)..."
-                            />
-                        </div>
+            <div className="flex flex-col">
+                <div className="border-b border-slate-100 bg-slate-50 px-6 py-4">
+                    <div className="mb-3 flex items-center gap-2 text-xs font-semibold uppercase tracking-widest text-slate-400">
+                        <InfoCircleOutlined /> Thông tin phiếu
                     </div>
+                    <div className="grid grid-cols-4 gap-4">
+                        <Input disabled value={sr?.requestCode ?? ''} className="font-mono font-semibold" />
+                        <Input disabled value="Cơ sở chính (CS1)" />
+                        <Input disabled value={sr?.fromPlant?.name ?? sr?.plant?.name ?? 'Cơ sở nhận'} />
+                        <DatePicker className="w-full" value={distributedAt} format="DD/MM/YYYY" onChange={(value) => value && setDistributedAt(value)} />
+                    </div>
+                    <Input.TextArea className="mt-3" rows={2} value={note} onChange={(event) => setNote(event.target.value)} placeholder="Ghi chú chung cho phiếu cấp phát" />
+                </div>
 
-                    {/* ── Section 2: Danh sách vật tư ── */}
-                    <div className="px-6 py-4">
-                        <div className="mb-4 flex items-center gap-2 text-xs font-semibold uppercase tracking-widest text-slate-400">
-                            <ShopOutlined /> Phân bổ vật tư kho
-                            <Tooltip title="Mỗi vật tư đề xuất có thể được ghép từ nhiều mã vật tư trong kho">
-                                <InfoCircleOutlined className="cursor-help text-slate-300" />
-                            </Tooltip>
-                        </div>
+                <div className="px-6 py-4">
+                    <Alert
+                        type="info"
+                        showIcon
+                        className="mb-4"
+                        message="Hệ thống tự gợi ý vật tư kho theo tên đề xuất, đơn vị tính và tồn CS1. Các dòng cấp thiếu sẽ được ghi nhận để tạo phiếu cấp bù."
+                    />
 
+                    {srLoading ? (
+                        <div className="py-12 text-center text-slate-400">Đang tải đề xuất...</div>
+                    ) : (
                         <div className="flex flex-col gap-4">
-                            {srItems.map((srItem: PurchaseRequestItem, idx: number) => {
-                                const rowsForItem = items.filter((r) => r.srItemIndex === idx);
-                                const qtyApproved = srItem.quantityApproved ?? srItem.quantityRequested;
-                                const qtyDistributed = rowsForItem.reduce((s, r) => s + r.quantity, 0);
-                                const isExact = qtyDistributed === qtyApproved;
-                                const isOver = qtyDistributed > qtyApproved;
+                            {srItems.map((item, idx) => {
+                                const group = rowsByItem[idx];
+                                const percent = group?.approved ? Math.min(100, Math.round((group.distributed / group.approved) * 100)) : 0;
+                                const statusColor = group?.over ? 'red' : group?.shortage ? 'orange' : 'green';
 
                                 return (
-                                    <div
-                                        key={idx}
-                                        className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm"
-                                    >
-                                        {/* Group header */}
-                                        <div className="flex items-center justify-between border-b border-slate-100 bg-slate-50 px-4 py-2.5">
-                                            <div className="flex items-center gap-2 min-w-0">
-                                                <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-blue-100 text-[11px] font-bold text-blue-600">
-                                                    {idx + 1}
-                                                </span>
-                                                <span className="truncate text-sm font-semibold text-slate-800">
-                                                    {srItem.materialName}
-                                                </span>
-                                                <span className="shrink-0 text-xs text-slate-400">
-                                                    ({srItem.unit})
-                                                </span>
-                                                <div className="ml-2 flex items-center gap-1.5 shrink-0">
-                                                    <Tag color="blue" className="!text-[11px] !m-0">
-                                                        Đề xuất: {fmt(srItem.quantityRequested)}
+                                    <div key={idx} className="overflow-hidden rounded-lg border border-slate-200 bg-white">
+                                        <div className="flex items-center justify-between gap-4 border-b border-slate-100 bg-slate-50 px-4 py-3">
+                                            <div className="min-w-0 flex-1">
+                                                <div className="flex items-center gap-2">
+                                                    <span className="flex h-6 w-6 items-center justify-center rounded bg-blue-100 text-xs font-bold text-blue-700">{idx + 1}</span>
+                                                    <span className="truncate font-semibold text-slate-900">{item.materialName}</span>
+                                                    <Tag className="!m-0">{item.unit}</Tag>
+                                                    <Tag color={statusColor} className="!m-0">
+                                                        Cấp {fmt(group?.distributed)} / duyệt {fmt(group?.approved)}
                                                     </Tag>
-                                                    {srItem.quantityApproved != null &&
-                                                        srItem.quantityApproved !== srItem.quantityRequested && (
-                                                            <Tag color="orange" className="!text-[11px] !m-0">
-                                                                Duyệt: {fmt(srItem.quantityApproved)}
-                                                            </Tag>
-                                                        )}
-                                                    <Tag
-                                                        color={isOver ? 'red' : isExact ? 'green' : 'warning'}
-                                                        className="!text-[11px] !m-0"
-                                                    >
-                                                        Đã phân: {fmt(qtyDistributed)} / {fmt(qtyApproved)}
-                                                    </Tag>
+                                                    {group?.shortage ? <Tag color="orange" className="!m-0">Thiếu {fmt(group.shortage)}</Tag> : <Tag color="green" className="!m-0" icon={<CheckCircleOutlined />}>Đủ</Tag>}
+                                                </div>
+                                                <div className="mt-2 grid grid-cols-[160px_1fr] items-center gap-3">
+                                                    <span className="text-xs text-slate-400">Tiến độ cấp phát</span>
+                                                    <Progress percent={percent} size="small" status={group?.over ? 'exception' : group?.shortage ? 'active' : 'success'} />
                                                 </div>
                                             </div>
-                                            <Button
-                                                size="small" icon={<PlusOutlined />}
-                                                onClick={() => addRow(idx)}
-                                                className="shrink-0 ml-3"
-                                            >
-                                                Thêm vật tư kho
-                                            </Button>
+                                            <Space>
+                                                <Button size="small" icon={<PlusOutlined />} onClick={() => addRow(idx)}>Ghép thêm vật tư</Button>
+                                                <Button size="small" danger icon={<StopOutlined />} onClick={() => markNotSupplied(idx)}>Không cấp</Button>
+                                            </Space>
                                         </div>
 
-                                        {/* Rows */}
-                                        <div>
-                                            <table className="w-full border-collapse text-sm">
-                                                <thead>
-                                                    <tr className="border-b border-slate-100 bg-slate-50/60 text-[11px] font-semibold uppercase tracking-wider text-slate-400">
-                                                        <th className="px-4 py-2 text-left" style={{ width: '28%' }}>Vật tư kho thực tế</th>
-                                                        <th className="px-2 py-2 text-center" style={{ width: 52 }}>ĐVT</th>
-                                                        <th className="px-2 py-2 text-right" style={{ width: 80 }}>SL cấp</th>
-                                                        <th className="px-2 py-2 text-right" style={{ width: 100 }}>Đơn giá</th>
-                                                        <th className="px-2 py-2 text-right" style={{ width: 90 }}>Thành tiền</th>
-                                                        <th className="px-2 py-2 text-right" style={{ width: 60 }}>VAT%</th>
-                                                        <th className="px-2 py-2 text-right" style={{ width: 90 }}>Tiền VAT</th>
-                                                        <th className="px-2 py-2 text-right" style={{ width: 100 }}>Tổng tiền</th>
-                                                        <th className="px-2 py-2 text-left">Ghi chú</th>
-                                                        <th style={{ width: 36 }} />
-                                                    </tr>
-                                                </thead>
-                                                <tbody className="divide-y divide-slate-100">
-                                                    {rowsForItem.map((row) => (
-                                                        <tr key={row.key} className="hover:bg-blue-50/20 transition-colors">
-                                                            <td className="px-4 py-2">
-                                                                <Select
-                                                                    allowClear showSearch={{ optionFilterProp: 'label' }}
-                                                                    placeholder="Chọn vật tư kho..." size="small"
-                                                                    style={{ width: '100%' }}
-                                                                    disabled={row.catalogStatus === 'ignored'}
-                                                                    value={row.materialId || undefined}
-                                                                    options={materialOptions}
-                                                                    optionRender={(opt) => {
-                                                                        const stock = (opt.data as any).stock;
-                                                                        return (
-                                                                            <div className="flex items-center justify-between gap-2">
-                                                                                <span className="flex-1 truncate text-xs">{opt.label}</span>
-                                                                                {stock === null ? (
-                                                                                    <Tag color="error" className="!text-[10px] !m-0">Chưa có</Tag>
-                                                                                ) : stock > 0 ? (
-                                                                                    <Tag color="success" className="!text-[10px] !m-0">Còn {fmt(stock)}</Tag>
-                                                                                ) : (
-                                                                                    <Tag color="warning" className="!text-[10px] !m-0">Hết</Tag>
-                                                                                )}
-                                                                            </div>
-                                                                        );
-                                                                    }}
-                                                                    onChange={(v) => {
-                                                                        const mat = materials.find((m: any) => m.id === v);
-                                                                        setItems((p) => patch(p, row.key, {
-                                                                            materialId: v || '',
-                                                                            materialName: mat?.name ?? '',
-                                                                            unit: mat?.unit ?? row.unit,
-                                                                            catalogStatus: v ? 'matched' : 'unmatched',
-                                                                            inventorySkipReason: '',
-                                                                        }));
-                                                                    }}
-                                                                />
-                                                                <div className="mt-1 flex items-center gap-1">
-                                                                    <Button
-                                                                        size="small"
-                                                                        icon={<PlusOutlined />}
-                                                                        loading={createMaterialMutation.isPending}
-                                                                        disabled={row.catalogStatus === 'ignored' || !(row.materialName || row.srItemName).trim() || !(row.unit || row.srItemUnit).trim()}
-                                                                        onClick={() => createMaterialMutation.mutate(row)}
-                                                                    >
-                                                                        Tao VT
-                                                                    </Button>
-                                                                    <Button
-                                                                        size="small"
-                                                                        type={row.catalogStatus === 'ignored' ? 'primary' : 'default'}
-                                                                        onClick={() => setItems((p) => patch(p, row.key, {
-                                                                            materialId: '',
-                                                                            materialName: row.materialName || row.srItemName,
-                                                                            unit: row.unit || row.srItemUnit,
-                                                                            catalogStatus: row.catalogStatus === 'ignored' ? 'unmatched' : 'ignored',
-                                                                            inventorySkipReason: row.catalogStatus === 'ignored' ? '' : 'Khong theo doi ton kho',
-                                                                        }))}
-                                                                    >
-                                                                        {row.catalogStatus === 'ignored' ? 'Theo ton' : 'Bo ton'}
-                                                                    </Button>
-                                                                </div>
-                                                                {row.catalogStatus === 'ignored' ? (
-                                                                    <Tag color="orange" className="!mt-1 !text-[10px]">Khong tru ton</Tag>
-                                                                ) : null}
-                                                            </td>
-                                                            <td className="px-2 py-2 text-center text-xs text-slate-500">{row.unit || '—'}</td>
-                                                            <td className="px-2 py-2">
-                                                                <InputNumber
-                                                                    size="small" min={0} value={row.quantity}
-                                                                    controls={false} style={{ width: '100%' }}
-                                                                    onChange={(v) => setItems((p) => patch(p, row.key, { quantity: v ?? 0 }))}
-                                                                />
-                                                            </td>
-                                                            <td className="px-2 py-2">
-                                                                <InputNumber
-                                                                    size="small" min={0} value={row.unitPrice}
-                                                                    controls={false} style={{ width: '100%' }}
-                                                                    formatter={(v) => `${v}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')}
-                                                                    parser={(v) => Number(String(v).replace(/,/g, '')) as any}
-                                                                    onChange={(v) => setItems((p) => patch(p, row.key, { unitPrice: v ?? 0 }))}
-                                                                />
-                                                            </td>
-                                                            <td className="px-2 py-2 text-right text-xs font-medium text-slate-700">
-                                                                {row.totalPrice > 0 ? fmt(row.totalPrice) : '—'}
-                                                            </td>
-                                                            <td className="px-2 py-2">
-                                                                <InputNumber
-                                                                    size="small" min={0} max={100} value={row.vatRate}
-                                                                    controls={false} style={{ width: '100%' }}
-                                                                    formatter={(v) => `${v}%`}
-                                                                    parser={(v) => Number(String(v).replace('%', '')) as any}
-                                                                    onChange={(v) => setItems((p) => patch(p, row.key, { vatRate: v ?? 0 }))}
-                                                                />
-                                                            </td>
-                                                            <td className="px-2 py-2 text-right text-xs text-slate-400">
-                                                                {row.vatAmount > 0 ? fmt(row.vatAmount) : '—'}
-                                                            </td>
-                                                            <td className="px-2 py-2 text-right text-sm font-bold text-blue-700">
-                                                                {row.totalWithVat > 0 ? fmt(row.totalWithVat) : '—'}
-                                                            </td>
-                                                            <td className="px-2 py-2">
-                                                                <Input
-                                                                    size="small" value={row.note}
-                                                                    placeholder="Ghi chú..."
-                                                                    style={{ width: '100%' }}
-                                                                    onChange={(e) => setItems((p) => patch(p, row.key, { note: e.target.value }))}
-                                                                />
-                                                            </td>
-                                                            <td className="px-2 py-2 text-center">
-                                                                <Tooltip title="Xoá dòng">
-                                                                    <Button
-                                                                        type="text" danger size="small" icon={<DeleteOutlined />}
-                                                                        onClick={() => removeRow(row.key)}
-                                                                    />
-                                                                </Tooltip>
-                                                            </td>
-                                                        </tr>
-                                                    ))}
-                                                </tbody>
-                                            </table>
-
-                                            {/* Sub-total per SR item */}
-                                            {rowsForItem.length > 1 && (
-                                                <table className="w-full border-collapse border-t border-slate-100 bg-slate-50 text-xs font-semibold text-slate-600">
-                                                    <tbody>
-                                                        <tr>
-                                                            <td className="px-4 py-1.5 text-right text-slate-400" colSpan={4}>Tổng nhóm</td>
-                                                            <td className="px-2 py-1.5 text-right" style={{ width: 90 }}>{fmt(rowsForItem.reduce((s, r) => s + r.totalPrice, 0))}</td>
-                                                            <td style={{ width: 60 }} />
-                                                            <td className="px-2 py-1.5 text-right" style={{ width: 90 }}>{fmt(rowsForItem.reduce((s, r) => s + r.vatAmount, 0))}</td>
-                                                            <td className="px-2 py-1.5 text-right font-bold text-blue-700" style={{ width: 100 }}>{fmt(rowsForItem.reduce((s, r) => s + r.totalWithVat, 0))}</td>
-                                                            <td /><td />
-                                                        </tr>
-                                                    </tbody>
-                                                </table>
-                                            )}
-                                        </div>
+                                        <Table<ItemRow>
+                                            rowKey="key"
+                                            size="small"
+                                            columns={buildColumns(idx)}
+                                            dataSource={group?.rows ?? []}
+                                            pagination={false}
+                                            scroll={{ x: 1110 }}
+                                        />
                                     </div>
                                 );
                             })}
                         </div>
-
-                        {/* Grand total summary */}
-                        {srItems.length > 1 && (
-                            <div className="mt-4 flex justify-end">
-                                <div className="rounded-xl border border-slate-200 bg-slate-50 px-6 py-3">
-                                    <div className="flex items-center gap-8">
-                                        <div className="text-center">
-                                            <div className="text-[11px] font-medium uppercase tracking-wide text-slate-400">Thành tiền</div>
-                                            <div className="text-sm font-semibold text-slate-700">{fmtVND(totals.price)}</div>
-                                        </div>
-                                        <Divider vertical className="!h-8" />
-                                        <div className="text-center">
-                                            <div className="text-[11px] font-medium uppercase tracking-wide text-slate-400">Tổng VAT</div>
-                                            <div className="text-sm font-semibold text-slate-700">{fmtVND(totals.vat)}</div>
-                                        </div>
-                                        <Divider vertical className="!h-8" />
-                                        <div className="text-center">
-                                            <div className="text-[11px] font-medium uppercase tracking-wide text-slate-400">Tổng cộng</div>
-                                            <div className="text-xl font-bold text-blue-700">{fmtVND(totals.total)}</div>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                        )}
-                    </div>
+                    )}
                 </div>
-            )}
+            </div>
         </Modal>
     );
 };

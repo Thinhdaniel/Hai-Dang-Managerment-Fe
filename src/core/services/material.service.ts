@@ -9,6 +9,7 @@ const SUPPLY_REQUESTS_BASE = '/supply-requests';
 const PURCHASE_ORDERS_BASE = '/purchase-orders';
 const INVENTORY_BASE = '/inventory';
 const DISTRIBUTIONS_BASE = '/distributions';
+const SUPPLY_SHORTAGES_BASE = '/supply-shortages';
 
 async function downloadFile(url: string, filename: string): Promise<void> {
     // axiosInstance interceptor returns response.data directly, so result is the Blob
@@ -33,6 +34,7 @@ export type PurchaseRequestStatus =
     | 'ordered'
     | 'received'
     | 'in_progress'
+    | 'partially_distributed'
     | 'distributed'
     | 'cancelled';
 export type PurchaseOrderStatus = 'draft' | 'sent' | 'confirmed' | 'ordered' | 'partially_received' | 'received' | 'cancelled';
@@ -406,6 +408,11 @@ export interface DistributionItem {
     unit?: string;
     quantity: number;
     quantityRequested?: number;
+    quantityDistributed?: number;
+    quantityShortage?: number;
+    sourceRequestItemIndex?: number;
+    sourceShortageId?: string;
+    fulfillmentStatus?: 'fulfilled' | 'partial' | 'not_supplied';
     unitPrice?: number;
     totalPrice?: number;
     vatRate?: number;
@@ -426,6 +433,10 @@ export interface DistributionItemPayload {
     quantity: number;
     quantityRequested?: number;
     quantityDistributed?: number;
+    quantityShortage?: number;
+    sourceRequestItemIndex?: number;
+    sourceShortageId?: string;
+    fulfillmentStatus?: 'fulfilled' | 'partial' | 'not_supplied';
     unitPrice?: number;
     vatRate?: number;
     catalogStatus?: 'matched' | 'unmatched' | 'ignored';
@@ -458,6 +469,33 @@ export interface Distribution {
     requesterName?: string;
     targetDepartment?: string;
     targetLine?: string;
+    isCompensation?: boolean;
+    compensationForShortageIds?: string[];
+}
+
+export interface SupplyShortage {
+    id: string;
+    originalSupplyRequestId: string;
+    originalSupplyRequestCode?: string;
+    originalDistributionId: string;
+    originalDistributionCode?: string;
+    originalItemIndex: number;
+    toPlantId: string;
+    toPlant?: Plant;
+    materialId?: string;
+    material?: Material;
+    materialName: string;
+    unit?: string;
+    quantityRequested: number;
+    quantityDistributed: number;
+    quantityShortage: number;
+    quantityResolved: number;
+    quantityOutstanding: number;
+    status: 'outstanding' | 'partially_settled' | 'settled' | 'cancelled';
+    reason?: string;
+    note?: string;
+    createdAt?: string;
+    updatedAt?: string;
 }
 
 export interface DistributionPayload {
@@ -598,6 +636,7 @@ export type PurchaseOrderListApiResponse = PurchaseOrder[] | PaginatedResponse<P
 export type InventoryListApiResponse = MaterialInventory[] | PaginatedResponse<MaterialInventory>;
 export type InventoryTransactionListApiResponse = InventoryTransaction[] | PaginatedResponse<InventoryTransaction>;
 export type DistributionListApiResponse = Distribution[] | PaginatedResponse<Distribution>;
+export type SupplyShortageListApiResponse = SupplyShortage[] | PaginatedResponse<SupplyShortage>;
 
 const shouldFallbackToSupplierSoftDelete = (error: unknown) => {
     if (!error || typeof error !== 'object' || !('status' in error)) {
@@ -847,6 +886,9 @@ export const distributionService = {
     create: (data: DistributionPayload): Promise<Distribution> =>
         api.post<Distribution, DistributionPayload>(DISTRIBUTIONS_BASE, data),
 
+    createCompensation: (data: { shortageIds: string[]; distributedAt?: string; items: DistributionItemPayload[]; note?: string }): Promise<Distribution> =>
+        api.post<Distribution, any>(`${DISTRIBUTIONS_BASE}/compensations`, data),
+
     createInternal: (data: InternalDistributionPayload): Promise<Distribution> =>
         api.post<Distribution, InternalDistributionPayload>(`${DISTRIBUTIONS_BASE}/internal`, data),
 
@@ -895,6 +937,21 @@ export const distributionService = {
         document.body.removeChild(link);
         URL.revokeObjectURL(url);
     },
+};
+
+export const supplyShortageService = {
+    getAll: (params?: {
+        search?: string;
+        status?: string;
+        originalSupplyRequestId?: string;
+        originalDistributionId?: string;
+        toPlantId?: string;
+        page?: number;
+        limit?: number;
+    }): Promise<SupplyShortageListApiResponse> =>
+        api.get<SupplyShortageListApiResponse>(SUPPLY_SHORTAGES_BASE, { params }),
+
+    getById: (id: string): Promise<SupplyShortage> => api.get<SupplyShortage>(`${SUPPLY_SHORTAGES_BASE}/${id}`),
 };
 
 export const materialReportService = {

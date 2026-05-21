@@ -40,6 +40,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useLocation } from 'react-router-dom';
 import ExpressDispatchModal from '../components/ExpressDispatchModal';
 import InternalDistributionModal from '../components/InternalDistributionModal';
+import SupplyCompensationModal from '../components/SupplyCompensationModal';
 import SupplyDistributionModal from '../components/SupplyDistributionModal';
 import ConfirmAction from '../components/shared/ConfirmAction';
 import PageHeader from '../components/shared/PageHeader';
@@ -54,6 +55,7 @@ import type {
     PurchaseRequest,
 } from '../core/services/material.service';
 import { distributionService, supplyRequestService } from '../core/services/material.service';
+import { supplyShortageService } from '../core/services/material.service';
 import type { PaginatedResponse, Plant, User } from '../core/types';
 
 const { RangePicker } = DatePicker;
@@ -212,6 +214,7 @@ const DistributionPage: React.FC = () => {
     const [createOpen, setCreateOpen] = useState(false);
     const [internalOpen, setInternalOpen] = useState(false);
     const [expressOpen, setExpressOpen] = useState(false);
+    const [compensationOpen, setCompensationOpen] = useState(false);
     const [confirmingId, setConfirmingId] = useState<string | null>(null);
     const [distributingId, setDistributingId] = useState<string | null>(null);
     const [exportingId, setExportingId] = useState<string | null>(null);
@@ -267,6 +270,18 @@ const DistributionPage: React.FC = () => {
         enabled: Boolean(selectedId),
     });
 
+    const { data: shortageRes } = useQuery({
+        queryKey: ['materials', 'supply-shortages', detail?.supplyRequestId],
+        queryFn: () =>
+            supplyShortageService
+                .getAll({ originalSupplyRequestId: detail!.supplyRequestId, limit: 100 })
+                .then((res) => (Array.isArray(res) ? res : res.data ?? [])),
+        enabled: Boolean(detail?.supplyRequestId),
+    });
+    const openShortages = (shortageRes ?? []).filter((item: any) =>
+        ['outstanding', 'partially_settled'].includes(String(item.status)) && Number(item.quantityOutstanding ?? 0) > 0
+    );
+
     // Fetch approved SRs for create selector
     const { data: approvedSRs = [] } = useQuery({
         queryKey: ['materials', 'supply-requests', 'approved'],
@@ -304,6 +319,7 @@ const DistributionPage: React.FC = () => {
             queryClient.invalidateQueries({ queryKey: ['materials', 'distributions'] }),
             queryClient.invalidateQueries({ queryKey: ['materials', 'inventory'] }),
             queryClient.invalidateQueries({ queryKey: ['materials', 'supply-requests'] }),
+            queryClient.invalidateQueries({ queryKey: ['materials', 'supply-shortages'] }),
             id ? queryClient.invalidateQueries({ queryKey: ['materials', 'distribution', id] }) : Promise.resolve(),
         ]);
     };
@@ -504,6 +520,18 @@ const DistributionPage: React.FC = () => {
         {
             title: 'SL CẤP', dataIndex: 'quantity', key: 'qty', width: 90, align: 'right',
             render: (v?: number) => <span className='font-semibold text-slate-800'>{fmt(v)}</span>,
+        },
+        {
+            title: 'SL THIẾU', dataIndex: 'quantityShortage', key: 'qtyShortage', width: 95, align: 'right',
+            render: (v?: number) => v ? <span className='font-semibold text-orange-600'>{fmt(v)}</span> : <span className='text-slate-400'>-</span>,
+        },
+        {
+            title: 'TÌNH TRẠNG', dataIndex: 'fulfillmentStatus', key: 'fulfillmentStatus', width: 120,
+            render: (value?: string) => {
+                if (value === 'not_supplied') return <Tag color='red'>Không cấp</Tag>;
+                if (value === 'partial') return <Tag color='orange'>Cấp thiếu</Tag>;
+                return <Tag color='green'>Đủ</Tag>;
+            },
         },
         {
             title: 'ĐƠN GIÁ', dataIndex: 'unitPrice', key: 'price', width: 110, align: 'right',
@@ -800,6 +828,15 @@ const DistributionPage: React.FC = () => {
                 />
             )}
 
+            {isCS1Manager && (
+                <SupplyCompensationModal
+                    open={compensationOpen}
+                    shortages={openShortages as any}
+                    onClose={() => setCompensationOpen(false)}
+                    onSuccess={() => { setCompensationOpen(false); invalidate(detail?.id); }}
+                />
+            )}
+
             {/* Detail Drawer */}
             <Drawer
                 title={
@@ -841,6 +878,11 @@ const DistributionPage: React.FC = () => {
                                 <ConfirmAction intent='primary' title='Xác nhận đã nhận vật tư' description='Xác nhận đã nhận đủ vật tư theo phiếu?' okLabel='Xác nhận đã nhận' onConfirm={() => handleConfirm(detail)}>
                                     <Button type='primary' icon={<CheckCircleOutlined />} loading={confirmingId === detail.id} block={isMobile} className='bg-blue-600 hover:!bg-blue-700'>Xác nhận đã nhận</Button>
                                 </ConfirmAction>
+                            )}
+                            {isCS1Manager && openShortages.length > 0 && (
+                                <Button icon={<PlusOutlined />} block={isMobile} onClick={() => setCompensationOpen(true)}>
+                                    Tạo phiếu cấp bù ({openShortages.length})
+                                </Button>
                             )}
                             {isCS1Manager && (detail.status === 'distributed' || detail.status === 'confirmed') && (
                                 <Button icon={<DownloadOutlined />} loading={exportingId === detail.id} block={isMobile} onClick={() => handleExport(detail.id, detail.distributionCode || detail.id)}>Xuất Excel</Button>
@@ -925,6 +967,7 @@ const DistributionPage: React.FC = () => {
                                                 <div className='flex flex-wrap gap-x-4 gap-y-0.5 text-xs text-slate-500'>
                                                     {item.quantityRequested != null && <span>Đề xuất: <strong>{fmt(item.quantityRequested)}</strong></span>}
                                                     <span>Cấp: <strong className='text-slate-700'>{fmt(item.quantity)}</strong></span>
+                                                    {item.quantityShortage ? <span className='text-orange-600'>Thiếu: <strong>{fmt(item.quantityShortage)}</strong></span> : null}
                                                     {item.unitPrice ? <span>Đơn giá: <strong>{fmt(item.unitPrice)}</strong></span> : null}
                                                     {item.totalWithVat ? <span className='font-bold text-slate-900'>Tổng: {fmt(item.totalWithVat)}</span> : null}
                                                 </div>
@@ -948,7 +991,7 @@ const DistributionPage: React.FC = () => {
                                                 if (!tp && !tv && !tw) return null;
                                                 return (
                                                     <Table.Summary.Row className='bg-slate-50 font-semibold'>
-                                                        <Table.Summary.Cell index={0} colSpan={6} align='right'>Tổng TT</Table.Summary.Cell>
+                                                        <Table.Summary.Cell index={0} colSpan={8} align='right'>Tổng TT</Table.Summary.Cell>
                                                         <Table.Summary.Cell index={1} align='right'>{fmt(tp)}</Table.Summary.Cell>
                                                         <Table.Summary.Cell index={2} />
                                                         <Table.Summary.Cell index={3} align='right'>{fmt(tv)}</Table.Summary.Cell>
@@ -961,6 +1004,31 @@ const DistributionPage: React.FC = () => {
                                     </div>
                                 )}
                             </div>
+
+                            {openShortages.length > 0 && (
+                                <div className='rounded-xl border border-orange-200 bg-orange-50 overflow-hidden'>
+                                    <div className='flex items-center justify-between border-b border-orange-100 px-4 py-2.5'>
+                                        <span className='text-xs font-semibold uppercase tracking-wider text-orange-700'>
+                                            Vật tư còn thiếu cần cấp bù · {openShortages.length} dòng
+                                        </span>
+                                        {isCS1Manager && (
+                                            <Button size='small' icon={<PlusOutlined />} onClick={() => setCompensationOpen(true)}>
+                                                Tạo phiếu cấp bù
+                                            </Button>
+                                        )}
+                                    </div>
+                                    <div className='divide-y divide-orange-100 bg-white'>
+                                        {openShortages.map((shortage: any) => (
+                                            <div key={shortage.id} className='grid grid-cols-[1fr_90px_110px_110px] gap-3 px-4 py-2.5 text-sm'>
+                                                <span className='font-medium text-slate-800'>{shortage.materialName}</span>
+                                                <span className='text-slate-500'>{shortage.unit || '-'}</span>
+                                                <span className='text-right text-slate-500'>Thiếu {fmt(shortage.quantityShortage)}</span>
+                                                <span className='text-right font-semibold text-orange-600'>Còn {fmt(shortage.quantityOutstanding)}</span>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
 
                             {editPriceOpen && (
                                 <EditDistributionPriceModal open={editPriceOpen} distribution={detail}
