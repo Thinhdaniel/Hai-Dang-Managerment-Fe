@@ -287,8 +287,12 @@ const DistributionPage: React.FC = () => {
                 .then((res) => (Array.isArray(res) ? res : res.data ?? [])),
         enabled: Boolean(detail?.supplyRequestId),
     });
-    const openShortages = (shortageRes ?? []).filter((item: any) =>
-        ['outstanding', 'partially_settled'].includes(String(item.status)) && Number(item.quantityOutstanding ?? 0) > 0
+    const openShortages = useMemo(
+        () =>
+            (shortageRes ?? []).filter((item: any) =>
+                ['outstanding', 'partially_settled'].includes(String(item.status)) && Number(item.quantityOutstanding ?? 0) > 0
+            ),
+        [shortageRes]
     );
 
     // Fetch approved SRs for create selector

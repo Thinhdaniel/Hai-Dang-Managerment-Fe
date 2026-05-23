@@ -24,6 +24,7 @@ import {
 
 const { Text } = Typography;
 const fmt = (value?: number) => (value ?? 0).toLocaleString('vi-VN');
+const EMPTY_MATERIALS: any[] = [];
 
 type Row = {
     key: string;
@@ -55,7 +56,7 @@ const SupplyCompensationModal: React.FC<Props> = ({ open, shortages, onClose, on
     const [note, setNote] = useState('');
     const [rows, setRows] = useState<Row[]>([]);
 
-    const { data: materialsRaw = [] } = useQuery({
+    const { data: materialsRaw } = useQuery({
         queryKey: ['materials', 'with-stock-cs1'],
         queryFn: () =>
             materialService
@@ -64,15 +65,14 @@ const SupplyCompensationModal: React.FC<Props> = ({ open, shortages, onClose, on
         enabled: open,
         staleTime: 60_000,
     });
-    const materials = materialsRaw as any[];
+    const materials = useMemo(() => (materialsRaw as any[] | undefined) ?? EMPTY_MATERIALS, [materialsRaw]);
 
     useEffect(() => {
         if (!open) {
-            setRows([]);
-            setNote('');
-            setDistributedAt(dayjs());
             return;
         }
+        setNote('');
+        setDistributedAt(dayjs());
         setRows(
             shortages.map((shortage) => {
                 const material = materials.find((item: any) => item.id === shortage.materialId);
@@ -130,12 +130,16 @@ const SupplyCompensationModal: React.FC<Props> = ({ open, shortages, onClose, on
         [rows]
     );
 
-    const materialOptions = materials.map((material: any) => ({
-        value: material.id,
-        label: `${material.code ? `[${material.code}] ` : ''}${material.name}`,
-        stock: getStock(material),
-        unit: material.unit,
-    }));
+    const materialOptions = useMemo(
+        () =>
+            materials.map((material: any) => ({
+                value: material.id,
+                label: `${material.code ? `[${material.code}] ` : ''}${material.name}`,
+                stock: getStock(material),
+                unit: material.unit,
+            })),
+        [materials]
+    );
 
     const patch = (key: string, changes: Partial<Row>) =>
         setRows((prev) => prev.map((row) => (row.key === key ? { ...row, ...changes } : row)));
