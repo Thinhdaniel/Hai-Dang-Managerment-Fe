@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useRef, useState } from 'react';
 import dayjs, { type Dayjs } from 'dayjs';
 import {
     Alert,
@@ -39,6 +39,10 @@ const { Text } = Typography;
 const fmt = (v?: number) => (v ?? 0).toLocaleString('vi-VN');
 const fmtVND = (v?: number) =>
     new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND', maximumFractionDigits: 0 }).format(v ?? 0);
+
+const EMPTY_MATERIALS: any[] = [];
+const EMPTY_SR_ITEMS: PurchaseRequestItem[] = [];
+const EMPTY_MATERIAL_OPTIONS: any[] = [];
 
 type ItemRow = {
     key: string;
@@ -163,7 +167,7 @@ const SupplyDistributionModal: React.FC<Props> = ({ open, supplyRequestId, fromP
     const [distributedAt, setDistributedAt] = useState<Dayjs>(dayjs());
     const [note, setNote] = useState('');
     const [rows, setRows] = useState<ItemRow[]>([]);
-    const [initializedKey, setInitializedKey] = useState('');
+    const initializedKeyRef = useRef('');
 
     const { data: sr, isLoading: srLoading } = useQuery({
         queryKey: ['supply-request', supplyRequestId],
@@ -171,7 +175,7 @@ const SupplyDistributionModal: React.FC<Props> = ({ open, supplyRequestId, fromP
         enabled: open && Boolean(supplyRequestId),
     });
 
-    const { data: materialsRaw = [], refetch: refetchMaterials } = useQuery({
+    const { data: materialsRaw, refetch: refetchMaterials } = useQuery({
         queryKey: ['materials', 'with-stock-cs1'],
         queryFn: () =>
             materialService
@@ -181,8 +185,8 @@ const SupplyDistributionModal: React.FC<Props> = ({ open, supplyRequestId, fromP
         staleTime: 60_000,
     });
 
-    const materials = materialsRaw as any[];
-    const srItems: PurchaseRequestItem[] = sr?.items ?? [];
+    const materials = useMemo(() => (materialsRaw as any[] | undefined) ?? EMPTY_MATERIALS, [materialsRaw]);
+    const srItems = useMemo<PurchaseRequestItem[]>(() => sr?.items ?? EMPTY_SR_ITEMS, [sr?.items]);
     const currentInitKey = `${open ? '1' : '0'}:${supplyRequestId}:${srItems.length}:${materials.length}`;
 
     React.useEffect(() => {
@@ -190,13 +194,13 @@ const SupplyDistributionModal: React.FC<Props> = ({ open, supplyRequestId, fromP
             setNote('');
             setDistributedAt(dayjs());
             setRows([]);
-            setInitializedKey('');
+            initializedKeyRef.current = '';
             return;
         }
-        if (!sr || initializedKey === currentInitKey) return;
-        setRows(buildInitialRows(sr.items ?? [], materials));
-        setInitializedKey(currentInitKey);
-    }, [open, sr, materials, initializedKey, currentInitKey]);
+        if (!sr || initializedKeyRef.current === currentInitKey) return;
+        setRows(buildInitialRows(srItems, materials));
+        initializedKeyRef.current = currentInitKey;
+    }, [open, sr, srItems, materials, currentInitKey]);
 
     const createDistMutation = useMutation({
         mutationFn: distributionService.create,
@@ -263,22 +267,27 @@ const SupplyDistributionModal: React.FC<Props> = ({ open, supplyRequestId, fromP
         [rows, rowsByItem]
     );
 
-    const getMaterialOptions = (row: ItemRow) =>
-        materials
-            .map((material: any) => {
-                const score =
-                    scoreMaterial(row.srItemName, material) +
-                    (normalizeText(material.unit) === normalizeText(row.srItemUnit) ? 12 : 0) +
-                    ((getStock(material) ?? 0) > 0 ? 8 : 0);
-                return {
-                    value: material.id,
-                    label: `${material.code ? `[${material.code}] ` : ''}${material.name}`,
-                    material,
-                    score,
-                    stock: getStock(material),
-                };
-            })
-            .sort((a, b) => b.score - a.score || String(a.label).localeCompare(String(b.label), 'vi'));
+    const materialOptionsBySrItem = useMemo(
+        () =>
+            srItems.map((item) =>
+                materials
+                    .map((material: any) => {
+                        const score =
+                            scoreMaterial(item.materialName ?? '', material) +
+                            (normalizeText(material.unit) === normalizeText(item.unit) ? 12 : 0) +
+                            ((getStock(material) ?? 0) > 0 ? 8 : 0);
+                        return {
+                            value: material.id,
+                            label: `${material.code ? `[${material.code}] ` : ''}${material.name}`,
+                            material,
+                            score,
+                            stock: getStock(material),
+                        };
+                    })
+                    .sort((a, b) => b.score - a.score || String(a.label).localeCompare(String(b.label), 'vi'))
+            ),
+        [materials, srItems]
+    );
 
     const addRow = (srItemIndex: number) => {
         const group = rowsByItem[srItemIndex];
@@ -407,11 +416,12 @@ const SupplyDistributionModal: React.FC<Props> = ({ open, supplyRequestId, fromP
                 <div className="flex flex-col gap-1">
                     <Select
                         allowClear
-                        showSearch={{ optionFilterProp: 'label' }}
+                        showSearch
+                        optionFilterProp='label'
                         placeholder="Chọn vật tư kho"
                         disabled={row.fulfillmentStatus === 'not_supplied'}
                         value={row.materialId || undefined}
-                        options={getMaterialOptions(row)}
+                        options={materialOptionsBySrItem[row.srItemIndex] ?? EMPTY_MATERIAL_OPTIONS}
                         optionRender={(option) => {
                             const data = option.data as any;
                             const stock = data.stock;

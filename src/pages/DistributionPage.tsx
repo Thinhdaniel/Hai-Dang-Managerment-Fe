@@ -235,8 +235,8 @@ const DistributionPage: React.FC = () => {
     useEffect(() => {
         const t = window.setTimeout(() => {
             const s = normalizeSearchTerm(draft.search);
-            setPagination((p) => ({ ...p, page: DEFAULT_PAGE }));
-            setFilters((f) => ({ ...f, search: s }));
+            setPagination((p) => (p.page === DEFAULT_PAGE ? p : { ...p, page: DEFAULT_PAGE }));
+            setFilters((f) => (f.search === s ? f : { ...f, search: s }));
         }, SEARCH_DEBOUNCE_MS);
         return () => window.clearTimeout(t);
     }, [draft.search]);
@@ -252,7 +252,16 @@ const DistributionPage: React.FC = () => {
             page: pagination.page,
             limit: pagination.limit,
         }),
-        [filters, pagination]
+        [
+            filters.distributionType,
+            filters.endDate,
+            filters.search,
+            filters.startDate,
+            filters.status,
+            filters.toPlantId,
+            pagination.limit,
+            pagination.page,
+        ]
     );
 
     // ── Queries ───────────────────────────────────────────────────────────────
@@ -674,7 +683,7 @@ const DistributionPage: React.FC = () => {
                     </div>
                     {filterOpen && (
                         <div className='mt-2 flex flex-col gap-2 sm:hidden'>
-                            <Select showSearch={{ optionFilterProp: 'label' }} allowClear placeholder='Cơ sở nhận' className='w-full'
+                            <Select showSearch optionFilterProp='label' allowClear placeholder='Cơ sở nhận' className='w-full'
                                 value={draft.toPlantId}
                                 onChange={(v) => { setDraft((d) => ({ ...d, toPlantId: v })); setPagination((p) => ({ ...p, page: DEFAULT_PAGE })); setFilters((f) => ({ ...f, toPlantId: v })); }}
                                 options={(plants as Plant[]).map((p) => ({ value: p.id, label: p.name }))} />
@@ -701,7 +710,7 @@ const DistributionPage: React.FC = () => {
                         <Input allowClear prefix={<SearchOutlined className='text-slate-400' />}
                             placeholder='Tìm mã phiếu, mã đề xuất...' style={{ width: 220 }}
                             value={draft.search} onChange={(e) => setDraft((d) => ({ ...d, search: e.target.value }))} />
-                        <Select showSearch={{ optionFilterProp: 'label' }} allowClear placeholder='Cơ sở nhận' style={{ width: 180 }}
+                        <Select showSearch optionFilterProp='label' allowClear placeholder='Cơ sở nhận' style={{ width: 180 }}
                             value={draft.toPlantId}
                             onChange={(v) => { setDraft((d) => ({ ...d, toPlantId: v })); setPagination((p) => ({ ...p, page: DEFAULT_PAGE })); setFilters((f) => ({ ...f, toPlantId: v })); }}
                             options={(plants as Plant[]).map((p) => ({ value: p.id, label: p.name }))} />
@@ -1282,7 +1291,8 @@ const CreateFromSRDrawer: React.FC<CreateFromSRDrawerProps> = ({
                         Chọn phiếu đề xuất đã duyệt <span className='text-red-500'>*</span>
                     </div>
                     <Select
-                        showSearch={{ optionFilterProp: 'label' }}
+                        showSearch
+                        optionFilterProp='label'
                         className='w-full'
                         placeholder='Tìm mã đề xuất...'
                         value={selectedSRId}

@@ -159,7 +159,8 @@ const SupplyCompensationModal: React.FC<Props> = ({ open, shortages, onClose, on
             width: 300,
             render: (_value, row) => (
                 <Select
-                    showSearch={{ optionFilterProp: 'label' }}
+                    showSearch
+                    optionFilterProp='label'
                     value={row.materialId}
                     options={materialOptions}
                     style={{ width: '100%' }}
