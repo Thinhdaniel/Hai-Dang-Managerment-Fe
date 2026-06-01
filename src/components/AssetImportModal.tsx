@@ -1,5 +1,16 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Alert, App, Button, Modal, Table, Tag, Typography, Upload, type TableColumnsType, type UploadFile } from 'antd';
+import {
+    Alert,
+    App,
+    Button,
+    Modal,
+    Table,
+    Tag,
+    Typography,
+    Upload,
+    type TableColumnsType,
+    type UploadFile,
+} from 'antd';
 import { InboxOutlined } from '@ant-design/icons';
 import { useMutation } from '@tanstack/react-query';
 import { assetService } from '../core/services/asset.service';
@@ -152,7 +163,7 @@ const AssetImportModal: React.FC<AssetImportModalProps> = ({ open, onClose, onIm
                 <Alert
                     type='info'
                     showIcon
-                    message='Các cột bắt buộc'
+                    title='Các cột bắt buộc'
                     description='Cần có ít nhất: name, machineCode, model, type, brand hoac brandId, plantCode/plant/plantId.'
                 />
 
@@ -184,16 +195,28 @@ const AssetImportModal: React.FC<AssetImportModalProps> = ({ open, onClose, onIm
                     <div className='flex flex-col gap-4'>
                         <div className='grid grid-cols-1 gap-3 md:grid-cols-3'>
                             <div className='rounded-xl border border-slate-200 bg-slate-50 p-4'>
-                                <div className='text-xs font-semibold uppercase tracking-wide text-slate-500'>Tổng dòng</div>
-                                <div className='mt-2 text-3xl font-bold text-slate-800'>{preview.summary.totalRows}</div>
+                                <div className='text-xs font-semibold tracking-wide text-slate-500 uppercase'>
+                                    Tổng dòng
+                                </div>
+                                <div className='mt-2 text-3xl font-bold text-slate-800'>
+                                    {preview.summary.totalRows}
+                                </div>
                             </div>
                             <div className='rounded-xl border border-emerald-200 bg-emerald-50 p-4'>
-                                <div className='text-xs font-semibold uppercase tracking-wide text-emerald-700'>Hợp lệ</div>
-                                <div className='mt-2 text-3xl font-bold text-emerald-700'>{preview.summary.validRows}</div>
+                                <div className='text-xs font-semibold tracking-wide text-emerald-700 uppercase'>
+                                    Hợp lệ
+                                </div>
+                                <div className='mt-2 text-3xl font-bold text-emerald-700'>
+                                    {preview.summary.validRows}
+                                </div>
                             </div>
                             <div className='rounded-xl border border-rose-200 bg-rose-50 p-4'>
-                                <div className='text-xs font-semibold uppercase tracking-wide text-rose-700'>Không hợp lệ</div>
-                                <div className='mt-2 text-3xl font-bold text-rose-700'>{preview.summary.invalidRows}</div>
+                                <div className='text-xs font-semibold tracking-wide text-rose-700 uppercase'>
+                                    Không hợp lệ
+                                </div>
+                                <div className='mt-2 text-3xl font-bold text-rose-700'>
+                                    {preview.summary.invalidRows}
+                                </div>
                             </div>
                         </div>
 

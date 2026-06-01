@@ -15,7 +15,7 @@ const PageHeader = ({ title, subtitle, actions, extra }: PageHeaderProps) => {
     return (
         <div className='page-header-card'>
             <div className='page-header-card__main'>
-                <Space direction='vertical' size={8} style={{ width: '100%' }}>
+                <Space orientation='vertical' size={8} style={{ width: '100%' }}>
                     <AppBreadcrumb />
                     <div>
                         <Title level={3} className='page-header-card__title'>

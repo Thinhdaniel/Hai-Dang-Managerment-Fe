@@ -14,10 +14,7 @@ interface Props {
 
 const ModalExportHistory: React.FC<Props> = ({ open, plantId, onClose }) => {
     const { message } = App.useApp();
-    const [range, setRange] = useState<[Dayjs, Dayjs]>([
-        dayjs().startOf('month'),
-        dayjs().endOf('day'),
-    ]);
+    const [range, setRange] = useState<[Dayjs, Dayjs]>([dayjs().startOf('month'), dayjs().endOf('day')]);
 
     const handleExport = () => {
         if (!range[0] || !range[1]) {
@@ -35,23 +32,23 @@ const ModalExportHistory: React.FC<Props> = ({ open, plantId, onClose }) => {
     return (
         <Modal
             open={open}
-            title="Chọn kỳ xuất báo cáo"
+            title='Chọn kỳ xuất báo cáo'
             width={420}
             onCancel={onClose}
             footer={
                 <Space>
                     <Button onClick={onClose}>Huỷ</Button>
-                    <Button type="primary" onClick={handleExport}>
+                    <Button type='primary' onClick={handleExport}>
                         Xuất Excel
                     </Button>
                 </Space>
             }
             destroyOnClose
         >
-            <Space direction="vertical" style={{ width: '100%' }} size={12}>
+            <Space orientation='vertical' style={{ width: '100%' }} size={12}>
                 <div>
                     <Text strong>
-                        Kỳ báo cáo <Text type="danger">*</Text>
+                        Kỳ báo cáo <Text type='danger'>*</Text>
                     </Text>
                     <div style={{ marginTop: 4 }}>
                         <RangePicker
@@ -62,7 +59,7 @@ const ModalExportHistory: React.FC<Props> = ({ open, plantId, onClose }) => {
                                     setRange([val[0], val[1]]);
                                 }
                             }}
-                            format="DD/MM/YYYY"
+                            format='DD/MM/YYYY'
                         />
                     </div>
                 </div>

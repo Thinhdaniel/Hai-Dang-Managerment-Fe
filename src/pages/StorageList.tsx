@@ -146,7 +146,7 @@ const StorageList: React.FC = () => {
                     <StatsCard title='Chờ xuất kho' value={8} accent='#7c3aed' />
                 </Col>
                 <Col xs={24} sm={12} lg={6}>
-                    <Card bordered={false} className='surface-card'>
+                    <Card variant='borderless' className='surface-card'>
                         <div
                             style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}
                         >
@@ -164,7 +164,7 @@ const StorageList: React.FC = () => {
                 </Col>
             </Row>
 
-            <Card bordered={false} className='filter-surface'>
+            <Card variant='borderless' className='filter-surface'>
                 <Row gutter={[16, 16]}>
                     <Col xs={24} md={6}>
                         <Input prefix={<SearchOutlined />} placeholder='Mã máy, vị trí lưu trữ...' />
@@ -198,7 +198,7 @@ const StorageList: React.FC = () => {
                 </Row>
             </Card>
 
-            <Card bordered={false} className='table-surface'>
+            <Card variant='borderless' className='table-surface'>
                 <Table
                     columns={columns}
                     dataSource={mockTableData}

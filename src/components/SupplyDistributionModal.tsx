@@ -124,7 +124,10 @@ const findBestMaterial = (item: PurchaseRequestItem, materials: any[]) => {
 
     return materials
         .map((material) => {
-            const score = scoreMaterial(query, material) + (sameUnit(material) ? 12 : 0) + ((getStock(material) ?? 0) > 0 ? 8 : 0);
+            const score =
+                scoreMaterial(query, material) +
+                (sameUnit(material) ? 12 : 0) +
+                ((getStock(material) ?? 0) > 0 ? 8 : 0);
             return { material, score };
         })
         .filter((entry) => entry.score >= 68)
@@ -156,12 +159,20 @@ const buildInitialRows = (items: PurchaseRequestItem[], materials: any[]) =>
             vatAmount: 0,
             totalWithVat: 0,
             catalogStatus: best ? 'matched' : 'unmatched',
-            fulfillmentStatus: quantity > 0 && quantity < approved ? 'partial' : quantity === 0 ? 'not_supplied' : 'fulfilled',
+            fulfillmentStatus:
+                quantity > 0 && quantity < approved ? 'partial' : quantity === 0 ? 'not_supplied' : 'fulfilled',
             inventorySkipReason: '',
         });
     });
 
-const SupplyDistributionModal: React.FC<Props> = ({ open, supplyRequestId, fromPlantId, toPlantId, onClose, onSuccess }) => {
+const SupplyDistributionModal: React.FC<Props> = ({
+    open,
+    supplyRequestId,
+    fromPlantId,
+    toPlantId,
+    onClose,
+    onSuccess,
+}) => {
     const { message } = App.useApp();
     const queryClient = useQueryClient();
     const [distributedAt, setDistributedAt] = useState<Dayjs>(dayjs());
@@ -180,7 +191,7 @@ const SupplyDistributionModal: React.FC<Props> = ({ open, supplyRequestId, fromP
         queryFn: () =>
             materialService
                 .getAll({ includeStock: true, limit: 1000, isActive: true } as any)
-                .then((res: any) => (Array.isArray(res) ? res : res.data ?? [])),
+                .then((res: any) => (Array.isArray(res) ? res : (res.data ?? []))),
         enabled: open,
         staleTime: 60_000,
     });
@@ -300,7 +311,9 @@ const SupplyDistributionModal: React.FC<Props> = ({ open, supplyRequestId, fromP
                 srItemName: ref?.srItemName ?? srItems[srItemIndex]?.materialName ?? '',
                 srItemUnit: ref?.srItemUnit ?? srItems[srItemIndex]?.unit ?? '',
                 quantityRequested: ref?.quantityRequested ?? Number(srItems[srItemIndex]?.quantityRequested ?? 0),
-                quantityApproved: ref?.quantityApproved ?? Number(srItems[srItemIndex]?.quantityApproved ?? srItems[srItemIndex]?.quantityRequested ?? 0),
+                quantityApproved:
+                    ref?.quantityApproved ??
+                    Number(srItems[srItemIndex]?.quantityApproved ?? srItems[srItemIndex]?.quantityRequested ?? 0),
                 materialId: '',
                 materialName: '',
                 unit: '',
@@ -365,13 +378,17 @@ const SupplyDistributionModal: React.FC<Props> = ({ open, supplyRequestId, fromP
             }
         }
 
-        const missingMaterial = rows.filter((row) => row.quantity > 0 && !row.materialId && row.catalogStatus !== 'ignored');
+        const missingMaterial = rows.filter(
+            (row) => row.quantity > 0 && !row.materialId && row.catalogStatus !== 'ignored'
+        );
         if (missingMaterial.length) {
             message.error(`${missingMaterial.length} dòng chưa chọn vật tư kho`);
             return;
         }
 
-        const invalidQty = rows.filter((row) => row.quantity < 0 || (row.quantity === 0 && row.fulfillmentStatus !== 'not_supplied'));
+        const invalidQty = rows.filter(
+            (row) => row.quantity < 0 || (row.quantity === 0 && row.fulfillmentStatus !== 'not_supplied')
+        );
         if (invalidQty.length) {
             message.error('Số lượng cấp không hợp lệ');
             return;
@@ -399,7 +416,9 @@ const SupplyDistributionModal: React.FC<Props> = ({ open, supplyRequestId, fromP
                     unitPrice: row.unitPrice,
                     vatRate: row.vatRate,
                     catalogStatus: isNotSupplied ? 'ignored' : row.materialId ? 'matched' : row.catalogStatus,
-                    inventorySkipReason: isNotSupplied ? row.inventorySkipReason || 'Chua the cap trong dot nay' : undefined,
+                    inventorySkipReason: isNotSupplied
+                        ? row.inventorySkipReason || 'Chua the cap trong dot nay'
+                        : undefined,
                     adjustReason: row.note.trim() || undefined,
                     note: row.note.trim() || undefined,
                 };
@@ -413,12 +432,12 @@ const SupplyDistributionModal: React.FC<Props> = ({ open, supplyRequestId, fromP
             key: 'material',
             width: 320,
             render: (_value, row) => (
-                <div className="flex flex-col gap-1">
+                <div className='flex flex-col gap-1'>
                     <Select
                         allowClear
                         showSearch
                         optionFilterProp='label'
-                        placeholder="Chọn vật tư kho"
+                        placeholder='Chọn vật tư kho'
                         disabled={row.fulfillmentStatus === 'not_supplied'}
                         value={row.materialId || undefined}
                         options={materialOptionsBySrItem[row.srItemIndex] ?? EMPTY_MATERIAL_OPTIONS}
@@ -427,11 +446,18 @@ const SupplyDistributionModal: React.FC<Props> = ({ open, supplyRequestId, fromP
                             const stock = data.stock;
                             const isSuggested = data.score >= 68;
                             return (
-                                <div className="flex items-center justify-between gap-2">
-                                    <span className="min-w-0 flex-1 truncate text-xs">{option.label}</span>
+                                <div className='flex items-center justify-between gap-2'>
+                                    <span className='min-w-0 flex-1 truncate text-xs'>{option.label}</span>
                                     <Space size={4}>
-                                        {isSuggested && <Tag color="blue" className="!m-0 !text-[10px]">Gợi ý</Tag>}
-                                        <Tag color={stock === null ? 'default' : stock > 0 ? 'success' : 'warning'} className="!m-0 !text-[10px]">
+                                        {isSuggested && (
+                                            <Tag color='blue' className='!m-0 !text-[10px]'>
+                                                Gợi ý
+                                            </Tag>
+                                        )}
+                                        <Tag
+                                            color={stock === null ? 'default' : stock > 0 ? 'success' : 'warning'}
+                                            className='!m-0 !text-[10px]'
+                                        >
                                             {stock === null ? 'Chưa có tồn' : `Tồn ${fmt(stock)}`}
                                         </Tag>
                                     </Space>
@@ -454,15 +480,23 @@ const SupplyDistributionModal: React.FC<Props> = ({ open, supplyRequestId, fromP
                     />
                     <Space size={6}>
                         <Button
-                            size="small"
+                            size='small'
                             icon={<PlusOutlined />}
                             loading={createMaterialMutation.isPending}
-                            disabled={row.fulfillmentStatus === 'not_supplied' || !(row.materialName || row.srItemName).trim() || !(row.unit || row.srItemUnit).trim()}
+                            disabled={
+                                row.fulfillmentStatus === 'not_supplied' ||
+                                !(row.materialName || row.srItemName).trim() ||
+                                !(row.unit || row.srItemUnit).trim()
+                            }
                             onClick={() => createMaterialMutation.mutate(row)}
                         >
                             Tạo VT
                         </Button>
-                        {row.fulfillmentStatus === 'not_supplied' && <Tag color="red" className="!m-0">Không cấp đợt này</Tag>}
+                        {row.fulfillmentStatus === 'not_supplied' && (
+                            <Tag color='red' className='!m-0'>
+                                Không cấp đợt này
+                            </Tag>
+                        )}
                     </Space>
                 </div>
             ),
@@ -481,7 +515,11 @@ const SupplyDistributionModal: React.FC<Props> = ({ open, supplyRequestId, fromP
             align: 'right',
             render: (_value, row) => {
                 const stock = getStock(materials.find((item: any) => item.id === row.materialId));
-                return stock === null ? <span className="text-slate-400">-</span> : <span className={stock > 0 ? 'text-emerald-600' : 'text-orange-500'}>{fmt(stock)}</span>;
+                return stock === null ? (
+                    <span className='text-slate-400'>-</span>
+                ) : (
+                    <span className={stock > 0 ? 'text-emerald-600' : 'text-orange-500'}>{fmt(stock)}</span>
+                );
             },
         },
         {
@@ -542,7 +580,9 @@ const SupplyDistributionModal: React.FC<Props> = ({ open, supplyRequestId, fromP
             key: 'total',
             width: 120,
             align: 'right',
-            render: (_value, row) => <span className="font-semibold text-slate-900">{row.totalWithVat ? fmt(row.totalWithVat) : '-'}</span>,
+            render: (_value, row) => (
+                <span className='font-semibold text-slate-900'>{row.totalWithVat ? fmt(row.totalWithVat) : '-'}</span>
+            ),
         },
         {
             title: 'Ghi chú / lý do thiếu',
@@ -562,8 +602,8 @@ const SupplyDistributionModal: React.FC<Props> = ({ open, supplyRequestId, fromP
             width: 52,
             align: 'center',
             render: (_value, row) => (
-                <Tooltip title="Xóa dòng">
-                    <Button type="text" danger icon={<DeleteOutlined />} onClick={() => removeRow(row.key)} />
+                <Tooltip title='Xóa dòng'>
+                    <Button type='text' danger icon={<DeleteOutlined />} onClick={() => removeRow(row.key)} />
                 </Tooltip>
             ),
         },
@@ -579,93 +619,172 @@ const SupplyDistributionModal: React.FC<Props> = ({ open, supplyRequestId, fromP
             destroyOnHidden
             styles={{ body: { padding: 0, maxHeight: '82vh', overflowY: 'auto' } }}
             title={
-                <div className="flex items-center gap-3 px-1 py-0.5">
-                    <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-blue-50 text-blue-600">
+                <div className='flex items-center gap-3 px-1 py-0.5'>
+                    <div className='flex h-9 w-9 items-center justify-center rounded-lg bg-blue-50 text-blue-600'>
                         <SendOutlined />
                     </div>
                     <div>
-                        <div className="text-base font-semibold text-slate-900">Tạo phiếu cấp phát vật tư</div>
-                        <div className="text-xs text-slate-400">
-                            Căn cứ đề xuất <span className="font-mono font-semibold text-blue-600">{sr?.requestCode ?? '...'}</span>
+                        <div className='text-base font-semibold text-slate-900'>Tạo phiếu cấp phát vật tư</div>
+                        <div className='text-xs text-slate-400'>
+                            Căn cứ đề xuất{' '}
+                            <span className='font-mono font-semibold text-blue-600'>{sr?.requestCode ?? '...'}</span>
                         </div>
                     </div>
                 </div>
             }
             footer={
-                <div className="flex items-center justify-between border-t border-slate-100 px-1 pt-3">
-                    <div className="grid grid-cols-4 gap-4 text-sm">
-                        <div><Text type="secondary">SL cấp</Text><div className="font-semibold">{fmt(totals.distributed)}</div></div>
-                        <div><Text type="secondary">SL thiếu</Text><div className={totals.shortage ? 'font-semibold text-orange-600' : 'font-semibold text-emerald-600'}>{fmt(totals.shortage)}</div></div>
-                        <div><Text type="secondary">Tiền VAT</Text><div className="font-semibold">{fmtVND(totals.vat)}</div></div>
-                        <div><Text type="secondary">Tổng cộng</Text><div className="font-bold text-blue-700">{fmtVND(totals.total)}</div></div>
+                <div className='flex items-center justify-between border-t border-slate-100 px-1 pt-3'>
+                    <div className='grid grid-cols-4 gap-4 text-sm'>
+                        <div>
+                            <Text type='secondary'>SL cấp</Text>
+                            <div className='font-semibold'>{fmt(totals.distributed)}</div>
+                        </div>
+                        <div>
+                            <Text type='secondary'>SL thiếu</Text>
+                            <div
+                                className={
+                                    totals.shortage ? 'font-semibold text-orange-600' : 'font-semibold text-emerald-600'
+                                }
+                            >
+                                {fmt(totals.shortage)}
+                            </div>
+                        </div>
+                        <div>
+                            <Text type='secondary'>Tiền VAT</Text>
+                            <div className='font-semibold'>{fmtVND(totals.vat)}</div>
+                        </div>
+                        <div>
+                            <Text type='secondary'>Tổng cộng</Text>
+                            <div className='font-bold text-blue-700'>{fmtVND(totals.total)}</div>
+                        </div>
                     </div>
                     <Space>
                         <Button onClick={onClose}>Hủy</Button>
-                        <Button type="primary" icon={<SendOutlined />} loading={createDistMutation.isPending} onClick={handleSubmit}>
+                        <Button
+                            type='primary'
+                            icon={<SendOutlined />}
+                            loading={createDistMutation.isPending}
+                            onClick={handleSubmit}
+                        >
                             Tạo phiếu cấp phát
                         </Button>
                     </Space>
                 </div>
             }
         >
-            <div className="flex flex-col">
-                <div className="border-b border-slate-100 bg-slate-50 px-6 py-4">
-                    <div className="mb-3 flex items-center gap-2 text-xs font-semibold uppercase tracking-widest text-slate-400">
+            <div className='flex flex-col'>
+                <div className='border-b border-slate-100 bg-slate-50 px-6 py-4'>
+                    <div className='mb-3 flex items-center gap-2 text-xs font-semibold tracking-widest text-slate-400 uppercase'>
                         <InfoCircleOutlined /> Thông tin phiếu
                     </div>
-                    <div className="grid grid-cols-4 gap-4">
-                        <Input disabled value={sr?.requestCode ?? ''} className="font-mono font-semibold" />
-                        <Input disabled value="Cơ sở chính (CS1)" />
+                    <div className='grid grid-cols-4 gap-4'>
+                        <Input disabled value={sr?.requestCode ?? ''} className='font-mono font-semibold' />
+                        <Input disabled value='Cơ sở chính (CS1)' />
                         <Input disabled value={sr?.fromPlant?.name ?? sr?.plant?.name ?? 'Cơ sở nhận'} />
-                        <DatePicker className="w-full" value={distributedAt} format="DD/MM/YYYY" onChange={(value) => value && setDistributedAt(value)} />
+                        <DatePicker
+                            className='w-full'
+                            value={distributedAt}
+                            format='DD/MM/YYYY'
+                            onChange={(value) => value && setDistributedAt(value)}
+                        />
                     </div>
-                    <Input.TextArea className="mt-3" rows={2} value={note} onChange={(event) => setNote(event.target.value)} placeholder="Ghi chú chung cho phiếu cấp phát" />
+                    <Input.TextArea
+                        className='mt-3'
+                        rows={2}
+                        value={note}
+                        onChange={(event) => setNote(event.target.value)}
+                        placeholder='Ghi chú chung cho phiếu cấp phát'
+                    />
                 </div>
 
-                <div className="px-6 py-4">
+                <div className='px-6 py-4'>
                     <Alert
-                        type="info"
+                        type='info'
                         showIcon
-                        className="mb-4"
-                        message="Hệ thống tự gợi ý vật tư kho theo tên đề xuất, đơn vị tính và tồn CS1. Các dòng cấp thiếu sẽ được ghi nhận để tạo phiếu cấp bù."
+                        className='mb-4'
+                        title='Hệ thống tự gợi ý vật tư kho theo tên đề xuất, đơn vị tính và tồn CS1. Các dòng cấp thiếu sẽ được ghi nhận để tạo phiếu cấp bù.'
                     />
 
                     {srLoading ? (
-                        <div className="py-12 text-center text-slate-400">Đang tải đề xuất...</div>
+                        <div className='py-12 text-center text-slate-400'>Đang tải đề xuất...</div>
                     ) : (
-                        <div className="flex flex-col gap-4">
+                        <div className='flex flex-col gap-4'>
                             {srItems.map((item, idx) => {
                                 const group = rowsByItem[idx];
-                                const percent = group?.approved ? Math.min(100, Math.round((group.distributed / group.approved) * 100)) : 0;
+                                const percent = group?.approved
+                                    ? Math.min(100, Math.round((group.distributed / group.approved) * 100))
+                                    : 0;
                                 const statusColor = group?.over ? 'red' : group?.shortage ? 'orange' : 'green';
 
                                 return (
-                                    <div key={idx} className="overflow-hidden rounded-lg border border-slate-200 bg-white">
-                                        <div className="flex items-center justify-between gap-4 border-b border-slate-100 bg-slate-50 px-4 py-3">
-                                            <div className="min-w-0 flex-1">
-                                                <div className="flex items-center gap-2">
-                                                    <span className="flex h-6 w-6 items-center justify-center rounded bg-blue-100 text-xs font-bold text-blue-700">{idx + 1}</span>
-                                                    <span className="truncate font-semibold text-slate-900">{item.materialName}</span>
-                                                    <Tag className="!m-0">{item.unit}</Tag>
-                                                    <Tag color={statusColor} className="!m-0">
+                                    <div
+                                        key={idx}
+                                        className='overflow-hidden rounded-lg border border-slate-200 bg-white'
+                                    >
+                                        <div className='flex items-center justify-between gap-4 border-b border-slate-100 bg-slate-50 px-4 py-3'>
+                                            <div className='min-w-0 flex-1'>
+                                                <div className='flex items-center gap-2'>
+                                                    <span className='flex h-6 w-6 items-center justify-center rounded bg-blue-100 text-xs font-bold text-blue-700'>
+                                                        {idx + 1}
+                                                    </span>
+                                                    <span className='truncate font-semibold text-slate-900'>
+                                                        {item.materialName}
+                                                    </span>
+                                                    <Tag className='!m-0'>{item.unit}</Tag>
+                                                    <Tag color={statusColor} className='!m-0'>
                                                         Cấp {fmt(group?.distributed)} / duyệt {fmt(group?.approved)}
                                                     </Tag>
-                                                    {group?.shortage ? <Tag color="orange" className="!m-0">Thiếu {fmt(group.shortage)}</Tag> : <Tag color="green" className="!m-0" icon={<CheckCircleOutlined />}>Đủ</Tag>}
+                                                    {group?.shortage ? (
+                                                        <Tag color='orange' className='!m-0'>
+                                                            Thiếu {fmt(group.shortage)}
+                                                        </Tag>
+                                                    ) : (
+                                                        <Tag
+                                                            color='green'
+                                                            className='!m-0'
+                                                            icon={<CheckCircleOutlined />}
+                                                        >
+                                                            Đủ
+                                                        </Tag>
+                                                    )}
                                                 </div>
-                                                <div className="mt-2 grid grid-cols-[160px_1fr] items-center gap-3">
-                                                    <span className="text-xs text-slate-400">Tiến độ cấp phát</span>
-                                                    <Progress percent={percent} size="small" status={group?.over ? 'exception' : group?.shortage ? 'active' : 'success'} />
+                                                <div className='mt-2 grid grid-cols-[160px_1fr] items-center gap-3'>
+                                                    <span className='text-xs text-slate-400'>Tiến độ cấp phát</span>
+                                                    <Progress
+                                                        percent={percent}
+                                                        size='small'
+                                                        status={
+                                                            group?.over
+                                                                ? 'exception'
+                                                                : group?.shortage
+                                                                  ? 'active'
+                                                                  : 'success'
+                                                        }
+                                                    />
                                                 </div>
                                             </div>
                                             <Space>
-                                                <Button size="small" icon={<PlusOutlined />} onClick={() => addRow(idx)}>Ghép thêm vật tư</Button>
-                                                <Button size="small" danger icon={<StopOutlined />} onClick={() => markNotSupplied(idx)}>Không cấp</Button>
+                                                <Button
+                                                    size='small'
+                                                    icon={<PlusOutlined />}
+                                                    onClick={() => addRow(idx)}
+                                                >
+                                                    Ghép thêm vật tư
+                                                </Button>
+                                                <Button
+                                                    size='small'
+                                                    danger
+                                                    icon={<StopOutlined />}
+                                                    onClick={() => markNotSupplied(idx)}
+                                                >
+                                                    Không cấp
+                                                </Button>
                                             </Space>
                                         </div>
 
                                         <Table<ItemRow>
-                                            rowKey="key"
-                                            size="small"
+                                            rowKey='key'
+                                            size='small'
                                             columns={buildColumns(idx)}
                                             dataSource={group?.rows ?? []}
                                             pagination={false}

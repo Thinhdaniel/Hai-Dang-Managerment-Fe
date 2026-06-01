@@ -70,28 +70,20 @@ const AssetQrModal: React.FC<AssetQrModalProps> = ({ open, assetName, machineCod
                             />
                         </div>
                         <div className='flex flex-col justify-center'>
-                            <span className='text-[10px] font-bold uppercase tracking-wider text-slate-500'>
+                            <span className='text-[10px] font-bold tracking-wider text-slate-500 uppercase'>
                                 Công ty TNHH May Xuất Khẩu
                             </span>
-                            <span className='text-sm font-black uppercase tracking-wide text-blue-700'>
-                                Hải Đăng
-                            </span>
+                            <span className='text-sm font-black tracking-wide text-blue-700 uppercase'>Hải Đăng</span>
                         </div>
                     </div>
 
                     {/* Body: Mã QR và Thông tin thiết bị */}
-                    <div className='flex flex-col items-center px-6 pb-6 pt-5'>
+                    <div className='flex flex-col items-center px-6 pt-5 pb-6'>
                         {/* Box chứa QR */}
                         <div className='relative mb-5 rounded-2xl border border-slate-100 bg-white p-3 shadow-[0_4px_20px_-4px_rgba(0,0,0,0.05)]'>
                             {publicUrl ? (
                                 <div ref={qrContainerRef}>
-                                    <QRCode
-                                        value={publicUrl}
-                                        type='canvas'
-                                        size={180}
-                                        bordered={false}
-                                        color='#0f172a'
-                                    />
+                                    <QRCode value={publicUrl} type='canvas' size={180} color='#0f172a' />
                                 </div>
                             ) : (
                                 <div className='flex h-[180px] w-[180px] items-center justify-center text-sm font-medium text-slate-400'>
@@ -102,18 +94,18 @@ const AssetQrModal: React.FC<AssetQrModalProps> = ({ open, assetName, machineCod
 
                         {/* Thông tin máy */}
                         <div className='w-full text-center'>
-                            <h3 className='mb-2 text-base font-bold leading-snug text-slate-800 line-clamp-2'>
+                            <h3 className='mb-2 line-clamp-2 text-base leading-snug font-bold text-slate-800'>
                                 {assetName}
                             </h3>
                             <div className='inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-1.5 shadow-sm'>
-                                <span className='text-[11px] font-bold uppercase tracking-wide text-slate-500'>
+                                <span className='text-[11px] font-bold tracking-wide text-slate-500 uppercase'>
                                     Mã máy
                                 </span>
                                 <span className='font-mono text-sm font-bold text-slate-900'>{machineCode}</span>
                             </div>
-                            
+
                             {publicId && (
-                                <div className='mt-4 flex items-center justify-center gap-2 text-[11px] font-medium uppercase tracking-wider text-slate-400'>
+                                <div className='mt-4 flex items-center justify-center gap-2 text-[11px] font-medium tracking-wider text-slate-400 uppercase'>
                                     <span>ID:</span>
                                     <span className='font-mono'>{publicId}</span>
                                 </div>
@@ -127,7 +119,10 @@ const AssetQrModal: React.FC<AssetQrModalProps> = ({ open, assetName, machineCod
                     <Text className='block text-xs font-semibold tracking-wide text-slate-500 uppercase'>
                         Liên kết trực tuyến
                     </Text>
-                    <Paragraph copyable={false} className='!mb-0 !mt-1.5 break-all font-mono text-[13px] text-slate-700'>
+                    <Paragraph
+                        copyable={false}
+                        className='!mt-1.5 !mb-0 font-mono text-[13px] break-all text-slate-700'
+                    >
                         {publicUrl || '-'}
                     </Paragraph>
                 </div>

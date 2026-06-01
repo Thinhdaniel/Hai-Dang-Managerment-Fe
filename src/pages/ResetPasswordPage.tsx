@@ -33,7 +33,10 @@ const ResetPasswordPage: React.FC = () => {
             navigate('/login', { replace: true });
         } catch (error) {
             setErrorMessage(
-                resolveAuthErrorMessage(error, 'Không thể đặt lại mật khẩu. Vui lòng thử lại hoặc yêu cầu liên kết mới.')
+                resolveAuthErrorMessage(
+                    error,
+                    'Không thể đặt lại mật khẩu. Vui lòng thử lại hoặc yêu cầu liên kết mới.'
+                )
             );
         } finally {
             setSubmitting(false);
@@ -50,7 +53,7 @@ const ResetPasswordPage: React.FC = () => {
                 <Alert
                     type='error'
                     showIcon
-                    message={errorMessage}
+                    title={errorMessage}
                     className='mb-6 rounded-lg border-rose-200 bg-rose-50 text-rose-700'
                 />
             ) : null}
@@ -60,7 +63,7 @@ const ResetPasswordPage: React.FC = () => {
                     <Alert
                         type='warning'
                         showIcon
-                        message='Liên kết đặt lại không hợp lệ'
+                        title='Liên kết đặt lại không hợp lệ'
                         description='Không tìm thấy token đặt lại mật khẩu trong đường dẫn. Vui lòng yêu cầu một liên kết mới từ màn hình quên mật khẩu.'
                         className='rounded-lg border-amber-200 bg-amber-50'
                     />
@@ -80,7 +83,13 @@ const ResetPasswordPage: React.FC = () => {
                 </div>
             ) : (
                 <>
-                    <Form layout='vertical' size='large' onFinish={handleSubmit} autoComplete='off' requiredMark={false}>
+                    <Form
+                        layout='vertical'
+                        size='large'
+                        onFinish={handleSubmit}
+                        autoComplete='off'
+                        requiredMark={false}
+                    >
                         <Form.Item
                             label={<span className='text-sm font-medium text-slate-700'>Mật khẩu mới</span>}
                             name='password'

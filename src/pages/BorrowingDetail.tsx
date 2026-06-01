@@ -190,7 +190,7 @@ const BorrowingDetail: React.FC = () => {
                 <div className='xl:col-span-2'>
                     <Card
                         title={<span className='font-bold text-slate-800'>Thông tin giao dịch</span>}
-                        bordered={false}
+                        variant='borderless'
                         className='rounded-2xl border border-slate-200 shadow-sm [&_.ant-card-head]:border-b-slate-100'
                     >
                         <Descriptions
@@ -236,7 +236,7 @@ const BorrowingDetail: React.FC = () => {
                 <div className='flex flex-col gap-6'>
                     <Card
                         title={<span className='font-bold text-slate-800'>Timeline</span>}
-                        bordered={false}
+                        variant='borderless'
                         className='rounded-2xl border border-slate-200 shadow-sm [&_.ant-card-head]:border-b-slate-100'
                     >
                         <Timeline items={timelineItems} />
@@ -244,7 +244,7 @@ const BorrowingDetail: React.FC = () => {
 
                     <Card
                         title={<span className='font-bold text-slate-800'>Thông tin nhanh</span>}
-                        bordered={false}
+                        variant='borderless'
                         className='rounded-2xl border border-slate-200 shadow-sm [&_.ant-card-head]:border-b-slate-100'
                     >
                         <div className='flex flex-col gap-3 text-sm'>

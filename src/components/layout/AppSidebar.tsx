@@ -229,7 +229,7 @@ const SidebarNavButton = ({
 }) => {
     const button = (
         <button
-            type="button"
+            type='button'
             onClick={onSelect}
             className={`group flex w-full items-center gap-3 rounded-2xl px-2.5 py-2.5 text-left transition-all ${
                 active
@@ -248,15 +248,15 @@ const SidebarNavButton = ({
             </span>
             {!collapsed ? (
                 <>
-                    <span className="min-w-0 flex-1">
-                        <span className="block truncate text-[14px] font-semibold leading-5">{item.label}</span>
+                    <span className='min-w-0 flex-1'>
+                        <span className='block truncate text-[14px] leading-5 font-semibold'>{item.label}</span>
                         {item.description ? (
-                            <span className="mt-0.5 block truncate text-[11px] font-medium text-slate-400 group-hover:text-slate-500">
+                            <span className='mt-0.5 block truncate text-[11px] font-medium text-slate-400 group-hover:text-slate-500'>
                                 {item.description}
                             </span>
                         ) : null}
                     </span>
-                    {active ? <span className="h-8 w-1 rounded-full bg-blue-500 shadow-sm" /> : null}
+                    {active ? <span className='h-8 w-1 rounded-full bg-blue-500 shadow-sm' /> : null}
                 </>
             ) : null}
         </button>
@@ -267,7 +267,7 @@ const SidebarNavButton = ({
     }
 
     return (
-        <Tooltip placement="right" title={item.label}>
+        <Tooltip placement='right' title={item.label}>
             {button}
         </Tooltip>
     );
@@ -317,36 +317,36 @@ const AppSidebar: React.FC<AppSidebarProps> = ({
     };
 
     const renderSidebarContent = (isCollapsed: boolean, onToggleCollapse?: () => void) => (
-        <div className="flex h-full flex-col rounded-r-[24px] border-r border-slate-200/80 bg-[rgba(255,255,255,0.96)] shadow-[10px_0_32px_rgba(15,23,42,0.06)] backdrop-blur-xl">
+        <div className='flex h-full flex-col rounded-r-[24px] border-r border-slate-200/80 bg-[rgba(255,255,255,0.96)] shadow-[10px_0_32px_rgba(15,23,42,0.06)] backdrop-blur-xl'>
             <div className={`border-b border-slate-100 px-4 py-4 ${isCollapsed ? 'px-3' : ''}`}>
                 <div className={`flex items-center ${isCollapsed ? 'justify-center' : 'gap-3'}`}>
-                    <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-blue-600 text-sm font-bold tracking-[0.24em] text-white shadow-[0_12px_24px_rgba(37,99,235,0.24)]">
+                    <div className='flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-blue-600 text-sm font-bold tracking-[0.24em] text-white shadow-[0_12px_24px_rgba(37,99,235,0.24)]'>
                         HD
                     </div>
                     {!isCollapsed ? (
-                        <div className="min-w-0">
-                            <Text className="mb-0 block text-[15px] font-bold text-slate-900">Hai Dang Ops</Text>
-                            <Text className="block text-xs text-slate-500">Quản lý vận hành</Text>
+                        <div className='min-w-0'>
+                            <Text className='mb-0 block text-[15px] font-bold text-slate-900'>Hai Dang Ops</Text>
+                            <Text className='block text-xs text-slate-500'>Quản lý vận hành</Text>
                         </div>
                     ) : null}
                 </div>
             </div>
 
-            <div className="flex-1 overflow-y-auto px-3 py-3">
-                <div className="space-y-4">
+            <div className='flex-1 overflow-y-auto px-3 py-3'>
+                <div className='space-y-4'>
                     {visibleSections.map((section) => (
-                        <section key={section.key} className="space-y-2">
+                        <section key={section.key} className='space-y-2'>
                             {!isCollapsed ? (
-                                <div className="px-2">
-                                    <Text className="text-[11px] font-bold tracking-[0.16em] text-slate-400 uppercase">
+                                <div className='px-2'>
+                                    <Text className='text-[11px] font-bold tracking-[0.16em] text-slate-400 uppercase'>
                                         {section.label}
                                     </Text>
                                 </div>
                             ) : (
-                                <div className="mx-auto h-px w-8 bg-slate-200/80" />
+                                <div className='mx-auto h-px w-8 bg-slate-200/80' />
                             )}
 
-                            <div className="space-y-1">
+                            <div className='space-y-1'>
                                 {section.items.map((item) => (
                                     <SidebarNavButton
                                         key={item.path}
@@ -363,9 +363,9 @@ const AppSidebar: React.FC<AppSidebarProps> = ({
             </div>
 
             <div className={`border-t border-slate-100 p-3 ${isCollapsed ? 'flex justify-center' : ''}`}>
-                <Badge count={unreadCount} size="small" offset={isCollapsed ? [-2, 2] : undefined}>
+                <Badge count={unreadCount} size='small' offset={isCollapsed ? [-2, 2] : undefined}>
                     <Button
-                        type="text"
+                        type='text'
                         icon={<BellOutlined />}
                         onClick={() => navigate('/dashboard')}
                         className={`h-11 rounded-2xl border border-slate-200 bg-white/88 font-semibold text-slate-700 shadow-sm hover:!border-blue-200 hover:!bg-blue-50 hover:!text-blue-700 ${
@@ -380,7 +380,7 @@ const AppSidebar: React.FC<AppSidebarProps> = ({
             {onToggleCollapse ? (
                 <div className={`border-t border-slate-100 p-3 ${isCollapsed ? 'flex justify-center' : ''}`}>
                     <Button
-                        type="text"
+                        type='text'
                         icon={isCollapsed ? <MenuUnfoldOutlined /> : <MenuFoldOutlined />}
                         onClick={onToggleCollapse}
                         className={`h-11 rounded-2xl border border-slate-200 bg-white/88 font-semibold text-slate-700 shadow-sm hover:!border-blue-200 hover:!bg-blue-50 hover:!text-blue-700 ${
@@ -397,14 +397,14 @@ const AppSidebar: React.FC<AppSidebarProps> = ({
     if (!isDesktop) {
         return (
             <Drawer
-                placement="left"
+                placement='left'
                 open={mobileOpen}
                 onClose={onMobileClose}
                 closable={false}
                 size={320}
                 styles={{
                     body: { padding: 0 },
-                    content: {
+                    root: {
                         background: 'transparent',
                         boxShadow: 'none',
                         paddingTop: `${headerOffset}px`,
@@ -426,7 +426,7 @@ const AppSidebar: React.FC<AppSidebarProps> = ({
             collapsed={collapsed}
             collapsedWidth={collapsedWidth}
             width={width}
-            className="!fixed !bottom-0 !left-0 !bg-transparent"
+            className='!fixed !bottom-0 !left-0 !bg-transparent'
             style={{ top: headerOffset, height: `calc(100vh - ${headerOffset}px)` }}
         >
             {renderSidebarContent(collapsed)}

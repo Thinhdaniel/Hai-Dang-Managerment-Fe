@@ -1,16 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import {
-    Avatar,
-    Badge,
-    Button,
-    Dropdown,
-    Grid,
-    Input,
-    Layout,
-    Popover,
-    Typography,
-    type MenuProps,
-} from 'antd';
+import { Avatar, Badge, Button, Dropdown, Grid, Input, Layout, Popover, Typography, type MenuProps } from 'antd';
 import {
     BellOutlined,
     ClockCircleOutlined,
@@ -33,7 +22,8 @@ import { useNotificationContext } from '../../core/contexts/NotificationContext'
 const { Header } = Layout;
 const { Text, Title } = Typography;
 const { useBreakpoint } = Grid;
-const COMPANY_LOGO_URL = 'https://res.cloudinary.com/dn0kgs7mi/image/upload/v1777042068/461879796_122098397930558026_2620600354798656289_n_zi0tf9.jpg';
+const COMPANY_LOGO_URL =
+    'https://res.cloudinary.com/dn0kgs7mi/image/upload/v1777042068/461879796_122098397930558026_2620600354798656289_n_zi0tf9.jpg';
 
 interface AppHeaderProps {
     collapsed: boolean;
@@ -41,8 +31,6 @@ interface AppHeaderProps {
     mobileOpen: boolean;
     onToggle: () => void;
 }
-
-
 
 const AppHeader: React.FC<AppHeaderProps> = ({ collapsed, isDesktop, mobileOpen, onToggle }) => {
     const navigate = useNavigate();
@@ -115,7 +103,7 @@ const AppHeader: React.FC<AppHeaderProps> = ({ collapsed, isDesktop, mobileOpen,
         disabled: true,
         label: (
             <div className='py-1'>
-                <div className='text-[10px] font-medium uppercase tracking-[0.16em] text-slate-400'>Signed in as</div>
+                <div className='text-[10px] font-medium tracking-[0.16em] text-slate-400 uppercase'>Signed in as</div>
                 <div className='mt-1 text-[13px] font-semibold text-slate-900'>{user?.name ?? 'Admin'}</div>
                 <div className='mt-0.5 text-[11px] text-slate-500'>{user?.email ?? ''}</div>
             </div>
@@ -169,10 +157,10 @@ const AppHeader: React.FC<AppHeaderProps> = ({ collapsed, isDesktop, mobileOpen,
                 </div>
                 <div className='flex items-center gap-2'>
                     {unreadCount > 0 ? (
-                        <Button 
-                            type='text' 
-                            size='small' 
-                            className='!px-2 !text-[12px] !text-blue-600 hover:!bg-blue-50' 
+                        <Button
+                            type='text'
+                            size='small'
+                            className='!px-2 !text-[12px] !text-blue-600 hover:!bg-blue-50'
                             onClick={async () => {
                                 await markAllAsRead();
                             }}
@@ -201,7 +189,8 @@ const AppHeader: React.FC<AppHeaderProps> = ({ collapsed, isDesktop, mobileOpen,
                         );
 
                     let href = '/dashboard';
-                    if (item.actionType === 'machine' || item.actionType === 'asset') href = `/assets${item.actionId ? `/${item.actionId}` : ''}`;
+                    if (item.actionType === 'machine' || item.actionType === 'asset')
+                        href = `/assets${item.actionId ? `/${item.actionId}` : ''}`;
                     else if (item.actionType === 'transfer') href = '/transfers';
                     else if (item.actionType === 'maintenance') href = '/maintenances';
                     else if (item.actionType === 'borrowing') href = '/borrowings';
@@ -228,7 +217,11 @@ const AppHeader: React.FC<AppHeaderProps> = ({ collapsed, isDesktop, mobileOpen,
                             </div>
                             <div className='min-w-0 flex-1'>
                                 <div className='flex items-start justify-between gap-2'>
-                                    <span className={`text-[13px] text-slate-900 ${item.isRead ? 'font-medium' : 'font-semibold'}`}>{item.title}</span>
+                                    <span
+                                        className={`text-[13px] text-slate-900 ${item.isRead ? 'font-medium' : 'font-semibold'}`}
+                                    >
+                                        {item.title}
+                                    </span>
                                     <span className='text-[10px] text-slate-400'>
                                         {new Date(item.createdAt).toLocaleDateString()}
                                     </span>
@@ -241,7 +234,11 @@ const AppHeader: React.FC<AppHeaderProps> = ({ collapsed, isDesktop, mobileOpen,
             </div>
 
             <div className='border-t border-slate-100 px-4 py-3'>
-                <Button type='link' className='!px-0 !text-[13px] !font-semibold' onClick={() => navigate('/dashboard')}>
+                <Button
+                    type='link'
+                    className='!px-0 !text-[13px] !font-semibold'
+                    onClick={() => navigate('/dashboard')}
+                >
                     View dashboard summary
                 </Button>
             </div>
@@ -261,13 +258,17 @@ const AppHeader: React.FC<AppHeaderProps> = ({ collapsed, isDesktop, mobileOpen,
                     <Button
                         type='text'
                         icon={
-                            isDesktop
-                                ? collapsed
-                                    ? <MenuUnfoldOutlined />
-                                    : <MenuFoldOutlined />
-                                : mobileOpen
-                                  ? <MenuFoldOutlined />
-                                  : <MenuUnfoldOutlined />
+                            isDesktop ? (
+                                collapsed ? (
+                                    <MenuUnfoldOutlined />
+                                ) : (
+                                    <MenuFoldOutlined />
+                                )
+                            ) : mobileOpen ? (
+                                <MenuFoldOutlined />
+                            ) : (
+                                <MenuUnfoldOutlined />
+                            )
                         }
                         onClick={onToggle}
                         className='flex h-9 w-9 items-center justify-center rounded-xl border border-slate-200 bg-white/92 text-slate-700 shadow-sm hover:!border-blue-200 hover:!bg-blue-50 hover:!text-blue-700'
@@ -275,20 +276,19 @@ const AppHeader: React.FC<AppHeaderProps> = ({ collapsed, isDesktop, mobileOpen,
 
                     <div className='flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-slate-200 bg-white shadow-[0_8px_18px_rgba(15,23,42,0.06)]'>
                         {COMPANY_LOGO_URL ? (
-                            <img
-                                src={COMPANY_LOGO_URL}
-                                alt='Company logo'
-                                className='h-full w-full object-contain'
-                            />
+                            <img src={COMPANY_LOGO_URL} alt='Company logo' className='h-full w-full object-contain' />
                         ) : (
-                            <span className='text-[9px] font-semibold uppercase tracking-[0.14em] text-slate-400'>
+                            <span className='text-[9px] font-semibold tracking-[0.14em] text-slate-400 uppercase'>
                                 Logo
                             </span>
                         )}
                     </div>
 
                     <div className='min-w-0'>
-                        <Title level={4} className='!mb-0 truncate !text-[18px] !font-semibold !leading-5 !text-slate-950'>
+                        <Title
+                            level={4}
+                            className='!mb-0 truncate !text-[18px] !leading-5 !font-semibold !text-slate-950'
+                        >
                             {pageMeta.title}
                         </Title>
                     </div>
@@ -304,7 +304,7 @@ const AppHeader: React.FC<AppHeaderProps> = ({ collapsed, isDesktop, mobileOpen,
                             onPressEnter={(e) => handleSearch(e.currentTarget.value)}
                             prefix={<SearchOutlined className='mr-1.5 text-slate-400' />}
                             style={{ height: 38, borderRadius: 12 }}
-                            className='w-full border-slate-200 bg-white/90 px-3 shadow-sm transition-all hover:border-blue-300 focus-within:border-blue-500 focus-within:bg-white focus-within:shadow-[0_2px_8px_rgba(37,99,235,0.1)]'
+                            className='w-full border-slate-200 bg-white/90 px-3 shadow-sm transition-all focus-within:border-blue-500 focus-within:bg-white focus-within:shadow-[0_2px_8px_rgba(37,99,235,0.1)] hover:border-blue-300'
                         />
                     </div>
                 ) : (
@@ -314,13 +314,13 @@ const AppHeader: React.FC<AppHeaderProps> = ({ collapsed, isDesktop, mobileOpen,
                 <div className='flex min-w-0 items-center justify-end gap-2'>
                     {supportsSearch && screens.md ? (
                         <div></div>
-                        // <Button
-                        //     type='text'
-                        //     icon={<SearchOutlined />}
-                        //     onClick={() => navigate('/assets')}
-                        //     className='flex h-9 w-9 items-center justify-center rounded-xl border border-slate-200 bg-white/92 text-slate-700 shadow-sm hover:!border-blue-200 hover:!bg-blue-50 hover:!text-blue-700 xl:hidden'
-                        // />
-                    ) : null}
+                    ) : // <Button
+                    //     type='text'
+                    //     icon={<SearchOutlined />}
+                    //     onClick={() => navigate('/assets')}
+                    //     className='flex h-9 w-9 items-center justify-center rounded-xl border border-slate-200 bg-white/92 text-slate-700 shadow-sm hover:!border-blue-200 hover:!bg-blue-50 hover:!text-blue-700 xl:hidden'
+                    // />
+                    null}
 
                     {quickAction && screens.xl ? (
                         <Button
@@ -338,8 +338,8 @@ const AppHeader: React.FC<AppHeaderProps> = ({ collapsed, isDesktop, mobileOpen,
                         open={notificationOpen}
                         onOpenChange={setNotificationOpen}
                         arrow={false}
-                        overlayClassName='header-notification-popover'
-                        overlayInnerStyle={{ padding: 0, background: 'transparent', boxShadow: 'none' }}
+                        classNames={{ root: 'header-notification-popover' }}
+                        styles={{ root: { padding: 0, background: 'transparent', boxShadow: 'none' } }}
                     >
                         <Badge count={unreadCount} size='small' offset={[-2, 2]}>
                             <Button
@@ -366,7 +366,7 @@ const AppHeader: React.FC<AppHeaderProps> = ({ collapsed, isDesktop, mobileOpen,
                             />
                             {screens.sm ? (
                                 <div className='hidden min-w-0 sm:block'>
-                                    <Text className='block truncate text-[13px] font-semibold leading-5 text-slate-900'>
+                                    <Text className='block truncate text-[13px] leading-5 font-semibold text-slate-900'>
                                         {user?.name ?? 'Admin'}
                                     </Text>
                                 </div>

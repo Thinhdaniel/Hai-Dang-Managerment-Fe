@@ -56,13 +56,10 @@ const columns: TableColumnsType<DashboardFacilityStat> = [
     },
 ];
 
-const DashboardFacilityDistributionCard = ({
-    facilityStats,
-    loading,
-}: DashboardFacilityDistributionCardProps) => {
+const DashboardFacilityDistributionCard = ({ facilityStats, loading }: DashboardFacilityDistributionCardProps) => {
     return (
         <Card
-            bordered={false}
+            variant='borderless'
             className='h-full overflow-hidden rounded-2xl border border-slate-200 shadow-sm'
             title={<span className='text-base font-semibold text-slate-800'>Phân bố cơ sở</span>}
             extra={<span className='text-xs font-medium text-slate-500'>{facilityStats.length} cơ sở</span>}

@@ -48,7 +48,7 @@ const ForgotPasswordPage: React.FC = () => {
                     <Alert
                         type='success'
                         showIcon
-                        message='Yêu cầu đã được ghi nhận'
+                        title='Yêu cầu đã được ghi nhận'
                         description={`Nếu email ${submittedEmail} tồn tại trong hệ thống, hướng dẫn đặt lại mật khẩu đã được gửi.`}
                         className='rounded-lg border-emerald-200 bg-emerald-50'
                     />
@@ -75,7 +75,7 @@ const ForgotPasswordPage: React.FC = () => {
                         <Alert
                             type='error'
                             showIcon
-                            message={errorMessage}
+                            title={errorMessage}
                             className='mb-6 rounded-lg border-rose-200 bg-rose-50 text-rose-700'
                         />
                     ) : null}

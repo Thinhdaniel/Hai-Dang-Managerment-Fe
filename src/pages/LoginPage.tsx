@@ -27,7 +27,9 @@ const LoginPage: React.FC = () => {
             message.success('Đăng nhập thành công');
             navigate('/dashboard', { replace: true });
         } catch (error) {
-            setErrorMessage(resolveAuthErrorMessage(error, 'Đăng nhập thất bại. Vui lòng kiểm tra lại email và mật khẩu.'));
+            setErrorMessage(
+                resolveAuthErrorMessage(error, 'Đăng nhập thất bại. Vui lòng kiểm tra lại email và mật khẩu.')
+            );
         } finally {
             setSubmitting(false);
         }
@@ -43,7 +45,7 @@ const LoginPage: React.FC = () => {
                 <Alert
                     type='error'
                     showIcon
-                    message={errorMessage}
+                    title={errorMessage}
                     className='mb-6 rounded-lg border-rose-200 bg-rose-50 text-rose-700'
                 />
             ) : null}

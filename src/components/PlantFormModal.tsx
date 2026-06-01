@@ -63,7 +63,7 @@ const PlantFormModal: React.FC<PlantFormModalProps> = ({ open, onClose, onSubmit
             ),
         [initialValues?.id, plants]
     );
-
+    
     const handleSubmit = async () => {
         const values = await form.validateFields();
         const payload = {
@@ -128,7 +128,7 @@ const PlantFormModal: React.FC<PlantFormModalProps> = ({ open, onClose, onSubmit
                             },
                         ]}
                     >
-                        <Input placeholder='Ví dụ: Nhà máy Bình Dương' size='large' maxLength={120} />
+                        <Input placeholder='Ví dụ: Nhà máy May Phú Sơn' size='large' maxLength={120} />
                     </Form.Item>
 
                     <Form.Item

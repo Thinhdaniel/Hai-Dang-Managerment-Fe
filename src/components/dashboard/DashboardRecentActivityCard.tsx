@@ -1,4 +1,4 @@
-import { Card, Empty, List, Tag } from 'antd';
+import { Card, Empty, Spin, Tag } from 'antd';
 import {
     ArrowRightOutlined,
     CheckCircleOutlined,
@@ -78,7 +78,7 @@ const getContextLine = (activity: DashboardRecentActivity) => {
 const DashboardRecentActivityCard = ({ activities, loading }: DashboardRecentActivityCardProps) => {
     return (
         <Card
-            bordered={false}
+            variant='borderless'
             className='rounded-2xl border border-slate-200 shadow-sm'
             title={<span className='text-base font-semibold text-slate-800'>Hoạt động gần đây</span>}
             extra={<span className='text-xs font-medium text-slate-500'>Luồng chuyển nhượng và mượn</span>}
@@ -86,61 +86,66 @@ const DashboardRecentActivityCard = ({ activities, loading }: DashboardRecentAct
             {activities.length === 0 && !loading ? (
                 <Empty description='Không có hoạt động nào' image={Empty.PRESENTED_IMAGE_SIMPLE} />
             ) : (
-                <List
-                    loading={loading}
-                    dataSource={activities}
-                    split={false}
-                    renderItem={(activity) => {
-                        const meta = getActivityMeta(activity);
+                <Spin spinning={Boolean(loading)}>
+                    <div className='divide-y divide-slate-100'>
+                        {activities.map((activity) => {
+                            const meta = getActivityMeta(activity);
 
-                        return (
-                            <List.Item className='!px-0 !py-4'>
-                                <div className='flex w-full flex-col gap-3 md:flex-row md:items-start md:justify-between'>
-                                    <div className='flex min-w-0 items-start gap-3'>
-                                        <div
-                                            className={`mt-0.5 flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl text-lg ${meta.accent}`}
-                                        >
-                                            {meta.icon}
-                                        </div>
-                                        <div className='min-w-0 space-y-1'>
-                                            <div className='flex flex-wrap items-center gap-2'>
-                                                <span className='truncate text-[14px] font-semibold text-slate-800'>
-                                                    {activity.asset?.name || 'Unknown machine'}
-                                                </span>
-                                                <Tag color={meta.color} className='mr-0 rounded-full px-2 py-0.5 text-[11px] font-semibold'>
-                                                    {meta.label}
-                                                </Tag>
+                            return (
+                                <div
+                                    key={`${activity.category}-${activity.action}-${activity.timestamp}`}
+                                    className='py-4'
+                                >
+                                    <div className='flex w-full flex-col gap-3 md:flex-row md:items-start md:justify-between'>
+                                        <div className='flex min-w-0 items-start gap-3'>
+                                            <div
+                                                className={`mt-0.5 flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl text-lg ${meta.accent}`}
+                                            >
+                                                {meta.icon}
                                             </div>
-                                            <div className='flex flex-wrap items-center gap-2 text-xs text-slate-500'>
-                                                <span className='rounded-full bg-slate-100 px-2 py-0.5 font-mono font-semibold text-slate-600'>
-                                                    {activity.asset?.machineCode || 'N/A'}
-                                                </span>
-                                                <span>{getContextLine(activity)}</span>
+                                            <div className='min-w-0 space-y-1'>
+                                                <div className='flex flex-wrap items-center gap-2'>
+                                                    <span className='truncate text-[14px] font-semibold text-slate-800'>
+                                                        {activity.asset?.name || 'Unknown machine'}
+                                                    </span>
+                                                    <Tag
+                                                        color={meta.color}
+                                                        className='mr-0 rounded-full px-2 py-0.5 text-[11px] font-semibold'
+                                                    >
+                                                        {meta.label}
+                                                    </Tag>
+                                                </div>
+                                                <div className='flex flex-wrap items-center gap-2 text-xs text-slate-500'>
+                                                    <span className='rounded-full bg-slate-100 px-2 py-0.5 font-mono font-semibold text-slate-600'>
+                                                        {activity.asset?.machineCode || 'N/A'}
+                                                    </span>
+                                                    <span>{getContextLine(activity)}</span>
+                                                </div>
+                                                {activity.description ? (
+                                                    <p className='line-clamp-2 max-w-3xl text-sm text-slate-600'>
+                                                        {activity.description}
+                                                    </p>
+                                                ) : null}
                                             </div>
-                                            {activity.description ? (
-                                                <p className='line-clamp-2 max-w-3xl text-sm text-slate-600'>
-                                                    {activity.description}
-                                                </p>
-                                            ) : null}
                                         </div>
-                                    </div>
 
-                                    <div className='flex shrink-0 items-center gap-2 md:flex-col md:items-end'>
-                                        <Tag
-                                            color={activity.category === 'transfer' ? 'blue' : 'purple'}
-                                            className='mr-0 rounded-full px-2 py-0.5 text-[11px] font-semibold uppercase'
-                                        >
-                                            {activity.category}
-                                        </Tag>
-                                        <span className='text-xs font-medium text-slate-500'>
-                                            {dayjs(activity.timestamp).format('DD/MM/YYYY HH:mm')}
-                                        </span>
+                                        <div className='flex shrink-0 items-center gap-2 md:flex-col md:items-end'>
+                                            <Tag
+                                                color={activity.category === 'transfer' ? 'blue' : 'purple'}
+                                                className='mr-0 rounded-full px-2 py-0.5 text-[11px] font-semibold uppercase'
+                                            >
+                                                {activity.category}
+                                            </Tag>
+                                            <span className='text-xs font-medium text-slate-500'>
+                                                {dayjs(activity.timestamp).format('DD/MM/YYYY HH:mm')}
+                                            </span>
+                                        </div>
                                     </div>
                                 </div>
-                            </List.Item>
-                        );
-                    }}
-                />
+                            );
+                        })}
+                    </div>
+                </Spin>
             )}
         </Card>
     );

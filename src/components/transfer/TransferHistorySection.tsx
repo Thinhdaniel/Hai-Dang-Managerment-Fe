@@ -193,7 +193,7 @@ const TransferHistorySection = ({
     return (
         <Card
             title={<span className='font-bold text-slate-800'>Lịch sử điều chuyển</span>}
-            bordered={false}
+            variant='borderless'
             className='rounded-2xl border border-slate-200 shadow-sm [&_.ant-card-head]:border-b-slate-100'
         >
             {transfers.length ? (

@@ -13,7 +13,7 @@ type StatsCardProps = {
 
 const StatsCard = ({ title, value, accent = '#1f7ae0', icon, caption }: StatsCardProps) => {
     return (
-        <Card bordered={false} className='stats-card'>
+        <Card variant='borderless' className='stats-card'>
             <div className='stats-card__bar' style={{ background: accent }} />
             <div className='stats-card__content'>
                 <div>

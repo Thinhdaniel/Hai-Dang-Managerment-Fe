@@ -44,7 +44,6 @@ export const useNotifications = (socket: import('socket.io-client').Socket | nul
         };
 
         void initializeNotifications();
-        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [isAuthenticated]);
 
     // Setup socket listeners
@@ -79,9 +78,12 @@ export const useNotifications = (socket: import('socket.io-client').Socket | nul
             showNotificationToast(notification);
         });
 
-        const unsubscribeRead = socketService.on<{ notificationId: string }>(NOTIFICATION_EVENTS.READ, ({ notificationId }) => {
-            store.markAsRead(notificationId);
-        });
+        const unsubscribeRead = socketService.on<{ notificationId: string }>(
+            NOTIFICATION_EVENTS.READ,
+            ({ notificationId }) => {
+                store.markAsRead(notificationId);
+            }
+        );
 
         const unsubscribeCleared = socketService.on(NOTIFICATION_EVENTS.CLEARED, () => {
             store.clearNotifications();
@@ -92,22 +94,17 @@ export const useNotifications = (socket: import('socket.io-client').Socket | nul
             unsubscribeRead();
             unsubscribeCleared();
         };
-        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [isAuthenticated, socket]);
 
     // Mark notification as read
-    const markAsRead = useCallback(
-        async (notificationId: string) => {
-            try {
-                store.markAsRead(notificationId);
-                await notificationService.markAsRead(notificationId);
-            } catch (error) {
-                console.error('[Notifications] Mark as read error:', error);
-            }
-        },
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-        []
-    );
+    const markAsRead = useCallback(async (notificationId: string) => {
+        try {
+            store.markAsRead(notificationId);
+            await notificationService.markAsRead(notificationId);
+        } catch (error) {
+            console.error('[Notifications] Mark as read error:', error);
+        }
+    }, []);
 
     // Mark all notifications as read
     const markAllAsRead = useCallback(async () => {
@@ -117,27 +114,22 @@ export const useNotifications = (socket: import('socket.io-client').Socket | nul
         } catch (error) {
             console.error('[Notifications] Mark all as read error:', error);
         }
-        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
     // Delete notification
-    const deleteNotification = useCallback(
-        async (notificationId: string) => {
-            try {
-                store.removeNotification(notificationId);
-                await notificationService.deleteNotification(notificationId);
-            } catch (error) {
-                console.error('[Notifications] Delete error:', error);
-                // Reload on error
-                const result = await notificationService.getNotifications(20, 0);
-                if (result && 'notifications' in result) {
-                    store.setNotifications(result.notifications);
-                }
+    const deleteNotification = useCallback(async (notificationId: string) => {
+        try {
+            store.removeNotification(notificationId);
+            await notificationService.deleteNotification(notificationId);
+        } catch (error) {
+            console.error('[Notifications] Delete error:', error);
+            // Reload on error
+            const result = await notificationService.getNotifications(20, 0);
+            if (result && 'notifications' in result) {
+                store.setNotifications(result.notifications);
             }
-        },
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-        []
-    );
+        }
+    }, []);
 
     // Delete all notifications
     const deleteAllNotifications = useCallback(async () => {
@@ -147,7 +139,6 @@ export const useNotifications = (socket: import('socket.io-client').Socket | nul
         } catch (error) {
             console.error('[Notifications] Delete all error:', error);
         }
-        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
     return {
@@ -167,7 +158,7 @@ export const useNotifications = (socket: import('socket.io-client').Socket | nul
  */
 function showNotificationToast(notification: Notification) {
     const notificationConfig = {
-        message: notification.title,
+        title: notification.title,
         description: notification.message,
         duration: 4.5,
     };
