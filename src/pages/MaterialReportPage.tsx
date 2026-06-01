@@ -48,6 +48,7 @@ import {
     BarChart,
     CartesianGrid,
     Cell,
+    ComposedChart,
     Legend,
     Line,
     LineChart,
@@ -73,6 +74,7 @@ import {
     type DistributionCostByPlant,
     type Material,
     type MaterialCostByPeriodPoint,
+    type MaterialReportSummary,
     type MaterialReportQueryParams,
     type MaterialSupplier,
     type PriceComparisonReportRow,
@@ -91,6 +93,30 @@ type DetailPayload =
     | { type: 'distribution'; title: string; record: Distribution | DistributionCostByPlant }
     | { type: 'material'; title: string; record: TopConsumedMaterial }
     | { type: 'supplier'; title: string; record: SupplierReportRow };
+
+type MaterialDrilldownPayload =
+    | { kind: 'purchase'; title: string; description: string; rows: PriceComparisonReportRow[]; loading?: boolean }
+    | { kind: 'distribution'; title: string; description: string; rows: Distribution[]; loading?: boolean }
+    | { kind: 'materials'; title: string; description: string; rows: TopConsumedMaterial[]; loading?: boolean }
+    | { kind: 'suppliers'; title: string; description: string; rows: SupplierReportRow[]; loading?: boolean }
+    | { kind: 'message'; title: string; description: string };
+
+type ActiveFilterChip = {
+    key: string;
+    label: string;
+    color?: string;
+};
+
+type MaterialKpiConfig = {
+    title: string;
+    value: number;
+    formatter?: (value: number) => string;
+    suffix?: string;
+    icon: React.ReactNode;
+    color: string;
+    hint: string;
+    onClick?: () => void;
+};
 
 type ReportFilters = {
     plantId?: string;
@@ -114,6 +140,13 @@ const STATUS_LABEL: Record<string, { label: string; color: string }> = {
     distributed: { label: 'Đã xuất', color: 'processing' },
 };
 
+const GROUP_BY_LABEL: Record<GroupBy, string> = {
+    day: 'Ngày',
+    week: 'Tuần',
+    month: 'Tháng',
+    quarter: 'Quý',
+};
+
 const DEFAULT_FILTERS: ReportFilters = {
     dateRange: [dayjs().startOf('month'), dayjs().endOf('day')],
     groupBy: 'month',
@@ -133,7 +166,7 @@ const fmtShort = (value: number) => {
 
 const normalizeList = <T,>(response: T[] | { data?: T[] } | undefined): T[] => {
     if (!response) return [];
-    return Array.isArray(response) ? response : response.data ?? [];
+    return Array.isArray(response) ? response : (response.data ?? []);
 };
 
 const toReportParams = (filters: ReportFilters): MaterialReportQueryParams => ({
@@ -174,9 +207,12 @@ export default function MaterialReportPage() {
     const [exportOpen, setExportOpen] = useState(false);
     const [exporting, setExporting] = useState(false);
     const [detail, setDetail] = useState<DetailPayload | null>(null);
+    const [drilldown, setDrilldown] = useState<MaterialDrilldownPayload | null>(null);
     const [detailSearch, setDetailSearch] = useState('');
 
     const params = useMemo(() => toReportParams(appliedFilters), [appliedFilters]);
+    const draftParams = useMemo(() => toReportParams(filters), [filters]);
+    const hasPendingFilterChanges = JSON.stringify(draftParams) !== JSON.stringify(params);
 
     const plantsQuery = useQuery({
         queryKey: ['report-plants'],
@@ -234,7 +270,14 @@ export default function MaterialReportPage() {
 
     const distributionDetailQuery = useQuery({
         queryKey: ['material-report-distribution-detail', params],
-        queryFn: () => distributionService.getAll({ ...params, page: 1, limit: 200 } as any),
+        queryFn: () =>
+            distributionService.getAll({
+                startDate: params.startDate,
+                endDate: params.endDate,
+                toPlantId: params.plantId,
+                page: 1,
+                limit: 200,
+            }),
         staleTime: 60_000,
     });
 
@@ -277,12 +320,7 @@ export default function MaterialReportPage() {
         const keyword = detailSearch.trim().toLowerCase();
         if (!keyword) return priceRows;
         return priceRows.filter((record) =>
-            [
-                record.orderCode,
-                record.supplierName,
-                record.status,
-                ...(record.requestCodes ?? []),
-            ]
+            [record.orderCode, record.supplierName, record.status, ...(record.requestCodes ?? [])]
                 .filter(Boolean)
                 .join(' ')
                 .toLowerCase()
@@ -339,22 +377,81 @@ export default function MaterialReportPage() {
         appliedFilters.status,
     ].filter(Boolean).length;
 
-    const kpis = [
+    const activeFilterChips = useMemo<ActiveFilterChip[]>(() => {
+        const chips: ActiveFilterChip[] = [
+            {
+                key: 'period',
+                label: `Kỳ: ${appliedFilters.dateRange[0].format('DD/MM/YYYY')} - ${appliedFilters.dateRange[1].format('DD/MM/YYYY')}`,
+                color: 'blue',
+            },
+            { key: 'groupBy', label: `Nhóm kỳ: ${GROUP_BY_LABEL[appliedFilters.groupBy]}`, color: 'geekblue' },
+        ];
+        if (appliedFilters.plantId) {
+            chips.push({
+                key: 'plant',
+                label: `Cơ sở: ${plants.find((plant) => plant.id === appliedFilters.plantId)?.name ?? 'Đã chọn'}`,
+                color: 'cyan',
+            });
+        }
+        if (appliedFilters.category) {
+            chips.push({ key: 'category', label: `Nhóm VT: ${appliedFilters.category}`, color: 'purple' });
+        }
+        if (appliedFilters.materialId) {
+            chips.push({
+                key: 'material',
+                label: `Vật tư: ${materials.find((material) => material.id === appliedFilters.materialId)?.name ?? 'Đã chọn'}`,
+                color: 'green',
+            });
+        }
+        if (appliedFilters.supplierId) {
+            chips.push({
+                key: 'supplier',
+                label: `NCC: ${suppliers.find((supplier) => supplier.id === appliedFilters.supplierId)?.name ?? 'Đã chọn'}`,
+                color: 'gold',
+            });
+        }
+        if (appliedFilters.status) {
+            chips.push({
+                key: 'status',
+                label: `Trạng thái: ${STATUS_LABEL[appliedFilters.status]?.label ?? appliedFilters.status}`,
+                color: 'orange',
+            });
+        }
+        return chips;
+    }, [appliedFilters, materials, plants, suppliers]);
+
+    const kpis: MaterialKpiConfig[] = [
         {
-            title: 'Chi phí mua hàng',
+            title: 'Chi phí mua vật tư',
             value: summary?.totalPurchaseCost ?? summary?.totalMonthlyCost ?? 0,
             formatter: fmtCurrency,
             icon: <DollarOutlined />,
             color: '#1677ff',
-            hint: 'Tổng chi phí mua theo kỳ đã lọc.',
+            hint: 'Tổng giá trị các dòng vật tư đã mua trong kỳ, lọc theo cơ sở của từng dòng vật tư.',
+            onClick: () =>
+                setDrilldown({
+                    kind: 'purchase',
+                    title: 'Chi tiết chi phí mua vật tư',
+                    description: 'Các đơn mua vật tư tạo nên KPI trong kỳ và bộ lọc hiện tại.',
+                    rows: filteredPurchaseDetails,
+                    loading: priceQuery.isLoading,
+                }),
         },
         {
-            title: 'Chi phí cấp phát',
+            title: 'Giá trị cấp phát vật tư',
             value: summary?.totalDistributionCost ?? 0,
             formatter: fmtCurrency,
             icon: <InboxOutlined />,
             color: '#722ed1',
-            hint: 'Tổng giá trị cấp phát tới cơ sở nhận.',
+            hint: 'Tổng giá trị vật tư đã cấp phát hoặc xuất cho cơ sở nhận trong kỳ.',
+            onClick: () =>
+                setDrilldown({
+                    kind: 'distribution',
+                    title: 'Chi tiết cấp phát vật tư',
+                    description: 'Các phiếu cấp phát/xuất vật tư trong kỳ và bộ lọc hiện tại.',
+                    rows: distributionDetails,
+                    loading: distributionDetailQuery.isLoading,
+                }),
         },
         {
             title: 'Net sau hoàn trả',
@@ -362,7 +459,15 @@ export default function MaterialReportPage() {
             formatter: fmtCurrency,
             icon: <LineChartOutlined />,
             color: '#52c41a',
-            hint: 'Chi phí mua hàng sau khi trừ hoàn trả.',
+            hint: 'Chi phí mua vật tư sau khi trừ hoàn trả hoặc điều chỉnh nếu có.',
+            onClick: () =>
+                setDrilldown({
+                    kind: 'purchase',
+                    title: 'Chi tiết net sau hoàn trả',
+                    description: 'Các đơn mua vật tư sau khi tính hoàn trả/điều chỉnh nếu có.',
+                    rows: filteredPurchaseDetails,
+                    loading: priceQuery.isLoading,
+                }),
         },
         {
             title: 'Lệch giá',
@@ -370,15 +475,30 @@ export default function MaterialReportPage() {
             formatter: fmtCurrency,
             icon: <AlertOutlined />,
             color: (summary?.totalPriceVariance ?? 0) > 0 ? '#f5222d' : '#52c41a',
-            hint: 'Chênh lệch giữa thực tế net và dự tính.',
+            hint: 'Chênh lệch giữa giá dự kiến/tham chiếu và giá thực tế sau hoàn trả.',
+            onClick: () =>
+                setDrilldown({
+                    kind: 'purchase',
+                    title: 'Các đơn có lệch giá',
+                    description: 'Danh sách đơn mua có chênh lệch giữa dự tính và thực tế.',
+                    rows: priceRows.filter((row) => Math.abs(row.difference ?? 0) > 0),
+                    loading: priceQuery.isLoading,
+                }),
         },
         {
-            title: 'Phiếu chờ duyệt',
+            title: 'Phiếu mua chờ duyệt',
             value: summary?.pendingRequestCount ?? 0,
             suffix: 'phiếu',
             icon: <CalendarOutlined />,
             color: '#faad14',
-            hint: 'Phiếu đề xuất vật tư còn ở trạng thái chờ.',
+            hint: 'Phiếu đề xuất mua vật tư còn ở trạng thái chờ duyệt.',
+            onClick: () =>
+                setDrilldown({
+                    kind: 'message',
+                    title: 'Phiếu mua chờ duyệt',
+                    description:
+                        'KPI này đang lấy từ tổng hợp backend. Phase sau nên bổ sung API danh sách phiếu chờ duyệt để drill-down đầy đủ.',
+                }),
         },
         {
             title: 'Dưới ngưỡng',
@@ -387,6 +507,16 @@ export default function MaterialReportPage() {
             icon: <WarningOutlined />,
             color: '#f5222d',
             hint: 'Vật tư có tồn thấp hơn ngưỡng tối thiểu.',
+            onClick: () =>
+                setDrilldown({
+                    kind: 'materials',
+                    title: 'Vật tư dưới ngưỡng',
+                    description: 'Các vật tư tiêu hao nhiều hoặc đang được đánh dấu dưới ngưỡng trong dữ liệu hiện có.',
+                    rows: topMaterials.filter(
+                        (row) => (row.currentStock ?? Number.POSITIVE_INFINITY) < (row.minStockLevel ?? 0)
+                    ),
+                    loading: topQuery.isLoading,
+                }),
         },
     ];
 
@@ -395,56 +525,61 @@ export default function MaterialReportPage() {
     const highVarianceCount = priceRows.filter((row) => Math.abs(row.difference ?? 0) > 0).length;
 
     return (
-        <div className="report-page">
+        <div className='report-page'>
             <style>{REPORT_PAGE_STYLE}</style>
             <PageHeader
-                title="Báo cáo vật tư"
+                title='Báo cáo vật tư'
                 subtitle={`Kỳ ${appliedFilters.dateRange[0].format('DD/MM/YYYY')} - ${appliedFilters.dateRange[1].format('DD/MM/YYYY')} · ${activeFilterCount} bộ lọc đang áp dụng`}
+                extra={<ActiveFilterChips chips={activeFilterChips} />}
                 actions={
-                    <Space wrap className="report-header-actions">
+                    <Space wrap className='report-header-actions'>
                         <Button icon={<ReloadOutlined />} onClick={handleRefresh} loading={isLoading}>
                             Làm mới
                         </Button>
-                        <Button type="primary" icon={<DownloadOutlined />} onClick={() => setExportOpen(true)}>
+                        <Button type='primary' icon={<DownloadOutlined />} onClick={() => setExportOpen(true)}>
                             Xuất Excel
                         </Button>
                     </Space>
                 }
             />
 
-            <Card className="report-filter-card" variant="outlined">
-                <div className="report-filter-toolbar">
-                    <div className="report-quick-range-scroll">
-                    <Segmented
-                        value={quickRange}
-                        onChange={handleQuickRangeChange}
-                        options={[
-                            { label: 'Tháng này', value: 'this_month' },
-                            { label: 'Quý này', value: 'quarter' },
-                            { label: '6 tháng', value: 'six_months' },
-                            { label: 'Năm nay', value: 'year' },
-                            { label: 'Tùy chỉnh', value: 'custom' },
-                        ]}
-                    />
+            <Card className='report-filter-card' variant='outlined'>
+                <div className='report-filter-toolbar'>
+                    <div className='report-quick-range-scroll'>
+                        <Segmented
+                            value={quickRange}
+                            onChange={handleQuickRangeChange}
+                            options={[
+                                { label: 'Tháng này', value: 'this_month' },
+                                { label: 'Quý này', value: 'quarter' },
+                                { label: '6 tháng', value: 'six_months' },
+                                { label: 'Năm nay', value: 'year' },
+                                { label: 'Tùy chỉnh', value: 'custom' },
+                            ]}
+                        />
                     </div>
-                    <Space wrap className="report-filter-actions">
-                        <Badge count={activeFilterCount} size="small">
-                            <Button icon={<FilterOutlined />} onClick={handleApplyFilters}>
-                                Áp dụng
+                    <Space wrap className='report-filter-actions'>
+                        <Badge count={activeFilterCount} size='small'>
+                            <Button
+                                type={hasPendingFilterChanges ? 'primary' : 'default'}
+                                icon={<FilterOutlined />}
+                                onClick={handleApplyFilters}
+                            >
+                                {hasPendingFilterChanges ? 'Áp dụng thay đổi' : 'Áp dụng'}
                             </Button>
                         </Badge>
                         <Button onClick={handleResetFilters}>Reset</Button>
                     </Space>
                 </div>
 
-                <Row gutter={[12, 12]} className="report-filter-grid">
+                <Row gutter={[12, 12]} className='report-filter-grid'>
                     <Col xs={24} md={12} xl={6}>
-                        <Text className="report-filter-label">Khoảng thời gian</Text>
+                        <Text className='report-filter-label'>Khoảng thời gian</Text>
                         <RangePicker
                             value={filters.dateRange}
                             allowClear={false}
-                            format="DD/MM/YYYY"
-                            className="report-filter-control"
+                            format='DD/MM/YYYY'
+                            className='report-filter-control'
                             onChange={(dates) => {
                                 if (!dates) return;
                                 setQuickRange('custom');
@@ -454,12 +589,12 @@ export default function MaterialReportPage() {
                     </Col>
                     {isManager ? (
                         <Col xs={24} md={12} xl={6}>
-                            <Text className="report-filter-label">Cơ sở</Text>
+                            <Text className='report-filter-label'>Cơ sở</Text>
                             <Select
                                 allowClear
                                 showSearch={{ optionFilterProp: 'label' }}
-                                placeholder="Tất cả cơ sở"
-                                className="report-filter-control"
+                                placeholder='Tất cả cơ sở'
+                                className='report-filter-control'
                                 value={filters.plantId}
                                 onChange={(plantId) => setFilters((current) => ({ ...current, plantId }))}
                                 options={plants.map((plant) => ({ label: plant.name, value: plant.id }))}
@@ -467,62 +602,71 @@ export default function MaterialReportPage() {
                         </Col>
                     ) : null}
                     <Col xs={24} md={12} xl={6}>
-                        <Text className="report-filter-label">Nhóm vật tư</Text>
+                        <Text className='report-filter-label'>Nhóm vật tư</Text>
                         <Select
                             allowClear
                             showSearch={{ optionFilterProp: 'label' }}
-                            placeholder="Tất cả nhóm"
-                            className="report-filter-control"
+                            placeholder='Tất cả nhóm'
+                            className='report-filter-control'
                             value={filters.category}
-                            onChange={(category) => setFilters((current) => ({ ...current, category, materialId: undefined }))}
+                            onChange={(category) =>
+                                setFilters((current) => ({ ...current, category, materialId: undefined }))
+                            }
                             options={categoryOptions}
                         />
                     </Col>
                     <Col xs={24} md={12} xl={6}>
-                        <Text className="report-filter-label">Vật tư</Text>
+                        <Text className='report-filter-label'>Vật tư</Text>
                         <Select
                             allowClear
                             showSearch={{ optionFilterProp: 'label' }}
-                            placeholder="Tất cả vật tư"
-                            className="report-filter-control"
+                            placeholder='Tất cả vật tư'
+                            className='report-filter-control'
                             value={filters.materialId}
                             onChange={(materialId) => setFilters((current) => ({ ...current, materialId }))}
                             options={materials
                                 .filter((material) => !filters.category || material.category === filters.category)
-                                .map((material) => ({ label: `${material.code ? `${material.code} · ` : ''}${material.name}`, value: material.id }))}
+                                .map((material) => ({
+                                    label: `${material.code ? `${material.code} · ` : ''}${material.name}`,
+                                    value: material.id,
+                                }))}
                         />
                     </Col>
                     <Col xs={24} md={12} xl={6}>
-                        <Text className="report-filter-label">Nhà cung cấp</Text>
+                        <Text className='report-filter-label'>Nhà cung cấp</Text>
                         <Select
                             allowClear
                             showSearch={{ optionFilterProp: 'label' }}
-                            placeholder="Tất cả NCC"
-                            className="report-filter-control"
+                            placeholder='Tất cả NCC'
+                            className='report-filter-control'
                             value={filters.supplierId}
                             onChange={(supplierId) => setFilters((current) => ({ ...current, supplierId }))}
                             options={suppliers.map((supplier) => ({ label: supplier.name, value: supplier.id }))}
                         />
                     </Col>
                     <Col xs={24} md={12} xl={6}>
-                        <Text className="report-filter-label">Trạng thái mua hàng</Text>
+                        <Text className='report-filter-label'>Trạng thái mua hàng</Text>
                         <Select
                             allowClear
-                            placeholder="Tất cả trạng thái"
-                            className="report-filter-control"
+                            placeholder='Tất cả trạng thái'
+                            className='report-filter-control'
                             value={filters.status}
                             onChange={(status) => setFilters((current) => ({ ...current, status }))}
                             options={Object.entries(STATUS_LABEL)
-                                .filter(([status]) => ['draft', 'confirmed', 'ordered', 'received', 'cancelled'].includes(status))
+                                .filter(([status]) =>
+                                    ['draft', 'confirmed', 'ordered', 'received', 'cancelled'].includes(status)
+                                )
                                 .map(([value, info]) => ({ label: info.label, value }))}
                         />
                     </Col>
                     <Col xs={24} md={12} xl={6}>
-                        <Text className="report-filter-label">Gom biểu đồ</Text>
+                        <Text className='report-filter-label'>Gom biểu đồ</Text>
                         <Segmented
                             block
                             value={filters.groupBy}
-                            onChange={(groupBy) => setFilters((current) => ({ ...current, groupBy: groupBy as GroupBy }))}
+                            onChange={(groupBy) =>
+                                setFilters((current) => ({ ...current, groupBy: groupBy as GroupBy }))
+                            }
                             options={[
                                 { label: 'Ngày', value: 'day' },
                                 { label: 'Tuần', value: 'week' },
@@ -532,14 +676,15 @@ export default function MaterialReportPage() {
                         />
                     </Col>
                 </Row>
+                <ActiveFilterChips chips={activeFilterChips} compact />
             </Card>
 
             {hasError ? (
                 <Alert
                     showIcon
-                    type="error"
-                    title="Không tải được một phần dữ liệu báo cáo"
-                    description="Vui lòng kiểm tra lại bộ lọc hoặc thử làm mới trang."
+                    type='error'
+                    title='Không tải được một phần dữ liệu báo cáo'
+                    description='Vui lòng kiểm tra lại bộ lọc hoặc thử làm mới trang.'
                     action={<Button onClick={handleRefresh}>Thử lại</Button>}
                 />
             ) : null}
@@ -547,70 +692,26 @@ export default function MaterialReportPage() {
             <Row gutter={[16, 16]}>
                 {kpis.map((kpi) => (
                     <Col key={kpi.title} xs={12} sm={12} xl={8} xxl={4}>
-                        <Card className="report-kpi-card" loading={summaryQuery.isLoading} variant="outlined">
-                            <div className="report-kpi-head">
-                                <Tooltip title={kpi.hint}>
-                                    <Text type="secondary" className="report-kpi-title">
-                                        {kpi.title}
-                                    </Text>
-                                </Tooltip>
-                                <span className="report-kpi-icon" style={{ color: kpi.color, background: `${kpi.color}16` }}>
-                                    {kpi.icon}
-                                </span>
-                            </div>
-                            <Statistic
-                                value={kpi.value}
-                                formatter={(value) => (kpi.formatter ? kpi.formatter(Number(value)) : fmtNumber(Number(value)))}
-                                suffix={kpi.suffix}
-                                styles={{ content: { color: kpi.color, fontWeight: 700, fontSize: 24 } }}
-                            />
-                        </Card>
+                        <ReportKpiCard kpi={kpi} loading={summaryQuery.isLoading} />
                     </Col>
                 ))}
             </Row>
 
-            <Row gutter={[16, 16]}>
-                <Col xs={24} lg={8}>
-                    <Alert
-                        showIcon
-                        type={(summary?.lowStockCount ?? 0) > 0 ? 'warning' : 'success'}
-                        title="Cảnh báo tồn kho"
-                        description={
-                            (summary?.lowStockCount ?? 0) > 0
-                                ? `${summary?.lowStockCount} vật tư đang thấp hơn ngưỡng tối thiểu.`
-                                : 'Không có vật tư dưới ngưỡng trong phạm vi đang xem.'
-                        }
-                    />
-                </Col>
-                <Col xs={24} lg={8}>
-                    <Alert
-                        showIcon
-                        type={highVarianceCount > 0 ? 'info' : 'success'}
-                        title="Biến động giá"
-                        description={
-                            highVarianceCount > 0
-                                ? `${highVarianceCount} đơn có chênh lệch giữa dự tính và thực tế.`
-                                : 'Không ghi nhận chênh lệch giá đáng chú ý.'
-                        }
-                    />
-                </Col>
-                <Col xs={24} lg={8}>
-                    <Alert
-                        showIcon
-                        type="info"
-                        title="Điểm tập trung chi phí"
-                        description={
-                            topSupplier || topPlant
-                                ? `${topSupplier?.supplierName ?? 'NCC chưa xác định'} / ${topPlant?.plantName ?? 'cơ sở chưa xác định'} đang đứng đầu theo chi phí.`
-                                : 'Chưa có dữ liệu chi phí trong kỳ.'
-                        }
-                    />
-                </Col>
-            </Row>
+            <MaterialInsightPanel
+                summary={summary}
+                highVarianceCount={highVarianceCount}
+                topSupplier={topSupplier}
+                topPlant={topPlant}
+                topMaterial={topMaterials[0]}
+                purchaseRows={priceRows}
+                suppliers={supplierRows}
+                materials={topMaterials}
+                onOpenDrilldown={setDrilldown}
+            />
 
-            <Card className="report-main-card" variant="outlined">
+            <Card className='report-main-card' variant='outlined'>
                 <Tabs
-                    className="report-tabs"
+                    className='report-tabs'
                     destroyOnHidden
                     tabBarGutter={isMobile ? 8 : 16}
                     size={isMobile ? 'small' : 'middle'}
@@ -634,7 +735,13 @@ export default function MaterialReportPage() {
                             key: 'consumption',
                             label: 'Tiêu hao vật tư',
                             icon: <DatabaseOutlined />,
-                            children: <ConsumptionTab data={topMaterials} loading={topQuery.isLoading} onOpenDetail={setDetail} />,
+                            children: (
+                                <ConsumptionTab
+                                    data={topMaterials}
+                                    loading={topQuery.isLoading}
+                                    onOpenDetail={setDetail}
+                                />
+                            ),
                         },
                         {
                             key: 'supplier-price',
@@ -651,7 +758,7 @@ export default function MaterialReportPage() {
                         },
                         {
                             key: 'distribution',
-                            label: 'Cấp phát',
+                            label: 'Cấp phát vật tư',
                             icon: <InboxOutlined />,
                             children: (
                                 <DistributionTab
@@ -681,20 +788,27 @@ export default function MaterialReportPage() {
             </Card>
 
             <Modal
-                title="Xuất báo cáo Excel"
+                title='Xuất báo cáo Excel'
                 open={exportOpen}
                 confirmLoading={exporting}
-                okText="Xuất Excel"
-                cancelText="Đóng"
+                okText='Xuất Excel'
+                cancelText='Đóng'
                 onOk={handleExport}
                 onCancel={() => setExportOpen(false)}
             >
-                <Text type="secondary">
+                <Text type='secondary'>
                     File sẽ được tạo theo đúng bộ lọc đang áp dụng, gồm các sheet nghiệp vụ chính.
                 </Text>
-                <div className="report-export-list">
-                    {['Tổng quan', 'Chi phí theo kỳ', 'Mua hàng', 'Cấp phát', 'Top tiêu hao', 'Nhà cung cấp'].map((sheet) => (
-                        <Tag key={sheet} color="blue">
+                <div className='report-export-list'>
+                    {[
+                        'Tổng quan vật tư',
+                        'Mua vật tư theo kỳ',
+                        'Mua vật tư',
+                        'Cấp phát vật tư',
+                        'Top tiêu hao',
+                        'Nhà cung cấp',
+                    ].map((sheet) => (
+                        <Tag key={sheet} color='blue'>
                             {sheet}
                         </Tag>
                     ))}
@@ -702,7 +816,157 @@ export default function MaterialReportPage() {
             </Modal>
 
             <ReportDetailDrawer detail={detail} onClose={() => setDetail(null)} />
+            <MaterialDrilldownDrawer drilldown={drilldown} onClose={() => setDrilldown(null)} />
         </div>
+    );
+}
+
+function ActiveFilterChips({ chips, compact = false }: { chips: ActiveFilterChip[]; compact?: boolean }) {
+    if (!chips.length) return null;
+
+    return (
+        <div className={compact ? 'report-active-filters report-active-filters--compact' : 'report-active-filters'}>
+            {chips.map((chip) => (
+                <Tag key={chip.key} color={chip.color ?? 'default'} className='report-filter-chip'>
+                    {chip.label}
+                </Tag>
+            ))}
+        </div>
+    );
+}
+
+function ReportKpiCard({ kpi, loading }: { kpi: MaterialKpiConfig; loading?: boolean }) {
+    return (
+        <button type='button' className='report-kpi-button' onClick={kpi.onClick} disabled={!kpi.onClick}>
+            <Card className='report-kpi-card' loading={loading} variant='outlined'>
+                <div className='report-kpi-head'>
+                    <Tooltip title={kpi.hint}>
+                        <Text type='secondary' className='report-kpi-title'>
+                            {kpi.title}
+                        </Text>
+                    </Tooltip>
+                    <span className='report-kpi-icon' style={{ color: kpi.color, background: `${kpi.color}16` }}>
+                        {kpi.icon}
+                    </span>
+                </div>
+                <Statistic
+                    value={kpi.value}
+                    formatter={(value) => (kpi.formatter ? kpi.formatter(Number(value)) : fmtNumber(Number(value)))}
+                    suffix={kpi.suffix}
+                    styles={{ content: { color: kpi.color, fontWeight: 700, fontSize: 24 } }}
+                />
+                {kpi.onClick ? <Text className='report-kpi-action'>Nhấn để xem chi tiết</Text> : null}
+            </Card>
+        </button>
+    );
+}
+
+function MaterialInsightPanel({
+    summary,
+    highVarianceCount,
+    topSupplier,
+    topPlant,
+    topMaterial,
+    purchaseRows,
+    suppliers,
+    materials,
+    onOpenDrilldown,
+}: {
+    summary?: MaterialReportSummary;
+    highVarianceCount: number;
+    topSupplier?: SupplierReportRow;
+    topPlant?: DistributionCostByPlant;
+    topMaterial?: TopConsumedMaterial;
+    purchaseRows: PriceComparisonReportRow[];
+    suppliers: SupplierReportRow[];
+    materials: TopConsumedMaterial[];
+    onOpenDrilldown: (payload: MaterialDrilldownPayload) => void;
+}) {
+    const lowStockCount = summary?.lowStockCount ?? 0;
+    const lowStockRows = materials.filter(
+        (row) => (row.currentStock ?? Number.POSITIVE_INFINITY) < (row.minStockLevel ?? 0)
+    );
+
+    const insights = [
+        {
+            title: 'Tồn kho',
+            value: lowStockCount ? `${lowStockCount} vật tư dưới ngưỡng` : 'Không có cảnh báo dưới ngưỡng',
+            tone: lowStockCount ? 'warning' : 'success',
+            onClick: () =>
+                onOpenDrilldown({
+                    kind: 'materials',
+                    title: 'Vật tư dưới ngưỡng',
+                    description: 'Danh sách vật tư dưới ngưỡng từ dữ liệu đang có trong báo cáo.',
+                    rows: lowStockRows,
+                }),
+        },
+        {
+            title: 'Lệch giá',
+            value: highVarianceCount ? `${highVarianceCount} đơn có chênh lệch` : 'Chưa ghi nhận lệch giá đáng chú ý',
+            tone: highVarianceCount ? 'info' : 'success',
+            onClick: () =>
+                onOpenDrilldown({
+                    kind: 'purchase',
+                    title: 'Các đơn có lệch giá',
+                    description: 'Chênh lệch giữa giá dự kiến/tham chiếu và giá thực tế.',
+                    rows: purchaseRows.filter((row) => Math.abs(row.difference ?? 0) > 0),
+                }),
+        },
+        {
+            title: 'Nhà cung cấp nổi bật',
+            value: topSupplier
+                ? `${topSupplier.supplierName}: ${fmtCurrency(topSupplier.totalAmount ?? 0)}`
+                : 'Chưa có dữ liệu nhà cung cấp',
+            tone: 'neutral',
+            onClick: () =>
+                onOpenDrilldown({
+                    kind: 'suppliers',
+                    title: 'Chi phí mua vật tư theo nhà cung cấp',
+                    description: 'Tỷ trọng và giá trị mua vật tư theo NCC trong kỳ.',
+                    rows: suppliers,
+                }),
+        },
+        {
+            title: 'Tiêu hao tập trung',
+            value: topMaterial
+                ? `${topMaterial.materialName}: ${fmtNumber(topMaterial.totalQuantityOut ?? 0)} ${topMaterial.unit ?? ''}`
+                : topPlant
+                  ? `${topPlant.plantName}: ${fmtCurrency(topPlant.totalWithVat)}`
+                  : 'Chưa có dữ liệu tiêu hao',
+            tone: 'neutral',
+            onClick: () =>
+                onOpenDrilldown({
+                    kind: 'materials',
+                    title: 'Top vật tư tiêu hao',
+                    description: 'Các vật tư có lượng xuất/cấp phát lớn trong kỳ.',
+                    rows: materials,
+                }),
+        },
+    ];
+
+    return (
+        <Card className='report-insight-card' variant='outlined'>
+            <div className='report-insight-head'>
+                <div>
+                    <Text className='report-section-title'>Gợi ý vận hành vật tư</Text>
+                    <Text type='secondary'>Các điểm cần chú ý từ dữ liệu đang lọc.</Text>
+                </div>
+                <Tag color='blue'>Insight</Tag>
+            </div>
+            <div className='report-insight-grid'>
+                {insights.map((insight) => (
+                    <button
+                        key={insight.title}
+                        type='button'
+                        className={`report-insight-item report-insight-item--${insight.tone}`}
+                        onClick={insight.onClick}
+                    >
+                        <span>{insight.title}</span>
+                        <strong>{insight.value}</strong>
+                    </button>
+                ))}
+            </div>
+        </Card>
     );
 }
 
@@ -721,46 +985,93 @@ function OverviewTab({
     loading: boolean;
     onOpenDetail: (detail: DetailPayload) => void;
 }) {
+    const combinedTrend = useMemo(() => {
+        const rows = new Map<string, { period: string; purchaseCost: number; distributionValue: number }>();
+        costTrend.forEach((point) => {
+            rows.set(point.period, {
+                period: point.period,
+                purchaseCost: Number(point.totalAmount ?? 0),
+                distributionValue: rows.get(point.period)?.distributionValue ?? 0,
+            });
+        });
+        (distribution?.byPeriod ?? []).forEach((point) => {
+            const current = rows.get(point.period) ?? { period: point.period, purchaseCost: 0, distributionValue: 0 };
+            current.distributionValue = Number(point.totalWithVat ?? 0);
+            rows.set(point.period, current);
+        });
+        return Array.from(rows.values()).sort((a, b) => a.period.localeCompare(b.period));
+    }, [costTrend, distribution]);
+
     if (loading) return <ReportSkeleton />;
 
     return (
         <Row gutter={[16, 16]}>
-            <Col xs={24} xl={14}>
-                <SectionCard title="Xu hướng chi phí mua hàng" extra={<Tag color="blue">Net cost</Tag>}>
-                    <ChartFrame empty={!costTrend.length}>
-                        <ResponsiveContainer width="100%" height="100%">
-                            <LineChart data={costTrend} margin={{ top: 8, right: 24, left: 8, bottom: 8 }}>
-                                <CartesianGrid strokeDasharray="3 3" stroke="#eef2f7" />
-                                <XAxis dataKey="period" tick={{ fontSize: 12 }} />
+            <Col xs={24} xl={15}>
+                <SectionCard
+                    title='Mua vật tư và cấp phát theo thời gian'
+                    extra={<Tag color='blue'>Không cộng double-count</Tag>}
+                >
+                    <ChartFrame empty={!combinedTrend.length}>
+                        <ResponsiveContainer width='100%' height='100%'>
+                            <ComposedChart data={combinedTrend} margin={{ top: 8, right: 24, left: 8, bottom: 8 }}>
+                                <CartesianGrid strokeDasharray='3 3' stroke='#eef2f7' />
+                                <XAxis dataKey='period' tick={{ fontSize: 12 }} />
                                 <YAxis tickFormatter={fmtShort} tick={{ fontSize: 12 }} width={58} />
-                                <ChartTooltip formatter={(value: any) => [fmtCurrency(Number(value)), 'Chi phí']} />
+                                <ChartTooltip
+                                    formatter={(value: any, name: any) => [fmtCurrency(Number(value)), String(name)]}
+                                />
                                 <Legend />
-                                <Line type="monotone" dataKey="totalAmount" name="Chi phí" stroke="#1677ff" strokeWidth={3} dot={{ r: 4 }} />
-                            </LineChart>
+                                <Bar
+                                    dataKey='distributionValue'
+                                    name='Giá trị cấp phát vật tư'
+                                    fill='#722ed1'
+                                    radius={[6, 6, 0, 0]}
+                                    barSize={24}
+                                />
+                                <Line
+                                    type='monotone'
+                                    dataKey='purchaseCost'
+                                    name='Chi phí mua vật tư net'
+                                    stroke='#1677ff'
+                                    strokeWidth={3}
+                                    dot={{ r: 4 }}
+                                />
+                            </ComposedChart>
                         </ResponsiveContainer>
                     </ChartFrame>
                 </SectionCard>
             </Col>
-            <Col xs={24} xl={10}>
-                <SectionCard title="Cấp phát theo cơ sở">
+            <Col xs={24} xl={9}>
+                <SectionCard title='Giá trị cấp phát vật tư theo cơ sở'>
                     <ChartFrame empty={!distribution?.byPlant?.length}>
-                        <ResponsiveContainer width="100%" height="100%">
-                            <BarChart data={distribution?.byPlant ?? []} layout="vertical" margin={{ top: 8, right: 24, left: 24, bottom: 8 }}>
-                                <CartesianGrid strokeDasharray="3 3" stroke="#eef2f7" />
-                                <XAxis type="number" tickFormatter={fmtShort} tick={{ fontSize: 12 }} />
-                                <YAxis type="category" dataKey="plantName" width={120} tick={{ fontSize: 12 }} />
-                                <ChartTooltip formatter={(value: any) => [fmtCurrency(Number(value)), 'Chi phí']} />
+                        <ResponsiveContainer width='100%' height='100%'>
+                            <BarChart
+                                data={distribution?.byPlant ?? []}
+                                layout='vertical'
+                                margin={{ top: 8, right: 24, left: 24, bottom: 8 }}
+                            >
+                                <CartesianGrid strokeDasharray='3 3' stroke='#eef2f7' />
+                                <XAxis type='number' tickFormatter={fmtShort} tick={{ fontSize: 12 }} />
+                                <YAxis type='category' dataKey='plantName' width={120} tick={{ fontSize: 12 }} />
+                                <ChartTooltip
+                                    formatter={(value: any) => [fmtCurrency(Number(value)), 'Giá trị cấp phát']}
+                                />
                                 <Bar
-                                    dataKey="totalWithVat"
-                                    name="Chi phí"
+                                    dataKey='totalWithVat'
+                                    name='Giá trị cấp phát'
                                     radius={[0, 6, 6, 0]}
                                     onClick={(entry: any) => {
                                         const row = entry?.payload as DistributionCostByPlant | undefined;
-                                        if (row) onOpenDetail({ type: 'distribution', title: row.plantName, record: row });
+                                        if (row)
+                                            onOpenDetail({ type: 'distribution', title: row.plantName, record: row });
                                     }}
                                 >
                                     {(distribution?.byPlant ?? []).map((_, index) => (
-                                        <Cell key={index} fill={CHART_COLORS[index % CHART_COLORS.length]} cursor="pointer" />
+                                        <Cell
+                                            key={index}
+                                            fill={CHART_COLORS[index % CHART_COLORS.length]}
+                                            cursor='pointer'
+                                        />
                                     ))}
                                 </Bar>
                             </BarChart>
@@ -769,16 +1080,25 @@ function OverviewTab({
                 </SectionCard>
             </Col>
             <Col xs={24} xl={12}>
-                <SectionCard title="Top vật tư tiêu hao">
+                <SectionCard title='Top vật tư tiêu hao'>
                     <TopMaterialMiniList data={topMaterials} onOpenDetail={onOpenDetail} />
                 </SectionCard>
             </Col>
             <Col xs={24} xl={12}>
-                <SectionCard title="Tỷ trọng nhà cung cấp">
+                <SectionCard title='Tỷ trọng nhà cung cấp'>
                     <ChartFrame empty={!suppliers.length} height={300}>
-                        <ResponsiveContainer width="100%" height="100%">
+                        <ResponsiveContainer width='100%' height='100%'>
                             <PieChart>
-                                <Pie data={suppliers.slice(0, 8)} dataKey="totalAmount" nameKey="supplierName" cx="50%" cy="50%" outerRadius={105} innerRadius={48} paddingAngle={2}>
+                                <Pie
+                                    data={suppliers.slice(0, 8)}
+                                    dataKey='totalAmount'
+                                    nameKey='supplierName'
+                                    cx='50%'
+                                    cy='50%'
+                                    outerRadius={105}
+                                    innerRadius={48}
+                                    paddingAngle={2}
+                                >
                                     {suppliers.slice(0, 8).map((_, index) => (
                                         <Cell key={index} fill={CHART_COLORS[index % CHART_COLORS.length]} />
                                     ))}
@@ -808,16 +1128,24 @@ function ConsumptionTab({
         { title: 'Tên vật tư', dataIndex: 'materialName', ellipsis: true },
         { title: 'Nhóm', dataIndex: 'category', width: 160, render: (value) => value || '-' },
         { title: 'ĐVT', dataIndex: 'unit', width: 90 },
-        { title: 'SL xuất', dataIndex: 'totalQuantityOut', align: 'right', sorter: (a, b) => (a.totalQuantityOut ?? 0) - (b.totalQuantityOut ?? 0), render: (value) => fmtNumber(value) },
+        {
+            title: 'SL xuất',
+            dataIndex: 'totalQuantityOut',
+            align: 'right',
+            sorter: (a, b) => (a.totalQuantityOut ?? 0) - (b.totalQuantityOut ?? 0),
+            render: (value) => fmtNumber(value),
+        },
         { title: 'Tồn hiện tại', dataIndex: 'currentStock', align: 'right', render: (value) => fmtNumber(value) },
         {
             title: 'Trạng thái',
             width: 150,
             render: (_, row) =>
                 (row.currentStock ?? 0) < (row.minStockLevel ?? 0) ? (
-                    <Tag color="error" icon={<WarningOutlined />}>Dưới ngưỡng</Tag>
+                    <Tag color='error' icon={<WarningOutlined />}>
+                        Dưới ngưỡng
+                    </Tag>
                 ) : (
-                    <Tag color="success">Đủ hàng</Tag>
+                    <Tag color='success'>Đủ hàng</Tag>
                 ),
         },
     ];
@@ -825,15 +1153,26 @@ function ConsumptionTab({
     return (
         <Row gutter={[16, 16]}>
             <Col xs={24}>
-                <SectionCard title="Biểu đồ top vật tư xuất kho">
+                <SectionCard title='Biểu đồ top vật tư xuất kho'>
                     <ChartFrame empty={!data.length}>
-                        <ResponsiveContainer width="100%" height="100%">
+                        <ResponsiveContainer width='100%' height='100%'>
                             <BarChart data={data} margin={{ top: 8, right: 24, left: 8, bottom: 64 }}>
-                                <CartesianGrid strokeDasharray="3 3" stroke="#eef2f7" />
-                                <XAxis dataKey="materialName" tick={{ fontSize: 11 }} angle={-30} textAnchor="end" interval={0} />
+                                <CartesianGrid strokeDasharray='3 3' stroke='#eef2f7' />
+                                <XAxis
+                                    dataKey='materialName'
+                                    tick={{ fontSize: 11 }}
+                                    angle={-30}
+                                    textAnchor='end'
+                                    interval={0}
+                                />
                                 <YAxis tickFormatter={fmtShort} tick={{ fontSize: 12 }} />
-                                <ChartTooltip formatter={(value: any, _name: any, entry: any) => [`${fmtNumber(Number(value))} ${entry.payload.unit || ''}`, 'Số lượng']} />
-                                <Bar dataKey="totalQuantityOut" name="SL xuất" radius={[6, 6, 0, 0]}>
+                                <ChartTooltip
+                                    formatter={(value: any, _name: any, entry: any) => [
+                                        `${fmtNumber(Number(value))} ${entry.payload.unit || ''}`,
+                                        'Số lượng',
+                                    ]}
+                                />
+                                <Bar dataKey='totalQuantityOut' name='SL xuất' radius={[6, 6, 0, 0]}>
                                     {data.map((_, index) => (
                                         <Cell key={index} fill={CHART_COLORS[index % CHART_COLORS.length]} />
                                     ))}
@@ -849,7 +1188,7 @@ function ConsumptionTab({
                     loading={loading}
                     columns={columns}
                     dataSource={data}
-                    size="small"
+                    size='small'
                     scroll={{ x: 980 }}
                     pagination={{ pageSize: 10, showSizeChanger: true }}
                     onRow={(record) => ({
@@ -875,29 +1214,64 @@ function SupplierPriceTab({
     const totalSupplierCost = suppliers.reduce((sum, row) => sum + (row.totalAmount ?? 0), 0);
     const supplierColumns: ColumnsType<SupplierReportRow> = [
         { title: 'Nhà cung cấp', dataIndex: 'supplierName', ellipsis: true },
-        { title: 'Số đơn', dataIndex: 'orderCount', width: 110, align: 'right', sorter: (a, b) => (a.orderCount ?? 0) - (b.orderCount ?? 0) },
-        { title: 'Tổng tiền', dataIndex: 'totalAmount', width: 160, align: 'right', sorter: (a, b) => (a.totalAmount ?? 0) - (b.totalAmount ?? 0), render: (value) => fmtCurrency(value) },
+        {
+            title: 'Số đơn',
+            dataIndex: 'orderCount',
+            width: 110,
+            align: 'right',
+            sorter: (a, b) => (a.orderCount ?? 0) - (b.orderCount ?? 0),
+        },
+        {
+            title: 'Tổng tiền',
+            dataIndex: 'totalAmount',
+            width: 160,
+            align: 'right',
+            sorter: (a, b) => (a.totalAmount ?? 0) - (b.totalAmount ?? 0),
+            render: (value) => fmtCurrency(value),
+        },
         {
             title: 'Tỷ trọng',
             width: 120,
             align: 'right',
-            render: (_, row) => (totalSupplierCost ? `${(((row.totalAmount ?? 0) / totalSupplierCost) * 100).toFixed(1)}%` : '-'),
+            render: (_, row) =>
+                totalSupplierCost ? `${(((row.totalAmount ?? 0) / totalSupplierCost) * 100).toFixed(1)}%` : '-',
         },
     ];
 
     const priceColumns: ColumnsType<PriceComparisonReportRow> = [
         { title: 'Mã PO', dataIndex: 'orderCode', width: 130, render: (value) => <Text code>{value || '-'}</Text> },
         { title: 'Nhà cung cấp', dataIndex: 'supplierName', ellipsis: true },
-        { title: 'Đề xuất', dataIndex: 'requestCodes', width: 220, render: (codes?: string[]) => (codes ?? []).map((code) => <Tag key={code}>{code}</Tag>) },
-        { title: 'Dự tính', dataIndex: 'estimatedTotal', width: 150, align: 'right', render: (value) => fmtCurrency(value) },
-        { title: 'Thực tế net', dataIndex: 'netActual', width: 150, align: 'right', render: (_value, row) => fmtCurrency(row.netActual ?? row.actualTotal ?? 0) },
+        {
+            title: 'Đề xuất',
+            dataIndex: 'requestCodes',
+            width: 220,
+            render: (codes?: string[]) => (codes ?? []).map((code) => <Tag key={code}>{code}</Tag>),
+        },
+        {
+            title: 'Dự tính',
+            dataIndex: 'estimatedTotal',
+            width: 150,
+            align: 'right',
+            render: (value) => fmtCurrency(value),
+        },
+        {
+            title: 'Thực tế net',
+            dataIndex: 'netActual',
+            width: 150,
+            align: 'right',
+            render: (_value, row) => fmtCurrency(row.netActual ?? row.actualTotal ?? 0),
+        },
         {
             title: 'Chênh lệch',
             dataIndex: 'difference',
             width: 160,
             align: 'right',
             sorter: (a, b) => (a.difference ?? 0) - (b.difference ?? 0),
-            render: (value = 0) => <Text type={value > 0 ? 'danger' : value < 0 ? 'success' : 'secondary'}>{value ? fmtCurrency(value) : '-'}</Text>,
+            render: (value = 0) => (
+                <Text type={value > 0 ? 'danger' : value < 0 ? 'success' : 'secondary'}>
+                    {value ? fmtCurrency(value) : '-'}
+                </Text>
+            ),
         },
         { title: 'Trạng thái', dataIndex: 'status', width: 130, render: renderStatus },
     ];
@@ -905,13 +1279,13 @@ function SupplierPriceTab({
     return (
         <Row gutter={[16, 16]}>
             <Col xs={24} xl={9}>
-                <SectionCard title="Chi phí theo nhà cung cấp">
+                <SectionCard title='Chi phí mua vật tư theo nhà cung cấp'>
                     <Table
                         rowKey={(row) => row.supplierId || row.supplierName}
                         loading={loading}
                         columns={supplierColumns}
                         dataSource={suppliers}
-                        size="small"
+                        size='small'
                         pagination={{ pageSize: 8 }}
                         onRow={(record) => ({
                             onClick: () => onOpenDetail({ type: 'supplier', title: record.supplierName, record }),
@@ -920,18 +1294,19 @@ function SupplierPriceTab({
                 </SectionCard>
             </Col>
             <Col xs={24} xl={15}>
-                <SectionCard title="So sánh dự tính và thực tế">
+                <SectionCard title='So sánh dự tính và thực tế'>
                     <Table
                         rowKey={(row) => row.orderId}
                         loading={loading}
                         columns={priceColumns}
                         dataSource={prices}
-                        size="small"
+                        size='small'
                         scroll={{ x: 1050 }}
                         pagination={{ pageSize: 8, showSizeChanger: true }}
                         rowClassName={(row) => ((row.difference ?? 0) > 0 ? 'report-row-danger' : '')}
                         onRow={(record) => ({
-                            onClick: () => onOpenDetail({ type: 'purchase', title: record.orderCode || 'Đơn mua hàng', record }),
+                            onClick: () =>
+                                onOpenDetail({ type: 'purchase', title: record.orderCode || 'Đơn mua vật tư', record }),
                         })}
                     />
                 </SectionCard>
@@ -954,37 +1329,64 @@ function DistributionTab({
     const columns: ColumnsType<DistributionCostByPlant> = [
         { title: 'Cơ sở nhận', dataIndex: 'plantName', ellipsis: true, width: 180 },
         { title: 'Số phiếu', dataIndex: 'count', width: 100, align: 'right', responsive: ['md'] },
-        { title: 'Tiền hàng', dataIndex: 'totalAmount', width: 145, align: 'right', responsive: ['lg'], render: (value) => fmtCurrency(value) },
-        { title: 'Tổng có VAT', dataIndex: 'totalWithVat', width: 160, align: 'right', sorter: (a, b) => a.totalWithVat - b.totalWithVat, render: (value) => fmtCurrency(value) },
-        { title: 'Tỷ trọng', width: 105, align: 'right', responsive: ['sm'], render: (_, row) => (total ? `${((row.totalWithVat / total) * 100).toFixed(1)}%` : '-') },
+        {
+            title: 'Tiền hàng',
+            dataIndex: 'totalAmount',
+            width: 145,
+            align: 'right',
+            responsive: ['lg'],
+            render: (value) => fmtCurrency(value),
+        },
+        {
+            title: 'Tổng có VAT',
+            dataIndex: 'totalWithVat',
+            width: 160,
+            align: 'right',
+            sorter: (a, b) => a.totalWithVat - b.totalWithVat,
+            render: (value) => fmtCurrency(value),
+        },
+        {
+            title: 'Tỷ trọng',
+            width: 105,
+            align: 'right',
+            responsive: ['sm'],
+            render: (_, row) => (total ? `${((row.totalWithVat / total) * 100).toFixed(1)}%` : '-'),
+        },
     ];
 
     return (
         <Row gutter={[16, 16]}>
             <Col xs={24} xl={14}>
-                <SectionCard title="Chi phí cấp phát theo thời gian">
+                <SectionCard title='Giá trị cấp phát vật tư theo thời gian'>
                     <ChartFrame empty={!data?.byPeriod?.length}>
-                        <ResponsiveContainer width="100%" height="100%">
+                        <ResponsiveContainer width='100%' height='100%'>
                             <BarChart data={data?.byPeriod ?? []} margin={{ top: 8, right: 24, left: 8, bottom: 8 }}>
-                                <CartesianGrid strokeDasharray="3 3" stroke="#eef2f7" />
-                                <XAxis dataKey="period" tick={{ fontSize: 12 }} />
+                                <CartesianGrid strokeDasharray='3 3' stroke='#eef2f7' />
+                                <XAxis dataKey='period' tick={{ fontSize: 12 }} />
                                 <YAxis tickFormatter={fmtShort} tick={{ fontSize: 12 }} width={58} />
-                                <ChartTooltip formatter={(value: any) => [fmtCurrency(Number(value)), 'Chi phí']} />
-                                <Bar dataKey="totalWithVat" name="Chi phí cấp phát" fill="#722ed1" radius={[6, 6, 0, 0]} />
+                                <ChartTooltip
+                                    formatter={(value: any) => [fmtCurrency(Number(value)), 'Giá trị cấp phát']}
+                                />
+                                <Bar
+                                    dataKey='totalWithVat'
+                                    name='Giá trị cấp phát vật tư'
+                                    fill='#722ed1'
+                                    radius={[6, 6, 0, 0]}
+                                />
                             </BarChart>
                         </ResponsiveContainer>
                     </ChartFrame>
                 </SectionCard>
             </Col>
             <Col xs={24} xl={10}>
-                <SectionCard title="Chi phí theo cơ sở nhận">
+                <SectionCard title='Giá trị cấp phát theo cơ sở nhận'>
                     <Table
-                        className="report-distribution-plant-table"
+                        className='report-distribution-plant-table'
                         rowKey={(row) => row.plantId}
                         loading={loading}
                         columns={columns}
                         dataSource={rows}
-                        size="small"
+                        size='small'
                         scroll={{ x: 360 }}
                         pagination={{ pageSize: 8 }}
                         onRow={(record) => ({
@@ -1015,61 +1417,115 @@ function DetailTab({
     const purchaseColumns: ColumnsType<PriceComparisonReportRow> = [
         { title: 'Mã PO', dataIndex: 'orderCode', width: 140, render: (value) => <Text code>{value || '-'}</Text> },
         { title: 'Nhà cung cấp', dataIndex: 'supplierName', ellipsis: true, render: (value) => value || '-' },
-        { title: 'Phiếu đề xuất', dataIndex: 'requestCodes', width: 210, render: (codes?: string[]) => (codes ?? []).map((code) => <Tag key={code}>{code}</Tag>) },
-        { title: 'Dự tính', dataIndex: 'estimatedTotal', width: 140, align: 'right', render: (value) => fmtCurrency(value ?? 0) },
-        { title: 'Thực tế net', dataIndex: 'netActual', width: 150, align: 'right', render: (_value, row) => fmtCurrency(row.netActual ?? row.actualTotal ?? 0) },
+        {
+            title: 'Phiếu đề xuất',
+            dataIndex: 'requestCodes',
+            width: 210,
+            render: (codes?: string[]) => (codes ?? []).map((code) => <Tag key={code}>{code}</Tag>),
+        },
+        {
+            title: 'Dự tính',
+            dataIndex: 'estimatedTotal',
+            width: 140,
+            align: 'right',
+            render: (value) => fmtCurrency(value ?? 0),
+        },
+        {
+            title: 'Thực tế net',
+            dataIndex: 'netActual',
+            width: 150,
+            align: 'right',
+            render: (_value, row) => fmtCurrency(row.netActual ?? row.actualTotal ?? 0),
+        },
         { title: 'Trạng thái', dataIndex: 'status', width: 140, render: renderStatus },
-        { title: 'Ngày nhận', dataIndex: 'receivedAt', width: 140, render: (value) => (value ? dayjs(value).format('DD/MM/YYYY') : '-') },
+        {
+            title: 'Ngày nhận',
+            dataIndex: 'receivedAt',
+            width: 140,
+            render: (value) => (value ? dayjs(value).format('DD/MM/YYYY') : '-'),
+        },
     ];
 
     const distributionColumns: ColumnsType<Distribution> = [
-        { title: 'Mã phiếu', dataIndex: 'distributionCode', width: 150, render: (value) => <Text code>{value || '-'}</Text> },
-        { title: 'Cơ sở nhận', dataIndex: ['toPlant', 'name'], ellipsis: true, render: (_value, row) => row.toPlant?.name || '-' },
+        {
+            title: 'Mã phiếu',
+            dataIndex: 'distributionCode',
+            width: 150,
+            render: (value) => <Text code>{value || '-'}</Text>,
+        },
+        {
+            title: 'Cơ sở nhận',
+            dataIndex: ['toPlant', 'name'],
+            ellipsis: true,
+            render: (_value, row) => row.toPlant?.name || '-',
+        },
         { title: 'Số dòng', dataIndex: 'items', width: 100, align: 'right', render: (items) => items?.length ?? 0 },
-        { title: 'Tổng tiền', dataIndex: 'items', width: 160, align: 'right', render: (items) => fmtCurrency((items ?? []).reduce((sum: number, item: any) => sum + (item.totalWithVat ?? 0), 0)) },
+        {
+            title: 'Tổng tiền',
+            dataIndex: 'items',
+            width: 160,
+            align: 'right',
+            render: (items) =>
+                fmtCurrency((items ?? []).reduce((sum: number, item: any) => sum + (item.totalWithVat ?? 0), 0)),
+        },
         { title: 'Trạng thái', dataIndex: 'status', width: 140, render: renderStatus },
-        { title: 'Ngày xuất', dataIndex: 'distributedAt', width: 140, render: (value) => (value ? dayjs(value).format('DD/MM/YYYY') : '-') },
+        {
+            title: 'Ngày xuất',
+            dataIndex: 'distributedAt',
+            width: 140,
+            render: (value) => (value ? dayjs(value).format('DD/MM/YYYY') : '-'),
+        },
     ];
 
     return (
-        <div className="report-stack">
+        <div className='report-stack'>
             <Input
                 allowClear
                 prefix={<SearchOutlined />}
-                placeholder="Tìm mã phiếu, nhà cung cấp, vật tư..."
+                placeholder='Tìm mã phiếu, nhà cung cấp, vật tư...'
                 value={search}
                 onChange={(event) => setSearch(event.target.value)}
-                className="report-detail-search"
+                className='report-detail-search'
             />
             <Row gutter={[16, 16]}>
                 <Col xs={24} xl={12}>
-                    <SectionCard title="Đơn mua hàng">
+                    <SectionCard title='Đơn mua vật tư'>
                         <Table
                             rowKey={(row) => row.orderId}
                             loading={loading}
                             columns={purchaseColumns}
                             dataSource={purchaseRows}
-                            size="small"
+                            size='small'
                             scroll={{ x: 850 }}
                             pagination={{ pageSize: 8 }}
                             onRow={(record) => ({
-                                onClick: () => onOpenDetail({ type: 'purchase', title: record.orderCode || 'Đơn mua hàng', record }),
+                                onClick: () =>
+                                    onOpenDetail({
+                                        type: 'purchase',
+                                        title: record.orderCode || 'Đơn mua vật tư',
+                                        record,
+                                    }),
                             })}
                         />
                     </SectionCard>
                 </Col>
                 <Col xs={24} xl={12}>
-                    <SectionCard title="Phiếu cấp phát">
+                    <SectionCard title='Phiếu cấp phát vật tư'>
                         <Table
                             rowKey={(row) => row.id}
                             loading={loading}
                             columns={distributionColumns}
                             dataSource={distributionRows}
-                            size="small"
+                            size='small'
                             scroll={{ x: 850 }}
                             pagination={{ pageSize: 8 }}
                             onRow={(record) => ({
-                                onClick: () => onOpenDetail({ type: 'distribution', title: record.distributionCode || 'Phiếu cấp phát', record }),
+                                onClick: () =>
+                                    onOpenDetail({
+                                        type: 'distribution',
+                                        title: record.distributionCode || 'Phiếu cấp phát vật tư',
+                                        record,
+                                    }),
                             })}
                         />
                     </SectionCard>
@@ -1079,9 +1535,22 @@ function DetailTab({
     );
 }
 
-function SectionCard({ title, extra, children }: { title: string; extra?: React.ReactNode; children: React.ReactNode }) {
+function SectionCard({
+    title,
+    extra,
+    children,
+}: {
+    title: string;
+    extra?: React.ReactNode;
+    children: React.ReactNode;
+}) {
     return (
-        <Card className="report-section-card" title={<span className="report-section-title">{title}</span>} extra={extra} variant="outlined">
+        <Card
+            className='report-section-card'
+            title={<span className='report-section-title'>{title}</span>}
+            extra={extra}
+            variant='outlined'
+        >
             {children}
         </Card>
     );
@@ -1090,13 +1559,13 @@ function SectionCard({ title, extra, children }: { title: string; extra?: React.
 function ChartFrame({ empty, height = 340, children }: { empty: boolean; height?: number; children: React.ReactNode }) {
     if (empty) {
         return (
-            <div className="report-chart-frame report-empty-chart" style={{ height }}>
-                <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="Không có dữ liệu trong kỳ đã chọn" />
+            <div className='report-chart-frame report-empty-chart' style={{ height }}>
+                <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description='Không có dữ liệu trong kỳ đã chọn' />
             </div>
         );
     }
     return (
-        <div className="report-chart-frame" style={{ height }}>
+        <div className='report-chart-frame' style={{ height }}>
             {children}
         </div>
     );
@@ -1107,7 +1576,7 @@ function ReportSkeleton() {
         <Row gutter={[16, 16]}>
             {[1, 2, 3, 4].map((item) => (
                 <Col key={item} xs={24} xl={12}>
-                    <Card variant="outlined">
+                    <Card variant='outlined'>
                         <Skeleton active paragraph={{ rows: 8 }} />
                     </Card>
                 </Col>
@@ -1124,27 +1593,31 @@ function TopMaterialMiniList({
     onOpenDetail: (detail: DetailPayload) => void;
 }) {
     if (!data.length) {
-        return <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="Không có dữ liệu tiêu hao" />;
+        return <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description='Không có dữ liệu tiêu hao' />;
     }
 
     const max = Math.max(...data.map((row) => row.totalQuantityOut ?? 0), 1);
     return (
-        <div className="report-mini-stack">
+        <div className='report-mini-stack'>
             {data.slice(0, 8).map((row, index) => {
                 const percent = ((row.totalQuantityOut ?? 0) / max) * 100;
                 return (
                     <button
                         key={row.materialId || row.materialName}
-                        type="button"
-                        className="report-rank-row"
+                        type='button'
+                        className='report-rank-row'
                         onClick={() => onOpenDetail({ type: 'material', title: row.materialName, record: row })}
                     >
-                        <span className="report-rank-index">{index + 1}</span>
-                        <span className="report-rank-main">
-                            <span className="report-rank-name">{row.materialName}</span>
-                            <span className="report-rank-bar"><span style={{ width: `${percent}%` }} /></span>
+                        <span className='report-rank-index'>{index + 1}</span>
+                        <span className='report-rank-main'>
+                            <span className='report-rank-name'>{row.materialName}</span>
+                            <span className='report-rank-bar'>
+                                <span style={{ width: `${percent}%` }} />
+                            </span>
                         </span>
-                        <span className="report-rank-value">{fmtNumber(row.totalQuantityOut)} {row.unit}</span>
+                        <span className='report-rank-value'>
+                            {fmtNumber(row.totalQuantityOut)} {row.unit}
+                        </span>
                     </button>
                 );
             })}
@@ -1157,8 +1630,8 @@ function ReportDetailDrawer({ detail, onClose }: { detail: DetailPayload | null;
     return (
         <Drawer open={Boolean(detail)} onClose={onClose} title={detail?.title} size={560} destroyOnHidden>
             {!detail ? null : (
-                <div className="report-stack">
-                    <Descriptions column={1} bordered size="small">
+                <div className='report-stack'>
+                    <Descriptions column={1} bordered size='small'>
                         {Object.entries(record ?? {})
                             .filter(([, value]) => ['string', 'number'].includes(typeof value))
                             .slice(0, 12)
@@ -1172,19 +1645,153 @@ function ReportDetailDrawer({ detail, onClose }: { detail: DetailPayload | null;
                         <Table
                             rowKey={(_, index) => String(index)}
                             dataSource={record.items}
-                            size="small"
+                            size='small'
                             pagination={false}
                             scroll={{ x: 640 }}
                             columns={[
                                 { title: 'Vật tư', dataIndex: 'materialName', ellipsis: true },
                                 { title: 'ĐVT', dataIndex: 'unit', width: 80 },
-                                { title: 'SL', dataIndex: 'quantityOrdered', width: 90, align: 'right', render: (_value, row: any) => fmtNumber(row.quantityOrdered ?? row.quantityRequested ?? row.quantity ?? 0) },
-                                { title: 'Tổng', dataIndex: 'totalWithVat', width: 130, align: 'right', render: (value, row: any) => fmtCurrency(value ?? row.totalPrice ?? 0) },
+                                {
+                                    title: 'SL',
+                                    dataIndex: 'quantityOrdered',
+                                    width: 90,
+                                    align: 'right',
+                                    render: (_value, row: any) =>
+                                        fmtNumber(row.quantityOrdered ?? row.quantityRequested ?? row.quantity ?? 0),
+                                },
+                                {
+                                    title: 'Tổng',
+                                    dataIndex: 'totalWithVat',
+                                    width: 130,
+                                    align: 'right',
+                                    render: (value, row: any) => fmtCurrency(value ?? row.totalPrice ?? 0),
+                                },
                             ]}
                         />
                     ) : null}
                 </div>
             )}
+        </Drawer>
+    );
+}
+
+function MaterialDrilldownDrawer({
+    drilldown,
+    onClose,
+}: {
+    drilldown: MaterialDrilldownPayload | null;
+    onClose: () => void;
+}) {
+    const purchaseColumns: ColumnsType<PriceComparisonReportRow> = [
+        { title: 'Mã PO', dataIndex: 'orderCode', width: 140, render: (value) => <Text code>{value || '-'}</Text> },
+        { title: 'Nhà cung cấp', dataIndex: 'supplierName', ellipsis: true },
+        { title: 'Dự tính', dataIndex: 'estimatedTotal', width: 130, align: 'right', render: fmtCurrency },
+        {
+            title: 'Thực tế net',
+            dataIndex: 'netActual',
+            width: 140,
+            align: 'right',
+            render: (_value, row) => fmtCurrency(row.netActual ?? row.actualTotal ?? 0),
+        },
+        { title: 'Lệch giá', dataIndex: 'difference', width: 130, align: 'right', render: fmtCurrency },
+    ];
+    const distributionColumns: ColumnsType<Distribution> = [
+        {
+            title: 'Mã phiếu',
+            dataIndex: 'distributionCode',
+            width: 150,
+            render: (value) => <Text code>{value || '-'}</Text>,
+        },
+        {
+            title: 'Cơ sở nhận',
+            dataIndex: ['toPlant', 'name'],
+            ellipsis: true,
+            render: (_value, row) => row.toPlant?.name || '-',
+        },
+        { title: 'Số dòng', dataIndex: 'items', width: 100, align: 'right', render: (items) => items?.length ?? 0 },
+        {
+            title: 'Tổng có VAT',
+            dataIndex: 'items',
+            width: 150,
+            align: 'right',
+            render: (items) =>
+                fmtCurrency((items ?? []).reduce((sum: number, item: any) => sum + Number(item.totalWithVat ?? 0), 0)),
+        },
+        { title: 'Trạng thái', dataIndex: 'status', width: 130, render: renderStatus },
+    ];
+    const materialColumns: ColumnsType<TopConsumedMaterial> = [
+        { title: 'Mã VT', dataIndex: 'materialCode', width: 120, render: (value) => <Text code>{value || '-'}</Text> },
+        { title: 'Tên vật tư', dataIndex: 'materialName', ellipsis: true },
+        { title: 'Nhóm', dataIndex: 'category', width: 150, render: (value) => value || '-' },
+        { title: 'SL xuất', dataIndex: 'totalQuantityOut', width: 120, align: 'right', render: fmtNumber },
+        { title: 'Tồn', dataIndex: 'currentStock', width: 100, align: 'right', render: fmtNumber },
+    ];
+    const supplierColumns: ColumnsType<SupplierReportRow> = [
+        { title: 'Nhà cung cấp', dataIndex: 'supplierName', ellipsis: true },
+        { title: 'Số đơn', dataIndex: 'orderCount', width: 100, align: 'right' },
+        { title: 'Tổng tiền', dataIndex: 'totalAmount', width: 150, align: 'right', render: fmtCurrency },
+    ];
+
+    const renderContent = () => {
+        if (!drilldown) return null;
+        if (drilldown.kind === 'message') {
+            return <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={drilldown.description} />;
+        }
+        const commonProps = {
+            loading: drilldown.loading,
+            size: 'small' as const,
+            pagination: { pageSize: 8, showSizeChanger: true },
+        };
+        if (drilldown.kind === 'purchase') {
+            return (
+                <Table
+                    {...commonProps}
+                    rowKey={(row) => row.orderId}
+                    columns={purchaseColumns}
+                    dataSource={drilldown.rows}
+                    scroll={{ x: 760 }}
+                />
+            );
+        }
+        if (drilldown.kind === 'distribution') {
+            return (
+                <Table
+                    {...commonProps}
+                    rowKey={(row) => row.id}
+                    columns={distributionColumns}
+                    dataSource={drilldown.rows}
+                    scroll={{ x: 760 }}
+                />
+            );
+        }
+        if (drilldown.kind === 'materials') {
+            return (
+                <Table
+                    {...commonProps}
+                    rowKey={(row) => row.materialId || row.materialCode || row.materialName}
+                    columns={materialColumns}
+                    dataSource={drilldown.rows}
+                    scroll={{ x: 720 }}
+                />
+            );
+        }
+        return (
+            <Table
+                {...commonProps}
+                rowKey={(row) => row.supplierId || row.supplierName}
+                columns={supplierColumns}
+                dataSource={drilldown.rows}
+                scroll={{ x: 520 }}
+            />
+        );
+    };
+
+    return (
+        <Drawer open={Boolean(drilldown)} onClose={onClose} title={drilldown?.title} size={720} destroyOnHidden>
+            <div className='report-stack'>
+                {drilldown?.description ? <Text type='secondary'>{drilldown.description}</Text> : null}
+                {renderContent()}
+            </div>
         </Drawer>
     );
 }
@@ -1195,11 +1802,32 @@ const REPORT_PAGE_STYLE = `
     flex-direction: column;
     gap: 16px;
 }
+.report-page .page-header-card {
+    border: 1px solid #dbeafe;
+    background:
+        linear-gradient(135deg, rgba(22, 119, 255, 0.1), rgba(82, 196, 26, 0.06)),
+        #ffffff;
+    box-shadow: 0 16px 36px rgba(15, 23, 42, 0.06);
+}
 .report-filter-card,
 .report-kpi-card,
 .report-main-card,
-.report-section-card {
+.report-section-card,
+.report-insight-card {
     border-radius: 8px;
+}
+.report-active-filters {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+.report-active-filters--compact {
+    margin-top: 14px;
+}
+.report-filter-chip {
+    margin-inline-end: 0;
+    border-radius: 999px;
+    font-weight: 600;
 }
 .report-filter-toolbar {
     display: flex;
@@ -1240,6 +1868,29 @@ const REPORT_PAGE_STYLE = `
     gap: 12px;
     margin-bottom: 8px;
 }
+.report-kpi-button {
+    width: 100%;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    text-align: left;
+    cursor: pointer;
+}
+.report-kpi-button:disabled {
+    cursor: default;
+}
+.report-kpi-card {
+    height: 100%;
+    transition:
+        transform 160ms ease,
+        box-shadow 160ms ease,
+        border-color 160ms ease;
+}
+.report-kpi-button:not(:disabled):hover .report-kpi-card {
+    transform: translateY(-2px);
+    border-color: #91caff;
+    box-shadow: 0 12px 28px rgba(15, 23, 42, 0.08);
+}
 .report-kpi-title {
     font-size: 12px;
     font-weight: 700;
@@ -1254,8 +1905,22 @@ const REPORT_PAGE_STYLE = `
     border-radius: 8px;
     font-size: 18px;
 }
+.report-kpi-action {
+    display: block;
+    margin-top: 6px;
+    font-size: 11px;
+    color: #64748b;
+}
 .report-section-title {
     font-weight: 700;
+}
+.report-section-card {
+    transition:
+        transform 160ms ease,
+        box-shadow 160ms ease;
+}
+.report-section-card:hover {
+    box-shadow: 0 12px 28px rgba(15, 23, 42, 0.06);
 }
 .report-empty-chart {
     display: flex;
@@ -1264,6 +1929,67 @@ const REPORT_PAGE_STYLE = `
 }
 .report-chart-frame {
     min-width: 0;
+}
+.report-insight-card .ant-card-body {
+    padding: 16px;
+}
+.report-insight-head {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 12px;
+}
+.report-insight-head > div {
+    display: grid;
+    gap: 2px;
+}
+.report-insight-grid {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 10px;
+}
+.report-insight-item {
+    display: grid;
+    gap: 6px;
+    min-height: 82px;
+    padding: 12px;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    background: #f8fafc;
+    text-align: left;
+    cursor: pointer;
+    transition:
+        transform 160ms ease,
+        border-color 160ms ease,
+        background 160ms ease;
+}
+.report-insight-item:hover {
+    transform: translateY(-1px);
+    border-color: #91caff;
+    background: #ffffff;
+}
+.report-insight-item span {
+    font-size: 12px;
+    font-weight: 700;
+    color: #64748b;
+    text-transform: uppercase;
+}
+.report-insight-item strong {
+    color: #0f172a;
+    line-height: 1.35;
+}
+.report-insight-item--warning {
+    background: #fff7e6;
+    border-color: #ffd591;
+}
+.report-insight-item--success {
+    background: #f6ffed;
+    border-color: #b7eb8f;
+}
+.report-insight-item--info {
+    background: #e6f4ff;
+    border-color: #91caff;
 }
 .report-tabs .ant-tabs-nav {
     margin-bottom: 16px;
@@ -1394,6 +2120,14 @@ const REPORT_PAGE_STYLE = `
         grid-template-columns: 1fr auto;
         width: 100%;
     }
+    .report-active-filters {
+        gap: 5px;
+    }
+    .report-filter-chip {
+        max-width: 100%;
+        white-space: normal;
+        line-height: 1.35;
+    }
     .report-filter-actions .ant-badge,
     .report-filter-actions .ant-btn {
         width: 100%;
@@ -1424,6 +2158,12 @@ const REPORT_PAGE_STYLE = `
         margin-inline-start: 0;
         margin-top: 2px;
         font-size: 11px;
+    }
+    .report-insight-grid {
+        grid-template-columns: minmax(0, 1fr);
+    }
+    .report-insight-item {
+        min-height: auto;
     }
     .report-main-card .ant-tabs-tab {
         padding: 8px 4px;

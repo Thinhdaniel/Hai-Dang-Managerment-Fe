@@ -57,14 +57,14 @@ const navigationSections: NavigationSection[] = [
             {
                 path: '/reports/facility-costs',
                 label: 'Báo cáo chi phí',
-                description: 'Vật tư cấp phát và sửa ngoài',
+                description: 'Chi phí vận hành theo cơ sở',
                 icon: <CalculatorOutlined />,
                 matchMode: 'exact',
             },
             {
                 path: '/materials/reports',
                 label: 'Báo cáo vật tư',
-                description: 'Chi phí, tồn kho, NCC',
+                description: 'Mua, cấp phát, tồn kho, NCC',
                 icon: <BarChartOutlined />,
                 matchMode: 'exact',
             },

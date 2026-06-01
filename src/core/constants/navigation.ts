@@ -136,15 +136,15 @@ export const PAGE_META: PageMeta[] = [
     {
         path: '/materials/reports',
         title: 'Báo Cáo Vật Tư',
-        subtitle: 'Tổng hợp chi phí, tiêu thụ và hiệu quả mua sắm vật tư theo thời gian và cơ sở.',
+        subtitle: 'Theo dõi mua vật tư, cấp phát, tồn kho, nhà cung cấp và biến động giá theo thời gian/cơ sở.',
         breadcrumbs: ['Dashboard', 'Quản lý vật tư', 'Báo cáo'],
         searchPlaceholder: 'Tìm theo vật tư, nhà cung cấp...',
     },
     {
         path: '/reports/facility-costs',
-        title: 'Báo Cáo Chi Phí Cơ Sở',
-        subtitle: 'Tổng hợp chi phí vận hành theo công thức cấp phát vật tư cộng chi phí sửa ngoài đã hoàn tất.',
-        breadcrumbs: ['Dashboard', 'Báo cáo', 'Chi phí cơ sở'],
+        title: 'Báo Cáo Chi Phí Vận Hành',
+        subtitle: 'Tổng hợp chi phí vận hành theo cơ sở, gồm vật tư đã cấp phát và chi phí sửa ngoài đã hoàn tất.',
+        breadcrumbs: ['Dashboard', 'Báo cáo', 'Chi phí vận hành'],
         searchPlaceholder: 'Tìm theo cơ sở, máy hoặc kỳ báo cáo...',
     },
 ];

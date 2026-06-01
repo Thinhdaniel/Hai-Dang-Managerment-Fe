@@ -81,9 +81,8 @@ export const facilityCostReportService = {
 
         return downloadReportFile(
             `${REPORTS_BASE}/facility-cost-summary/export-excel`,
-            `BaoCaoChiPhiCoSo_${startStr}_${endStr}.xlsx`,
+            `BaoCaoChiPhiVanHanh_${startStr}_${endStr}.xlsx`,
             params
         );
     },
 };
-
