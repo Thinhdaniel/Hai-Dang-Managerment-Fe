@@ -499,7 +499,7 @@ export default function FacilityCostReportPage() {
             ) : null}
 
             <Row gutter={[16, 16]}>
-                <Col xs={24} md={12} xl={4}>
+                <Col xs={24} sm={12} lg={8} xxl={4}>
                     <MetricCard
                         title='Tổng chi phí vận hành'
                         value={summary?.totalFacilityCost ?? 0}
@@ -517,7 +517,7 @@ export default function FacilityCostReportPage() {
                         }
                     />
                 </Col>
-                <Col xs={24} md={12} xl={4}>
+                <Col xs={24} sm={12} lg={8} xxl={4}>
                     <MetricCard
                         title='Chi phí vật tư đã cấp phát'
                         value={summary?.materialDistributionCost ?? 0}
@@ -535,7 +535,7 @@ export default function FacilityCostReportPage() {
                         }
                     />
                 </Col>
-                <Col xs={24} md={12} xl={4}>
+                <Col xs={24} sm={12} lg={8} xxl={4}>
                     <MetricCard
                         title='Chi phí sửa ngoài'
                         value={summary?.externalRepairCost ?? 0}
@@ -553,7 +553,7 @@ export default function FacilityCostReportPage() {
                         }
                     />
                 </Col>
-                <Col xs={24} md={12} xl={4}>
+                <Col xs={24} sm={12} lg={8} xxl={4}>
                     <MetricCard
                         title='Sửa ngoài chờ duyệt'
                         value={summary?.pendingApprovalCount ?? 0}
@@ -572,7 +572,7 @@ export default function FacilityCostReportPage() {
                         }
                     />
                 </Col>
-                <Col xs={24} md={12} xl={4}>
+                <Col xs={24} sm={12} lg={8} xxl={4}>
                     <MetricCard
                         title='Sửa ngoài đang xử lý'
                         value={summary?.inProgressCount ?? 0}
@@ -591,7 +591,7 @@ export default function FacilityCostReportPage() {
                         }
                     />
                 </Col>
-                <Col xs={24} md={12} xl={4}>
+                <Col xs={24} sm={12} lg={8} xxl={4}>
                     <MetricCard
                         title='Cơ sở phát sinh cao nhất'
                         value={topPlant?.totalCost ?? 0}
@@ -613,7 +613,7 @@ export default function FacilityCostReportPage() {
             </Row>
 
             <Row gutter={[16, 16]}>
-                <Col xs={24} xl={16}>
+                <Col xs={24} xxl={16}>
                     <Card
                         className='facility-cost-section-card'
                         title='Xu hướng chi phí vận hành theo kỳ'
@@ -626,7 +626,7 @@ export default function FacilityCostReportPage() {
                         )}
                     </Card>
                 </Col>
-                <Col xs={24} xl={8}>
+                <Col xs={24} xxl={8}>
                     <CostCompositionPanel
                         summary={summary}
                         topPlant={topPlant}
@@ -639,7 +639,7 @@ export default function FacilityCostReportPage() {
             </Row>
 
             <Row gutter={[16, 16]}>
-                <Col xs={24} xl={15}>
+                <Col xs={24} xxl={15}>
                     <Card className='facility-cost-section-card' title='Chi phí vận hành theo cơ sở' variant='outlined'>
                         <Table
                             rowKey={(row) => row.plantId || row.plantName}
@@ -652,7 +652,7 @@ export default function FacilityCostReportPage() {
                         />
                     </Card>
                 </Col>
-                <Col xs={24} xl={9}>
+                <Col xs={24} xxl={9}>
                     <Card
                         className='facility-cost-section-card'
                         title='Top máy phát sinh chi phí sửa ngoài'
@@ -1002,7 +1002,13 @@ function FacilityDrilldownDrawer({
     };
 
     return (
-        <Drawer open={Boolean(drilldown)} onClose={onClose} title={drilldown?.title} size={720} destroyOnHidden>
+        <Drawer
+            open={Boolean(drilldown)}
+            onClose={onClose}
+            title={drilldown?.title}
+            size='min(100vw, 720px)'
+            destroyOnHidden
+        >
             <div className='facility-cost-drilldown'>
                 {drilldown?.description ? <Text type='secondary'>{drilldown.description}</Text> : null}
                 {renderContent()}
@@ -1078,6 +1084,21 @@ const FACILITY_COST_STYLE = `
 }
 .facility-cost-metric-card .ant-card-body {
     min-height: 128px;
+    min-width: 0;
+}
+.facility-cost-metric-card .ant-statistic {
+    min-width: 0;
+}
+.facility-cost-metric-card .ant-statistic-content {
+    font-size: clamp(18px, 0.7rem + 0.7vw, 24px);
+    font-weight: 700;
+    line-height: 1.25;
+    word-break: break-word;
+    overflow-wrap: anywhere;
+}
+.facility-cost-metric-card .ant-statistic-content-suffix {
+    font-size: 13px;
+    word-break: keep-all;
 }
 .facility-cost-metric-button {
     width: 100%;
@@ -1195,8 +1216,10 @@ const FACILITY_COST_STYLE = `
     text-transform: uppercase;
 }
 .facility-cost-insight-list > button strong {
+    min-width: 0;
     color: #0f172a;
     line-height: 1.35;
+    overflow-wrap: anywhere;
 }
 .facility-cost-status-grid {
     display: grid;

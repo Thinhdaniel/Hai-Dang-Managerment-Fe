@@ -573,7 +573,7 @@ export default function MaterialReportPage() {
                 </div>
 
                 <Row gutter={[12, 12]} className='report-filter-grid'>
-                    <Col xs={24} md={12} xl={6}>
+                    <Col xs={24} sm={12} xl={8} xxl={6}>
                         <Text className='report-filter-label'>Khoảng thời gian</Text>
                         <RangePicker
                             value={filters.dateRange}
@@ -588,7 +588,7 @@ export default function MaterialReportPage() {
                         />
                     </Col>
                     {isManager ? (
-                        <Col xs={24} md={12} xl={6}>
+                        <Col xs={24} sm={12} xl={8} xxl={6}>
                             <Text className='report-filter-label'>Cơ sở</Text>
                             <Select
                                 allowClear
@@ -601,7 +601,7 @@ export default function MaterialReportPage() {
                             />
                         </Col>
                     ) : null}
-                    <Col xs={24} md={12} xl={6}>
+                    <Col xs={24} sm={12} xl={8} xxl={6}>
                         <Text className='report-filter-label'>Nhóm vật tư</Text>
                         <Select
                             allowClear
@@ -615,7 +615,7 @@ export default function MaterialReportPage() {
                             options={categoryOptions}
                         />
                     </Col>
-                    <Col xs={24} md={12} xl={6}>
+                    <Col xs={24} sm={12} xl={8} xxl={6}>
                         <Text className='report-filter-label'>Vật tư</Text>
                         <Select
                             allowClear
@@ -632,7 +632,7 @@ export default function MaterialReportPage() {
                                 }))}
                         />
                     </Col>
-                    <Col xs={24} md={12} xl={6}>
+                    <Col xs={24} sm={12} xl={8} xxl={6}>
                         <Text className='report-filter-label'>Nhà cung cấp</Text>
                         <Select
                             allowClear
@@ -644,7 +644,7 @@ export default function MaterialReportPage() {
                             options={suppliers.map((supplier) => ({ label: supplier.name, value: supplier.id }))}
                         />
                     </Col>
-                    <Col xs={24} md={12} xl={6}>
+                    <Col xs={24} sm={12} xl={8} xxl={6}>
                         <Text className='report-filter-label'>Trạng thái mua hàng</Text>
                         <Select
                             allowClear
@@ -659,7 +659,7 @@ export default function MaterialReportPage() {
                                 .map(([value, info]) => ({ label: info.label, value }))}
                         />
                     </Col>
-                    <Col xs={24} md={12} xl={6}>
+                    <Col xs={24} sm={12} xl={8} xxl={6}>
                         <Text className='report-filter-label'>Gom biểu đồ</Text>
                         <Segmented
                             block
@@ -691,7 +691,7 @@ export default function MaterialReportPage() {
 
             <Row gutter={[16, 16]}>
                 {kpis.map((kpi) => (
-                    <Col key={kpi.title} xs={12} sm={12} xl={8} xxl={4}>
+                    <Col key={kpi.title} xs={24} sm={12} lg={8} xxl={4}>
                         <ReportKpiCard kpi={kpi} loading={summaryQuery.isLoading} />
                     </Col>
                 ))}
@@ -849,12 +849,14 @@ function ReportKpiCard({ kpi, loading }: { kpi: MaterialKpiConfig; loading?: boo
                         {kpi.icon}
                     </span>
                 </div>
-                <Statistic
-                    value={kpi.value}
-                    formatter={(value) => (kpi.formatter ? kpi.formatter(Number(value)) : fmtNumber(Number(value)))}
-                    suffix={kpi.suffix}
-                    styles={{ content: { color: kpi.color, fontWeight: 700, fontSize: 24 } }}
-                />
+                <Tooltip title={kpi.formatter ? kpi.formatter(kpi.value) : fmtNumber(kpi.value)}>
+                    <Statistic
+                        value={kpi.value}
+                        formatter={(value) => (kpi.formatter ? kpi.formatter(Number(value)) : fmtNumber(Number(value)))}
+                        suffix={kpi.suffix}
+                        styles={{ content: { color: kpi.color, fontWeight: 700 } }}
+                    />
+                </Tooltip>
                 {kpi.onClick ? <Text className='report-kpi-action'>Nhấn để xem chi tiết</Text> : null}
             </Card>
         </button>
@@ -1006,7 +1008,7 @@ function OverviewTab({
 
     return (
         <Row gutter={[16, 16]}>
-            <Col xs={24} xl={15}>
+            <Col xs={24} xxl={15}>
                 <SectionCard
                     title='Mua vật tư và cấp phát theo thời gian'
                     extra={<Tag color='blue'>Không cộng double-count</Tag>}
@@ -1041,7 +1043,7 @@ function OverviewTab({
                     </ChartFrame>
                 </SectionCard>
             </Col>
-            <Col xs={24} xl={9}>
+            <Col xs={24} xxl={9}>
                 <SectionCard title='Giá trị cấp phát vật tư theo cơ sở'>
                     <ChartFrame empty={!distribution?.byPlant?.length}>
                         <ResponsiveContainer width='100%' height='100%'>
@@ -1628,7 +1630,7 @@ function TopMaterialMiniList({
 function ReportDetailDrawer({ detail, onClose }: { detail: DetailPayload | null; onClose: () => void }) {
     const record: any = detail?.record;
     return (
-        <Drawer open={Boolean(detail)} onClose={onClose} title={detail?.title} size={560} destroyOnHidden>
+        <Drawer open={Boolean(detail)} onClose={onClose} title={detail?.title} size='min(100vw, 560px)' destroyOnHidden>
             {!detail ? null : (
                 <div className='report-stack'>
                     <Descriptions column={1} bordered size='small'>
@@ -1787,7 +1789,13 @@ function MaterialDrilldownDrawer({
     };
 
     return (
-        <Drawer open={Boolean(drilldown)} onClose={onClose} title={drilldown?.title} size={720} destroyOnHidden>
+        <Drawer
+            open={Boolean(drilldown)}
+            onClose={onClose}
+            title={drilldown?.title}
+            size='min(100vw, 720px)'
+            destroyOnHidden
+        >
             <div className='report-stack'>
                 {drilldown?.description ? <Text type='secondary'>{drilldown.description}</Text> : null}
                 {renderContent()}
@@ -1911,6 +1919,22 @@ const REPORT_PAGE_STYLE = `
     font-size: 11px;
     color: #64748b;
 }
+.report-kpi-card .ant-card-body {
+    min-width: 0;
+}
+.report-kpi-card .ant-statistic {
+    min-width: 0;
+}
+.report-kpi-card .ant-statistic-content {
+    font-size: clamp(18px, 0.7rem + 0.7vw, 24px);
+    line-height: 1.25;
+    word-break: break-word;
+    overflow-wrap: anywhere;
+}
+.report-kpi-card .ant-statistic-content-suffix {
+    font-size: 13px;
+    word-break: keep-all;
+}
 .report-section-title {
     font-weight: 700;
 }
@@ -1946,7 +1970,7 @@ const REPORT_PAGE_STYLE = `
 }
 .report-insight-grid {
     display: grid;
-    grid-template-columns: repeat(4, minmax(0, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 210px), 1fr));
     gap: 10px;
 }
 .report-insight-item {
@@ -1976,8 +2000,10 @@ const REPORT_PAGE_STYLE = `
     text-transform: uppercase;
 }
 .report-insight-item strong {
+    min-width: 0;
     color: #0f172a;
     line-height: 1.35;
+    overflow-wrap: anywhere;
 }
 .report-insight-item--warning {
     background: #fff7e6;
