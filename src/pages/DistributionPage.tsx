@@ -33,6 +33,7 @@ import {
     RightOutlined,
     SearchOutlined,
     ThunderboltOutlined,
+    WarningOutlined,
 } from '@ant-design/icons';
 
 const { useBreakpoint } = Grid;
@@ -53,6 +54,7 @@ import type {
     DistributionStatus,
     DistributionType,
     PurchaseRequest,
+    SupplyShortage,
 } from '../core/services/material.service';
 import { distributionService, supplyRequestService } from '../core/services/material.service';
 import { supplyShortageService } from '../core/services/material.service';
@@ -210,6 +212,7 @@ const DistributionPage: React.FC = () => {
     const [internalOpen, setInternalOpen] = useState(false);
     const [expressOpen, setExpressOpen] = useState(false);
     const [compensationOpen, setCompensationOpen] = useState(false);
+    const [plantComp, setPlantComp] = useState<{ plantName: string; shortages: SupplyShortage[] } | null>(null);
     const [confirmingId, setConfirmingId] = useState<string | null>(null);
     const [distributingId, setDistributingId] = useState<string | null>(null);
     const [exportingId, setExportingId] = useState<string | null>(null);
@@ -297,6 +300,42 @@ const DistributionPage: React.FC = () => {
                     Number(item.quantityOutstanding ?? 0) > 0
             ),
         [shortageRes]
+    );
+
+    // Tầng 2: tất cả vật tư còn thiếu (mọi SR) để cấp bù gộp theo cơ sở.
+    const { data: allOpenShortages = [] } = useQuery({
+        queryKey: ['materials', 'supply-shortages', 'all-open'],
+        queryFn: () =>
+            supplyShortageService
+                .getAll({ limit: 500 })
+                .then((res) => (Array.isArray(res) ? res : (res.data ?? [])))
+                .then((list) =>
+                    (list as SupplyShortage[]).filter(
+                        (item) =>
+                            ['outstanding', 'partially_settled'].includes(String(item.status)) &&
+                            Number(item.quantityOutstanding ?? 0) > 0
+                    )
+                ),
+        enabled: isCS1Manager,
+        staleTime: 30_000,
+    });
+
+    const shortagesByPlant = useMemo(() => {
+        const map = new Map<string, { plantId: string; plantName: string; shortages: SupplyShortage[] }>();
+        (allOpenShortages as SupplyShortage[]).forEach((item) => {
+            const plantId = String((item as any).toPlant?.id ?? item.toPlantId ?? '');
+            if (!plantId) return;
+            const plantName =
+                (item as any).toPlant?.name ?? (plants as Plant[]).find((p) => p.id === plantId)?.name ?? 'Cơ sở';
+            if (!map.has(plantId)) map.set(plantId, { plantId, plantName, shortages: [] });
+            map.get(plantId)!.shortages.push(item);
+        });
+        return Array.from(map.values()).sort((a, b) => b.shortages.length - a.shortages.length);
+    }, [allOpenShortages, plants]);
+
+    const totalOpenShortages = useMemo(
+        () => shortagesByPlant.reduce((sum, group) => sum + group.shortages.length, 0),
+        [shortagesByPlant]
     );
 
     // Fetch approved SRs for create selector
@@ -695,6 +734,36 @@ const DistributionPage: React.FC = () => {
                                             <span className='text-xs text-slate-400'>
                                                 {d.targetDepartment || d.requesterName} · {d.items?.length ?? 0} dòng
                                             </span>
+                                        </span>
+                                    ),
+                                }))}
+                            />
+                        )}
+                        {shortagesByPlant.length > 0 && (
+                            <Select
+                                placeholder={
+                                    <span className='flex items-center gap-1.5'>
+                                        <WarningOutlined className='text-orange-500' />
+                                        <span className='text-xs font-medium text-orange-600 sm:text-sm'>
+                                            Cấp bù theo cơ sở ({totalOpenShortages})
+                                        </span>
+                                    </span>
+                                }
+                                style={{ minWidth: isMobile ? 180 : 230 }}
+                                value={null}
+                                popupMatchSelectWidth={false}
+                                onChange={(plantId) => {
+                                    const group = shortagesByPlant.find((g) => g.plantId === plantId);
+                                    if (group) setPlantComp({ plantName: group.plantName, shortages: group.shortages });
+                                }}
+                                options={shortagesByPlant.map((group) => ({
+                                    value: group.plantId,
+                                    label: (
+                                        <span className='flex items-center justify-between gap-3'>
+                                            <span className='font-medium text-slate-700'>{group.plantName}</span>
+                                            <Tag color='orange' className='!m-0 !text-[10px]'>
+                                                {group.shortages.length} dòng
+                                            </Tag>
                                         </span>
                                     ),
                                 }))}
@@ -1103,6 +1172,19 @@ const DistributionPage: React.FC = () => {
                     onSuccess={() => {
                         setCompensationOpen(false);
                         invalidate(detail?.id);
+                    }}
+                />
+            )}
+
+            {isCS1Manager && (
+                <SupplyCompensationModal
+                    open={Boolean(plantComp)}
+                    shortages={(plantComp?.shortages ?? []) as any}
+                    title={`Cấp bù cho ${plantComp?.plantName ?? 'cơ sở'}`}
+                    onClose={() => setPlantComp(null)}
+                    onSuccess={() => {
+                        setPlantComp(null);
+                        invalidate();
                     }}
                 />
             )}

@@ -44,6 +44,7 @@ import {
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import PageHeader from '../components/shared/PageHeader';
+import SupplyCompensationModal from '../components/SupplyCompensationModal';
 import { useAuth } from '../core/contexts/AuthContext';
 import { api } from '../core/lib/api';
 import { normalizeSearchTerm } from '../core/lib/search';
@@ -54,7 +55,7 @@ import type {
     PurchaseRequestQueryParams,
     PurchaseRequestStatus,
 } from '../core/services/material.service';
-import { distributionService, supplyRequestService } from '../core/services/material.service';
+import { distributionService, supplyRequestService, supplyShortageService } from '../core/services/material.service';
 import type { PaginatedResponse, Plant, User } from '../core/types';
 
 const { RangePicker } = DatePicker;
@@ -554,6 +555,7 @@ const SupplyRequestPage: React.FC = () => {
     });
     const [pagination, setPagination] = useState({ page: DEFAULT_PAGE, limit: DEFAULT_LIMIT });
     const [selectedId, setSelectedId] = useState<string | null>(null);
+    const [compensationOpen, setCompensationOpen] = useState(false);
     const [formOpen, setFormOpen] = useState(false);
     const [filterOpen, setFilterOpen] = useState(false);
     const [rejectTarget, setRejectTarget] = useState<PurchaseRequest | null>(null);
@@ -653,6 +655,26 @@ const SupplyRequestPage: React.FC = () => {
         const items = Array.isArray(linkedDistRes) ? linkedDistRes : ((linkedDistRes as any).data ?? []);
         return items[0] ?? null;
     }, [linkedDistRes]);
+
+    // Vật tư còn thiếu của phiếu đề xuất đang chọn → dùng cho luồng cấp bù
+    const isPartiallyDistributed = String(selectedRequest?.status) === 'partially_distributed';
+    const { data: shortageRes } = useQuery({
+        queryKey: ['materials', 'supply-shortages', selectedId],
+        queryFn: () =>
+            supplyShortageService
+                .getAll({ originalSupplyRequestId: selectedId!, limit: 100 })
+                .then((res) => (Array.isArray(res) ? res : (res.data ?? []))),
+        enabled: !!selectedId && isPartiallyDistributed,
+    });
+    const openShortages = useMemo(
+        () =>
+            (shortageRes ?? []).filter(
+                (item: any) =>
+                    ['outstanding', 'partially_settled'].includes(String(item.status)) &&
+                    Number(item.quantityOutstanding ?? 0) > 0
+            ),
+        [shortageRes]
+    );
 
     const resolveId = (v: any): string | undefined => (v && typeof v === 'object' ? (v.id ?? String(v._id ?? '')) : v);
     const canConfirm =
@@ -1345,6 +1367,34 @@ const SupplyRequestPage: React.FC = () => {
                                 </div>
                             )}
 
+                            {/* Cấp thiếu → lối vào cấp bù */}
+                            {isPartiallyDistributed && openShortages.length > 0 && (
+                                <div className='flex flex-col gap-3 rounded-2xl border border-orange-200 bg-orange-50 p-4 sm:flex-row sm:items-center sm:justify-between'>
+                                    <div className='flex gap-3 text-orange-700'>
+                                        <WarningOutlined className='mt-0.5 shrink-0' />
+                                        <div>
+                                            <div className='text-sm font-semibold'>
+                                                Còn {openShortages.length} vật tư cấp thiếu cần cấp bù
+                                            </div>
+                                            <div className='mt-0.5 text-sm'>
+                                                Tạo phiếu cấp bù để xuất bổ sung phần còn thiếu cho cơ sở.
+                                            </div>
+                                        </div>
+                                    </div>
+                                    {isCS1Manager && (
+                                        <Button
+                                            type='primary'
+                                            icon={<SendOutlined />}
+                                            block={isMobile}
+                                            className='bg-orange-500 hover:!bg-orange-600'
+                                            onClick={() => setCompensationOpen(true)}
+                                        >
+                                            Cấp bù ngay ({openShortages.length})
+                                        </Button>
+                                    )}
+                                </div>
+                            )}
+
                             {/* Info — mobile: list rows, desktop: Descriptions */}
                             <div className='overflow-hidden rounded-2xl border border-slate-200 bg-white'>
                                 <div className='border-b border-slate-100 bg-slate-50 px-4 py-2.5 text-xs font-semibold tracking-wider text-slate-400 uppercase'>
@@ -1664,6 +1714,18 @@ const SupplyRequestPage: React.FC = () => {
                     />
                 </div>
             </Modal>
+
+            <SupplyCompensationModal
+                open={compensationOpen}
+                shortages={openShortages as any}
+                onClose={() => setCompensationOpen(false)}
+                onSuccess={() => {
+                    setCompensationOpen(false);
+                    queryClient.invalidateQueries({ queryKey: ['supply-requests'] });
+                    queryClient.invalidateQueries({ queryKey: ['distributions'] });
+                    queryClient.invalidateQueries({ queryKey: ['materials', 'supply-shortages'] });
+                }}
+            />
         </>
     );
 };
