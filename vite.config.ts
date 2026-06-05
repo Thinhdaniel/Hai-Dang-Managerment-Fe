@@ -4,7 +4,7 @@ import tailwindcss from '@tailwindcss/vite';
 
 // https://vite.dev/config/
 export default defineConfig({
-    cacheDir: '.vite-cache',
+    cacheDir: process.env.VITE_CACHE_DIR || '.vite-cache',
     plugins: [react(), tailwindcss()],
     build: {
         rollupOptions: {

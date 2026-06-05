@@ -24,6 +24,7 @@ body,
 }
 
 body {
+    min-height: 100dvh;
     margin: 0;
     color: var(--app-text);
     background:
@@ -31,6 +32,95 @@ body {
         radial-gradient(circle at top right, rgba(34, 197, 94, 0.08), transparent 18%),
         linear-gradient(180deg, #f8fbff 0%, var(--app-bg) 44%, #eef3fb 100%);
     font-family: 'Segoe UI', 'Inter', 'Helvetica Neue', Arial, sans-serif;
+}
+
+button,
+a,
+input,
+select,
+textarea {
+    -webkit-tap-highlight-color: transparent;
+}
+
+.pwa-install-button.ant-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 36px;
+}
+
+.pwa-offline-banner {
+    position: fixed;
+    right: 16px;
+    bottom: 18px;
+    z-index: 320;
+    display: inline-flex;
+    max-width: min(420px, calc(100vw - 32px));
+    align-items: center;
+    gap: 10px;
+    padding: 11px 14px;
+    border: 1px solid rgba(239, 68, 68, 0.18);
+    border-radius: 16px;
+    background: rgba(255, 255, 255, 0.96);
+    color: #991b1b;
+    box-shadow: 0 16px 34px rgba(15, 23, 42, 0.12);
+    backdrop-filter: blur(16px);
+    font-size: 13px;
+    font-weight: 700;
+}
+
+.mobile-bottom-nav {
+    position: fixed;
+    right: 10px;
+    bottom: max(10px, env(safe-area-inset-bottom));
+    left: 10px;
+    z-index: 240;
+    display: none;
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    gap: 4px;
+    padding: 7px;
+    border: 1px solid rgba(15, 23, 42, 0.08);
+    border-radius: 24px;
+    background: rgba(255, 255, 255, 0.96);
+    box-shadow: 0 18px 42px rgba(15, 23, 42, 0.14);
+    backdrop-filter: blur(20px);
+}
+
+.mobile-bottom-nav__item {
+    display: flex;
+    min-width: 0;
+    min-height: 58px;
+    align-items: center;
+    justify-content: center;
+    flex-direction: column;
+    gap: 4px;
+    border: 0;
+    border-radius: 18px;
+    background: transparent;
+    color: #64748b;
+    font: inherit;
+    font-size: 11px;
+    font-weight: 700;
+    line-height: 1.1;
+}
+
+.mobile-bottom-nav__item--active {
+    background: rgba(24, 144, 255, 0.1);
+    color: #0f6fd2;
+}
+
+.mobile-bottom-nav__icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 19px;
+}
+
+.mobile-bottom-nav__label {
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
 .app-shell,
@@ -637,6 +727,19 @@ body {
 }
 
 @media (max-width: 991px) {
+    .mobile-bottom-nav {
+        display: grid;
+    }
+
+    .pwa-offline-banner {
+        right: 12px;
+        bottom: calc(88px + env(safe-area-inset-bottom));
+        left: 12px;
+        max-width: none;
+        justify-content: center;
+        text-align: center;
+    }
+
     .page-header-card {
         flex-direction: column;
     }

@@ -4,6 +4,7 @@ import { Outlet } from 'react-router-dom';
 import AppHeader from './AppHeader';
 import AppSidebar from './AppSidebar';
 import HelpAssistant from '../help/HelpAssistant';
+import MobileBottomNav from '../pwa/MobileBottomNav';
 
 const { Content } = Layout;
 const { useBreakpoint } = Grid;
@@ -60,7 +61,14 @@ const AppLayout: React.FC = () => {
                         marginLeft: isDesktop ? (desktopCollapsed ? SIDEBAR_COLLAPSED_WIDTH : SIDEBAR_WIDTH) : 0,
                     }}
                 >
-                    <Content className='bg-transparent' style={{ margin: screens.md ? '24px' : '14px', overflow: 'initial' }}>
+                    <Content
+                        className='bg-transparent'
+                        style={{
+                            margin: screens.md ? '24px' : '14px',
+                            overflow: 'initial',
+                            paddingBottom: isDesktop ? undefined : 'calc(86px + env(safe-area-inset-bottom))',
+                        }}
+                    >
                         <div className='flex flex-col gap-6'>
                             <Outlet />
                         </div>
@@ -68,6 +76,7 @@ const AppLayout: React.FC = () => {
                 </Layout>
             </Layout>
 
+            {!isDesktop ? <MobileBottomNav onOpenMenu={() => setMobileSidebarOpen(true)} /> : null}
             <HelpAssistant />
         </Layout>
     );

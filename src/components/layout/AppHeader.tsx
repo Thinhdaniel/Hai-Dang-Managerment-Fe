@@ -18,6 +18,8 @@ import { normalizeSearchTerm } from '../../core/lib/search';
 import { useAuth } from '../../core/contexts/AuthContext';
 import { hasManagerAccess } from '../../core/lib/permissions';
 import { useNotificationContext } from '../../core/contexts/NotificationContext';
+import PushNotificationToggle from '../notifications/PushNotificationToggle';
+import InstallPrompt from '../pwa/InstallPrompt';
 
 const { Header } = Layout;
 const { Text, Title } = Typography;
@@ -149,7 +151,7 @@ const AppHeader: React.FC<AppHeaderProps> = ({ collapsed, isDesktop, mobileOpen,
     };
 
     const notificationContent = (
-        <div className='w-[320px] overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-[0_18px_40px_rgba(15,23,42,0.08)]'>
+        <div className='w-[min(360px,calc(100vw-24px))] overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-[0_18px_40px_rgba(15,23,42,0.08)]'>
             <div className='flex items-center justify-between border-b border-slate-100 px-4 py-3'>
                 <div>
                     <div className='text-sm font-semibold text-slate-900'>Notifications</div>
@@ -173,6 +175,8 @@ const AppHeader: React.FC<AppHeaderProps> = ({ collapsed, isDesktop, mobileOpen,
                     </span>
                 </div>
             </div>
+
+            <PushNotificationToggle />
 
             <div className='max-h-[300px] overflow-y-auto p-2'>
                 {notifications.length === 0 ? (
@@ -330,6 +334,8 @@ const AppHeader: React.FC<AppHeaderProps> = ({ collapsed, isDesktop, mobileOpen,
                             {quickAction.label}
                         </Button>
                     ) : null}
+
+                    <InstallPrompt />
 
                     <Popover
                         content={notificationContent}

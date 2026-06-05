@@ -5,6 +5,8 @@ import { RouterProvider } from 'react-router-dom';
 import { AuthProvider } from './core/contexts/AuthContext';
 import { NotificationProvider } from './core/contexts/NotificationContext';
 import { queryClient } from './core/queryClient';
+import OfflineStatus from './components/pwa/OfflineStatus';
+import ServiceWorkerManager from './components/pwa/ServiceWorkerManager';
 
 function App() {
     return (
@@ -37,6 +39,8 @@ function App() {
                     <AuthProvider>
                         <NotificationProvider>
                             <RouterProvider router={router} />
+                            <OfflineStatus />
+                            <ServiceWorkerManager />
                         </NotificationProvider>
                     </AuthProvider>
                 </QueryClientProvider>
