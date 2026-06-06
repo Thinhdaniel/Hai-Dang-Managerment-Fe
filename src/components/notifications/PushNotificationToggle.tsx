@@ -15,8 +15,26 @@ const DEFAULT_STATE: PushNotificationState = {
 
 const getStateCopy = (state: PushNotificationState) => ({ ...state });
 
+const isAppleMobile = () =>
+    typeof navigator !== 'undefined' &&
+    /iPad|iPhone|iPod/.test(navigator.userAgent) &&
+    !(window as Window & { MSStream?: unknown }).MSStream;
+
+const isStandalonePwa = () =>
+    typeof window !== 'undefined' &&
+    (window.matchMedia('(display-mode: standalone)').matches ||
+        (navigator as Navigator & { standalone?: boolean }).standalone === true);
+
 const getStatus = (state: PushNotificationState) => {
     if (!state.supported) {
+        if (isAppleMobile() && !isStandalonePwa()) {
+            return {
+                color: 'orange',
+                label: 'Cần cài PWA',
+                description: 'Trên iPhone phải Add to Home Screen và mở app từ icon thì mới nhận thông báo ngoài app.',
+            };
+        }
+
         return {
             color: 'default',
             label: 'Không hỗ trợ',

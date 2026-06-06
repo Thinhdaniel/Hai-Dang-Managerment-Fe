@@ -13,7 +13,17 @@ import {
     Typography,
     type TableColumnsType,
 } from 'antd';
-import { DeleteOutlined, DownloadOutlined, EditOutlined, PlusOutlined, ReloadOutlined, SearchOutlined, UploadOutlined, WarningOutlined } from '@ant-design/icons';
+import {
+    DeleteOutlined,
+    DownloadOutlined,
+    EditOutlined,
+    EyeOutlined,
+    PlusOutlined,
+    ReloadOutlined,
+    SearchOutlined,
+    UploadOutlined,
+    WarningOutlined,
+} from '@ant-design/icons';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import ConfirmAction from '../components/shared/ConfirmAction';
 import LazyBoundary from '../components/shared/LazyBoundary';
@@ -160,9 +170,7 @@ const MaterialListPage: React.FC = () => {
         const timeoutId = window.setTimeout(() => {
             const normalizedSearch = normalizeSearchTerm(draftFilters.search);
 
-            setPagination((current) =>
-                current.page === DEFAULT_PAGE ? current : { ...current, page: DEFAULT_PAGE }
-            );
+            setPagination((current) => (current.page === DEFAULT_PAGE ? current : { ...current, page: DEFAULT_PAGE }));
             setFilters((current) =>
                 current.search === normalizedSearch
                     ? current
@@ -176,7 +184,11 @@ const MaterialListPage: React.FC = () => {
         return () => window.clearTimeout(timeoutId);
     }, [draftFilters.search]);
 
-    const { data: materialResponse, isLoading, isFetching } = useQuery({
+    const {
+        data: materialResponse,
+        isLoading,
+        isFetching,
+    } = useQuery({
         queryKey: ['materials', queryParams],
         queryFn: async () => normalizeMaterialListResponse(await materialService.getAll(queryParams), queryParams),
         placeholderData: (previousData) => previousData,
@@ -195,12 +207,20 @@ const MaterialListPage: React.FC = () => {
 
     const { data: activeStats } = useQuery({
         queryKey: ['materials', 'stat', 'active'],
-        queryFn: async () => normalizeMaterialListResponse(await materialService.getAll({ page: 1, limit: 1, isActive: true }), { page: 1, limit: 1 }),
+        queryFn: async () =>
+            normalizeMaterialListResponse(await materialService.getAll({ page: 1, limit: 1, isActive: true }), {
+                page: 1,
+                limit: 1,
+            }),
     });
 
     const { data: inactiveStats } = useQuery({
         queryKey: ['materials', 'stat', 'inactive'],
-        queryFn: async () => normalizeMaterialListResponse(await materialService.getAll({ page: 1, limit: 1, isActive: false }), { page: 1, limit: 1 }),
+        queryFn: async () =>
+            normalizeMaterialListResponse(await materialService.getAll({ page: 1, limit: 1, isActive: false }), {
+                page: 1,
+                limit: 1,
+            }),
     });
 
     const detailMaterialId = detailMaterial?.id;
@@ -261,8 +281,21 @@ const MaterialListPage: React.FC = () => {
             inactive: inactiveStats?.total ?? 0,
             lowStock: summary?.lowStockCount ?? lowStockMaterials.length,
         }),
-        [activeStats?.total, inactiveStats?.total, lowStockMaterials.length, materialResponse?.total, summary?.lowStockCount, summary?.totalMaterials]
+        [
+            activeStats?.total,
+            inactiveStats?.total,
+            lowStockMaterials.length,
+            materialResponse?.total,
+            summary?.lowStockCount,
+            summary?.totalMaterials,
+        ]
     );
+    const currentPage = materialResponse?.page ?? pagination.page;
+    const pageSize = materialResponse?.limit ?? pagination.limit;
+    const totalItems = materialResponse?.total ?? 0;
+    const totalPages = Math.max(materialResponse?.totalPages ?? Math.ceil(totalItems / Math.max(pageSize, 1)), 1);
+    const pageStart = totalItems === 0 ? 0 : (currentPage - 1) * pageSize + 1;
+    const pageEnd = Math.min(currentPage * pageSize, totalItems);
 
     const handleCategoryChange = (value?: string) => {
         setDraftFilters((current) => ({ ...current, category: value }));
@@ -482,8 +515,7 @@ const MaterialListPage: React.FC = () => {
             dataIndex: 'lowStock',
             key: 'lowStock',
             width: 140,
-            render: (lowStock?: boolean) =>
-                lowStock ? <Tag color='error'>Thiếu</Tag> : <Tag color='success'>Đủ</Tag>,
+            render: (lowStock?: boolean) => (lowStock ? <Tag color='error'>Thiếu</Tag> : <Tag color='success'>Đủ</Tag>),
         },
     ];
 
@@ -533,7 +565,7 @@ const MaterialListPage: React.FC = () => {
                 />
             </div>
 
-            <div className='ml-s flex flex-wrap gap-px overflow-hidden rounded-xl border border-slate-200 bg-slate-200'>
+            <div className='ml-s material-list-stats flex flex-wrap gap-px overflow-hidden rounded-xl border border-slate-200 bg-slate-200'>
                 {[
                     { label: 'Tổng loại VT', value: stats.total, accent: 'oklch(0.18 0.012 250)' },
                     { label: 'Đang hoạt động', value: stats.active, accent: 'oklch(0.42 0.14 145)' },
@@ -549,16 +581,14 @@ const MaterialListPage: React.FC = () => {
                 ))}
             </div>
 
-            <div className='ml-f flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center'>
+            <div className='ml-f material-filter-bar flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center'>
                 <div className='min-w-[220px] flex-1'>
                     <Input
                         allowClear
                         prefix={<SearchOutlined className='text-slate-400' />}
                         placeholder='Tìm theo tên hoặc mã vật tư...'
                         value={draftFilters.search}
-                        onChange={(event) =>
-                            setDraftFilters((current) => ({ ...current, search: event.target.value }))
-                        }
+                        onChange={(event) => setDraftFilters((current) => ({ ...current, search: event.target.value }))}
                         onPressEnter={() =>
                             setFilters((current) => ({
                                 ...current,
@@ -597,7 +627,94 @@ const MaterialListPage: React.FC = () => {
             </div>
 
             <div className='ml-t overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm'>
-                <div className='[&_.ant-table]:!bg-white [&_.ant-table-row:hover_td]:!bg-blue-50/30 [&_.ant-table-thead_th]:!bg-slate-50 [&_.ant-table-thead_th]:!text-[11px] [&_.ant-table-thead_th]:!font-bold [&_.ant-table-thead_th]:!tracking-[0.07em] [&_.ant-table-thead_th]:!text-slate-400 [&_.ant-table-cell]:!transition-colors [&_.ant-table-cell]:!duration-100'>
+                <div className='material-mobile-list' aria-label='Danh sách vật tư mobile'>
+                    {isLoading || isFetching ? (
+                        <div className='material-mobile-empty'>Đang tải danh mục vật tư...</div>
+                    ) : materials.length === 0 ? (
+                        <div className='material-mobile-empty'>Chưa có vật tư nào phù hợp bộ lọc hiện tại.</div>
+                    ) : (
+                        materials.map((material) => {
+                            const isLowStock = material.lowStock ?? lowStockMaterialIds.has(material.id);
+
+                            return (
+                                <article
+                                    key={material.id}
+                                    className={`material-mobile-card${isLowStock ? 'material-mobile-card--warning' : ''}`}
+                                >
+                                    <button
+                                        type='button'
+                                        className='material-mobile-card__main'
+                                        onClick={() => handleOpenDetail(material)}
+                                    >
+                                        <span className='material-mobile-card__heading'>
+                                            <span className='material-mobile-card__title'>{material.name}</span>
+                                            <span className='material-mobile-card__code'>{material.code}</span>
+                                        </span>
+                                        <span className='material-mobile-card__badges'>
+                                            {material.isActive ? (
+                                                <Tag color='success'>Hoạt động</Tag>
+                                            ) : (
+                                                <Tag color='error'>Ngừng</Tag>
+                                            )}
+                                            {isLowStock ? (
+                                                <Tag color='warning' icon={<WarningOutlined />}>
+                                                    Dưới ngưỡng
+                                                </Tag>
+                                            ) : null}
+                                        </span>
+                                        <span className='material-mobile-card__meta'>
+                                            <span>Nhóm: {material.category || '-'}</span>
+                                            <span>ĐVT: {material.unit}</span>
+                                            <span>Ngưỡng: {formatNumber(material.minStockLevel)}</span>
+                                        </span>
+                                    </button>
+                                    <div className='material-mobile-card__actions'>
+                                        <Button
+                                            size='small'
+                                            icon={<EyeOutlined />}
+                                            onClick={() => handleOpenDetail(material)}
+                                        >
+                                            Chi tiết
+                                        </Button>
+                                        {canManageMaterials ? (
+                                            <Button
+                                                size='small'
+                                                icon={<EditOutlined />}
+                                                onClick={() => handleOpenEdit(material)}
+                                            >
+                                                Sửa
+                                            </Button>
+                                        ) : null}
+                                    </div>
+                                </article>
+                            );
+                        })
+                    )}
+                </div>
+
+                {materials.length > 0 ? (
+                    <div className='material-mobile-pagination'>
+                        <Button
+                            size='small'
+                            disabled={currentPage <= 1}
+                            onClick={() => setPagination((current) => ({ ...current, page: currentPage - 1 }))}
+                        >
+                            Trước
+                        </Button>
+                        <span>
+                            {pageStart}-{pageEnd} / {totalItems}
+                        </span>
+                        <Button
+                            size='small'
+                            disabled={currentPage >= totalPages}
+                            onClick={() => setPagination((current) => ({ ...current, page: currentPage + 1 }))}
+                        >
+                            Sau
+                        </Button>
+                    </div>
+                ) : null}
+
+                <div className='material-desktop-table [&_.ant-table]:!bg-white [&_.ant-table-cell]:!transition-colors [&_.ant-table-cell]:!duration-100 [&_.ant-table-row:hover_td]:!bg-blue-50/30 [&_.ant-table-thead_th]:!bg-slate-50 [&_.ant-table-thead_th]:!text-[11px] [&_.ant-table-thead_th]:!font-bold [&_.ant-table-thead_th]:!tracking-[0.07em] [&_.ant-table-thead_th]:!text-slate-400'>
                     <Table<Material>
                         rowKey='id'
                         columns={columns}
@@ -690,14 +807,12 @@ const MaterialListPage: React.FC = () => {
                             <Descriptions
                                 column={{ xs: 1, md: 2 }}
                                 size='small'
-                                className='[&_.ant-descriptions-item-label]:font-medium [&_.ant-descriptions-item-label]:text-slate-500 [&_.ant-descriptions-item-content]:font-medium [&_.ant-descriptions-item-content]:text-slate-800'
+                                className='[&_.ant-descriptions-item-content]:font-medium [&_.ant-descriptions-item-content]:text-slate-800 [&_.ant-descriptions-item-label]:font-medium [&_.ant-descriptions-item-label]:text-slate-500'
                             >
                                 <Descriptions.Item label='Nhóm / Category'>
                                     {detailSummary.category || '-'}
                                 </Descriptions.Item>
-                                <Descriptions.Item label='Đơn vị tính'>
-                                    {detailSummary.unit}
-                                </Descriptions.Item>
+                                <Descriptions.Item label='Đơn vị tính'>{detailSummary.unit}</Descriptions.Item>
                                 <Descriptions.Item label='Ngưỡng tối thiểu'>
                                     {formatNumber(detailSummary.minStockLevel)}
                                 </Descriptions.Item>
@@ -717,7 +832,9 @@ const MaterialListPage: React.FC = () => {
                         <div className='overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm'>
                             <div className='border-b border-slate-100 px-5 py-4'>
                                 <div className='text-sm font-semibold text-slate-900'>Tồn kho theo từng cơ sở</div>
-                                <div className='text-xs text-slate-500'>Nguồn dữ liệu từ `/api/inventory/:materialId`</div>
+                                <div className='text-xs text-slate-500'>
+                                    Nguồn dữ liệu từ `/api/inventory/:materialId`
+                                </div>
                             </div>
 
                             <div className='[&_.ant-table]:!bg-white [&_.ant-table-row:hover_td]:!bg-slate-50/80 [&_.ant-table-thead_th]:!bg-slate-50 [&_.ant-table-thead_th]:!text-[11px] [&_.ant-table-thead_th]:!font-bold [&_.ant-table-thead_th]:!tracking-[0.07em] [&_.ant-table-thead_th]:!text-slate-400'>

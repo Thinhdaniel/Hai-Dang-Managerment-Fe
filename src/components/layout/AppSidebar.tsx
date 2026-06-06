@@ -5,6 +5,7 @@ import {
     BellOutlined,
     BuildOutlined,
     CalculatorOutlined,
+    CloseOutlined,
     ClusterOutlined,
     DashboardOutlined,
     DatabaseOutlined,
@@ -316,7 +317,7 @@ const AppSidebar: React.FC<AppSidebarProps> = ({
         }
     };
 
-    const renderSidebarContent = (isCollapsed: boolean, onToggleCollapse?: () => void) => (
+    const renderSidebarContent = (isCollapsed: boolean, onToggleCollapse?: () => void, showClose?: boolean) => (
         <div className='flex h-full flex-col rounded-r-[24px] border-r border-slate-200/80 bg-[rgba(255,255,255,0.96)] shadow-[10px_0_32px_rgba(15,23,42,0.06)] backdrop-blur-xl'>
             <div className={`border-b border-slate-100 px-4 py-4 ${isCollapsed ? 'px-3' : ''}`}>
                 <div className={`flex items-center ${isCollapsed ? 'justify-center' : 'gap-3'}`}>
@@ -324,10 +325,18 @@ const AppSidebar: React.FC<AppSidebarProps> = ({
                         HD
                     </div>
                     {!isCollapsed ? (
-                        <div className='min-w-0'>
+                        <div className='min-w-0 flex-1'>
                             <Text className='mb-0 block text-[15px] font-bold text-slate-900'>Hai Dang Ops</Text>
                             <Text className='block text-xs text-slate-500'>Quản lý vận hành</Text>
                         </div>
+                    ) : null}
+                    {showClose ? (
+                        <Button
+                            type='text'
+                            icon={<CloseOutlined />}
+                            onClick={onMobileClose}
+                            className='flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-600 shadow-sm'
+                        />
                     ) : null}
                 </div>
             </div>
@@ -401,13 +410,13 @@ const AppSidebar: React.FC<AppSidebarProps> = ({
                 open={mobileOpen}
                 onClose={onMobileClose}
                 closable={false}
-                size={320}
+                width='min(340px, calc(100vw - 20px))'
                 styles={{
                     body: { padding: 0 },
                     root: {
                         background: 'transparent',
                         boxShadow: 'none',
-                        paddingTop: `${headerOffset}px`,
+                        paddingTop: `calc(${headerOffset}px + env(safe-area-inset-top))`,
                     },
                     mask: {
                         backdropFilter: 'blur(4px)',
@@ -415,7 +424,7 @@ const AppSidebar: React.FC<AppSidebarProps> = ({
                     },
                 }}
             >
-                {renderSidebarContent(false)}
+                {renderSidebarContent(false, undefined, true)}
             </Drawer>
         );
     }

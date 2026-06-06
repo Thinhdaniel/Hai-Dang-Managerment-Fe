@@ -1,5 +1,5 @@
 import { Badge } from 'antd';
-import { AppstoreOutlined, DashboardOutlined, DatabaseOutlined, MenuOutlined, SendOutlined } from '@ant-design/icons';
+import { AppstoreOutlined, DashboardOutlined, DatabaseOutlined, FormOutlined, MenuOutlined } from '@ant-design/icons';
 import type { ReactNode } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useNotificationContext } from '../../core/contexts/NotificationContext';
@@ -13,6 +13,13 @@ type MobileNavItem = {
 };
 
 const isExactOrPrefix = (pathname: string, path: string) => pathname === path || pathname.startsWith(`${path}/`);
+const materialCatalogPaths = ['/materials', '/materials/inventory', '/materials/suppliers', '/materials/reports'];
+const materialWorkflowPaths = [
+    '/materials/supply-requests',
+    '/materials/purchase-requests',
+    '/materials/purchase-orders',
+    '/materials/distributions',
+];
 
 const MobileBottomNav = ({ onOpenMenu }: { onOpenMenu: () => void }) => {
     const navigate = useNavigate();
@@ -38,17 +45,16 @@ const MobileBottomNav = ({ onOpenMenu }: { onOpenMenu: () => void }) => {
                 isExactOrPrefix(current, '/maintenances'),
         },
         {
-            path: '/materials/inventory',
-            label: 'Tồn kho',
+            path: '/materials',
+            label: 'Vật tư',
             icon: <DatabaseOutlined />,
-            match: (current) =>
-                isExactOrPrefix(current, '/materials') && !isExactOrPrefix(current, '/materials/distributions'),
+            match: (current) => materialCatalogPaths.some((path) => isExactOrPrefix(current, path)),
         },
         {
-            path: '/materials/distributions',
-            label: 'Cấp phát',
-            icon: <SendOutlined />,
-            match: (current) => isExactOrPrefix(current, '/materials/distributions'),
+            path: '/materials/supply-requests',
+            label: 'Phiếu',
+            icon: <FormOutlined />,
+            match: (current) => materialWorkflowPaths.some((path) => isExactOrPrefix(current, path)),
         },
     ];
 

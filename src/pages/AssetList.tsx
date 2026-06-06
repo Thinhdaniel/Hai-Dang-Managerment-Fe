@@ -114,6 +114,31 @@ const createDefaultFilters = (search = '') => ({
     ownershipType: undefined as AssetOwnershipType | undefined,
 });
 
+const renderStatusPill = (status: AssetStatus) => {
+    const meta = statusMeta[status] ?? statusMeta.active;
+
+    return (
+        <span
+            className={`inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1 text-xs font-semibold ${meta.bg} ${meta.text} ${meta.border}`}
+        >
+            <span className={`h-1.5 w-1.5 rounded-full ${meta.dot}`}></span>
+            {meta.label}
+        </span>
+    );
+};
+
+const renderOwnershipPill = (ownershipType: AssetOwnershipType = AssetOwnershipType.OWNED) => {
+    const meta = ownershipMeta[ownershipType] ?? ownershipMeta.owned;
+
+    return (
+        <span className={`inline-flex rounded-md border px-2.5 py-1 text-xs font-semibold ${meta.className}`}>
+            {meta.label}
+        </span>
+    );
+};
+
+const getAssetLocation = (asset: Asset) => asset.area || asset.plant?.name || 'Chưa gắn khu vực';
+
 const AssetList: React.FC = () => {
     const navigate = useNavigate();
     const { role } = useAuth();
@@ -277,6 +302,12 @@ const AssetList: React.FC = () => {
                 .filter((asset): asset is Asset => Boolean(asset)),
         [assets, selectedAssetMap, selectedRowKeys]
     );
+    const currentPage = assetResponse?.page ?? filters.page;
+    const pageSize = assetResponse?.limit ?? filters.limit;
+    const totalItems = assetResponse?.total ?? 0;
+    const totalPages = Math.max(assetResponse?.totalPages ?? Math.ceil(totalItems / Math.max(pageSize, 1)), 1);
+    const pageStart = totalItems === 0 ? 0 : (currentPage - 1) * pageSize + 1;
+    const pageEnd = Math.min(currentPage * pageSize, totalItems);
 
     const assetSummary = useMemo(
         () => ({
@@ -466,9 +497,7 @@ const AssetList: React.FC = () => {
             render: (_value, record) => (
                 <div className='flex flex-col gap-0.5'>
                     <span className='text-[14px] font-semibold text-slate-800'>{record.name}</span>
-                    <span className='text-xs font-medium text-slate-500'>
-                        {record.area || record.plant?.name || 'Chưa gắn khu vực'}
-                    </span>
+                    <span className='text-xs font-medium text-slate-500'>{getAssetLocation(record)}</span>
                 </div>
             ),
         },
@@ -511,32 +540,13 @@ const AssetList: React.FC = () => {
             title: 'TRẠNG THÁI',
             dataIndex: 'status',
             key: 'status',
-            render: (status: AssetStatus) => {
-                const meta = statusMeta[status];
-                return (
-                    <span
-                        className={`inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1 text-xs font-semibold ${meta.bg} ${meta.text} ${meta.border}`}
-                    >
-                        <span className={`h-1.5 w-1.5 rounded-full ${meta.dot}`}></span>
-                        {meta.label}
-                    </span>
-                );
-            },
+            render: renderStatusPill,
         },
         {
             title: 'NGUỒN GỐC',
             dataIndex: 'ownershipType',
             key: 'ownershipType',
-            render: (ownershipType: AssetOwnershipType = AssetOwnershipType.OWNED) => {
-                const meta = ownershipMeta[ownershipType] ?? ownershipMeta.owned;
-                return (
-                    <span
-                        className={`inline-flex rounded-md border px-2.5 py-1 text-xs font-semibold ${meta.className}`}
-                    >
-                        {meta.label}
-                    </span>
-                );
-            },
+            render: renderOwnershipPill,
         },
         {
             title: 'CƠ SỞ',
@@ -680,7 +690,7 @@ const AssetList: React.FC = () => {
             </div>
 
             {/* Stats count strip — reflects current applied filter */}
-            <div className='al-s flex flex-wrap gap-px overflow-hidden rounded-xl border border-slate-200 bg-slate-200'>
+            <div className='al-s asset-list-stats flex flex-wrap gap-px overflow-hidden rounded-xl border border-slate-200 bg-slate-200'>
                 {[
                     { label: 'Trong bộ lọc', value: assetSummary.total },
                     { label: 'Máy Hải Đăng', value: assetSummary.owned, accent: 'oklch(0.36 0.12 160)' },
@@ -701,7 +711,7 @@ const AssetList: React.FC = () => {
             </div>
 
             {/* Filter bar — no card wrapper, just controls */}
-            <div className='al-f flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center'>
+            <div className='al-f asset-filter-bar flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center'>
                 <Select
                     placeholder='Cơ sở'
                     className='min-w-[148px]'
@@ -755,7 +765,7 @@ const AssetList: React.FC = () => {
                         className='w-full rounded-lg'
                     />
                 </div>
-                <div className='flex gap-2'>
+                <div className='asset-filter-actions flex gap-2'>
                     <Button
                         type='primary'
                         icon={<SearchOutlined />}
@@ -817,7 +827,92 @@ const AssetList: React.FC = () => {
                     </div>
                 )}
 
-                <div className='[&_.ant-table-row]:group [&_.ant-table]:!bg-white [&_.ant-table-cell]:!transition-colors [&_.ant-table-cell]:!duration-100 [&_.ant-table-row:hover_td]:!bg-blue-50/30 [&_.ant-table-thead_th]:!bg-slate-50 [&_.ant-table-thead_th]:!text-[11px] [&_.ant-table-thead_th]:!font-bold [&_.ant-table-thead_th]:!tracking-[0.07em] [&_.ant-table-thead_th]:!text-slate-400'>
+                <div className='asset-mobile-list' aria-label='Danh sách thiết bị mobile'>
+                    {isLoading ? (
+                        <div className='asset-mobile-empty'>Đang tải danh sách thiết bị...</div>
+                    ) : assets.length === 0 ? (
+                        <div className='asset-mobile-empty'>Không có thiết bị phù hợp bộ lọc hiện tại.</div>
+                    ) : (
+                        assets.map((asset) => {
+                            const transferDisabled =
+                                Boolean(asset.hasOpenTransfer) || isReturnedToPartner(asset.status);
+
+                            return (
+                                <article key={asset.id} className='asset-mobile-card'>
+                                    <button
+                                        type='button'
+                                        className='asset-mobile-card__main'
+                                        onClick={() => navigate(`/assets/${asset.id}`)}
+                                    >
+                                        <span className='asset-mobile-card__heading'>
+                                            <span className='asset-mobile-card__title'>{asset.name}</span>
+                                            <span className='asset-mobile-card__code'>{asset.machineCode}</span>
+                                        </span>
+                                        <span className='asset-mobile-card__badges'>
+                                            {renderStatusPill(asset.status)}
+                                            {renderOwnershipPill(asset.ownershipType)}
+                                        </span>
+                                        <span className='asset-mobile-card__meta'>
+                                            <span>{getAssetLocation(asset)}</span>
+                                            <span>{asset.model || asset.type || 'Chưa có model'}</span>
+                                            <span>{asset.serial || 'Chưa có serial'}</span>
+                                        </span>
+                                    </button>
+                                    <div className='asset-mobile-card__actions'>
+                                        <Button
+                                            size='small'
+                                            icon={<EyeOutlined />}
+                                            onClick={() => navigate(`/assets/${asset.id}`)}
+                                        >
+                                            Xem
+                                        </Button>
+                                        <Button
+                                            size='small'
+                                            icon={<SwapOutlined />}
+                                            disabled={transferDisabled}
+                                            onClick={() => handleOpenTransfer(asset)}
+                                        >
+                                            Điều chuyển
+                                        </Button>
+                                        {canManageAssets ? (
+                                            <Button
+                                                size='small'
+                                                icon={<EditOutlined />}
+                                                onClick={() => handleOpenEdit(asset)}
+                                            >
+                                                Sửa
+                                            </Button>
+                                        ) : null}
+                                    </div>
+                                </article>
+                            );
+                        })
+                    )}
+                </div>
+
+                {assets.length > 0 ? (
+                    <div className='asset-mobile-pagination'>
+                        <Button
+                            size='small'
+                            disabled={currentPage <= 1}
+                            onClick={() => setFilters((prev) => ({ ...prev, page: currentPage - 1 }))}
+                        >
+                            Trước
+                        </Button>
+                        <span>
+                            {pageStart}-{pageEnd} / {totalItems}
+                        </span>
+                        <Button
+                            size='small'
+                            disabled={currentPage >= totalPages}
+                            onClick={() => setFilters((prev) => ({ ...prev, page: currentPage + 1 }))}
+                        >
+                            Sau
+                        </Button>
+                    </div>
+                ) : null}
+
+                <div className='asset-desktop-table [&_.ant-table-row]:group [&_.ant-table]:!bg-white [&_.ant-table-cell]:!transition-colors [&_.ant-table-cell]:!duration-100 [&_.ant-table-row:hover_td]:!bg-blue-50/30 [&_.ant-table-thead_th]:!bg-slate-50 [&_.ant-table-thead_th]:!text-[11px] [&_.ant-table-thead_th]:!font-bold [&_.ant-table-thead_th]:!tracking-[0.07em] [&_.ant-table-thead_th]:!text-slate-400'>
                     <Table<Asset>
                         rowKey='id'
                         rowSelection={{

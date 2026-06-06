@@ -1,8 +1,21 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Avatar, Badge, Button, Dropdown, Grid, Input, Layout, Popover, Typography, type MenuProps } from 'antd';
+import {
+    Avatar,
+    Badge,
+    Button,
+    Drawer,
+    Dropdown,
+    Grid,
+    Input,
+    Layout,
+    Popover,
+    Typography,
+    type MenuProps,
+} from 'antd';
 import {
     BellOutlined,
     ClockCircleOutlined,
+    CloseOutlined,
     DownOutlined,
     LogoutOutlined,
     MenuFoldOutlined,
@@ -31,10 +44,11 @@ interface AppHeaderProps {
     collapsed: boolean;
     isDesktop: boolean;
     mobileOpen: boolean;
+    headerHeight: number;
     onToggle: () => void;
 }
 
-const AppHeader: React.FC<AppHeaderProps> = ({ collapsed, isDesktop, mobileOpen, onToggle }) => {
+const AppHeader: React.FC<AppHeaderProps> = ({ collapsed, isDesktop, mobileOpen, headerHeight, onToggle }) => {
     const navigate = useNavigate();
     const { role, logout, user } = useAuth();
     const { notifications, unreadCount, markAsRead, markAllAsRead } = useNotificationContext();
@@ -46,18 +60,19 @@ const AppHeader: React.FC<AppHeaderProps> = ({ collapsed, isDesktop, mobileOpen,
     const pageMeta = usePageMeta();
     const supportsSearch = pathname.startsWith('/assets');
     const canViewUsers = hasManagerAccess(role);
+    const useNotificationDrawer = !isDesktop;
 
     const quickAction = useMemo(() => {
         if (pathname.startsWith('/borrowings') && pathname !== '/borrowings/new') {
             return {
-                label: 'New Transaction',
+                label: 'Tạo giao dịch',
                 onClick: () => navigate('/borrowings/new'),
             };
         }
 
         if (pathname.startsWith('/transfers')) {
             return {
-                label: 'Open Machines',
+                label: 'Danh sách máy',
                 onClick: () => navigate('/assets'),
             };
         }
@@ -150,12 +165,12 @@ const AppHeader: React.FC<AppHeaderProps> = ({ collapsed, isDesktop, mobileOpen,
         }
     };
 
-    const notificationContent = (
-        <div className='w-[min(360px,calc(100vw-24px))] overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-[0_18px_40px_rgba(15,23,42,0.08)]'>
-            <div className='flex items-center justify-between border-b border-slate-100 px-4 py-3'>
+    const renderNotificationContent = (variant: 'popover' | 'drawer') => (
+        <div className={`notification-panel notification-panel--${variant}`}>
+            <div className='notification-panel__header'>
                 <div>
-                    <div className='text-sm font-semibold text-slate-900'>Notifications</div>
-                    <div className='text-[11px] text-slate-500'>Important system updates and alerts</div>
+                    <div className='text-sm font-semibold text-slate-900'>Thông báo</div>
+                    <div className='text-[11px] text-slate-500'>Cảnh báo vận hành và phiếu cần xử lý</div>
                 </div>
                 <div className='flex items-center gap-2'>
                     {unreadCount > 0 ? (
@@ -167,18 +182,27 @@ const AppHeader: React.FC<AppHeaderProps> = ({ collapsed, isDesktop, mobileOpen,
                                 await markAllAsRead();
                             }}
                         >
-                            Đánh dấu tất cả đã đọc
+                            Đánh dấu đã đọc
                         </Button>
                     ) : null}
                     <span className='rounded-full bg-blue-50 px-2.5 py-1 text-[10px] font-semibold text-blue-700'>
-                        {unreadCount} new
+                        {unreadCount} mới
                     </span>
+                    {variant === 'drawer' ? (
+                        <Button
+                            type='text'
+                            size='small'
+                            icon={<CloseOutlined />}
+                            onClick={() => setNotificationOpen(false)}
+                            className='flex h-8 w-8 items-center justify-center rounded-full'
+                        />
+                    ) : null}
                 </div>
             </div>
 
             <PushNotificationToggle />
 
-            <div className='max-h-[300px] overflow-y-auto p-2'>
+            <div className='notification-panel__list'>
                 {notifications.length === 0 ? (
                     <div className='py-8 text-center text-sm text-slate-500'>Không có thông báo nào</div>
                 ) : null}
@@ -237,13 +261,13 @@ const AppHeader: React.FC<AppHeaderProps> = ({ collapsed, isDesktop, mobileOpen,
                 })}
             </div>
 
-            <div className='border-t border-slate-100 px-4 py-3'>
+            <div className='notification-panel__footer'>
                 <Button
                     type='link'
                     className='!px-0 !text-[13px] !font-semibold'
                     onClick={() => navigate('/dashboard')}
                 >
-                    View dashboard summary
+                    Xem tổng quan vận hành
                 </Button>
             </div>
         </div>
@@ -251,14 +275,15 @@ const AppHeader: React.FC<AppHeaderProps> = ({ collapsed, isDesktop, mobileOpen,
 
     return (
         <Header
-            className='fixed inset-x-0 top-0 z-[220] flex h-[72px] items-center border-b border-slate-200/80 px-3 shadow-[0_8px_20px_rgba(15,23,42,0.04)] backdrop-blur-xl md:px-5'
+            className='app-main-header fixed inset-x-0 top-0 z-[220] flex items-center border-b border-slate-200/80 px-3 shadow-[0_8px_20px_rgba(15,23,42,0.04)] backdrop-blur-xl md:px-5'
             style={{
+                height: `calc(${headerHeight}px + env(safe-area-inset-top))`,
                 background: 'rgba(248, 250, 252, 0.88)',
                 backdropFilter: 'blur(18px)',
             }}
         >
-            <div className='grid w-full grid-cols-[minmax(0,1fr)_auto] items-center gap-3 xl:grid-cols-[minmax(0,1fr)_minmax(240px,280px)_auto] xl:gap-4'>
-                <div className='flex min-w-0 items-center gap-3'>
+            <div className='app-header-grid grid w-full grid-cols-[minmax(0,1fr)_auto] items-center gap-3 xl:grid-cols-[minmax(0,1fr)_minmax(240px,280px)_auto] xl:gap-4'>
+                <div className='app-header-left flex min-w-0 items-center gap-3'>
                     <Button
                         type='text'
                         icon={
@@ -275,10 +300,10 @@ const AppHeader: React.FC<AppHeaderProps> = ({ collapsed, isDesktop, mobileOpen,
                             )
                         }
                         onClick={onToggle}
-                        className='flex h-9 w-9 items-center justify-center rounded-xl border border-slate-200 bg-white/92 text-slate-700 shadow-sm hover:!border-blue-200 hover:!bg-blue-50 hover:!text-blue-700'
+                        className='app-icon-button flex h-9 w-9 items-center justify-center rounded-xl border border-slate-200 bg-white/92 text-slate-700 shadow-sm hover:!border-blue-200 hover:!bg-blue-50 hover:!text-blue-700'
                     />
 
-                    <div className='flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-slate-200 bg-white shadow-[0_8px_18px_rgba(15,23,42,0.06)]'>
+                    <div className='app-header-logo flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-slate-200 bg-white shadow-[0_8px_18px_rgba(15,23,42,0.06)]'>
                         {COMPANY_LOGO_URL ? (
                             <img src={COMPANY_LOGO_URL} alt='Company logo' className='h-full w-full object-contain' />
                         ) : (
@@ -291,7 +316,7 @@ const AppHeader: React.FC<AppHeaderProps> = ({ collapsed, isDesktop, mobileOpen,
                     <div className='min-w-0'>
                         <Title
                             level={4}
-                            className='!mb-0 truncate !text-[18px] !leading-5 !font-semibold !text-slate-950'
+                            className='app-header-title !mb-0 truncate !text-[18px] !leading-5 !font-semibold !text-slate-950'
                         >
                             {pageMeta.title}
                         </Title>
@@ -316,15 +341,14 @@ const AppHeader: React.FC<AppHeaderProps> = ({ collapsed, isDesktop, mobileOpen,
                 )}
 
                 <div className='flex min-w-0 items-center justify-end gap-2'>
-                    {supportsSearch && screens.md ? (
-                        <div></div>
-                    ) : // <Button
-                    //     type='text'
-                    //     icon={<SearchOutlined />}
-                    //     onClick={() => navigate('/assets')}
-                    //     className='flex h-9 w-9 items-center justify-center rounded-xl border border-slate-200 bg-white/92 text-slate-700 shadow-sm hover:!border-blue-200 hover:!bg-blue-50 hover:!text-blue-700 xl:hidden'
-                    // />
-                    null}
+                    {supportsSearch && !screens.xl ? (
+                        <Button
+                            type='text'
+                            icon={<SearchOutlined />}
+                            onClick={() => navigate('/assets')}
+                            className='app-icon-button flex h-9 w-9 items-center justify-center rounded-xl border border-slate-200 bg-white/92 text-slate-700 shadow-sm hover:!border-blue-200 hover:!bg-blue-50 hover:!text-blue-700'
+                        />
+                    ) : null}
 
                     {quickAction && screens.xl ? (
                         <Button
@@ -337,24 +361,35 @@ const AppHeader: React.FC<AppHeaderProps> = ({ collapsed, isDesktop, mobileOpen,
 
                     <InstallPrompt />
 
-                    <Popover
-                        content={notificationContent}
-                        trigger='click'
-                        placement='bottomRight'
-                        open={notificationOpen}
-                        onOpenChange={setNotificationOpen}
-                        arrow={false}
-                        classNames={{ root: 'header-notification-popover' }}
-                        styles={{ root: { padding: 0, background: 'transparent', boxShadow: 'none' } }}
-                    >
+                    {useNotificationDrawer ? (
                         <Badge count={unreadCount} size='small' offset={[-2, 2]}>
                             <Button
                                 type='text'
                                 icon={<BellOutlined />}
-                                className='flex h-9 w-9 items-center justify-center rounded-xl border border-slate-200 bg-white/92 text-slate-700 shadow-sm hover:!border-blue-200 hover:!bg-blue-50 hover:!text-blue-700'
+                                onClick={() => setNotificationOpen(true)}
+                                className='app-icon-button flex h-9 w-9 items-center justify-center rounded-xl border border-slate-200 bg-white/92 text-slate-700 shadow-sm hover:!border-blue-200 hover:!bg-blue-50 hover:!text-blue-700'
                             />
                         </Badge>
-                    </Popover>
+                    ) : (
+                        <Popover
+                            content={renderNotificationContent('popover')}
+                            trigger='click'
+                            placement='bottomRight'
+                            open={notificationOpen}
+                            onOpenChange={setNotificationOpen}
+                            arrow={false}
+                            classNames={{ root: 'header-notification-popover' }}
+                            styles={{ root: { padding: 0, background: 'transparent', boxShadow: 'none' } }}
+                        >
+                            <Badge count={unreadCount} size='small' offset={[-2, 2]}>
+                                <Button
+                                    type='text'
+                                    icon={<BellOutlined />}
+                                    className='app-icon-button flex h-9 w-9 items-center justify-center rounded-xl border border-slate-200 bg-white/92 text-slate-700 shadow-sm hover:!border-blue-200 hover:!bg-blue-50 hover:!text-blue-700'
+                                />
+                            </Badge>
+                        </Popover>
+                    )}
 
                     <Dropdown
                         menu={{ items: userMenuItems, onClick: handleUserMenuClick }}
@@ -363,7 +398,7 @@ const AppHeader: React.FC<AppHeaderProps> = ({ collapsed, isDesktop, mobileOpen,
                     >
                         <button
                             type='button'
-                            className='flex items-center gap-2 rounded-xl border border-slate-200 bg-white/92 px-2 py-1 text-left shadow-sm transition-colors hover:bg-slate-50'
+                            className='app-user-button flex items-center gap-2 rounded-xl border border-slate-200 bg-white/92 px-2 py-1 text-left shadow-sm transition-colors hover:bg-slate-50'
                         >
                             <Avatar
                                 size={32}
@@ -382,6 +417,22 @@ const AppHeader: React.FC<AppHeaderProps> = ({ collapsed, isDesktop, mobileOpen,
                     </Dropdown>
                 </div>
             </div>
+
+            <Drawer
+                placement='bottom'
+                open={useNotificationDrawer && notificationOpen}
+                onClose={() => setNotificationOpen(false)}
+                closable={false}
+                height='min(82vh, 680px)'
+                className='mobile-notification-drawer'
+                styles={{
+                    body: { padding: 0 },
+                    content: { borderRadius: '24px 24px 0 0', overflow: 'hidden' },
+                    mask: { backdropFilter: 'blur(4px)', background: 'rgba(15, 23, 42, 0.22)' },
+                }}
+            >
+                {renderNotificationContent('drawer')}
+            </Drawer>
         </Header>
     );
 };

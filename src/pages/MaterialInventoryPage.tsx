@@ -20,7 +20,16 @@ import {
     type TableColumnsType,
     type MenuProps,
 } from 'antd';
-import { DownloadOutlined, EditOutlined, HistoryOutlined, PlusOutlined, ReloadOutlined, SearchOutlined, UploadOutlined, WarningOutlined } from '@ant-design/icons';
+import {
+    DownloadOutlined,
+    EditOutlined,
+    HistoryOutlined,
+    PlusOutlined,
+    ReloadOutlined,
+    SearchOutlined,
+    UploadOutlined,
+    WarningOutlined,
+} from '@ant-design/icons';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import PageHeader from '../components/shared/PageHeader';
@@ -461,6 +470,12 @@ const MaterialInventoryPage: React.FC = () => {
                 : inventoryRows,
         [inventoryRows, lowStockOnly]
     );
+    const currentPage = lowStockOnly ? 1 : (inventoryResponse?.page ?? pagination.page);
+    const pageSize = lowStockOnly ? LOW_STOCK_VIEW_LIMIT : (inventoryResponse?.limit ?? pagination.limit);
+    const totalItems = lowStockOnly ? displayedInventoryRows.length : (inventoryResponse?.total ?? 0);
+    const totalPages = Math.max(inventoryResponse?.totalPages ?? Math.ceil(totalItems / Math.max(pageSize, 1)), 1);
+    const pageStart = totalItems === 0 ? 0 : (currentPage - 1) * pageSize + 1;
+    const pageEnd = Math.min(currentPage * pageSize, totalItems);
     const catalogMaterials = useMemo(() => materialCatalogResponse?.data ?? [], [materialCatalogResponse?.data]);
     const historyRows = useMemo(() => historyResponse?.data ?? [], [historyResponse?.data]);
 
@@ -545,6 +560,12 @@ const MaterialInventoryPage: React.FC = () => {
             page: DEFAULT_HISTORY_PAGE,
             limit: DEFAULT_HISTORY_LIMIT,
         });
+    };
+
+    const handleOpenAdjustStock = (record: MaterialInventory) => {
+        setEditingStockItem(record);
+        setNewStock(record.currentStock);
+        setAdjustReason('');
     };
 
     const columns: TableColumnsType<MaterialInventory> = [
@@ -654,9 +675,7 @@ const MaterialInventoryPage: React.FC = () => {
                                 className='flex h-8 w-8 items-center justify-center rounded-md text-amber-600 hover:bg-amber-50 hover:text-amber-700'
                                 onClick={(event) => {
                                     event.stopPropagation();
-                                    setEditingStockItem(record);
-                                    setNewStock(record.currentStock);
-                                    setAdjustReason('');
+                                    handleOpenAdjustStock(record);
                                 }}
                             />
                         </Tooltip>
@@ -753,17 +772,10 @@ const MaterialInventoryPage: React.FC = () => {
                     actions={
                         canEditStock ? (
                             <Space wrap>
-                                <Button
-                                    icon={<PlusOutlined />}
-                                    type='primary'
-                                    onClick={() => setInitStockOpen(true)}
-                                >
+                                <Button icon={<PlusOutlined />} type='primary' onClick={() => setInitStockOpen(true)}>
                                     Nhập tồn kho
                                 </Button>
-                                <Button
-                                    icon={<UploadOutlined />}
-                                    onClick={() => setImportExcelOpen(true)}
-                                >
+                                <Button icon={<UploadOutlined />} onClick={() => setImportExcelOpen(true)}>
                                     Import Excel
                                 </Button>
                                 <Dropdown
@@ -793,7 +805,7 @@ const MaterialInventoryPage: React.FC = () => {
                 />
             </div>
 
-            <div className='mi-s flex flex-wrap gap-px overflow-hidden rounded-xl border border-slate-200 bg-slate-200'>
+            <div className='mi-s inventory-list-stats flex flex-wrap gap-px overflow-hidden rounded-xl border border-slate-200 bg-slate-200'>
                 {[
                     {
                         label: 'Tổng loại vật tư đang theo dõi',
@@ -817,7 +829,7 @@ const MaterialInventoryPage: React.FC = () => {
                 ))}
             </div>
 
-            <div className='mi-f flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center'>
+            <div className='mi-f inventory-filter-bar flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center'>
                 <Select
                     showSearch
                     allowClear
@@ -867,7 +879,100 @@ const MaterialInventoryPage: React.FC = () => {
             </div>
 
             <div className='mi-t overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm'>
-                <div className='[&_.ant-table]:!bg-white [&_.ant-table-cell]:!transition-colors [&_.ant-table-cell]:!duration-100 [&_.ant-table-row:hover_td]:!bg-blue-50/30 [&_.ant-table-thead_th]:!bg-slate-50 [&_.ant-table-thead_th]:!text-[11px] [&_.ant-table-thead_th]:!font-bold [&_.ant-table-thead_th]:!tracking-[0.07em] [&_.ant-table-thead_th]:!text-slate-400'>
+                <div className='inventory-mobile-list' aria-label='Danh sách tồn kho mobile'>
+                    {isLoading || isFetching ? (
+                        <div className='inventory-mobile-empty'>Đang tải dữ liệu tồn kho...</div>
+                    ) : displayedInventoryRows.length === 0 ? (
+                        <div className='inventory-mobile-empty'>Chưa có dữ liệu tồn kho phù hợp bộ lọc hiện tại.</div>
+                    ) : (
+                        displayedInventoryRows.map((record) => {
+                            const isLowStock = record.currentStock < (record.minStockLevel ?? 0);
+                            const isOutOfStock = record.currentStock === 0;
+
+                            return (
+                                <article
+                                    key={record.id}
+                                    className={`inventory-mobile-card${isLowStock ? 'inventory-mobile-card--warning' : ''}`}
+                                >
+                                    <div className='inventory-mobile-card__main'>
+                                        <div className='inventory-mobile-card__heading'>
+                                            <span className='inventory-mobile-card__title'>
+                                                {record.material?.name || '-'}
+                                            </span>
+                                            <span className='inventory-mobile-card__code'>
+                                                {record.material?.code || '-'}
+                                            </span>
+                                        </div>
+                                        <div className='inventory-mobile-card__stock'>
+                                            <span className={isLowStock ? 'text-rose-600' : 'text-slate-900'}>
+                                                {formatNumber(record.currentStock)}
+                                            </span>
+                                            <small>{record.material?.unit || '-'}</small>
+                                        </div>
+                                        <div className='inventory-mobile-card__badges'>
+                                            {isOutOfStock ? (
+                                                <Tag color='error'>Hết hàng</Tag>
+                                            ) : isLowStock ? (
+                                                <Tag color='warning' icon={<WarningOutlined />}>
+                                                    Sắp hết
+                                                </Tag>
+                                            ) : (
+                                                <Tag color='success'>Đủ hàng</Tag>
+                                            )}
+                                        </div>
+                                        <div className='inventory-mobile-card__meta'>
+                                            <span>Cơ sở: {record.plant?.name || '-'}</span>
+                                            <span>Nhóm: {record.material?.category || '-'}</span>
+                                            <span>Ngưỡng: {formatNumber(record.minStockLevel)}</span>
+                                        </div>
+                                    </div>
+                                    <div className='inventory-mobile-card__actions'>
+                                        <Button
+                                            size='small'
+                                            icon={<HistoryOutlined />}
+                                            onClick={() => handleOpenHistory(record)}
+                                        >
+                                            Lịch sử
+                                        </Button>
+                                        {canEditStock ? (
+                                            <Button
+                                                size='small'
+                                                icon={<EditOutlined />}
+                                                onClick={() => handleOpenAdjustStock(record)}
+                                            >
+                                                Điều chỉnh
+                                            </Button>
+                                        ) : null}
+                                    </div>
+                                </article>
+                            );
+                        })
+                    )}
+                </div>
+
+                {displayedInventoryRows.length > 0 ? (
+                    <div className='inventory-mobile-pagination'>
+                        <Button
+                            size='small'
+                            disabled={currentPage <= 1 || lowStockOnly}
+                            onClick={() => setPagination((current) => ({ ...current, page: currentPage - 1 }))}
+                        >
+                            Trước
+                        </Button>
+                        <span>
+                            {pageStart}-{pageEnd} / {totalItems}
+                        </span>
+                        <Button
+                            size='small'
+                            disabled={currentPage >= totalPages || lowStockOnly}
+                            onClick={() => setPagination((current) => ({ ...current, page: currentPage + 1 }))}
+                        >
+                            Sau
+                        </Button>
+                    </div>
+                ) : null}
+
+                <div className='inventory-desktop-table [&_.ant-table]:!bg-white [&_.ant-table-cell]:!transition-colors [&_.ant-table-cell]:!duration-100 [&_.ant-table-row:hover_td]:!bg-blue-50/30 [&_.ant-table-thead_th]:!bg-slate-50 [&_.ant-table-thead_th]:!text-[11px] [&_.ant-table-thead_th]:!font-bold [&_.ant-table-thead_th]:!tracking-[0.07em] [&_.ant-table-thead_th]:!text-slate-400'>
                     <Table<MaterialInventory>
                         rowKey='id'
                         columns={columns}
@@ -1003,10 +1108,13 @@ const MaterialInventoryPage: React.FC = () => {
                     setAdjustReason('');
                 }}
                 onOk={() => {
-                    if (newStock === null || newStock < 0) return message.error('Vui lòng nhập số lượng tồn kho hợp lệ');
-                    if (newStock === editingStockItem?.currentStock) return message.error('Số lượng tồn kho chưa thay đổi');
-                    if (!adjustReason.trim() || adjustReason.length < 10) return message.error('Vui lòng nhập lý do hợp lệ (ít nhất 10 ký tự)');
-                    
+                    if (newStock === null || newStock < 0)
+                        return message.error('Vui lòng nhập số lượng tồn kho hợp lệ');
+                    if (newStock === editingStockItem?.currentStock)
+                        return message.error('Số lượng tồn kho chưa thay đổi');
+                    if (!adjustReason.trim() || adjustReason.length < 10)
+                        return message.error('Vui lòng nhập lý do hợp lệ (ít nhất 10 ký tự)');
+
                     adjustStock({
                         materialId: editingStockItem!.materialId,
                         plantId: editingStockItem!.plantId,
@@ -1021,23 +1129,29 @@ const MaterialInventoryPage: React.FC = () => {
             >
                 {editingStockItem && (
                     <div className='flex flex-col gap-4 py-4'>
-                        <div className='rounded-lg bg-slate-50 p-4 border border-slate-200'>
-                            <div className='flex justify-between items-center mb-2'>
+                        <div className='rounded-lg border border-slate-200 bg-slate-50 p-4'>
+                            <div className='mb-2 flex items-center justify-between'>
                                 <span className='text-slate-500'>Vật tư:</span>
-                                <span className='font-semibold'>{editingStockItem.material?.name} ({editingStockItem.material?.code})</span>
+                                <span className='font-semibold'>
+                                    {editingStockItem.material?.name} ({editingStockItem.material?.code})
+                                </span>
                             </div>
-                            <div className='flex justify-between items-center mb-2'>
+                            <div className='mb-2 flex items-center justify-between'>
                                 <span className='text-slate-500'>Cơ sở:</span>
                                 <span className='font-semibold'>{editingStockItem.plant?.name}</span>
                             </div>
-                            <div className='flex justify-between items-center'>
+                            <div className='flex items-center justify-between'>
                                 <span className='text-slate-500'>Tồn kho hiện tại:</span>
-                                <span className='text-xl font-bold text-blue-600'>{formatNumber(editingStockItem.currentStock)} {editingStockItem.material?.unit}</span>
+                                <span className='text-xl font-bold text-blue-600'>
+                                    {formatNumber(editingStockItem.currentStock)} {editingStockItem.material?.unit}
+                                </span>
                             </div>
                         </div>
 
                         <div className='flex flex-col gap-1'>
-                            <label className='font-medium'>Tồn kho mới <span className='text-red-500'>*</span></label>
+                            <label className='font-medium'>
+                                Tồn kho mới <span className='text-red-500'>*</span>
+                            </label>
                             <InputNumber
                                 min={0}
                                 value={newStock}
@@ -1046,16 +1160,20 @@ const MaterialInventoryPage: React.FC = () => {
                                 placeholder='Nhập số lượng tồn kho thực tế'
                             />
                             {newStock !== null && newStock !== editingStockItem.currentStock && (
-                                <div className={`text-sm mt-1 ${newStock > editingStockItem.currentStock ? 'text-green-600' : 'text-red-600'}`}>
-                                    Thay đổi: {formatNumber(editingStockItem.currentStock)} → {formatNumber(newStock)} 
-                                    {' '}
-                                    ({newStock > editingStockItem.currentStock ? '+' : ''}{formatNumber(newStock - editingStockItem.currentStock)})
+                                <div
+                                    className={`mt-1 text-sm ${newStock > editingStockItem.currentStock ? 'text-green-600' : 'text-red-600'}`}
+                                >
+                                    Thay đổi: {formatNumber(editingStockItem.currentStock)} → {formatNumber(newStock)} (
+                                    {newStock > editingStockItem.currentStock ? '+' : ''}
+                                    {formatNumber(newStock - editingStockItem.currentStock)})
                                 </div>
                             )}
                         </div>
 
                         <div className='flex flex-col gap-1'>
-                            <label className='font-medium'>Lý do điều chỉnh <span className='text-red-500'>*</span></label>
+                            <label className='font-medium'>
+                                Lý do điều chỉnh <span className='text-red-500'>*</span>
+                            </label>
                             <Input.TextArea
                                 rows={3}
                                 value={adjustReason}

@@ -82,7 +82,7 @@ const getTransferAssetLabel = (transfer: Transfer) => {
 };
 
 const MetricCard = ({ title, value, icon }: { title: string; value: React.ReactNode; icon: React.ReactNode }) => (
-    <Card variant='outlined' className='h-full'>
+    <Card variant='outlined' className='asset-detail-metric-card h-full'>
         <div className='flex items-start justify-between gap-3'>
             <div>
                 <Text type='secondary' className='text-xs font-semibold tracking-wide uppercase'>
@@ -539,16 +539,16 @@ const AssetDetail: React.FC = () => {
     );
 
     return (
-        <div className='flex w-full max-w-full flex-col gap-6 overflow-hidden'>
-            <Card variant='outlined'>
+        <div className='asset-detail-page flex w-full max-w-full flex-col gap-6 overflow-hidden'>
+            <Card variant='outlined' className='asset-detail-header-card'>
                 <div className='flex flex-col gap-5'>
-                    <div className='flex flex-col items-start justify-between gap-4 lg:flex-row lg:items-start'>
-                        <div className='flex min-w-0 flex-col gap-3'>
+                    <div className='asset-detail-header flex flex-col items-start justify-between gap-4 lg:flex-row lg:items-start'>
+                        <div className='asset-detail-header__info flex min-w-0 flex-col gap-3'>
                             <AppBreadcrumb />
                             <Button icon={<ArrowLeftOutlined />} onClick={() => navigate('/assets')} className='w-fit'>
                                 Quay lại danh sách máy
                             </Button>
-                            <div className='flex flex-wrap items-center gap-3'>
+                            <div className='asset-detail-tags flex flex-wrap items-center gap-3'>
                                 <Title level={3} className='!mb-0'>
                                     {asset.name}
                                 </Title>
@@ -563,7 +563,7 @@ const AssetDetail: React.FC = () => {
                                 ) : null}
                                 <Tag>{ownershipLabel}</Tag>
                             </div>
-                            <div className='flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-slate-500'>
+                            <div className='asset-detail-meta flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-slate-500'>
                                 <span>
                                     Serial: <strong className='text-slate-800'>{asset.serial || '-'}</strong>
                                 </span>
@@ -576,9 +576,10 @@ const AssetDetail: React.FC = () => {
                             </div>
                         </div>
 
-                        <div className='flex flex-wrap items-center gap-2'>
+                        <div className='asset-detail-actions flex flex-wrap items-center gap-2'>
                             <Tooltip title={transferDisabledReason}>
                                 <Button
+                                    className='asset-detail-action-button'
                                     icon={<SwapOutlined />}
                                     disabled={Boolean(transferDisabledReason)}
                                     onClick={() => setIsTransferOpen(true)}
@@ -587,6 +588,7 @@ const AssetDetail: React.FC = () => {
                                 </Button>
                             </Tooltip>
                             <Button
+                                className='asset-detail-action-button'
                                 icon={<RollbackOutlined />}
                                 disabled={returnedToPartner}
                                 onClick={() => navigate(`/borrowings/new?assetId=${asset.id}`)}
@@ -594,6 +596,7 @@ const AssetDetail: React.FC = () => {
                                 Tạo giao dịch
                             </Button>
                             <Button
+                                className='asset-detail-action-button'
                                 icon={<ToolOutlined />}
                                 disabled={returnedToPartner}
                                 onClick={() => setIsMaintenanceOpen(true)}
@@ -601,7 +604,12 @@ const AssetDetail: React.FC = () => {
                                 Bảo trì
                             </Button>
                             {canManage ? (
-                                <Button type='primary' icon={<EditOutlined />} onClick={() => setIsFormOpen(true)}>
+                                <Button
+                                    type='primary'
+                                    className='asset-detail-action-button'
+                                    icon={<EditOutlined />}
+                                    onClick={() => setIsFormOpen(true)}
+                                >
                                     Chỉnh sửa
                                 </Button>
                             ) : null}
@@ -609,7 +617,7 @@ const AssetDetail: React.FC = () => {
                     </div>
 
                     {canManage ? (
-                        <div className='rounded-2xl border border-slate-200 bg-slate-50 p-4'>
+                        <div className='asset-detail-status-panel rounded-2xl border border-slate-200 bg-slate-50 p-4'>
                             <div className='mb-3 flex items-center gap-2'>
                                 <ToolOutlined className='text-slate-500' />
                                 <Text strong>Cập nhật trạng thái nhanh</Text>
@@ -634,6 +642,7 @@ const AssetDetail: React.FC = () => {
             </Card>
 
             <Tabs
+                className='asset-detail-tabs'
                 activeKey={tab}
                 onChange={setTab}
                 destroyOnHidden

@@ -67,13 +67,18 @@ const getActivityMeta = (activity: DashboardRecentActivity) => {
 
 const getContextLine = (activity: DashboardRecentActivity) => {
     if (activity.category === 'transfer') {
-        return `${activity.fromFacility?.name || 'Unknown origin'} -> ${activity.toFacility?.name || 'Unknown destination'}`;
+        return `${activity.fromFacility?.name || 'Chưa rõ nơi đi'} -> ${
+            activity.toFacility?.name || 'Chưa rõ nơi đến'
+        }`;
     }
 
-    const counterpart = activity.counterpart ? `by ${activity.counterpart}` : 'without counterpart';
-    const facility = activity.facility?.name ? `at ${activity.facility.name}` : 'without facility';
+    const counterpart = activity.counterpart ? `bởi ${activity.counterpart}` : 'chưa có người liên quan';
+    const facility = activity.facility?.name ? `tại ${activity.facility.name}` : 'chưa rõ cơ sở';
     return `${counterpart} ${facility}`;
 };
+
+const getCategoryLabel = (category: DashboardRecentActivity['category']) =>
+    category === 'transfer' ? 'Điều chuyển' : 'Mượn/Trả';
 
 const DashboardRecentActivityCard = ({ activities, loading }: DashboardRecentActivityCardProps) => {
     return (
@@ -106,7 +111,7 @@ const DashboardRecentActivityCard = ({ activities, loading }: DashboardRecentAct
                                             <div className='min-w-0 space-y-1'>
                                                 <div className='flex flex-wrap items-center gap-2'>
                                                     <span className='truncate text-[14px] font-semibold text-slate-800'>
-                                                        {activity.asset?.name || 'Unknown machine'}
+                                                        {activity.asset?.name || 'Chưa rõ máy'}
                                                     </span>
                                                     <Tag
                                                         color={meta.color}
@@ -122,7 +127,7 @@ const DashboardRecentActivityCard = ({ activities, loading }: DashboardRecentAct
                                                     <span>{getContextLine(activity)}</span>
                                                 </div>
                                                 {activity.description ? (
-                                                    <p className='line-clamp-2 max-w-3xl text-sm text-slate-600'>
+                                                    <p className='mb-0 line-clamp-2 max-w-3xl text-sm text-slate-600'>
                                                         {activity.description}
                                                     </p>
                                                 ) : null}
@@ -134,7 +139,7 @@ const DashboardRecentActivityCard = ({ activities, loading }: DashboardRecentAct
                                                 color={activity.category === 'transfer' ? 'blue' : 'purple'}
                                                 className='mr-0 rounded-full px-2 py-0.5 text-[11px] font-semibold uppercase'
                                             >
-                                                {activity.category}
+                                                {getCategoryLabel(activity.category)}
                                             </Tag>
                                             <span className='text-xs font-medium text-slate-500'>
                                                 {dayjs(activity.timestamp).format('DD/MM/YYYY HH:mm')}

@@ -5,6 +5,7 @@ import { socketService } from '../services/socket.service';
 import { notification as antNotification } from 'antd';
 import { useAuth } from '../contexts/AuthContext';
 import { queryClient } from '../queryClient';
+import { syncAppBadge } from '../lib/app-badge';
 
 // Socket event names
 const NOTIFICATION_EVENTS = {
@@ -18,6 +19,17 @@ const NOTIFICATION_EVENTS = {
 export const useNotifications = (socket: import('socket.io-client').Socket | null) => {
     const store = useNotificationStore();
     const { isAuthenticated } = useAuth();
+    const unreadCount = store.unreadCount();
+
+    // Keep Home Screen app badge in sync with unread notifications.
+    useEffect(() => {
+        if (!isAuthenticated) {
+            void syncAppBadge(0);
+            return;
+        }
+
+        void syncAppBadge(unreadCount);
+    }, [isAuthenticated, unreadCount]);
 
     // Initialize notifications on mount
     useEffect(() => {
@@ -143,7 +155,7 @@ export const useNotifications = (socket: import('socket.io-client').Socket | nul
 
     return {
         notifications: store.notifications,
-        unreadCount: store.unreadCount(),
+        unreadCount,
         loading: store.loading,
         error: store.error,
         markAsRead,

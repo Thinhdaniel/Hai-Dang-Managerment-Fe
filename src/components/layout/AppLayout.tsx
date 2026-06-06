@@ -9,13 +9,15 @@ import MobileBottomNav from '../pwa/MobileBottomNav';
 const { Content } = Layout;
 const { useBreakpoint } = Grid;
 
-const HEADER_HEIGHT = 72;
+const DESKTOP_HEADER_HEIGHT = 72;
+const MOBILE_HEADER_HEIGHT = 64;
 const SIDEBAR_WIDTH = 296;
 const SIDEBAR_COLLAPSED_WIDTH = 104;
 
 const AppLayout: React.FC = () => {
     const screens = useBreakpoint();
     const isDesktop = Boolean(screens.lg);
+    const headerHeight = isDesktop ? DESKTOP_HEADER_HEIGHT : MOBILE_HEADER_HEIGHT;
     const [desktopCollapsed, setDesktopCollapsed] = useState(false);
     const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
 
@@ -40,17 +42,21 @@ const AppLayout: React.FC = () => {
                 collapsed={desktopCollapsed}
                 isDesktop={isDesktop}
                 mobileOpen={mobileSidebarOpen}
+                headerHeight={headerHeight}
                 onToggle={handleToggleSidebar}
             />
 
-            <Layout className='bg-transparent' style={{ paddingTop: HEADER_HEIGHT }}>
+            <Layout
+                className='bg-transparent'
+                style={{ paddingTop: `calc(${headerHeight}px + env(safe-area-inset-top))` }}
+            >
                 <AppSidebar
                     collapsed={desktopCollapsed}
                     isDesktop={isDesktop}
                     mobileOpen={mobileSidebarOpen}
                     width={SIDEBAR_WIDTH}
                     collapsedWidth={SIDEBAR_COLLAPSED_WIDTH}
-                    headerOffset={HEADER_HEIGHT}
+                    headerOffset={headerHeight}
                     onCollapse={setDesktopCollapsed}
                     onMobileClose={() => setMobileSidebarOpen(false)}
                 />
@@ -64,9 +70,9 @@ const AppLayout: React.FC = () => {
                     <Content
                         className='bg-transparent'
                         style={{
-                            margin: screens.md ? '24px' : '14px',
+                            margin: isDesktop ? '24px' : screens.md ? '18px' : '12px',
                             overflow: 'initial',
-                            paddingBottom: isDesktop ? undefined : 'calc(86px + env(safe-area-inset-bottom))',
+                            paddingBottom: isDesktop ? undefined : 'calc(92px + env(safe-area-inset-bottom))',
                         }}
                     >
                         <div className='flex flex-col gap-6'>

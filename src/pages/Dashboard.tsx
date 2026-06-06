@@ -4,11 +4,16 @@ import {
     AppstoreOutlined,
     CheckCircleOutlined,
     ClusterOutlined,
+    DatabaseOutlined,
     DollarOutlined,
+    FormOutlined,
     ReloadOutlined,
+    SendOutlined,
+    SwapOutlined,
     ToolOutlined,
 } from '@ant-design/icons';
 import dayjs from 'dayjs';
+import { useNavigate } from 'react-router-dom';
 import DashboardFacilityDistributionCard from '../components/dashboard/DashboardFacilityDistributionCard';
 import DashboardOperationsCard from '../components/dashboard/DashboardOperationsCard';
 import DashboardRecentActivityCard from '../components/dashboard/DashboardRecentActivityCard';
@@ -41,8 +46,14 @@ const formatMoney = (value = 0) =>
     new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND', maximumFractionDigits: 0 }).format(value);
 
 const Dashboard: React.FC = () => {
+    const navigate = useNavigate();
     const { data = emptyOverview, isLoading, isFetching, refetch, dataUpdatedAt } = useDashboardOverview();
     const { summary, maintenanceCost = emptyOverview.maintenanceCost, facilityStats, recentActivities } = data;
+    const attentionCount =
+        summary.unassignedMachines +
+        summary.maintenanceMachines +
+        summary.inactiveMachines +
+        (maintenanceCost?.externalRepairPendingApproval ?? 0);
 
     const summaryCards = useMemo(
         () => [
@@ -78,10 +89,71 @@ const Dashboard: React.FC = () => {
         [summary, maintenanceCost]
     );
 
+    const quickActions = useMemo(
+        () => [
+            {
+                label: 'Danh sách máy',
+                path: '/assets',
+                icon: <AppstoreOutlined />,
+            },
+            {
+                label: 'Chuyển máy',
+                path: '/transfers',
+                icon: <SwapOutlined />,
+            },
+            {
+                label: 'Tồn kho',
+                path: '/materials/inventory',
+                icon: <DatabaseOutlined />,
+            },
+            {
+                label: 'Cấp phát vật tư',
+                path: '/materials/distributions',
+                icon: <SendOutlined />,
+            },
+            {
+                label: 'Phiếu yêu cầu',
+                path: '/materials/supply-requests',
+                icon: <FormOutlined />,
+            },
+        ],
+        []
+    );
+
+    const attentionItems = useMemo(
+        () => [
+            {
+                label: 'Máy chưa phân công',
+                value: summary.unassignedMachines,
+                caption: 'Cần gán cơ sở để theo dõi vận hành',
+                path: '/assets',
+                icon: <ClusterOutlined />,
+                severity: summary.unassignedMachines > 0 ? 'danger' : 'ok',
+            },
+            {
+                label: 'Đang bảo trì',
+                value: summary.maintenanceMachines,
+                caption: 'Kiểm tra tiến độ và lịch sử sửa chữa',
+                path: '/maintenances',
+                icon: <ToolOutlined />,
+                severity: summary.maintenanceMachines > 0 ? 'warning' : 'ok',
+            },
+            {
+                label: 'Phiếu sửa chờ duyệt',
+                value: maintenanceCost?.externalRepairPendingApproval ?? 0,
+                caption: 'Ưu tiên xử lý chi phí sửa ngoài',
+                path: '/maintenances',
+                icon: <DollarOutlined />,
+                severity: (maintenanceCost?.externalRepairPendingApproval ?? 0) > 0 ? 'warning' : 'ok',
+            },
+        ],
+        [summary.unassignedMachines, summary.maintenanceMachines, maintenanceCost?.externalRepairPendingApproval]
+    );
+
     const lastUpdatedLabel = dataUpdatedAt ? dayjs(dataUpdatedAt).format('DD/MM/YYYY HH:mm') : '--';
 
     return (
-        <div className='flex w-full max-w-full flex-col gap-6 overflow-hidden'>
+        <div className='dashboard-shell flex w-full max-w-full flex-col gap-6 overflow-hidden'>
             <PageHeader
                 title='Bảng điều khiển vận hành'
                 subtitle='Tổng quan tình trạng máy móc, tải cơ sở, sửa chữa và hoạt động gần đây trên toàn công ty.'
@@ -111,9 +183,46 @@ const Dashboard: React.FC = () => {
                         <Tag className='rounded-full px-3 py-1 text-xs font-semibold text-slate-600'>
                             Cập nhật {lastUpdatedLabel}
                         </Tag>
+                        {attentionCount > 0 ? (
+                            <Tag color='orange' className='rounded-full px-3 py-1 text-xs font-semibold'>
+                                {attentionCount} việc cần xử lý
+                            </Tag>
+                        ) : null}
                     </div>
                 }
             />
+
+            <div className='dashboard-action-strip' aria-label='Thao tác nhanh trên dashboard'>
+                {quickActions.map((action) => (
+                    <button
+                        key={action.path}
+                        type='button'
+                        onClick={() => navigate(action.path)}
+                        className='dashboard-action-chip'
+                    >
+                        <span className='dashboard-action-chip__icon'>{action.icon}</span>
+                        <span className='dashboard-action-chip__label'>{action.label}</span>
+                    </button>
+                ))}
+            </div>
+
+            <div className='dashboard-attention-grid'>
+                {attentionItems.map((item) => (
+                    <button
+                        key={item.label}
+                        type='button'
+                        onClick={() => navigate(item.path)}
+                        className={`dashboard-attention-item dashboard-attention-item--${item.severity}`}
+                    >
+                        <span className='dashboard-attention-item__icon'>{item.icon}</span>
+                        <span className='min-w-0 flex-1'>
+                            <span className='dashboard-attention-item__label'>{item.label}</span>
+                            <span className='dashboard-attention-item__caption'>{item.caption}</span>
+                        </span>
+                        <span className='dashboard-attention-item__value'>{item.value}</span>
+                    </button>
+                ))}
+            </div>
 
             <div className='grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4'>
                 {summaryCards.map((card) => (

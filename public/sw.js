@@ -67,6 +67,28 @@ async function networkFirstNavigation(event) {
     }
 }
 
+async function setBadgeCount(count) {
+    const safeCount = Number.isFinite(Number(count)) ? Number(count) : undefined;
+
+    try {
+        if (safeCount && safeCount > 0 && 'setAppBadge' in self.navigator) {
+            await self.navigator.setAppBadge(safeCount);
+            return;
+        }
+
+        if ('clearAppBadge' in self.navigator) {
+            await self.navigator.clearAppBadge();
+            return;
+        }
+
+        if ('setAppBadge' in self.navigator) {
+            await self.navigator.setAppBadge(0);
+        }
+    } catch {
+        // Badge support is best-effort and depends on OS/browser notification settings.
+    }
+}
+
 self.addEventListener('install', (event) => {
     event.waitUntil(caches.open(CACHE_NAME).then((cache) => cacheAllSafely(cache, PRECACHE_URLS)));
 });
@@ -141,7 +163,9 @@ self.addEventListener('push', (event) => {
         },
     };
 
-    event.waitUntil(self.registration.showNotification(title, options));
+    const badgeCount = payload.unreadCount ?? payload.badgeCount;
+
+    event.waitUntil(Promise.all([self.registration.showNotification(title, options), setBadgeCount(badgeCount)]));
 });
 
 self.addEventListener('notificationclick', (event) => {

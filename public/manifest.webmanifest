@@ -2,6 +2,7 @@
     "name": "Hệ thống Quản lý Thiết bị Hải Đăng",
     "short_name": "HD Ops",
     "description": "Quản lý máy móc, thiết bị, vật tư và cảnh báo vận hành.",
+    "id": "/",
     "start_url": "/dashboard",
     "scope": "/",
     "display": "standalone",
