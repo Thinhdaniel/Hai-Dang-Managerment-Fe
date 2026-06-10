@@ -10,18 +10,30 @@ import {
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate, useParams } from 'react-router-dom';
 import { qrLabelService } from '../core/services/qr-label.service';
-import type { QrLabel } from '../core/types';
+import { AssetOwnershipType, QrLabelStatus, type QrLabel } from '../core/types';
 
 const { Text } = Typography;
 
 const A4_WIDTH_MM = 210;
 const A4_HEIGHT_MM = 297;
 const STORAGE_KEY = 'hai-dang-qr-print-template-v1';
-const QR_TEXT_HEIGHT_MM = 3.2;
-const QR_TEXT_GAP_MM = 0.8;
+const QR_TEXT_HEIGHT_MM = 2.4;
+const QR_TEXT_GAP_MM = 0.35;
+const QR_BRAND_HEIGHT_MM = 2.4;
+const QR_DETAIL_HEIGHT_MM = 2.3;
+const CROP_MARK_LENGTH_MM = 3.2;
+const CROP_MARK_OFFSET_MM = 0.35;
+const CUT_BORDER_WIDTH_MM = 0.18;
+
+type PrintStyle = 'qr_only' | 'branded_compact' | 'branded_full';
+type CutMode = 'none' | 'border' | 'crop_marks';
+type RgbTuple = [number, number, number];
+type OwnershipBadgeKey = AssetOwnershipType | 'unassigned';
 
 type PrintTemplate = {
     preset: string;
+    printStyle: PrintStyle;
+    cutMode: CutMode;
     columns: number;
     rows: number;
     marginTop: number;
@@ -31,25 +43,29 @@ type PrintTemplate = {
     gapX: number;
     gapY: number;
     qrSize: number;
+    safePadding: number;
     showCode: boolean;
-    showCutLines: boolean;
 };
 
 const presets: Record<string, Omit<PrintTemplate, 'preset'>> = {
     '4x8': {
+        printStyle: 'branded_compact',
+        cutMode: 'crop_marks',
         columns: 4,
         rows: 8,
         marginTop: 8,
         marginLeft: 8,
-        labelWidth: 46,
+        labelWidth: 45,
         labelHeight: 33,
         gapX: 4,
         gapY: 3,
-        qrSize: 24,
+        qrSize: 24.5,
+        safePadding: 1.5,
         showCode: true,
-        showCutLines: true,
     },
     '3x8': {
+        printStyle: 'branded_compact',
+        cutMode: 'crop_marks',
         columns: 3,
         rows: 8,
         marginTop: 8,
@@ -58,11 +74,13 @@ const presets: Record<string, Omit<PrintTemplate, 'preset'>> = {
         labelHeight: 33,
         gapX: 2,
         gapY: 3,
-        qrSize: 25,
+        qrSize: 25.5,
+        safePadding: 1.8,
         showCode: true,
-        showCutLines: true,
     },
     '5x10': {
+        printStyle: 'branded_compact',
+        cutMode: 'crop_marks',
         columns: 5,
         rows: 10,
         marginTop: 7,
@@ -71,9 +89,9 @@ const presets: Record<string, Omit<PrintTemplate, 'preset'>> = {
         labelHeight: 25,
         gapX: 3,
         gapY: 3,
-        qrSize: 19,
+        qrSize: 18,
+        safePadding: 1.3,
         showCode: true,
-        showCutLines: true,
     },
 };
 
@@ -84,13 +102,77 @@ const defaultTemplate: PrintTemplate = {
 
 const getQrUrl = (publicId: string) => new URL(`/qr/${publicId}`, window.location.origin).toString();
 
+const ownershipMeta: Record<
+    OwnershipBadgeKey,
+    { label: string; pdfLabel: string; color: RgbTuple; bg: RgbTuple; border: RgbTuple }
+> = {
+    [AssetOwnershipType.OWNED]: {
+        label: 'HẢI ĐĂNG',
+        pdfLabel: 'HAI DANG',
+        color: [29, 78, 216],
+        bg: [239, 246, 255],
+        border: [191, 219, 254],
+    },
+    [AssetOwnershipType.PARTNER_BORROWED]: {
+        label: 'MƯỢN',
+        pdfLabel: 'MUON',
+        color: [126, 34, 206],
+        bg: [250, 245, 255],
+        border: [221, 214, 254],
+    },
+    [AssetOwnershipType.RENTAL]: {
+        label: 'THUÊ',
+        pdfLabel: 'THUE',
+        color: [180, 83, 9],
+        bg: [255, 251, 235],
+        border: [253, 230, 138],
+    },
+    unassigned: {
+        label: 'QR TRẮNG',
+        pdfLabel: 'QR TRANG',
+        color: [71, 85, 105],
+        bg: [248, 250, 252],
+        border: [203, 213, 225],
+    },
+};
+
+const rgbToCss = ([r, g, b]: RgbTuple) => `rgb(${r}, ${g}, ${b})`;
+
+const getOwnershipMeta = (label: QrLabel) =>
+    ownershipMeta[(label.asset?.ownershipType ?? 'unassigned') as OwnershipBadgeKey] ?? ownershipMeta.unassigned;
+
+const getOwnershipStyle = (label: QrLabel) => {
+    const ownership = getOwnershipMeta(label);
+    return {
+        '--qr-label-badge-color': rgbToCss(ownership.color),
+        '--qr-label-badge-bg': rgbToCss(ownership.bg),
+        '--qr-label-badge-border': rgbToCss(ownership.border),
+    } as React.CSSProperties;
+};
+
+const getLabelPrimaryText = (label: QrLabel) => label.asset?.machineCode || label.publicId;
+
+const getLabelDetailText = (label: QrLabel) => {
+    if (label.asset?.name) return label.asset.name;
+    if (label.status === QrLabelStatus.UNUSED) return 'Chưa kích hoạt';
+    return 'Tem QR máy';
+};
+
 const loadTemplate = (): PrintTemplate => {
     if (typeof window === 'undefined') return defaultTemplate;
 
     try {
         const raw = localStorage.getItem(STORAGE_KEY);
         if (!raw) return defaultTemplate;
-        return { ...defaultTemplate, ...JSON.parse(raw), preset: 'custom' };
+        const parsed = JSON.parse(raw);
+        const migrated = {
+            ...parsed,
+            cutMode: parsed.cutMode ?? (parsed.showCutLines ? 'border' : 'none'),
+            printStyle: parsed.printStyle ?? 'branded_compact',
+            safePadding: parsed.safePadding ?? 1.2,
+        };
+        delete migrated.showCutLines;
+        return { ...defaultTemplate, ...migrated, preset: 'custom' };
     } catch {
         return defaultTemplate;
     }
@@ -172,11 +254,36 @@ const QrBatchPrintPage: React.FC = () => {
         template.marginLeft + template.columns * template.labelWidth + (template.columns - 1) * template.gapX;
     const usedHeight = template.marginTop + template.rows * template.labelHeight + (template.rows - 1) * template.gapY;
     const layoutFits = usedWidth <= A4_WIDTH_MM && usedHeight <= A4_HEIGHT_MM;
-    const qrVerticalReserve = template.showCode ? QR_TEXT_HEIGHT_MM + QR_TEXT_GAP_MM : 0;
-    const maxQrSize = Math.max(4, Math.min(template.labelWidth, template.labelHeight - qrVerticalReserve));
+    const hasBrand = template.printStyle !== 'qr_only';
+    const hasDetail = template.printStyle === 'branded_full';
+    const brandReserve = hasBrand ? QR_BRAND_HEIGHT_MM + QR_TEXT_GAP_MM : 0;
+    const codeReserve = template.showCode ? QR_TEXT_HEIGHT_MM + QR_TEXT_GAP_MM : 0;
+    const detailReserve = hasDetail ? QR_DETAIL_HEIGHT_MM + QR_TEXT_GAP_MM : 0;
+    const availableWidth = Math.max(4, template.labelWidth - template.safePadding * 2);
+    const availableHeight = Math.max(
+        4,
+        template.labelHeight - template.safePadding * 2 - brandReserve - codeReserve - detailReserve
+    );
+    const maxQrSize = Math.max(4, Math.min(availableWidth, availableHeight));
     const qrVisualSize = Math.min(template.qrSize, maxQrSize);
     const isQrSizeClamped = qrVisualSize < template.qrSize;
     const canvasSize = Math.max(160, Math.round(qrVisualSize * 10));
+    const cropMarkLength = Math.max(
+        1.2,
+        Math.min(
+            CROP_MARK_LENGTH_MM,
+            Math.max(0.8, template.gapX - CROP_MARK_OFFSET_MM),
+            Math.max(0.8, template.gapY - CROP_MARK_OFFSET_MM),
+            Math.max(0.8, template.marginLeft - CROP_MARK_OFFSET_MM),
+            Math.max(0.8, template.marginTop - CROP_MARK_OFFSET_MM)
+        )
+    );
+    const cutLineClass =
+        template.cutMode === 'border'
+            ? 'qr-print-label--cut-border'
+            : template.cutMode === 'crop_marks'
+              ? 'qr-print-label--crop-marks'
+              : '';
 
     const updateTemplate = (patch: Partial<PrintTemplate>) => {
         setTemplate((prev) => ({ ...prev, ...patch, preset: patch.preset ?? 'custom' }));
@@ -202,7 +309,45 @@ const QrBatchPrintPage: React.FC = () => {
         '--qr-template-gap-y': `${template.gapY}mm`,
         '--qr-template-code-size': `${qrVisualSize}mm`,
         '--qr-template-code-gap': `${template.showCode ? QR_TEXT_GAP_MM : 0}mm`,
+        '--qr-template-safe-padding': `${template.safePadding}mm`,
+        '--qr-template-header-height': `${QR_BRAND_HEIGHT_MM}mm`,
+        '--qr-template-code-height': `${QR_TEXT_HEIGHT_MM}mm`,
+        '--qr-template-detail-height': `${QR_DETAIL_HEIGHT_MM}mm`,
+        '--qr-template-crop-size': `${cropMarkLength}mm`,
+        '--qr-template-crop-offset': `${CROP_MARK_OFFSET_MM}mm`,
+        '--qr-template-crop-outset': `-${cropMarkLength + CROP_MARK_OFFSET_MM}mm`,
     } as React.CSSProperties;
+
+    const drawCropMarks = (doc: any, x: number, y: number, width: number, height: number) => {
+        const mark = Math.min(cropMarkLength, width / 5, height / 5);
+        const offset = CROP_MARK_OFFSET_MM;
+
+        doc.setDrawColor(203, 213, 225);
+        doc.setLineWidth(0.15);
+        doc.line(x - mark - offset, y - offset, x - offset, y - offset);
+        doc.line(x - offset, y - mark - offset, x - offset, y - offset);
+        doc.line(x + width + offset, y - offset, x + width + mark + offset, y - offset);
+        doc.line(x + width + offset, y - mark - offset, x + width + offset, y - offset);
+        doc.line(x - mark - offset, y + height + offset, x - offset, y + height + offset);
+        doc.line(x - offset, y + height + offset, x - offset, y + height + mark + offset);
+        doc.line(x + width + offset, y + height + offset, x + width + mark + offset, y + height + offset);
+        doc.line(x + width + offset, y + height + offset, x + width + offset, y + height + mark + offset);
+    };
+
+    const drawLabelFrame = (doc: any, x: number, y: number) => {
+        if (template.cutMode === 'none') return;
+
+        if (template.cutMode === 'border') {
+            doc.setDrawColor(208, 215, 222);
+            doc.setLineWidth(CUT_BORDER_WIDTH_MM);
+            doc.setLineDashPattern?.([1.2, 0.8], 0);
+            doc.rect(x, y, template.labelWidth, template.labelHeight);
+            doc.setLineDashPattern?.([], 0);
+            return;
+        }
+
+        drawCropMarks(doc, x, y, template.labelWidth, template.labelHeight);
+    };
 
     const handleDownloadPdf = async () => {
         if (!data?.labels.length) return;
@@ -220,16 +365,40 @@ const QrBatchPrintPage: React.FC = () => {
             const row = Math.floor(slot / template.columns);
             const x = template.marginLeft + col * (template.labelWidth + template.gapX);
             const y = template.marginTop + row * (template.labelHeight + template.gapY);
-            const codeHeight = template.showCode ? QR_TEXT_HEIGHT_MM + QR_TEXT_GAP_MM : 0;
-            const qrX = x + (template.labelWidth - qrVisualSize) / 2;
-            const qrY = y + Math.max(0, (template.labelHeight - qrVisualSize - codeHeight) / 2);
+            const innerX = x + template.safePadding;
+            const innerY = y + template.safePadding;
+            const innerWidth = template.labelWidth - template.safePadding * 2;
+            const innerHeight = template.labelHeight - template.safePadding * 2;
+            let cursorY = innerY;
             const canvas = qrRefs.current[label.publicId]?.querySelector('canvas');
+            const ownership = getOwnershipMeta(label);
+            const primaryText = getLabelPrimaryText(label);
+            const detailText = getLabelDetailText(label);
 
-            if (template.showCutLines) {
-                doc.setDrawColor(205, 213, 225);
-                doc.setLineWidth(0.1);
-                doc.rect(x, y, template.labelWidth, template.labelHeight);
+            drawLabelFrame(doc, x, y);
+
+            if (hasBrand) {
+                doc.setDrawColor(ownership.border[0], ownership.border[1], ownership.border[2]);
+                doc.setLineWidth(0.08);
+                doc.line(innerX, cursorY + QR_BRAND_HEIGHT_MM, innerX + innerWidth, cursorY + QR_BRAND_HEIGHT_MM);
+                doc.setFont('helvetica', 'bold');
+                doc.setTextColor(29, 78, 216);
+                doc.setFontSize(4.4);
+                doc.text('HAIDANG MS', innerX, cursorY + 1.55, { baseline: 'middle' });
+                doc.setTextColor(ownership.color[0], ownership.color[1], ownership.color[2]);
+                doc.setFontSize(3.9);
+                doc.text(ownership.pdfLabel, innerX + innerWidth, cursorY + 1.55, {
+                    align: 'right',
+                    baseline: 'middle',
+                });
+                cursorY += QR_BRAND_HEIGHT_MM + QR_TEXT_GAP_MM;
             }
+
+            const bottomReserve =
+                (template.showCode ? QR_TEXT_HEIGHT_MM + QR_TEXT_GAP_MM : 0) +
+                (hasDetail ? QR_DETAIL_HEIGHT_MM + QR_TEXT_GAP_MM : 0);
+            const qrX = innerX + (innerWidth - qrVisualSize) / 2;
+            const qrY = cursorY + Math.max(0, (innerHeight - (cursorY - innerY) - qrVisualSize - bottomReserve) / 2);
 
             if (canvas) {
                 doc.addImage(
@@ -247,11 +416,28 @@ const QrBatchPrintPage: React.FC = () => {
             if (template.showCode) {
                 doc.setFont('helvetica', 'bold');
                 doc.setTextColor(15, 23, 42);
-                doc.setFontSize(5.5);
-                doc.text(label.publicId, x + template.labelWidth / 2, qrY + qrVisualSize + QR_TEXT_GAP_MM + 1.2, {
+                doc.setFontSize(4.8);
+                doc.text(primaryText, x + template.labelWidth / 2, qrY + qrVisualSize + QR_TEXT_GAP_MM + 0.2, {
                     align: 'center',
                     baseline: 'top',
+                    maxWidth: innerWidth,
                 });
+            }
+
+            if (hasDetail) {
+                doc.setFont('helvetica', 'normal');
+                doc.setTextColor(71, 85, 105);
+                doc.setFontSize(3.8);
+                doc.text(
+                    detailText.slice(0, 34),
+                    x + template.labelWidth / 2,
+                    qrY + qrVisualSize + QR_TEXT_GAP_MM + QR_TEXT_HEIGHT_MM + QR_TEXT_GAP_MM + 0.1,
+                    {
+                        align: 'center',
+                        baseline: 'top',
+                        maxWidth: innerWidth,
+                    }
+                );
             }
         });
 
@@ -326,6 +512,32 @@ const QrBatchPrintPage: React.FC = () => {
                                     onChange={applyPreset}
                                 />
                             </label>
+                            <label className='qr-print-setting'>
+                                <span>Kiểu tem</span>
+                                <Select
+                                    size='small'
+                                    value={template.printStyle}
+                                    options={[
+                                        { value: 'branded_compact', label: 'HAIDANG MS + mã' },
+                                        { value: 'branded_full', label: 'HAIDANG MS + tên máy' },
+                                        { value: 'qr_only', label: 'QR + mã' },
+                                    ]}
+                                    onChange={(printStyle: PrintStyle) => updateTemplate({ printStyle })}
+                                />
+                            </label>
+                            <label className='qr-print-setting'>
+                                <span>Đường cắt</span>
+                                <Select
+                                    size='small'
+                                    value={template.cutMode}
+                                    options={[
+                                        { value: 'crop_marks', label: 'Dấu cắt ngoài' },
+                                        { value: 'border', label: 'Viền dashed nhạt' },
+                                        { value: 'none', label: 'Không in' },
+                                    ]}
+                                    onChange={(cutMode: CutMode) => updateTemplate({ cutMode })}
+                                />
+                            </label>
                             <SettingNumber
                                 label='Cột'
                                 value={template.columns}
@@ -396,6 +608,14 @@ const QrBatchPrintPage: React.FC = () => {
                                 step={0.5}
                                 onChange={(qrSize) => updateTemplate({ qrSize })}
                             />
+                            <SettingNumber
+                                label='Padding mm'
+                                value={template.safePadding}
+                                min={0.5}
+                                max={6}
+                                step={0.1}
+                                onChange={(safePadding) => updateTemplate({ safePadding })}
+                            />
                             <label className='qr-print-switch'>
                                 <span>Mã nhỏ</span>
                                 <Switch
@@ -404,20 +624,18 @@ const QrBatchPrintPage: React.FC = () => {
                                     onChange={(showCode) => updateTemplate({ showCode })}
                                 />
                             </label>
-                            <label className='qr-print-switch'>
-                                <span>Đường cắt</span>
-                                <Switch
-                                    size='small'
-                                    checked={template.showCutLines}
-                                    onChange={(showCutLines) => updateTemplate({ showCutLines })}
-                                />
-                            </label>
                         </div>
-                        <div className='mt-3 flex flex-col gap-2 md:flex-row md:items-center md:justify-between'>
-                            <Text type='secondary' className='text-xs'>
-                                A4 dùng {usedWidth.toFixed(1)} / 210mm ngang, {usedHeight.toFixed(1)} / 297mm dọc. Mỗi
-                                trang in {labelsPerPage} tem.
-                            </Text>
+                        <div className='mt-3 flex flex-col gap-2 md:flex-row md:items-start md:justify-between'>
+                            <div className='flex flex-col gap-1'>
+                                <Text type='secondary' className='text-xs'>
+                                    A4 dùng {usedWidth.toFixed(1)} / 210mm ngang, {usedHeight.toFixed(1)} / 297mm dọc.
+                                    Mỗi trang in {labelsPerPage} tem.
+                                </Text>
+                                <Text type='secondary' className='text-xs'>
+                                    Khi in từ trình duyệt: chọn A4, Scale 100%, tắt Fit to page nếu thấy lệch kích
+                                    thước.
+                                </Text>
+                            </div>
                             <Button
                                 size='small'
                                 icon={<SaveOutlined />}
@@ -454,29 +672,55 @@ const QrBatchPrintPage: React.FC = () => {
                 {pages.map((pageLabels, pageIndex) => (
                     <section key={pageIndex} className='qr-print-paper' style={pageStyle}>
                         <div className='qr-print-grid'>
-                            {pageLabels.map((label) => (
-                                <article
-                                    key={label.id}
-                                    className={`qr-print-label ${template.showCutLines ? 'qr-print-label--cut' : ''}`}
-                                >
-                                    <div
-                                        ref={(node) => {
-                                            qrRefs.current[label.publicId] = node;
-                                        }}
-                                        className='qr-print-label__qr'
+                            {pageLabels.map((label) => {
+                                const ownership = getOwnershipMeta(label);
+
+                                return (
+                                    <article
+                                        key={label.id}
+                                        className={`qr-print-label qr-print-label--${template.printStyle} ${cutLineClass}`}
+                                        style={getOwnershipStyle(label)}
                                     >
-                                        <QRCode
-                                            value={getQrUrl(label.publicId)}
-                                            size={canvasSize}
-                                            type='canvas'
-                                            bordered={false}
-                                        />
-                                    </div>
-                                    {template.showCode ? (
-                                        <div className='qr-print-label__code'>{label.publicId}</div>
-                                    ) : null}
-                                </article>
-                            ))}
+                                        {template.cutMode === 'crop_marks' ? (
+                                            <>
+                                                <span className='qr-print-crop qr-print-crop--tl' />
+                                                <span className='qr-print-crop qr-print-crop--tr' />
+                                                <span className='qr-print-crop qr-print-crop--bl' />
+                                                <span className='qr-print-crop qr-print-crop--br' />
+                                            </>
+                                        ) : null}
+                                        <div className='qr-print-label__content'>
+                                            {template.printStyle !== 'qr_only' ? (
+                                                <div className='qr-print-label__brand'>
+                                                    <span>HAIDANG MS</span>
+                                                    <strong>{ownership.label}</strong>
+                                                </div>
+                                            ) : null}
+                                            <div
+                                                ref={(node) => {
+                                                    qrRefs.current[label.publicId] = node;
+                                                }}
+                                                className='qr-print-label__qr'
+                                            >
+                                                <QRCode
+                                                    value={getQrUrl(label.publicId)}
+                                                    size={canvasSize}
+                                                    type='canvas'
+                                                    bordered={false}
+                                                />
+                                            </div>
+                                            {template.showCode ? (
+                                                <div className='qr-print-label__code'>{getLabelPrimaryText(label)}</div>
+                                            ) : null}
+                                            {template.printStyle === 'branded_full' ? (
+                                                <div className='qr-print-label__detail'>
+                                                    {getLabelDetailText(label)}
+                                                </div>
+                                            ) : null}
+                                        </div>
+                                    </article>
+                                );
+                            })}
                         </div>
                     </section>
                 ))}
