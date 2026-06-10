@@ -6,6 +6,7 @@ import { notification as antNotification } from 'antd';
 import { useAuth } from '../contexts/AuthContext';
 import { queryClient } from '../queryClient';
 import { syncAppBadge } from '../lib/app-badge';
+import { playNotificationSound, primeNotificationSound } from '../lib/notificationSound';
 
 // Socket event names
 const NOTIFICATION_EVENTS = {
@@ -20,6 +21,11 @@ export const useNotifications = (socket: import('socket.io-client').Socket | nul
     const store = useNotificationStore();
     const { isAuthenticated } = useAuth();
     const unreadCount = store.unreadCount();
+
+    // Mở khoá audio sau tương tác đầu tiên để chuông phát được (autoplay policy)
+    useEffect(() => {
+        primeNotificationSound();
+    }, []);
 
     // Keep Home Screen app badge in sync with unread notifications.
     useEffect(() => {
@@ -66,6 +72,9 @@ export const useNotifications = (socket: import('socket.io-client').Socket | nul
 
         const unsubscribeNew = socketService.on<Notification>(NOTIFICATION_EVENTS.NEW, (notification) => {
             store.addNotification(notification);
+
+            // Chuông báo khi có thông báo mới đến (nếu người dùng đang bật)
+            playNotificationSound();
 
             // Invalidate React Query cache based on actionType
             if (notification.actionType) {

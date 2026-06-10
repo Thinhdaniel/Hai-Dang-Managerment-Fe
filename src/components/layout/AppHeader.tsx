@@ -32,6 +32,7 @@ import { useAuth } from '../../core/contexts/AuthContext';
 import { hasManagerAccess } from '../../core/lib/permissions';
 import { useNotificationContext } from '../../core/contexts/NotificationContext';
 import PushNotificationToggle from '../notifications/PushNotificationToggle';
+import NotificationSoundToggle from '../notifications/NotificationSoundToggle';
 import InstallPrompt from '../pwa/InstallPrompt';
 
 const { Header } = Layout;
@@ -199,6 +200,8 @@ const AppHeader: React.FC<AppHeaderProps> = ({ collapsed, isDesktop, mobileOpen,
                     ) : null}
                 </div>
             </div>
+
+            <NotificationSoundToggle />
 
             <PushNotificationToggle />
 
