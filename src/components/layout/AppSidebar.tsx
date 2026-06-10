@@ -15,6 +15,7 @@ import {
     InboxOutlined,
     MenuFoldOutlined,
     MenuUnfoldOutlined,
+    QrcodeOutlined,
     SendOutlined,
     ShopOutlined,
     ShoppingCartOutlined,
@@ -141,6 +142,12 @@ const navigationSections: NavigationSection[] = [
                 label: 'Máy',
                 description: 'Danh sách máy',
                 icon: <AppstoreOutlined />,
+            },
+            {
+                path: '/qr-labels',
+                label: 'Tem QR',
+                description: 'Tạo, in và kích hoạt tem',
+                icon: <QrcodeOutlined />,
             },
             {
                 path: '/transfers',

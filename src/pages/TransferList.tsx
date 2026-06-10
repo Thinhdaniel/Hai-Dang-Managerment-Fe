@@ -1,5 +1,17 @@
 import React, { useState } from 'react';
-import { App, Button, Input, Modal, Select, Table, Tooltip, Typography, type TableColumnsType } from 'antd';
+import {
+    App,
+    Badge,
+    Button,
+    Drawer,
+    Input,
+    Modal,
+    Select,
+    Table,
+    Tooltip,
+    Typography,
+    type TableColumnsType,
+} from 'antd';
 import {
     AppstoreOutlined,
     CheckCircleOutlined,
@@ -7,6 +19,7 @@ import {
     CloseOutlined,
     DownloadOutlined,
     EyeOutlined,
+    FilterOutlined,
     ReloadOutlined,
     SearchOutlined,
     StopOutlined,
@@ -65,6 +78,8 @@ const getTransferAssetCodes = (transfer: Transfer) => {
 
 const getTransferFromPlantId = (transfer: Transfer) => transfer.fromPlantId || transfer.fromPlant?.id;
 
+const formatNumber = (value?: number) => (value ?? 0).toLocaleString('vi-VN');
+
 const TransferList: React.FC = () => {
     const navigate = useNavigate();
     const { role, user } = useAuth();
@@ -73,6 +88,7 @@ const TransferList: React.FC = () => {
 
     const [filters, setFilters] = useState(() => createDefaultFilters());
     const [draftFilters, setDraftFilters] = useState(() => createDefaultFilters());
+    const [isMobileFilterOpen, setIsMobileFilterOpen] = useState(false);
     const [approvingTransferId, setApprovingTransferId] = useState<string | null>(null);
     const [completingTransferId, setCompletingTransferId] = useState<string | null>(null);
     const [rejectingTransferId, setRejectingTransferId] = useState<string | null>(null);
@@ -157,8 +173,23 @@ const TransferList: React.FC = () => {
     });
 
     const transfers = transferResponse?.data ?? [];
+    const currentPage = transferResponse?.page ?? filters.page;
+    const pageSize = transferResponse?.limit ?? filters.limit;
+    const totalItems = transferResponse?.total ?? 0;
+    const totalPages = Math.max(transferResponse?.totalPages ?? Math.ceil(totalItems / Math.max(pageSize, 1)), 1);
+    const pageStart = totalItems === 0 ? 0 : (currentPage - 1) * pageSize + 1;
+    const pageEnd = Math.min(currentPage * pageSize, totalItems);
     const canRejectOrCancelTransfer = (transfer: Transfer) =>
         canManageTransfers && (!user?.plantId || getTransferFromPlantId(transfer) === user.plantId);
+    const activeFilterChips = [
+        filters.search ? `Từ khóa: ${filters.search}` : '',
+        filters.status
+            ? transferStatusOptions.find((option) => option.value === filters.status)?.label || 'Trạng thái'
+            : '',
+        filters.fromPlantId ? plants.find((plant) => plant.id === filters.fromPlantId)?.name || 'Từ cơ sở' : '',
+        filters.toPlantId ? plants.find((plant) => plant.id === filters.toPlantId)?.name || 'Đến cơ sở' : '',
+    ].filter(Boolean);
+    const activeFilterCount = activeFilterChips.length;
 
     const applyFilters = () => setFilters({ ...draftFilters, search: draftFilters.search.trim(), page: 1 });
 
@@ -166,6 +197,16 @@ const TransferList: React.FC = () => {
         const next = createDefaultFilters();
         setDraftFilters(next);
         setFilters(next);
+    };
+
+    const handleApplyMobileFilters = () => {
+        applyFilters();
+        setIsMobileFilterOpen(false);
+    };
+
+    const handleResetMobileFilters = () => {
+        resetFilters();
+        setIsMobileFilterOpen(false);
     };
 
     const handleApprove = async (transfer: Transfer) => {
@@ -230,6 +271,130 @@ const TransferList: React.FC = () => {
             setExportingTransferId(null);
         }
     };
+
+    const renderTransferActions = (record: Transfer, mode: 'table' | 'mobile') => (
+        <div className={mode === 'table' ? 'flex items-center justify-end gap-1.5' : 'transfer-mobile-card__actions'}>
+            <Tooltip title='Xem chi tiết'>
+                <Button
+                    type={mode === 'table' ? 'text' : 'default'}
+                    size={mode === 'mobile' ? 'small' : 'middle'}
+                    icon={<EyeOutlined />}
+                    className={
+                        mode === 'table'
+                            ? 'flex h-8 w-8 items-center justify-center rounded-md bg-slate-50 text-slate-600 transition-colors hover:bg-slate-100 hover:text-slate-800'
+                            : undefined
+                    }
+                    onClick={() => navigate(`/transfers/${record.id}`)}
+                >
+                    {mode === 'mobile' ? 'Xem' : null}
+                </Button>
+            </Tooltip>
+            {['approved', 'completed'].includes(record.status) ? (
+                <Tooltip title='Xuất phiếu xuất kho'>
+                    <Button
+                        type={mode === 'table' ? 'text' : 'default'}
+                        size={mode === 'mobile' ? 'small' : 'middle'}
+                        icon={<DownloadOutlined />}
+                        loading={exportingTransferId === record.id}
+                        className={
+                            mode === 'table'
+                                ? 'flex h-8 w-8 items-center justify-center rounded-md bg-green-50 text-green-600 transition-colors hover:bg-green-100 hover:text-green-700'
+                                : undefined
+                        }
+                        onClick={() => handleExportStockOut(record)}
+                    >
+                        {mode === 'mobile' ? 'Xuất phiếu' : null}
+                    </Button>
+                </Tooltip>
+            ) : null}
+            {record.status === 'pending' && canManageTransfers ? (
+                <ConfirmAction
+                    intent='warning'
+                    title='Duyệt lệnh điều chuyển'
+                    description={`Xác nhận duyệt lệnh điều chuyển "${getTransferAssetLabel(record)}"?`}
+                    okLabel='Duyệt'
+                    onConfirm={() => handleApprove(record)}
+                >
+                    <Tooltip title='Duyệt lệnh'>
+                        <Button
+                            type={mode === 'table' ? 'text' : 'default'}
+                            size={mode === 'mobile' ? 'small' : 'middle'}
+                            icon={<CheckOutlined />}
+                            loading={approvingTransferId === record.id}
+                            className={
+                                mode === 'table'
+                                    ? 'flex h-8 w-8 items-center justify-center rounded-md bg-amber-50 text-amber-600 transition-colors hover:bg-amber-100 hover:text-amber-700'
+                                    : undefined
+                            }
+                        >
+                            {mode === 'mobile' ? 'Duyệt' : null}
+                        </Button>
+                    </Tooltip>
+                </ConfirmAction>
+            ) : null}
+            {record.status === 'approved' && canManageTransfers ? (
+                <ConfirmAction
+                    intent='primary'
+                    title='Hoàn tất điều chuyển'
+                    description={`Xác nhận hoàn tất và cập nhật vị trí cho "${getTransferAssetLabel(record)}"?`}
+                    okLabel='Hoàn tất'
+                    onConfirm={() => handleComplete(record)}
+                >
+                    <Tooltip title='Hoàn tất điều chuyển'>
+                        <Button
+                            type={mode === 'table' ? 'text' : 'default'}
+                            size={mode === 'mobile' ? 'small' : 'middle'}
+                            icon={<CheckCircleOutlined />}
+                            loading={completingTransferId === record.id}
+                            className={
+                                mode === 'table'
+                                    ? 'flex h-8 w-8 items-center justify-center rounded-md bg-emerald-50 text-emerald-600 transition-colors hover:bg-emerald-100 hover:text-emerald-700'
+                                    : undefined
+                            }
+                        >
+                            {mode === 'mobile' ? 'Hoàn tất' : null}
+                        </Button>
+                    </Tooltip>
+                </ConfirmAction>
+            ) : null}
+            {record.status === 'pending' && canRejectOrCancelTransfer(record) ? (
+                <Tooltip title='Từ chối'>
+                    <Button
+                        type={mode === 'table' ? 'text' : 'default'}
+                        size={mode === 'mobile' ? 'small' : 'middle'}
+                        icon={<CloseOutlined />}
+                        loading={rejectingTransferId === record.id}
+                        onClick={() => setRejectModal({ open: true, transfer: record, reason: '' })}
+                        className={
+                            mode === 'table'
+                                ? 'flex h-8 w-8 items-center justify-center rounded-md bg-rose-50 text-rose-600 transition-colors hover:bg-rose-100 hover:text-rose-700'
+                                : undefined
+                        }
+                    >
+                        {mode === 'mobile' ? 'Từ chối' : null}
+                    </Button>
+                </Tooltip>
+            ) : null}
+            {record.status === 'pending' && canRejectOrCancelTransfer(record) ? (
+                <Tooltip title='Hủy lệnh'>
+                    <Button
+                        type={mode === 'table' ? 'text' : 'default'}
+                        size={mode === 'mobile' ? 'small' : 'middle'}
+                        icon={<StopOutlined />}
+                        loading={cancellingTransferId === record.id}
+                        onClick={() => setCancelModal({ open: true, transfer: record, reason: '' })}
+                        className={
+                            mode === 'table'
+                                ? 'flex h-8 w-8 items-center justify-center rounded-md bg-slate-50 text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-700'
+                                : undefined
+                        }
+                    >
+                        {mode === 'mobile' ? 'Hủy' : null}
+                    </Button>
+                </Tooltip>
+            ) : null}
+        </div>
+    );
 
     const columns: TableColumnsType<Transfer> = [
         {
@@ -331,91 +496,13 @@ const TransferList: React.FC = () => {
             width: 230,
             align: 'right',
             render: (_value, record) => (
-                <div className='flex items-center justify-end gap-1.5' onClick={(e) => e.stopPropagation()}>
-                    <Tooltip title='Xem chi tiết'>
-                        <Button
-                            type='text'
-                            icon={<EyeOutlined />}
-                            className='flex h-8 w-8 items-center justify-center rounded-md bg-slate-50 text-slate-600 transition-colors hover:bg-slate-100 hover:text-slate-800'
-                            onClick={() => navigate(`/transfers/${record.id}`)}
-                        />
-                    </Tooltip>
-                    {['approved', 'completed'].includes(record.status) ? (
-                        <Tooltip title='Xuất phiếu xuất kho'>
-                            <Button
-                                type='text'
-                                icon={<DownloadOutlined />}
-                                loading={exportingTransferId === record.id}
-                                className='flex h-8 w-8 items-center justify-center rounded-md bg-green-50 text-green-600 transition-colors hover:bg-green-100 hover:text-green-700'
-                                onClick={() => handleExportStockOut(record)}
-                            />
-                        </Tooltip>
-                    ) : null}
-                    {record.status === 'pending' && canManageTransfers ? (
-                        <ConfirmAction
-                            intent='warning'
-                            title='Duyệt lệnh điều chuyển'
-                            description={`Xác nhận duyệt lệnh điều chuyển "${getTransferAssetLabel(record)}"?`}
-                            okLabel='Duyệt'
-                            onConfirm={() => handleApprove(record)}
-                        >
-                            <Tooltip title='Duyệt lệnh'>
-                                <Button
-                                    type='text'
-                                    icon={<CheckOutlined />}
-                                    loading={approvingTransferId === record.id}
-                                    className='flex h-8 w-8 items-center justify-center rounded-md bg-amber-50 text-amber-600 transition-colors hover:bg-amber-100 hover:text-amber-700'
-                                />
-                            </Tooltip>
-                        </ConfirmAction>
-                    ) : null}
-                    {record.status === 'approved' && canManageTransfers ? (
-                        <ConfirmAction
-                            intent='primary'
-                            title='Hoàn tất điều chuyển'
-                            description={`Xác nhận hoàn tất và cập nhật vị trí cho "${getTransferAssetLabel(record)}"?`}
-                            okLabel='Hoàn tất'
-                            onConfirm={() => handleComplete(record)}
-                        >
-                            <Tooltip title='Hoàn tất điều chuyển'>
-                                <Button
-                                    type='text'
-                                    icon={<CheckCircleOutlined />}
-                                    loading={completingTransferId === record.id}
-                                    className='flex h-8 w-8 items-center justify-center rounded-md bg-emerald-50 text-emerald-600 transition-colors hover:bg-emerald-100 hover:text-emerald-700'
-                                />
-                            </Tooltip>
-                        </ConfirmAction>
-                    ) : null}
-                    {record.status === 'pending' && canRejectOrCancelTransfer(record) ? (
-                        <Tooltip title='Từ chối'>
-                            <Button
-                                type='text'
-                                icon={<CloseOutlined />}
-                                loading={rejectingTransferId === record.id}
-                                onClick={() => setRejectModal({ open: true, transfer: record, reason: '' })}
-                                className='flex h-8 w-8 items-center justify-center rounded-md bg-rose-50 text-rose-600 transition-colors hover:bg-rose-100 hover:text-rose-700'
-                            />
-                        </Tooltip>
-                    ) : null}
-                    {record.status === 'pending' && canRejectOrCancelTransfer(record) ? (
-                        <Tooltip title='Hủy lệnh'>
-                            <Button
-                                type='text'
-                                icon={<StopOutlined />}
-                                loading={cancellingTransferId === record.id}
-                                onClick={() => setCancelModal({ open: true, transfer: record, reason: '' })}
-                                className='flex h-8 w-8 items-center justify-center rounded-md bg-slate-50 text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-700'
-                            />
-                        </Tooltip>
-                    ) : null}
-                </div>
+                <div onClick={(e) => e.stopPropagation()}>{renderTransferActions(record, 'table')}</div>
             ),
         },
     ];
 
     return (
-        <div className='flex w-full max-w-full flex-col gap-6 overflow-hidden'>
+        <div className='transfer-page flex w-full max-w-full flex-col gap-6 overflow-hidden'>
             <PageHeader
                 title='Điều Chuyển Thiết Bị'
                 subtitle='Theo dõi và quản lý toàn bộ lệnh điều chuyển phát sinh từ hệ thống.'
@@ -431,7 +518,7 @@ const TransferList: React.FC = () => {
             />
 
             {/* Stats Cards */}
-            <div className='grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4'>
+            <div className='transfer-stats-grid grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4'>
                 {[
                     {
                         label: 'Tổng lệnh',
@@ -485,8 +572,39 @@ const TransferList: React.FC = () => {
                 ))}
             </div>
 
+            <div className='transfer-mobile-filter'>
+                <div className='transfer-mobile-filter__bar'>
+                    <Input
+                        prefix={<SearchOutlined className='text-slate-400' />}
+                        placeholder='Tìm mã lệnh, máy, lý do...'
+                        value={draftFilters.search}
+                        onChange={(e) => setDraftFilters((prev) => ({ ...prev, search: e.target.value }))}
+                        onPressEnter={handleApplyMobileFilters}
+                        allowClear
+                    />
+                    <Badge count={activeFilterCount} size='small' offset={[-2, 4]}>
+                        <Button icon={<FilterOutlined />} onClick={() => setIsMobileFilterOpen(true)}>
+                            Lọc
+                        </Button>
+                    </Badge>
+                </div>
+                <div className='transfer-mobile-filter__meta'>
+                    <span>{formatNumber(totalItems)} lệnh</span>
+                    {activeFilterChips.length ? (
+                        <div className='transfer-mobile-filter__chips'>
+                            {activeFilterChips.slice(0, 3).map((chip) => (
+                                <span key={chip}>{chip}</span>
+                            ))}
+                            {activeFilterChips.length > 3 ? <span>+{activeFilterChips.length - 3}</span> : null}
+                        </div>
+                    ) : (
+                        <span>Chưa áp dụng bộ lọc</span>
+                    )}
+                </div>
+            </div>
+
             {/* Filter */}
-            <div className='rounded-xl border border-slate-200 bg-white p-4 shadow-sm'>
+            <div className='transfer-filter-bar rounded-xl border border-slate-200 bg-white p-4 shadow-sm'>
                 <div className='flex flex-col gap-4 lg:flex-row'>
                     <div className='flex-1'>
                         <Input
@@ -555,9 +673,135 @@ const TransferList: React.FC = () => {
                 </div>
             </div>
 
+            <Drawer
+                title='Bộ lọc lệnh điều chuyển'
+                placement='bottom'
+                height='auto'
+                open={isMobileFilterOpen}
+                onClose={() => setIsMobileFilterOpen(false)}
+                className='transfer-filter-drawer'
+                styles={{ body: { padding: 0 } }}
+            >
+                <div className='transfer-filter-sheet'>
+                    <div className='transfer-filter-sheet__summary'>
+                        <span>{formatNumber(totalItems)} lệnh trong kết quả</span>
+                        {activeFilterCount > 0 ? <strong>{activeFilterCount} bộ lọc đang áp dụng</strong> : null}
+                    </div>
+                    <div className='transfer-filter-sheet__controls'>
+                        <label>
+                            <span>Trạng thái</span>
+                            <Select
+                                placeholder='Chọn trạng thái'
+                                allowClear
+                                value={draftFilters.status}
+                                onChange={(value) => setDraftFilters((prev) => ({ ...prev, status: value }))}
+                                options={transferStatusOptions}
+                            />
+                        </label>
+                        <label>
+                            <span>Từ cơ sở</span>
+                            <Select
+                                placeholder='Chọn cơ sở nguồn'
+                                allowClear
+                                value={draftFilters.fromPlantId}
+                                onChange={(value) => setDraftFilters((prev) => ({ ...prev, fromPlantId: value }))}
+                                options={plants.map((p) => ({ value: p.id, label: p.name }))}
+                            />
+                        </label>
+                        <label>
+                            <span>Đến cơ sở</span>
+                            <Select
+                                placeholder='Chọn cơ sở đích'
+                                allowClear
+                                value={draftFilters.toPlantId}
+                                onChange={(value) => setDraftFilters((prev) => ({ ...prev, toPlantId: value }))}
+                                options={plants.map((p) => ({ value: p.id, label: p.name }))}
+                            />
+                        </label>
+                    </div>
+                    <div className='transfer-filter-sheet__actions'>
+                        <Button onClick={handleResetMobileFilters}>Đặt lại</Button>
+                        <Button type='primary' icon={<SearchOutlined />} onClick={handleApplyMobileFilters}>
+                            Áp dụng
+                        </Button>
+                    </div>
+                </div>
+            </Drawer>
+
             {/* Table */}
-            <div className='flex flex-col overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm'>
-                <div className='[&_.ant-table-row]:group [&_.ant-table]:!bg-white [&_.ant-table-row:hover_td]:!bg-slate-50/80 [&_.ant-table-thead_th]:!bg-slate-50 [&_.ant-table-thead_th]:!text-[12px] [&_.ant-table-thead_th]:!font-bold [&_.ant-table-thead_th]:!tracking-wider [&_.ant-table-thead_th]:!text-slate-500'>
+            <div className='transfer-table-card flex flex-col overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm'>
+                <div className='transfer-mobile-list' aria-label='Danh sách lệnh điều chuyển mobile'>
+                    {isLoading ? (
+                        <div className='transfer-mobile-empty'>Đang tải danh sách lệnh điều chuyển...</div>
+                    ) : transfers.length === 0 ? (
+                        <div className='transfer-mobile-empty'>Không có lệnh phù hợp bộ lọc hiện tại.</div>
+                    ) : (
+                        transfers.map((transfer) => (
+                            <article key={transfer.id} className='transfer-mobile-card'>
+                                <button
+                                    type='button'
+                                    className='transfer-mobile-card__main'
+                                    onClick={() => navigate(`/transfers/${transfer.id}`)}
+                                >
+                                    <span className='transfer-mobile-card__heading'>
+                                        <span className='transfer-mobile-card__title'>
+                                            {getTransferAssetLabel(transfer)}
+                                        </span>
+                                        <span className='transfer-mobile-card__code'>
+                                            {buildTransferCode(transfer)}
+                                        </span>
+                                    </span>
+                                    <span className='transfer-mobile-card__badges'>
+                                        <TransferStatusBadge status={transfer.status} />
+                                        <span>{new Date(transfer.transferDate).toLocaleDateString('vi-VN')}</span>
+                                    </span>
+                                    <span className='transfer-mobile-card__route'>
+                                        <span>
+                                            <strong>{transfer.fromPlant?.name || '-'}</strong>
+                                            <small>{transfer.fromArea || 'Chưa chỉ định'}</small>
+                                        </span>
+                                        <SwapOutlined />
+                                        <span>
+                                            <strong>{transfer.toPlant?.name || '-'}</strong>
+                                            <small>{transfer.toArea || 'Chưa chỉ định'}</small>
+                                        </span>
+                                    </span>
+                                    <span className='transfer-mobile-card__meta'>
+                                        <span>{getTransferAssetCodes(transfer)}</span>
+                                        <span>{transfer.reason || 'Chưa có lý do'}</span>
+                                    </span>
+                                </button>
+                                <div onClick={(e) => e.stopPropagation()}>
+                                    {renderTransferActions(transfer, 'mobile')}
+                                </div>
+                            </article>
+                        ))
+                    )}
+                </div>
+
+                {transfers.length > 0 ? (
+                    <div className='transfer-mobile-pagination'>
+                        <Button
+                            size='small'
+                            disabled={currentPage <= 1}
+                            onClick={() => setFilters((prev) => ({ ...prev, page: currentPage - 1 }))}
+                        >
+                            Trước
+                        </Button>
+                        <span>
+                            {pageStart}-{pageEnd} / {totalItems}
+                        </span>
+                        <Button
+                            size='small'
+                            disabled={currentPage >= totalPages}
+                            onClick={() => setFilters((prev) => ({ ...prev, page: currentPage + 1 }))}
+                        >
+                            Sau
+                        </Button>
+                    </div>
+                ) : null}
+
+                <div className='transfer-desktop-table [&_.ant-table-row]:group [&_.ant-table]:!bg-white [&_.ant-table-row:hover_td]:!bg-slate-50/80 [&_.ant-table-thead_th]:!bg-slate-50 [&_.ant-table-thead_th]:!text-[12px] [&_.ant-table-thead_th]:!font-bold [&_.ant-table-thead_th]:!tracking-wider [&_.ant-table-thead_th]:!text-slate-500'>
                     <Table<Transfer>
                         rowKey='id'
                         columns={columns}

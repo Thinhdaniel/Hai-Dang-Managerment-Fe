@@ -30,6 +30,10 @@ const LoginPage = lazy(() => import('../pages/LoginPage'));
 const ForgotPasswordPage = lazy(() => import('../pages/ForgotPasswordPage'));
 const ResetPasswordPage = lazy(() => import('../pages/ResetPasswordPage'));
 const PublicMachinePage = lazy(() => import('../pages/PublicMachinePage'));
+const QrResolverPage = lazy(() => import('../pages/QrResolverPage'));
+const QrLabelListPage = lazy(() => import('../pages/QrLabelListPage'));
+const QrBatchPrintPage = lazy(() => import('../pages/QrBatchPrintPage'));
+const QrActivateMachinePage = lazy(() => import('../pages/QrActivateMachinePage'));
 const ComingSoonPage = lazy(() => import('../pages/ComingSoonPage'));
 const NotFoundPage = lazy(() => import('../pages/NotFoundPage'));
 const RouteErrorPage = lazy(() => import('../pages/RouteErrorPage'));
@@ -54,6 +58,10 @@ export const router = createBrowserRouter([
         element: withSuspense(<PublicMachinePage />),
     },
     {
+        path: '/qr/:publicId',
+        element: withSuspense(<QrResolverPage />),
+    },
+    {
         path: '/',
         element: (
             <ProtectedRoute>
@@ -66,6 +74,9 @@ export const router = createBrowserRouter([
             { path: 'dashboard', element: withSuspense(<Dashboard />) },
             { path: 'assets', element: withSuspense(<AssetList />) },
             { path: 'assets/:id', element: withSuspense(<AssetDetail />) },
+            { path: 'qr-labels', element: withSuspense(<QrLabelListPage />) },
+            { path: 'qr-labels/batches/:id/print', element: withSuspense(<QrBatchPrintPage />) },
+            { path: 'qr/:publicId/activate', element: withSuspense(<QrActivateMachinePage />) },
             { path: 'brands', element: withSuspense(<BrandList />) },
             { path: 'maintenances', element: withSuspense(<MaintenanceList />) },
             { path: 'transfers', element: withSuspense(<TransferList />) },

@@ -51,6 +51,17 @@ export default defineConfig({
                             return 'vendor-query';
                         }
 
+                        if (
+                            normalizedId.includes('/node_modules/jspdf/') ||
+                            normalizedId.includes('/node_modules/fflate/') ||
+                            normalizedId.includes('/node_modules/fast-png/') ||
+                            normalizedId.includes('/node_modules/canvg/') ||
+                            normalizedId.includes('/node_modules/dompurify/') ||
+                            normalizedId.includes('/node_modules/html2canvas/')
+                        ) {
+                            return 'vendor-pdf';
+                        }
+
                         return 'vendor';
                     }
                 },

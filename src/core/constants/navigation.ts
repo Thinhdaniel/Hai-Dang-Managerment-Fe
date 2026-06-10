@@ -29,6 +29,27 @@ export const PAGE_META: PageMeta[] = [
         searchPlaceholder: 'Tìm theo tên máy, mã máy, serial...',
     },
     {
+        path: '/qr-labels',
+        title: 'Quản Lý Tem QR',
+        subtitle: 'Tạo tem QR trắng, in hàng loạt và kích hoạt hồ sơ máy từ hiện trường.',
+        breadcrumbs: ['Dashboard', 'Quản lý máy', 'Tem QR'],
+        searchPlaceholder: 'Tìm theo mã QR hoặc mã lô...',
+    },
+    {
+        path: '/qr-labels/batches/:id/print',
+        title: 'In Tem QR',
+        subtitle: 'Kiểm tra và in tem QR theo từng lô.',
+        breadcrumbs: ['Dashboard', 'Quản lý máy', 'Tem QR', 'In tem'],
+        searchPlaceholder: 'Tìm theo mã QR...',
+    },
+    {
+        path: '/qr/:publicId/activate',
+        title: 'Kích Hoạt Tem Máy',
+        subtitle: 'Tạo hoặc gán hồ sơ máy từ tem QR trắng đã dán ngoài thực tế.',
+        breadcrumbs: ['Dashboard', 'Quản lý máy', 'Tem QR', 'Kích hoạt'],
+        searchPlaceholder: 'Tìm theo mã máy...',
+    },
+    {
         path: '/brands',
         title: 'Quản Lý Nhãn Hiệu',
         subtitle: 'Danh mục nhãn hiệu máy được dùng chung trong module quản lý máy.',

@@ -1,22 +1,32 @@
 import React, { useState } from 'react';
 import { Alert, App, Button, Form, Input, Typography } from 'antd';
 import { ArrowRightOutlined, LockOutlined, MailOutlined } from '@ant-design/icons';
-import { Link, Navigate, useNavigate } from 'react-router-dom';
+import { Link, Navigate, useNavigate, useSearchParams } from 'react-router-dom';
 import AuthPageShell from '../components/auth/AuthPageShell';
 import { useAuth } from '../core/contexts/AuthContext';
 import { resolveAuthErrorMessage } from '../core/lib/auth';
 
 const { Text } = Typography;
 
+const getSafeRedirectPath = (value: string | null) => {
+    if (!value || !value.startsWith('/') || value.startsWith('//')) {
+        return '/dashboard';
+    }
+
+    return value;
+};
+
 const LoginPage: React.FC = () => {
     const navigate = useNavigate();
+    const [searchParams] = useSearchParams();
     const { message } = App.useApp();
     const { login, isAuthenticated } = useAuth();
     const [submitting, setSubmitting] = useState(false);
     const [errorMessage, setErrorMessage] = useState<string | null>(null);
+    const redirectPath = getSafeRedirectPath(searchParams.get('redirect'));
 
     if (isAuthenticated) {
-        return <Navigate to='/dashboard' replace />;
+        return <Navigate to={redirectPath} replace />;
     }
 
     const handleSubmit = async (values: { email: string; password: string }) => {
@@ -25,7 +35,7 @@ const LoginPage: React.FC = () => {
             setErrorMessage(null);
             await login(values.email, values.password);
             message.success('Đăng nhập thành công');
-            navigate('/dashboard', { replace: true });
+            navigate(redirectPath, { replace: true });
         } catch (error) {
             setErrorMessage(
                 resolveAuthErrorMessage(error, 'Đăng nhập thất bại. Vui lòng kiểm tra lại email và mật khẩu.')

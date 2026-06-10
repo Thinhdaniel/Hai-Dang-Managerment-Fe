@@ -40,6 +40,8 @@ const MobileBottomNav = ({ onOpenMenu }: { onOpenMenu: () => void }) => {
             icon: <AppstoreOutlined />,
             match: (current) =>
                 isExactOrPrefix(current, '/assets') ||
+                isExactOrPrefix(current, '/qr-labels') ||
+                isExactOrPrefix(current, '/qr/') ||
                 isExactOrPrefix(current, '/transfers') ||
                 isExactOrPrefix(current, '/borrowings') ||
                 isExactOrPrefix(current, '/maintenances'),

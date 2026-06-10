@@ -1,5 +1,17 @@
 import React, { lazy, useEffect, useMemo, useState } from 'react';
-import { App, Button, Input, Select, Space, Table, Tooltip, Typography, type TableColumnsType } from 'antd';
+import {
+    App,
+    Badge,
+    Button,
+    Drawer,
+    Input,
+    Select,
+    Space,
+    Table,
+    Tooltip,
+    Typography,
+    type TableColumnsType,
+} from 'antd';
 import {
     AppstoreOutlined,
     CheckCircleOutlined,
@@ -7,6 +19,7 @@ import {
     DownloadOutlined,
     EditOutlined,
     EyeOutlined,
+    FilterOutlined,
     InboxOutlined,
     PlusOutlined,
     QrcodeOutlined,
@@ -138,6 +151,7 @@ const renderOwnershipPill = (ownershipType: AssetOwnershipType = AssetOwnershipT
 };
 
 const getAssetLocation = (asset: Asset) => asset.area || asset.plant?.name || 'Chưa gắn khu vực';
+const formatNumber = (value?: number) => (value ?? 0).toLocaleString('vi-VN');
 
 const AssetList: React.FC = () => {
     const navigate = useNavigate();
@@ -153,6 +167,7 @@ const AssetList: React.FC = () => {
     const [selectedAssetMap, setSelectedAssetMap] = useState<Record<string, Asset>>({});
     const [isFormModalOpen, setIsFormModalOpen] = useState(false);
     const [isImportModalOpen, setIsImportModalOpen] = useState(false);
+    const [isMobileFilterOpen, setIsMobileFilterOpen] = useState(false);
     const [isTransferModalOpen, setIsTransferModalOpen] = useState(false);
     const [editingAsset, setEditingAsset] = useState<Asset | null>(null);
     const [transferTarget, setTransferTarget] = useState<Asset | null>(null);
@@ -302,6 +317,7 @@ const AssetList: React.FC = () => {
                 .filter((asset): asset is Asset => Boolean(asset)),
         [assets, selectedAssetMap, selectedRowKeys]
     );
+    const selectedAssetIdSet = useMemo(() => new Set(selectedRowKeys.map(String)), [selectedRowKeys]);
     const currentPage = assetResponse?.page ?? filters.page;
     const pageSize = assetResponse?.limit ?? filters.limit;
     const totalItems = assetResponse?.total ?? 0;
@@ -331,6 +347,21 @@ const AssetList: React.FC = () => {
         }),
         [statActive, statMaintenance, statBroken, statBorrowing, statStorage, statReturnedToPartner, statOwned]
     );
+    const activeFilterChips = useMemo(() => {
+        const chips: string[] = [];
+
+        if (filters.search) chips.push(`Từ khóa: ${filters.search}`);
+        if (filters.plantId) chips.push(plants.find((plant) => plant.id === filters.plantId)?.name ?? 'Cơ sở đã chọn');
+        if (filters.name) chips.push(`Tên máy: ${filters.name}`);
+        if (filters.brandId) chips.push(brands.find((brand) => brand.id === filters.brandId)?.name ?? 'Nhãn hiệu');
+        if (filters.status) chips.push(statusMeta[filters.status]?.label ?? 'Trạng thái');
+        if (filters.ownershipType) {
+            chips.push(ownershipMeta[filters.ownershipType]?.label ?? 'Nguồn gốc');
+        }
+
+        return chips;
+    }, [brands, filters, plants]);
+    const activeFilterCount = activeFilterChips.length;
 
     const applyFilters = () => {
         const nextFilters = {
@@ -347,6 +378,16 @@ const AssetList: React.FC = () => {
         const resetValue = createDefaultFilters();
         setDraftFilters(resetValue);
         setFilters(resetValue);
+    };
+
+    const handleApplyMobileFilters = () => {
+        applyFilters();
+        setIsMobileFilterOpen(false);
+    };
+
+    const handleResetMobileFilters = () => {
+        resetFilters();
+        setIsMobileFilterOpen(false);
     };
 
     const handleSelectionChange = (keys: React.Key[], rows: Asset[]) => {
@@ -378,6 +419,30 @@ const AssetList: React.FC = () => {
     const clearSelectedAssets = () => {
         setSelectedRowKeys([]);
         setSelectedAssetMap({});
+    };
+
+    const handleToggleMobileSelection = (asset: Asset) => {
+        if (isReturnedToPartner(asset.status)) {
+            message.warning('Máy đã trả đối tác, không thể chọn để điều chuyển');
+            return;
+        }
+
+        const isSelected = selectedAssetIdSet.has(asset.id);
+
+        setSelectedRowKeys((current) =>
+            isSelected ? current.filter((key) => String(key) !== asset.id) : [...current, asset.id]
+        );
+        setSelectedAssetMap((current) => {
+            const next = { ...current };
+
+            if (isSelected) {
+                delete next[asset.id];
+            } else {
+                next[asset.id] = asset;
+            }
+
+            return next;
+        });
     };
 
     const handleOpenCreate = () => {
@@ -710,6 +775,37 @@ const AssetList: React.FC = () => {
                 ))}
             </div>
 
+            <div className='asset-mobile-filter'>
+                <div className='asset-mobile-filter__bar'>
+                    <Input
+                        prefix={<SearchOutlined className='text-slate-400' />}
+                        placeholder='Tìm mã máy, tên máy, serial...'
+                        value={draftFilters.search}
+                        onChange={(event) => setDraftFilters((prev) => ({ ...prev, search: event.target.value }))}
+                        onPressEnter={handleApplyMobileFilters}
+                        allowClear
+                    />
+                    <Badge count={activeFilterCount} size='small' offset={[-2, 4]}>
+                        <Button icon={<FilterOutlined />} onClick={() => setIsMobileFilterOpen(true)}>
+                            Lọc
+                        </Button>
+                    </Badge>
+                </div>
+                <div className='asset-mobile-filter__meta'>
+                    <span>{formatNumber(totalItems)} thiết bị</span>
+                    {activeFilterChips.length ? (
+                        <div className='asset-mobile-filter__chips'>
+                            {activeFilterChips.slice(0, 3).map((chip) => (
+                                <span key={chip}>{chip}</span>
+                            ))}
+                            {activeFilterChips.length > 3 ? <span>+{activeFilterChips.length - 3}</span> : null}
+                        </div>
+                    ) : (
+                        <span>Chưa áp dụng bộ lọc</span>
+                    )}
+                </div>
+            </div>
+
             {/* Filter bar — no card wrapper, just controls */}
             <div className='al-f asset-filter-bar flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center'>
                 <Select
@@ -780,16 +876,96 @@ const AssetList: React.FC = () => {
                 </div>
             </div>
 
+            <Drawer
+                title='Bộ lọc thiết bị'
+                placement='bottom'
+                height='auto'
+                open={isMobileFilterOpen}
+                onClose={() => setIsMobileFilterOpen(false)}
+                className='asset-filter-drawer'
+                styles={{ body: { padding: 0 } }}
+            >
+                <div className='asset-filter-sheet'>
+                    <div className='asset-filter-sheet__summary'>
+                        <span>{formatNumber(totalItems)} thiết bị trong kết quả</span>
+                        {activeFilterCount > 0 ? <strong>{activeFilterCount} bộ lọc đang áp dụng</strong> : null}
+                    </div>
+                    <div className='asset-filter-sheet__controls'>
+                        <label>
+                            <span>Cơ sở</span>
+                            <Select
+                                placeholder='Chọn cơ sở'
+                                allowClear
+                                value={draftFilters.plantId}
+                                onChange={(value) => setDraftFilters((prev) => ({ ...prev, plantId: value }))}
+                                options={plants.map((plant) => ({ value: plant.id, label: plant.name }))}
+                            />
+                        </label>
+                        <label>
+                            <span>Tên máy</span>
+                            <Select
+                                showSearch={{ optionFilterProp: 'label' }}
+                                placeholder='Chọn tên máy'
+                                allowClear
+                                value={draftFilters.name}
+                                onChange={(value) => setDraftFilters((prev) => ({ ...prev, name: value }))}
+                                options={names.map((n) => ({ value: n, label: n }))}
+                            />
+                        </label>
+                        <label>
+                            <span>Nhãn hiệu</span>
+                            <Select
+                                showSearch={{ optionFilterProp: 'label' }}
+                                placeholder='Chọn nhãn hiệu'
+                                allowClear
+                                value={draftFilters.brandId}
+                                onChange={(value) => setDraftFilters((prev) => ({ ...prev, brandId: value }))}
+                                options={brands.map((b) => ({ value: b.id, label: b.name }))}
+                            />
+                        </label>
+                        <label>
+                            <span>Trạng thái</span>
+                            <Select
+                                placeholder='Chọn trạng thái'
+                                allowClear
+                                value={draftFilters.status}
+                                onChange={(value) => setDraftFilters((prev) => ({ ...prev, status: value }))}
+                                options={Object.entries(statusMeta).map(([value, meta]) => ({
+                                    value,
+                                    label: meta.label,
+                                }))}
+                            />
+                        </label>
+                        <label>
+                            <span>Nguồn gốc</span>
+                            <Select
+                                placeholder='Chọn nguồn gốc'
+                                allowClear
+                                value={draftFilters.ownershipType}
+                                onChange={(value) => setDraftFilters((prev) => ({ ...prev, ownershipType: value }))}
+                                options={ASSET_OWNERSHIP_OPTIONS}
+                            />
+                        </label>
+                    </div>
+                    <div className='asset-filter-sheet__actions'>
+                        <Button onClick={handleResetMobileFilters}>Đặt lại</Button>
+                        <Button type='primary' icon={<SearchOutlined />} onClick={handleApplyMobileFilters}>
+                            Áp dụng
+                        </Button>
+                    </div>
+                </div>
+            </Drawer>
+
             <div className='al-t flex flex-col overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm'>
                 {selectedRowKeys.length > 0 && (
-                    <div className='al-sel flex items-center justify-between border-b border-blue-100 bg-blue-50 px-5 py-2.5'>
+                    <div className='al-sel asset-selection-bar flex items-center justify-between border-b border-blue-100 bg-blue-50 px-5 py-2.5'>
                         <div className='flex items-center gap-2 text-sm font-medium text-slate-700'>
                             <span className='flex h-5 w-5 items-center justify-center rounded-full bg-blue-600 text-[11px] font-bold text-white'>
                                 {selectedRowKeys.length}
                             </span>
                             thiết bị đang chọn
                         </div>
-                        <div className='flex gap-2'>
+                        <div className='asset-selection-actions flex gap-2'>
                             <Tooltip
                                 title={
                                     selectedAssets[0]?.hasOpenTransfer
@@ -836,9 +1012,14 @@ const AssetList: React.FC = () => {
                         assets.map((asset) => {
                             const transferDisabled =
                                 Boolean(asset.hasOpenTransfer) || isReturnedToPartner(asset.status);
+                            const isSelected = selectedAssetIdSet.has(asset.id);
+                            const selectionDisabled = isReturnedToPartner(asset.status);
 
                             return (
-                                <article key={asset.id} className='asset-mobile-card'>
+                                <article
+                                    key={asset.id}
+                                    className={`asset-mobile-card${isSelected ? 'asset-mobile-card--selected' : ''}`}
+                                >
                                     <button
                                         type='button'
                                         className='asset-mobile-card__main'
@@ -859,6 +1040,15 @@ const AssetList: React.FC = () => {
                                         </span>
                                     </button>
                                     <div className='asset-mobile-card__actions'>
+                                        <Button
+                                            size='small'
+                                            type={isSelected ? 'primary' : 'default'}
+                                            icon={<CheckCircleOutlined />}
+                                            disabled={selectionDisabled}
+                                            onClick={() => handleToggleMobileSelection(asset)}
+                                        >
+                                            {isSelected ? 'Bỏ chọn' : 'Chọn'}
+                                        </Button>
                                         <Button
                                             size='small'
                                             icon={<EyeOutlined />}

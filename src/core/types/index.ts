@@ -480,3 +480,105 @@ export interface PublicMachine {
         code?: string;
     };
 }
+
+// ===== QR LABEL =====
+export enum QrLabelType {
+    MACHINE = 'machine',
+}
+
+export enum QrLabelStatus {
+    UNUSED = 'unused',
+    ASSIGNED = 'assigned',
+    RETIRED = 'retired',
+    LOST = 'lost',
+    DAMAGED = 'damaged',
+}
+
+export enum QrLabelBatchStatus {
+    DRAFT = 'draft',
+    PRINTED = 'printed',
+    PARTIALLY_ASSIGNED = 'partially_assigned',
+    COMPLETED = 'completed',
+}
+
+export interface QrLabel {
+    id: string;
+    publicId: string;
+    type: QrLabelType;
+    status: QrLabelStatus;
+    assetId?: string;
+    asset?: Asset;
+    batchId?: string;
+    batchCode?: string;
+    plannedPlantId?: string;
+    plannedPlant?: Plant;
+    plannedArea?: string;
+    note?: string;
+    printedAt?: string;
+    activatedAt?: string;
+    retiredAt?: string;
+    retiredReason?: string;
+    scanCount: number;
+    lastScannedAt?: string;
+    createdAt: string;
+    updatedAt: string;
+}
+
+export interface QrLabelBatch {
+    id: string;
+    code: string;
+    type: QrLabelType;
+    quantity: number;
+    status: QrLabelBatchStatus;
+    plantId?: string;
+    plant?: Plant;
+    area?: string;
+    note?: string;
+    printedAt?: string;
+    assignedCount?: number;
+    unusedCount?: number;
+    createdAt: string;
+    updatedAt: string;
+}
+
+export interface QrBatchDetail {
+    batch: QrLabelBatch;
+    labels: QrLabel[];
+}
+
+export interface PublicQrLabel {
+    publicId: string;
+    type: QrLabelType;
+    status: QrLabelStatus;
+}
+
+export interface PublicQrResolveResponse {
+    source: 'qr_label' | 'legacy_asset';
+    publicId: string;
+    type: QrLabelType;
+    status: QrLabelStatus;
+    label?: PublicQrLabel;
+    asset?: PublicMachine;
+}
+
+export interface InternalQrResolveResponse {
+    source: 'qr_label' | 'legacy_asset';
+    publicId: string;
+    type: QrLabelType;
+    status: QrLabelStatus;
+    label?: QrLabel;
+    asset?: Asset;
+    canActivate: boolean;
+}
+
+export type CreateQrBatchPayload = {
+    type?: QrLabelType;
+    quantity: number;
+    plantId?: string;
+    area?: string;
+    note?: string;
+};
+
+export type ActivateMachineQrPayload = {
+    asset: Omit<Asset, 'id' | 'createdAt' | 'updatedAt' | 'brand' | 'plant' | 'hasOpenTransfer'>;
+};
