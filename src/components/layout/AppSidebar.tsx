@@ -1,6 +1,7 @@
 import { Badge, Button, Drawer, Layout, Tooltip, Typography } from 'antd';
 import {
     AppstoreOutlined,
+    AuditOutlined,
     BarChartOutlined,
     BellOutlined,
     BuildOutlined,
@@ -37,6 +38,7 @@ type NavigationItem = {
     description?: string;
     icon: ReactNode;
     matchMode?: 'exact' | 'prefix';
+    managerOnly?: boolean;
 };
 
 type NavigationSection = {
@@ -142,6 +144,14 @@ const navigationSections: NavigationSection[] = [
                 label: 'Máy',
                 description: 'Danh sách máy',
                 icon: <AppstoreOutlined />,
+            },
+            {
+                path: '/assets/stocktake',
+                label: 'Kiểm kê QR',
+                description: 'Quét đối chiếu hiện trường',
+                icon: <AuditOutlined />,
+                matchMode: 'exact',
+                managerOnly: true,
             },
             {
                 path: '/qr-labels',
@@ -304,14 +314,16 @@ const AppSidebar: React.FC<AppSidebarProps> = ({
     const isProcurementManager =
         Boolean(user?.plantId && procurementPlantIds.includes(user.plantId)) &&
         (user?.role === 'admin' || user?.role === 'manager' || user?.role === 'director');
+    const isMachineManager = user?.role === 'admin' || user?.role === 'manager';
 
     const visibleSections = navigationSections
         .map((section) => ({
             ...section,
             items: section.items.filter(
                 (item) =>
-                    (item.path !== '/materials/purchase-requests' && item.path !== '/materials/purchase-orders') ||
-                    isProcurementManager
+                    (!item.managerOnly || isMachineManager) &&
+                    ((item.path !== '/materials/purchase-requests' && item.path !== '/materials/purchase-orders') ||
+                        isProcurementManager)
             ),
         }))
         .filter((section) => section.items.length > 0);

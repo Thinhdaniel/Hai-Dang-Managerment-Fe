@@ -4,6 +4,7 @@ import {
     Badge,
     Button,
     Drawer,
+    Dropdown,
     Input,
     Select,
     Space,
@@ -16,6 +17,7 @@ import {
     AppstoreOutlined,
     CheckCircleOutlined,
     DeleteOutlined,
+    DownOutlined,
     DownloadOutlined,
     EditOutlined,
     EyeOutlined,
@@ -51,6 +53,7 @@ const AssetFormModal = lazy(() => import('../components/AssetFormModal'));
 const AssetImportModal = lazy(() => import('../components/AssetImportModal'));
 const TransferModal = lazy(() => import('../components/transfer/TransferModal'));
 const QrScanLookupModal = lazy(() => import('../components/QrScanLookupModal'));
+const QrQuickUpdateModal = lazy(() => import('../components/QrQuickUpdateModal'));
 
 const { Text } = Typography;
 
@@ -167,6 +170,7 @@ const AssetList: React.FC = () => {
     const initialSearch = normalizeSearchTerm(searchParams.get('search'));
     const canManageAssets = isAdmin(role);
     const canExportImport = hasManagerAccess(role);
+    const canQuickUpdate = hasManagerAccess(role);
     const [selectedRowKeys, setSelectedRowKeys] = useState<React.Key[]>([]);
     const [selectedAssetMap, setSelectedAssetMap] = useState<Record<string, Asset>>({});
     const [isFormModalOpen, setIsFormModalOpen] = useState(false);
@@ -174,9 +178,11 @@ const AssetList: React.FC = () => {
     const [isMobileFilterOpen, setIsMobileFilterOpen] = useState(false);
     const [isTransferModalOpen, setIsTransferModalOpen] = useState(false);
     const [isScanLookupOpen, setIsScanLookupOpen] = useState(false);
+    const [scanMode, setScanMode] = useState<'profile' | 'quick'>('profile');
     const [editingAsset, setEditingAsset] = useState<Asset | null>(null);
     const [transferTarget, setTransferTarget] = useState<Asset | null>(null);
     const [transferTargets, setTransferTargets] = useState<Asset[]>([]);
+    const [quickUpdateAsset, setQuickUpdateAsset] = useState<Asset | null>(null);
     const [qrAsset, setQrAsset] = useState<Asset | null>(null);
     const [qrLoadingAssetId, setQrLoadingAssetId] = useState<string | null>(null);
     const [filters, setFilters] = useState(() => createDefaultFilters(initialSearch));
@@ -534,6 +540,11 @@ const AssetList: React.FC = () => {
         }
     };
 
+    const handleOpenScan = (mode: 'profile' | 'quick') => {
+        setScanMode(mode);
+        setIsScanLookupOpen(true);
+    };
+
     const handleDelete = async (assetId: string) => {
         await deleteMutation.mutateAsync(assetId);
         message.success('Đã xóa thiết bị');
@@ -743,13 +754,37 @@ const AssetList: React.FC = () => {
                     subtitle='Theo dõi và quản lý toàn bộ thiết bị trong nhà máy'
                     actions={
                         <Space wrap size={8}>
-                            <Button
-                                icon={<ScanOutlined />}
-                                onClick={() => setIsScanLookupOpen(true)}
-                                className='rounded-lg border-blue-200 font-medium text-blue-600 hover:!border-blue-300 hover:!text-blue-700'
-                            >
-                                Quét QR
-                            </Button>
+                            {canQuickUpdate ? (
+                                <Dropdown
+                                    trigger={['click']}
+                                    menu={{
+                                        items: [
+                                            { key: 'profile', label: 'Quét mở hồ sơ', icon: <EyeOutlined /> },
+                                            {
+                                                key: 'quick',
+                                                label: 'Quét cập nhật nhanh',
+                                                icon: <ToolOutlined />,
+                                            },
+                                        ],
+                                        onClick: ({ key }) => handleOpenScan(key as 'profile' | 'quick'),
+                                    }}
+                                >
+                                    <Button
+                                        icon={<ScanOutlined />}
+                                        className='rounded-lg border-blue-200 font-medium text-blue-600 hover:!border-blue-300 hover:!text-blue-700'
+                                    >
+                                        Quét QR <DownOutlined />
+                                    </Button>
+                                </Dropdown>
+                            ) : (
+                                <Button
+                                    icon={<ScanOutlined />}
+                                    onClick={() => handleOpenScan('profile')}
+                                    className='rounded-lg border-blue-200 font-medium text-blue-600 hover:!border-blue-300 hover:!text-blue-700'
+                                >
+                                    Quét QR
+                                </Button>
+                            )}
                             {canExportImport ? (
                                 <>
                                     <Button
@@ -1236,9 +1271,37 @@ const AssetList: React.FC = () => {
                     <QrScanLookupModal
                         open={isScanLookupOpen}
                         onClose={() => setIsScanLookupOpen(false)}
+                        title={scanMode === 'quick' ? 'Quét QR cập nhật nhanh' : 'Quét QR mở hồ sơ máy'}
+                        subtitle={
+                            scanMode === 'quick'
+                                ? 'Quét hoặc nhập mã máy để đổi nhanh trạng thái/khu vực'
+                                : 'Đưa tem QR trên máy vào khung để mở nhanh chi tiết'
+                        }
+                        successMessage={(asset) =>
+                            scanMode === 'quick' ? `Đã nhận diện "${asset.name}"` : `Mở hồ sơ "${asset.name}"`
+                        }
                         onResolved={(asset) => {
                             setIsScanLookupOpen(false);
+                            if (scanMode === 'quick') {
+                                setQuickUpdateAsset(asset);
+                                return;
+                            }
                             navigate(`/assets/${asset.id}`);
+                        }}
+                    />
+                </LazyBoundary>
+            ) : null}
+
+            {quickUpdateAsset ? (
+                <LazyBoundary mode='overlay'>
+                    <QrQuickUpdateModal
+                        open={Boolean(quickUpdateAsset)}
+                        asset={quickUpdateAsset}
+                        onClose={() => setQuickUpdateAsset(null)}
+                        onUpdated={(asset) => setQuickUpdateAsset(asset)}
+                        onScanNext={() => {
+                            setQuickUpdateAsset(null);
+                            handleOpenScan('quick');
                         }}
                     />
                 </LazyBoundary>

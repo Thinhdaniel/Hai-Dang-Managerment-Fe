@@ -22,6 +22,13 @@ export const PAGE_META: PageMeta[] = [
         searchPlaceholder: 'Tìm theo tên máy, mã máy, serial...',
     },
     {
+        path: '/assets/stocktake',
+        title: 'Kiểm Kê QR',
+        subtitle: 'Quét tem QR tại hiện trường để đối chiếu máy có mặt, thiếu và sai vị trí.',
+        breadcrumbs: ['Dashboard', 'Quản lý máy', 'Kiểm kê QR'],
+        searchPlaceholder: 'Quét hoặc nhập mã máy...',
+    },
+    {
         path: '/assets/:id',
         title: 'Chi Tiết Thiết Bị',
         subtitle: 'Theo dõi hồ sơ, trạng thái và lịch sử hoạt động của thiết bị.',

@@ -9,9 +9,19 @@ type QrScanLookupModalProps = {
     open: boolean;
     onClose: () => void;
     onResolved: (asset: Asset) => void;
+    title?: string;
+    subtitle?: string;
+    successMessage?: (asset: Asset) => string;
 };
 
-const QrScanLookupModal: React.FC<QrScanLookupModalProps> = ({ open, onClose, onResolved }) => {
+const QrScanLookupModal: React.FC<QrScanLookupModalProps> = ({
+    open,
+    onClose,
+    onResolved,
+    title = 'Quét QR mở hồ sơ máy',
+    subtitle = 'Đưa tem QR trên máy vào khung để mở nhanh chi tiết',
+    successMessage = (asset) => `Mở hồ sơ "${asset.name}"`,
+}) => {
     const { message } = App.useApp();
     const [resolving, setResolving] = useState(false);
 
@@ -28,7 +38,7 @@ const QrScanLookupModal: React.FC<QrScanLookupModalProps> = ({ open, onClose, on
                 }
                 return;
             }
-            message.success(`Mở hồ sơ "${asset.name}"`);
+            message.success(successMessage(asset));
             onResolved(asset);
         } finally {
             setResolving(false);
@@ -49,10 +59,8 @@ const QrScanLookupModal: React.FC<QrScanLookupModalProps> = ({ open, onClose, on
                         <ScanOutlined />
                     </div>
                     <div>
-                        <div className='text-base font-bold text-slate-900'>Quét QR mở hồ sơ máy</div>
-                        <div className='text-xs font-normal text-slate-500'>
-                            Đưa tem QR trên máy vào khung để mở nhanh chi tiết
-                        </div>
+                        <div className='text-base font-bold text-slate-900'>{title}</div>
+                        <div className='text-xs font-normal text-slate-500'>{subtitle}</div>
                     </div>
                 </div>
             }

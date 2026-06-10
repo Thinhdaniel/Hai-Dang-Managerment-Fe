@@ -8,6 +8,7 @@ import ProtectedRoute from './guard';
 const Dashboard = lazy(() => import('../pages/Dashboard'));
 const AssetList = lazy(() => import('../pages/AssetList'));
 const AssetDetail = lazy(() => import('../pages/AssetDetail'));
+const StocktakePage = lazy(() => import('../pages/StocktakePage'));
 const BrandList = lazy(() => import('../pages/BrandList'));
 const MaintenanceList = lazy(() => import('../pages/MaintenanceList'));
 const TransferList = lazy(() => import('../pages/TransferList'));
@@ -73,6 +74,7 @@ export const router = createBrowserRouter([
             { index: true, element: <Navigate to='/dashboard' replace /> },
             { path: 'dashboard', element: withSuspense(<Dashboard />) },
             { path: 'assets', element: withSuspense(<AssetList />) },
+            { path: 'assets/stocktake', element: withSuspense(<StocktakePage />) },
             { path: 'assets/:id', element: withSuspense(<AssetDetail />) },
             { path: 'qr-labels', element: withSuspense(<QrLabelListPage />) },
             { path: 'qr-labels/batches/:id/print', element: withSuspense(<QrBatchPrintPage />) },
