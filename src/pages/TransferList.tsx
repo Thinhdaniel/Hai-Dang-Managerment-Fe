@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { lazy, useState } from 'react';
 import {
     App,
     Badge,
@@ -21,6 +21,7 @@ import {
     EyeOutlined,
     FilterOutlined,
     ReloadOutlined,
+    ScanOutlined,
     SearchOutlined,
     StopOutlined,
     SwapOutlined,
@@ -30,6 +31,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import PageHeader from '../components/shared/PageHeader';
 import ConfirmAction from '../components/shared/ConfirmAction';
+import LazyBoundary from '../components/shared/LazyBoundary';
 import TransferStatusBadge from '../components/transfer/TransferStatusBadge';
 import HandoverModal from '../components/transfer/HandoverModal';
 import { transferStatusOptions } from '../core/constants/transfer';
@@ -37,7 +39,10 @@ import { useAuth } from '../core/contexts/AuthContext';
 import { hasManagerAccess } from '../core/lib/permissions';
 import { plantService } from '../core/services';
 import { transferService } from '../core/services/transfer.service';
-import type { Transfer, TransferFilter } from '../core/types';
+import type { Asset, CreateTransferPayload, Transfer, TransferFilter } from '../core/types';
+
+const TransferModal = lazy(() => import('../components/transfer/TransferModal'));
+const ScanTransferModal = lazy(() => import('../components/transfer/ScanTransferModal'));
 
 const { Text } = Typography;
 
@@ -105,6 +110,9 @@ const TransferList: React.FC = () => {
         reason: '',
     });
     const [handoverTransfer, setHandoverTransfer] = useState<Transfer | null>(null);
+    const [isScanOpen, setIsScanOpen] = useState(false);
+    const [scannedAssets, setScannedAssets] = useState<Asset[]>([]);
+    const [isTransferModalOpen, setIsTransferModalOpen] = useState(false);
     const canManageTransfers = hasManagerAccess(role);
 
     const { data: plants = [] } = useQuery({
@@ -171,6 +179,28 @@ const TransferList: React.FC = () => {
             queryClient.invalidateQueries({ queryKey: ['assets'] });
         },
     });
+
+    const createTransferMutation = useMutation({
+        mutationFn: transferService.create,
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['transfers'] });
+            queryClient.invalidateQueries({ queryKey: ['transfers-stats'] });
+            queryClient.invalidateQueries({ queryKey: ['assets'] });
+        },
+    });
+
+    const handleScanProceed = (assets: Asset[]) => {
+        setScannedAssets(assets);
+        setIsScanOpen(false);
+        setIsTransferModalOpen(true);
+    };
+
+    const handleScanTransferSubmit = async (payload: CreateTransferPayload) => {
+        await createTransferMutation.mutateAsync(payload);
+        message.success('Đã tạo lệnh điều chuyển từ QR');
+        setIsTransferModalOpen(false);
+        setScannedAssets([]);
+    };
 
     const transfers = transferResponse?.data ?? [];
     const currentPage = transferResponse?.page ?? filters.page;
@@ -507,13 +537,24 @@ const TransferList: React.FC = () => {
                 title='Điều Chuyển Thiết Bị'
                 subtitle='Theo dõi và quản lý toàn bộ lệnh điều chuyển phát sinh từ hệ thống.'
                 actions={
-                    <Button
-                        type='primary'
-                        onClick={() => navigate('/assets')}
-                        className='rounded-lg border-none bg-blue-600 font-medium shadow-sm hover:bg-blue-700'
-                    >
-                        Tạo từ danh sách máy
-                    </Button>
+                    <div className='flex flex-wrap gap-2'>
+                        {canManageTransfers ? (
+                            <Button
+                                icon={<ScanOutlined />}
+                                onClick={() => setIsScanOpen(true)}
+                                className='rounded-lg border-blue-200 font-medium text-blue-600 hover:!border-blue-300 hover:!text-blue-700'
+                            >
+                                Quét QR điều chuyển
+                            </Button>
+                        ) : null}
+                        <Button
+                            type='primary'
+                            onClick={() => navigate('/assets')}
+                            className='rounded-lg border-none bg-blue-600 font-medium shadow-sm hover:bg-blue-700'
+                        >
+                            Tạo từ danh sách máy
+                        </Button>
+                    </div>
                 }
             />
 
@@ -881,6 +922,33 @@ const TransferList: React.FC = () => {
                 onClose={() => setHandoverTransfer(null)}
                 onSubmit={handleHandoverSubmit}
             />
+
+            {isScanOpen ? (
+                <LazyBoundary mode='overlay'>
+                    <ScanTransferModal
+                        open={isScanOpen}
+                        onClose={() => setIsScanOpen(false)}
+                        onProceed={handleScanProceed}
+                    />
+                </LazyBoundary>
+            ) : null}
+
+            {isTransferModalOpen ? (
+                <LazyBoundary mode='overlay'>
+                    <TransferModal
+                        open={isTransferModalOpen}
+                        asset={scannedAssets[0] ?? null}
+                        assets={scannedAssets}
+                        plants={plants}
+                        submitting={createTransferMutation.isPending}
+                        onClose={() => {
+                            setIsTransferModalOpen(false);
+                            setScannedAssets([]);
+                        }}
+                        onSubmit={handleScanTransferSubmit}
+                    />
+                </LazyBoundary>
+            ) : null}
         </div>
     );
 };

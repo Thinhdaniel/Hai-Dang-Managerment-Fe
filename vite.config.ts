@@ -51,6 +51,11 @@ export default defineConfig({
                             return 'vendor-query';
                         }
 
+                        // zxing chi dung cho quet QR (ScanTransferModal lazy) -> tach chunk rieng, tai khi can
+                        if (normalizedId.includes('/node_modules/@zxing/')) {
+                            return 'vendor-zxing';
+                        }
+
                         if (
                             normalizedId.includes('/node_modules/jspdf/') ||
                             normalizedId.includes('/node_modules/fflate/') ||

@@ -24,6 +24,7 @@ import {
     PlusOutlined,
     QrcodeOutlined,
     ReloadOutlined,
+    ScanOutlined,
     SearchOutlined,
     SwapOutlined,
     ToolOutlined,
@@ -35,6 +36,8 @@ import ConfirmAction from '../components/shared/ConfirmAction';
 import LazyBoundary from '../components/shared/LazyBoundary';
 import PageHeader from '../components/shared/PageHeader';
 import AssetQrModal from '../components/AssetQrModal';
+import AssetAiSearchBar from '../components/AssetAiSearchBar';
+import type { AiAssetSearchFilters } from '../core/services/ai-help.service';
 import { useAuth } from '../core/contexts/AuthContext';
 import { hasManagerAccess, isAdmin } from '../core/lib/permissions';
 import { normalizeSearchTerm } from '../core/lib/search';
@@ -47,6 +50,7 @@ import { AssetOwnershipType, AssetStatus, type Asset, type CreateTransferPayload
 const AssetFormModal = lazy(() => import('../components/AssetFormModal'));
 const AssetImportModal = lazy(() => import('../components/AssetImportModal'));
 const TransferModal = lazy(() => import('../components/transfer/TransferModal'));
+const QrScanLookupModal = lazy(() => import('../components/QrScanLookupModal'));
 
 const { Text } = Typography;
 
@@ -169,6 +173,7 @@ const AssetList: React.FC = () => {
     const [isImportModalOpen, setIsImportModalOpen] = useState(false);
     const [isMobileFilterOpen, setIsMobileFilterOpen] = useState(false);
     const [isTransferModalOpen, setIsTransferModalOpen] = useState(false);
+    const [isScanLookupOpen, setIsScanLookupOpen] = useState(false);
     const [editingAsset, setEditingAsset] = useState<Asset | null>(null);
     const [transferTarget, setTransferTarget] = useState<Asset | null>(null);
     const [transferTargets, setTransferTargets] = useState<Asset[]>([]);
@@ -378,6 +383,21 @@ const AssetList: React.FC = () => {
         const resetValue = createDefaultFilters();
         setDraftFilters(resetValue);
         setFilters(resetValue);
+    };
+
+    const handleAiApply = (aiFilters: AiAssetSearchFilters) => {
+        const nextFilters = {
+            ...createDefaultFilters(),
+            search: aiFilters.search ?? '',
+            status: (aiFilters.status as AssetStatus | undefined) ?? undefined,
+            plantId: aiFilters.plantId ?? undefined,
+            brandId: aiFilters.brandId ?? undefined,
+            ownershipType: (aiFilters.ownershipType as AssetOwnershipType | undefined) ?? undefined,
+            page: 1,
+        };
+
+        setDraftFilters(nextFilters);
+        setFilters(nextFilters);
     };
 
     const handleApplyMobileFilters = () => {
@@ -722,36 +742,49 @@ const AssetList: React.FC = () => {
                     title='Quản Lý Thiết Bị'
                     subtitle='Theo dõi và quản lý toàn bộ thiết bị trong nhà máy'
                     actions={
-                        canExportImport ? (
-                            <Space wrap size={8}>
-                                <Button
-                                    icon={<DownloadOutlined />}
-                                    onClick={handleExport}
-                                    className='rounded-lg border-slate-200 text-slate-600'
-                                >
-                                    Export Excel
-                                </Button>
-                                <Button
-                                    icon={<InboxOutlined />}
-                                    onClick={() => setIsImportModalOpen(true)}
-                                    className='rounded-lg border-slate-200 text-slate-600'
-                                >
-                                    Import Excel
-                                </Button>
-                                {canManageAssets ? (
+                        <Space wrap size={8}>
+                            <Button
+                                icon={<ScanOutlined />}
+                                onClick={() => setIsScanLookupOpen(true)}
+                                className='rounded-lg border-blue-200 font-medium text-blue-600 hover:!border-blue-300 hover:!text-blue-700'
+                            >
+                                Quét QR
+                            </Button>
+                            {canExportImport ? (
+                                <>
                                     <Button
-                                        type='primary'
-                                        icon={<PlusOutlined />}
-                                        onClick={handleOpenCreate}
-                                        className='rounded-lg bg-blue-600 hover:!bg-blue-700'
+                                        icon={<DownloadOutlined />}
+                                        onClick={handleExport}
+                                        className='rounded-lg border-slate-200 text-slate-600'
                                     >
-                                        Thêm thiết bị
+                                        Export Excel
                                     </Button>
-                                ) : null}
-                            </Space>
-                        ) : undefined
+                                    <Button
+                                        icon={<InboxOutlined />}
+                                        onClick={() => setIsImportModalOpen(true)}
+                                        className='rounded-lg border-slate-200 text-slate-600'
+                                    >
+                                        Import Excel
+                                    </Button>
+                                </>
+                            ) : null}
+                            {canManageAssets ? (
+                                <Button
+                                    type='primary'
+                                    icon={<PlusOutlined />}
+                                    onClick={handleOpenCreate}
+                                    className='rounded-lg bg-blue-600 hover:!bg-blue-700'
+                                >
+                                    Thêm thiết bị
+                                </Button>
+                            ) : null}
+                        </Space>
                     }
                 />
+            </div>
+
+            <div className='al-s'>
+                <AssetAiSearchBar onApply={handleAiApply} onReset={resetFilters} />
             </div>
 
             {/* Stats count strip — reflects current applied filter */}
@@ -1196,6 +1229,19 @@ const AssetList: React.FC = () => {
                     publicId={qrAsset.publicId}
                     onClose={() => setQrAsset(null)}
                 />
+            ) : null}
+
+            {isScanLookupOpen ? (
+                <LazyBoundary mode='overlay'>
+                    <QrScanLookupModal
+                        open={isScanLookupOpen}
+                        onClose={() => setIsScanLookupOpen(false)}
+                        onResolved={(asset) => {
+                            setIsScanLookupOpen(false);
+                            navigate(`/assets/${asset.id}`);
+                        }}
+                    />
+                </LazyBoundary>
             ) : null}
         </div>
     );

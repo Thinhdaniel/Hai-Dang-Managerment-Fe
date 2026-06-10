@@ -26,3 +26,34 @@ export const aiHelpService = {
             timeout: 90000,
         }),
 };
+
+export type AiAssetSearchFilters = {
+    search?: string;
+    status?: string;
+    ownershipType?: string;
+    plantId?: string;
+    brandId?: string;
+};
+
+export type AiAssetSearchResponse = {
+    filters: AiAssetSearchFilters;
+    intent: 'search' | 'create_transfer';
+    explanation: string;
+    matchedPlantName?: string;
+    matchedBrandName?: string;
+    statusLabel?: string;
+    ownershipLabel?: string;
+    suggestedActions: { label: string; hint: string }[];
+    provider: 'ollama' | 'fallback';
+};
+
+export const aiAssetSearchService = {
+    search: (query: string): Promise<AiAssetSearchResponse> =>
+        api.post<AiAssetSearchResponse, { query: string }>(
+            '/ai/asset-search',
+            { query },
+            {
+                timeout: 75000,
+            }
+        ),
+};
