@@ -1,5 +1,7 @@
 // Chuông báo khi có thông báo mới (Web Audio API - không cần file âm thanh).
-const STORAGE_KEY = 'notification_sound_enabled';
+// Hỗ trợ nhiều kiểu chuông có sẵn, người dùng chọn trong panel thông báo.
+const ENABLED_KEY = 'notification_sound_enabled';
+const SOUND_ID_KEY = 'notification_sound_id';
 const MIN_INTERVAL_MS = 1200; // chống phát chồng khi nhiều thông báo tới dồn
 
 let audioContext: AudioContext | null = null;
@@ -11,14 +13,75 @@ const getAudioContextCtor = (): AudioContextCtor | undefined =>
     (window as unknown as { AudioContext?: AudioContextCtor; webkitAudioContext?: AudioContextCtor }).AudioContext ??
     (window as unknown as { webkitAudioContext?: AudioContextCtor }).webkitAudioContext;
 
+type Note = { freq: number; at: number; dur: number; type?: OscillatorType; gain?: number };
+
+// Một preset chuông = danh sách nốt phát tuần tự/chồng nhau.
+type SoundPreset = { id: string; label: string; notes: Note[] };
+
+export const NOTIFICATION_SOUNDS: SoundPreset[] = [
+    {
+        id: 'chime',
+        label: 'Ting nhẹ',
+        notes: [
+            { freq: 880, at: 0, dur: 0.35 },
+            { freq: 1174.66, at: 0.12, dur: 0.35 },
+        ],
+    },
+    {
+        id: 'dingdong',
+        label: 'Ding-dong',
+        notes: [
+            { freq: 1318.51, at: 0, dur: 0.45 },
+            { freq: 987.77, at: 0.2, dur: 0.55 },
+        ],
+    },
+    {
+        id: 'bell',
+        label: 'Chuông ngân',
+        notes: [
+            { freq: 784, at: 0, dur: 0.9, gain: 0.18 },
+            { freq: 1568, at: 0, dur: 0.7, gain: 0.05 },
+        ],
+    },
+    {
+        id: 'pop',
+        label: 'Pop ngắn',
+        notes: [{ freq: 660, at: 0, dur: 0.14, type: 'triangle', gain: 0.22 }],
+    },
+    {
+        id: 'alert',
+        label: 'Báo gấp (3 tiếng)',
+        notes: [
+            { freq: 920, at: 0, dur: 0.1, type: 'triangle', gain: 0.16 },
+            { freq: 920, at: 0.16, dur: 0.1, type: 'triangle', gain: 0.16 },
+            { freq: 920, at: 0.32, dur: 0.1, type: 'triangle', gain: 0.16 },
+        ],
+    },
+];
+
+const DEFAULT_SOUND_ID = 'chime';
+
+const findPreset = (id: string) => NOTIFICATION_SOUNDS.find((sound) => sound.id === id) ?? NOTIFICATION_SOUNDS[0];
+
 export const isNotificationSoundEnabled = (): boolean => {
     if (typeof window === 'undefined') return false;
-    return window.localStorage.getItem(STORAGE_KEY) !== 'false'; // mặc định bật
+    return window.localStorage.getItem(ENABLED_KEY) !== 'false'; // mặc định bật
 };
 
 export const setNotificationSoundEnabled = (enabled: boolean) => {
     if (typeof window === 'undefined') return;
-    window.localStorage.setItem(STORAGE_KEY, enabled ? 'true' : 'false');
+    window.localStorage.setItem(ENABLED_KEY, enabled ? 'true' : 'false');
+};
+
+export const getNotificationSoundId = (): string => {
+    if (typeof window === 'undefined') return DEFAULT_SOUND_ID;
+    const stored = window.localStorage.getItem(SOUND_ID_KEY);
+    return stored && NOTIFICATION_SOUNDS.some((sound) => sound.id === stored) ? stored : DEFAULT_SOUND_ID;
+};
+
+export const setNotificationSoundId = (id: string) => {
+    if (typeof window === 'undefined') return;
+    window.localStorage.setItem(SOUND_ID_KEY, id);
 };
 
 const ensureContext = (): AudioContext | null => {
@@ -34,30 +97,24 @@ const ensureContext = (): AudioContext | null => {
     return audioContext;
 };
 
-// Chime 2 nốt nhẹ nhàng (A5 -> D6)
-const playChime = (ctx: AudioContext) => {
+const playPreset = (ctx: AudioContext, preset: SoundPreset) => {
     const now = ctx.currentTime;
-    const notes = [
-        { freq: 880, at: 0 },
-        { freq: 1174.66, at: 0.12 },
-    ];
-
-    notes.forEach(({ freq, at }) => {
+    preset.notes.forEach(({ freq, at, dur, type = 'sine', gain = 0.16 }) => {
         const osc = ctx.createOscillator();
-        const gain = ctx.createGain();
-        osc.type = 'sine';
+        const gainNode = ctx.createGain();
+        osc.type = type;
         osc.frequency.value = freq;
-        gain.gain.setValueAtTime(0, now + at);
-        gain.gain.linearRampToValueAtTime(0.16, now + at + 0.02);
-        gain.gain.exponentialRampToValueAtTime(0.0001, now + at + 0.35);
-        osc.connect(gain).connect(ctx.destination);
+        gainNode.gain.setValueAtTime(0, now + at);
+        gainNode.gain.linearRampToValueAtTime(gain, now + at + 0.02);
+        gainNode.gain.exponentialRampToValueAtTime(0.0001, now + at + dur);
+        osc.connect(gainNode).connect(ctx.destination);
         osc.start(now + at);
-        osc.stop(now + at + 0.4);
+        osc.stop(now + at + dur + 0.05);
     });
 };
 
-// Phát chuông; force=true để nghe thử (bỏ qua throttle nhưng vẫn theo cài đặt bật/tắt)
-export const playNotificationSound = (options?: { force?: boolean }) => {
+// Phát chuông; force=true để nghe thử (bỏ qua throttle). soundId để nghe thử một kiểu cụ thể.
+export const playNotificationSound = (options?: { force?: boolean; soundId?: string }) => {
     if (!isNotificationSoundEnabled()) return;
 
     const now = Date.now();
@@ -67,7 +124,7 @@ export const playNotificationSound = (options?: { force?: boolean }) => {
     const ctx = ensureContext();
     if (!ctx) return;
     try {
-        playChime(ctx);
+        playPreset(ctx, findPreset(options?.soundId ?? getNotificationSoundId()));
     } catch {
         // Bỏ qua nếu trình duyệt chặn (chưa có tương tác người dùng)
     }
