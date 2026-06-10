@@ -7,6 +7,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { queryClient } from '../queryClient';
 import { syncAppBadge } from '../lib/app-badge';
 import { playNotificationSound, primeNotificationSound } from '../lib/notificationSound';
+import type { Asset } from '../types';
 
 // Socket event names
 const NOTIFICATION_EVENTS = {
@@ -15,7 +16,39 @@ const NOTIFICATION_EVENTS = {
     CLEARED: 'notify:cleared',
     MARK_READ: 'notify:mark-read',
     CLEAR: 'notify:clear',
+    ASSET_CREATED: 'asset:created',
+    ASSET_UPDATED: 'asset:updated',
+    ASSET_DELETED: 'asset:deleted',
 } as const;
+
+type AssetRealtimePayload = {
+    assetId?: string;
+    asset?: Asset;
+    action?: string;
+    changedFields?: string[];
+    updatedAt?: string;
+};
+
+const invalidateAssetQueries = (payload?: AssetRealtimePayload) => {
+    const assetId = payload?.assetId ?? payload?.asset?.id;
+
+    if (payload?.asset?.id && payload.action !== 'deleted') {
+        queryClient.setQueryData(['asset', payload.asset.id], payload.asset);
+    }
+
+    queryClient.invalidateQueries({ queryKey: ['assets'] });
+    queryClient.invalidateQueries({ queryKey: ['asset-stat'] });
+    queryClient.invalidateQueries({ queryKey: ['asset-models'] });
+    queryClient.invalidateQueries({ queryKey: ['stocktake-assets'] });
+    queryClient.invalidateQueries({ queryKey: ['dashboard'] });
+
+    if (assetId) {
+        queryClient.invalidateQueries({ queryKey: ['asset', assetId] });
+        queryClient.invalidateQueries({ queryKey: ['transfers', 'asset', assetId] });
+        queryClient.invalidateQueries({ queryKey: ['maintenances', 'asset', assetId] });
+        queryClient.invalidateQueries({ queryKey: ['borrowings', 'asset', assetId] });
+    }
+};
 
 export const useNotifications = (socket: import('socket.io-client').Socket | null) => {
     const store = useNotificationStore();
@@ -110,10 +143,28 @@ export const useNotifications = (socket: import('socket.io-client').Socket | nul
             store.clearNotifications();
         });
 
+        const unsubscribeAssetCreated = socketService.on<AssetRealtimePayload>(
+            NOTIFICATION_EVENTS.ASSET_CREATED,
+            invalidateAssetQueries
+        );
+
+        const unsubscribeAssetUpdated = socketService.on<AssetRealtimePayload>(
+            NOTIFICATION_EVENTS.ASSET_UPDATED,
+            invalidateAssetQueries
+        );
+
+        const unsubscribeAssetDeleted = socketService.on<AssetRealtimePayload>(
+            NOTIFICATION_EVENTS.ASSET_DELETED,
+            invalidateAssetQueries
+        );
+
         return () => {
             unsubscribeNew();
             unsubscribeRead();
             unsubscribeCleared();
+            unsubscribeAssetCreated();
+            unsubscribeAssetUpdated();
+            unsubscribeAssetDeleted();
         };
     }, [isAuthenticated, socket]);
 
