@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { Button, Drawer, Empty, FloatButton, Input, Tag, Typography } from 'antd';
+import { Button, Drawer, Empty, Input, Tag, Typography } from 'antd';
 import {
     BookOutlined,
     BulbOutlined,
@@ -8,7 +8,6 @@ import {
     FileSearchOutlined,
     LoadingOutlined,
     MessageOutlined,
-    QuestionCircleOutlined,
     SendOutlined,
 } from '@ant-design/icons';
 import { useLocation } from 'react-router-dom';
@@ -371,13 +370,26 @@ const HelpAssistant = () => {
 
     return (
         <>
-            <FloatButton
-                type='primary'
-                icon={<QuestionCircleOutlined />}
-                tooltip='Trợ lý hướng dẫn'
+            <button
+                type='button'
+                aria-label='Mở trợ lý hướng dẫn'
+                title='Trợ lý hướng dẫn'
                 onClick={() => setOpen(true)}
-                className='app-help-float-button'
-            />
+                className='app-help-float-button help-assistant-launcher'
+            >
+                <span className='help-assistant-launcher__halo help-assistant-launcher__halo--outer' />
+                <span className='help-assistant-launcher__halo help-assistant-launcher__halo--inner' />
+                <span className='help-assistant-launcher__particle help-assistant-launcher__particle--one' />
+                <span className='help-assistant-launcher__particle help-assistant-launcher__particle--two' />
+                <span className='help-assistant-launcher__particle help-assistant-launcher__particle--three' />
+                <span className='help-assistant-launcher__core'>
+                    <span className='help-assistant-launcher__beam help-assistant-launcher__beam--one' />
+                    <span className='help-assistant-launcher__beam help-assistant-launcher__beam--two' />
+                    <span className='help-assistant-launcher__shine' />
+                    <MessageOutlined className='help-assistant-launcher__icon' />
+                    <span className='help-assistant-launcher__status'>AI</span>
+                </span>
+            </button>
 
             <Drawer
                 open={open}

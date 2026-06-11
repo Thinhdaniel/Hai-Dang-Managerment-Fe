@@ -110,6 +110,29 @@ type MaterialOptionData = {
     item: MaterialSearchItem;
 };
 
+type MaterialMatchSource = {
+    materialId?: string;
+    materialName?: string;
+    unit?: string;
+};
+
+type MaterialCatalogMatch = {
+    status: 'matched' | 'suggested' | 'ambiguous' | 'unmatched';
+    material?: MaterialSearchItem;
+    confidence: number;
+    reason: string;
+    candidateCount: number;
+};
+
+type MaterialMatcher = {
+    materialSearchIndex: MaterialSearchItem[];
+    materialById: Map<string, MaterialSearchItem>;
+    materialByCode: Map<string, MaterialSearchItem[]>;
+    materialByCodeCompact: Map<string, MaterialSearchItem[]>;
+    materialByName: Map<string, MaterialSearchItem[]>;
+    materialByNameUnit: Map<string, MaterialSearchItem[]>;
+};
+
 const getMaterialList = (r?: Material[] | PaginatedResponse<Material>) =>
     Array.isArray(r) ? r : ((r as PaginatedResponse<Material> | undefined)?.data ?? []);
 
@@ -165,6 +188,129 @@ const scoreMaterial = (item: MaterialSearchItem, query: string) => {
     });
 
     return score;
+};
+
+const pushToMaterialMap = (map: Map<string, MaterialSearchItem[]>, key: string, item: MaterialSearchItem) => {
+    if (!key) return;
+    const list = map.get(key) ?? [];
+    list.push(item);
+    map.set(key, list);
+};
+
+const uniqueMaterial = (items?: MaterialSearchItem[]) => (items?.length === 1 ? items[0] : undefined);
+
+const materialNameUnitKey = (name?: string | number | null, unit?: string | number | null) =>
+    `${normalizeSearchText(name)}::${normalizeSearchText(unit)}`;
+
+const buildMaterialMatcher = (materialSearchIndex: MaterialSearchItem[]): MaterialMatcher => {
+    const materialById = new Map<string, MaterialSearchItem>();
+    const materialByCode = new Map<string, MaterialSearchItem[]>();
+    const materialByCodeCompact = new Map<string, MaterialSearchItem[]>();
+    const materialByName = new Map<string, MaterialSearchItem[]>();
+    const materialByNameUnit = new Map<string, MaterialSearchItem[]>();
+
+    materialSearchIndex.forEach((item) => {
+        materialById.set(item.id, item);
+        pushToMaterialMap(materialByCode, item.codeNorm, item);
+        pushToMaterialMap(materialByCodeCompact, item.codeCompact, item);
+        pushToMaterialMap(materialByName, item.nameNorm, item);
+        pushToMaterialMap(materialByNameUnit, materialNameUnitKey(item.name, item.unit), item);
+    });
+
+    return {
+        materialSearchIndex,
+        materialById,
+        materialByCode,
+        materialByCodeCompact,
+        materialByName,
+        materialByNameUnit,
+    };
+};
+
+const findSmartMaterialMatch = (row: MaterialMatchSource, matcher: MaterialMatcher): MaterialCatalogMatch => {
+    if (row.materialId) {
+        const selected = matcher.materialById.get(row.materialId);
+        return selected
+            ? {
+                  status: 'matched',
+                  material: selected,
+                  confidence: 100,
+                  reason: 'selected_material_id',
+                  candidateCount: 1,
+              }
+            : { status: 'unmatched', confidence: 0, reason: 'missing_material_id', candidateCount: 0 };
+    }
+
+    const nameNorm = normalizeSearchText(row.materialName);
+    const nameCompact = compactSearchText(row.materialName);
+    const unitNorm = normalizeSearchText(row.unit);
+    if (!nameNorm) {
+        return { status: 'unmatched', confidence: 0, reason: 'empty_name', candidateCount: 0 };
+    }
+
+    const exactCode =
+        uniqueMaterial(matcher.materialByCode.get(nameNorm)) ??
+        uniqueMaterial(matcher.materialByCodeCompact.get(nameCompact));
+    if (exactCode) {
+        return { status: 'matched', material: exactCode, confidence: 100, reason: 'exact_code', candidateCount: 1 };
+    }
+
+    const exactNameUnit = unitNorm
+        ? uniqueMaterial(matcher.materialByNameUnit.get(materialNameUnitKey(nameNorm, unitNorm)))
+        : undefined;
+    if (exactNameUnit) {
+        return {
+            status: 'matched',
+            material: exactNameUnit,
+            confidence: 98,
+            reason: 'exact_name_unit',
+            candidateCount: 1,
+        };
+    }
+
+    const exactNameCandidates = matcher.materialByName.get(nameNorm) ?? [];
+    const exactName = uniqueMaterial(exactNameCandidates);
+    if (exactName) {
+        return {
+            status: 'matched',
+            material: exactName,
+            confidence: 94,
+            reason: 'exact_name_unique',
+            candidateCount: 1,
+        };
+    }
+
+    if (exactNameCandidates.length > 1) {
+        return {
+            status: 'ambiguous',
+            confidence: 88,
+            reason: 'exact_name_ambiguous',
+            candidateCount: exactNameCandidates.length,
+        };
+    }
+
+    const scored = matcher.materialSearchIndex
+        .map((item) => {
+            const unitBonus = unitNorm && item.unitNorm === unitNorm ? 90 : 0;
+            return { item, score: scoreMaterial(item, row.materialName ?? '') + unitBonus };
+        })
+        .filter(({ score }) => score >= 360)
+        .sort((a, b) => b.score - a.score || a.item.name.localeCompare(b.item.name, 'vi'));
+
+    const best = scored[0];
+    if (!best) {
+        return { status: 'unmatched', confidence: 0, reason: 'no_candidate', candidateCount: 0 };
+    }
+
+    const secondScore = scored[1]?.score ?? 0;
+    const strongUnique = best.score >= 820 && best.score - secondScore >= 160;
+    return {
+        status: strongUnique ? 'matched' : 'suggested',
+        material: best.item,
+        confidence: Math.min(99, Math.round(best.score / 10)),
+        reason: strongUnique ? 'strong_unique_match' : 'fuzzy_candidate',
+        candidateCount: scored.length,
+    };
 };
 
 const highlightMatch = (text: string, query: string) => {
@@ -254,6 +400,7 @@ type MaterialPickerCellProps = {
     onSearch: (value: string) => void;
     onChange: (value: string) => void;
     onSelect: (value: string, option: MaterialOptionData) => void;
+    onBlur?: () => void;
 };
 
 const materialCodePillStyle: React.CSSProperties = {
@@ -288,6 +435,7 @@ const MaterialPickerCell = React.memo(
         onSearch,
         onChange,
         onSelect,
+        onBlur,
     }: MaterialPickerCellProps) => (
         <AutoComplete
             size={size}
@@ -322,6 +470,7 @@ const MaterialPickerCell = React.memo(
                 prefix={material?.code ? <span style={materialCodePillStyle}>{material.code}</span> : undefined}
                 suffix={material ? <MaterialInfoTooltip material={material} /> : undefined}
                 style={{ height: size === 'large' ? 40 : 30 }}
+                onBlur={onBlur}
             />
         </AutoComplete>
     )
@@ -536,21 +685,23 @@ const ModalForm: React.FC<ModalFormProps> = ({ open, initial, plants, mainPlantI
         return map;
     }, [materialSearchIndex]);
 
-    const materialByName = useMemo(() => {
-        const map = new Map<string, MaterialSearchItem>();
-        materialSearchIndex.forEach((item) => {
-            if (!map.has(item.nameNorm)) map.set(item.nameNorm, item);
-        });
-        return map;
-    }, [materialSearchIndex]);
+    const materialMatcher = useMemo(() => buildMaterialMatcher(materialSearchIndex), [materialSearchIndex]);
+
+    const getRowCatalogMatch = React.useCallback(
+        (row: MaterialMatchSource) => findSmartMaterialMatch(row, materialMatcher),
+        [materialMatcher]
+    );
 
     const resolveRowMaterial = React.useCallback(
         (row: ItemRow) => {
-            if (row.materialId) return materialById.get(row.materialId);
-            const nameKey = normalizeSearchText(row.materialName);
-            return nameKey ? materialByName.get(nameKey) : undefined;
+            const match = getRowCatalogMatch(row);
+            return match.status === 'matched'
+                ? match.material
+                : row.materialId
+                  ? materialById.get(row.materialId)
+                  : undefined;
         },
-        [materialById, materialByName]
+        [getRowCatalogMatch, materialById]
     );
 
     const supplierOptions = useMemo(() => {
@@ -668,27 +819,32 @@ const ModalForm: React.FC<ModalFormProps> = ({ open, initial, plants, mainPlantI
         requestMonth: month,
         requestYear: year,
         status,
-        items: items.map((r) => ({
-            materialId: r.materialId,
-            materialName: r.materialName,
-            unit: r.unit,
-            proposedBy: r.proposedBy,
-            purpose: r.purpose,
-            plantId: r.plantId || undefined,
-            quantityRequested: r.quantityRequested,
-            quantityOrdered: r.quantityOrdered || undefined,
-            unitPrice: r.unitPrice || undefined,
-            totalPrice: r.totalPrice || undefined,
-            vatRate: r.vatRate,
-            vatAmount: r.vatAmount || undefined,
-            totalWithVat: r.totalWithVat || undefined,
-            orderDate: r.orderDate?.toISOString(),
-            receivedDate: r.receivedDate?.toISOString(),
-            supplierId: r.supplierId,
-            supplierName: r.supplierName,
-            catalogStatus: r.materialId ? 'matched' : 'unmatched',
-            note: r.note?.trim() || undefined,
-        })),
+        items: items.map((r) => {
+            const match = getRowCatalogMatch(r);
+            const matchedMaterial = match.status === 'matched' ? match.material : undefined;
+
+            return {
+                materialId: matchedMaterial?.id ?? r.materialId,
+                materialName: matchedMaterial?.name ?? r.materialName,
+                unit: matchedMaterial?.unit || r.unit,
+                proposedBy: r.proposedBy,
+                purpose: r.purpose,
+                plantId: r.plantId || undefined,
+                quantityRequested: r.quantityRequested,
+                quantityOrdered: r.quantityOrdered || undefined,
+                unitPrice: r.unitPrice || undefined,
+                totalPrice: r.totalPrice || undefined,
+                vatRate: r.vatRate,
+                vatAmount: r.vatAmount || undefined,
+                totalWithVat: r.totalWithVat || undefined,
+                orderDate: r.orderDate?.toISOString(),
+                receivedDate: r.receivedDate?.toISOString(),
+                supplierId: r.supplierId,
+                supplierName: r.supplierName,
+                catalogStatus: matchedMaterial ? 'matched' : 'unmatched',
+                note: r.note?.trim() || undefined,
+            };
+        }),
     });
 
     const handleSubmit = async (status: 'draft' | 'pending') => {
@@ -721,6 +877,120 @@ const ModalForm: React.FC<ModalFormProps> = ({ open, initial, plants, mainPlantI
             Object.keys(patch).forEach((field) => (fieldMap[field] ?? []).forEach((f) => next.delete(`${key}-${f}`)));
             return next;
         });
+    };
+
+    const applyMaterialToRow = (key: string, material: MaterialSearchItem) => {
+        updateRow(key, {
+            materialId: material.id,
+            materialName: material.name,
+            unit: material.unit || '',
+        });
+        markRecent([key]);
+    };
+
+    const autoApplyMaterialMatch = (key: string) => {
+        const row = items.find((item) => item.key === key);
+        if (!row || row.materialId || !row.materialName.trim()) return;
+
+        const match = getRowCatalogMatch(row);
+        if (match.status !== 'matched' || !match.material) return;
+        applyMaterialToRow(key, match.material);
+    };
+
+    const applySmartCatalogMatch = () => {
+        let autoMatched = 0;
+        let suggested = 0;
+        let unmatched = 0;
+        const updatedKeys: string[] = [];
+
+        setItems((prev) =>
+            prev.map((row) => {
+                if (row.materialId || !row.materialName.trim()) return row;
+
+                const match = getRowCatalogMatch(row);
+                if (match.status === 'matched' && match.material) {
+                    autoMatched += 1;
+                    updatedKeys.push(row.key);
+                    return computeRow({
+                        ...row,
+                        materialId: match.material.id,
+                        materialName: match.material.name,
+                        unit: row.unit || match.material.unit || '',
+                    });
+                }
+
+                if (match.status === 'suggested' || match.status === 'ambiguous') suggested += 1;
+                else unmatched += 1;
+                return row;
+            })
+        );
+
+        if (updatedKeys.length) markRecent(updatedKeys);
+
+        if (autoMatched > 0) {
+            notification.success({
+                title: `Đã tự khớp ${autoMatched} dòng vật tư`,
+                description:
+                    suggested > 0 || unmatched > 0
+                        ? `${suggested} dòng cần xác nhận gợi ý, ${unmatched} dòng chưa có danh mục.`
+                        : undefined,
+            });
+            return;
+        }
+
+        if (suggested > 0) {
+            notification.info({
+                title: `${suggested} dòng có gợi ý nhưng chưa đủ chắc chắn`,
+                description: 'Bấm gợi ý ở từng dòng để xác nhận vật tư đúng.',
+            });
+            return;
+        }
+
+        notification.warning({ title: 'Chưa tìm thấy vật tư phù hợp trong danh mục' });
+    };
+
+    const renderCatalogHint = (row: ItemRow, compact = false) => {
+        const match = getRowCatalogMatch(row);
+        if (!row.materialName.trim()) return null;
+
+        if (match.status === 'matched' && match.material) {
+            return (
+                <Tag color='success' style={{ margin: compact ? '6px 0 0' : '6px 0 0', fontSize: 10 }}>
+                    {row.materialId ? 'Đã gắn' : 'Tự khớp'} {match.material.code ? `· ${match.material.code}` : ''}
+                </Tag>
+            );
+        }
+
+        if ((match.status === 'suggested' || match.status === 'ambiguous') && match.material) {
+            return (
+                <Button
+                    type='link'
+                    size='small'
+                    style={{ height: 22, padding: 0, fontSize: compact ? 12 : 11, fontWeight: 600 }}
+                    onClick={(event) => {
+                        event.stopPropagation();
+                        applyMaterialToRow(row.key, match.material!);
+                    }}
+                >
+                    Gợi ý: {match.material.code ? `[${match.material.code}] ` : ''}
+                    {match.material.name}
+                </Button>
+            );
+        }
+
+        if (match.status === 'ambiguous') {
+            return (
+                <Tag color='gold' style={{ margin: compact ? '6px 0 0' : '6px 0 0', fontSize: 10 }}>
+                    Trùng tên, cần chọn mã
+                </Tag>
+            );
+        }
+
+        return (
+            <Tag color='orange' style={{ margin: compact ? '6px 0 0' : '6px 0 0', fontSize: 10 }}>
+                Chưa có danh mục
+            </Tag>
+        );
     };
 
     const addRow = () => {
@@ -783,6 +1053,7 @@ const ModalForm: React.FC<ModalFormProps> = ({ open, initial, plants, mainPlantI
 
     const selectedRow = items.find((r) => r.key === selectedKey) ?? null;
     const selectedIdx = items.findIndex((r) => r.key === selectedKey);
+    const selectedCatalogMatch = selectedRow ? getRowCatalogMatch(selectedRow) : null;
 
     const hasRowError = (key: string) =>
         errors.has(`${key}-name`) ||
@@ -801,12 +1072,26 @@ const ModalForm: React.FC<ModalFormProps> = ({ open, initial, plants, mainPlantI
     const missingPurposeCount = items.filter((r) => !r.purpose.trim()).length;
     const missingPriceCount = items.filter((r) => !r.unitPrice || r.unitPrice <= 0).length;
     const visibleItems = showMissingOnly
-        ? items.filter((r) => getRequiredIssues(r).length > 0 || (!r.supplierId && !r.supplierName))
+        ? items.filter((r) => {
+              const catalogMatch = getRowCatalogMatch(r);
+              return (
+                  getRequiredIssues(r).length > 0 ||
+                  (!r.supplierId && !r.supplierName) ||
+                  (Boolean(r.materialName.trim()) && catalogMatch.status !== 'matched')
+              );
+          })
         : items;
     const allVisibleChecked = visibleItems.length > 0 && visibleItems.every((r) => checkedKeys.has(r.key));
     const someVisibleChecked = visibleItems.some((r) => checkedKeys.has(r.key));
     const bulkDisabled = checkedKeys.size === 0;
     const fieldStatus = (key: string, field: string) => (errors.has(`${key}-${field}`) ? 'error' : undefined);
+    const catalogMatches = items.map((row) => ({ row, match: getRowCatalogMatch(row) }));
+    const suggestedCatalogCount = catalogMatches.filter(
+        ({ row, match }) => row.materialName.trim() && (match.status === 'suggested' || match.status === 'ambiguous')
+    ).length;
+    const unmatchedCatalogCount = catalogMatches.filter(
+        ({ row, match }) => row.materialName.trim() && match.status === 'unmatched'
+    ).length;
 
     const toggleAllVisible = (checked: boolean) => {
         setCheckedKeys((prev) => {
@@ -903,26 +1188,30 @@ const ModalForm: React.FC<ModalFormProps> = ({ open, initial, plants, mainPlantI
                 </span>
             ),
             render: (_: any, r: ItemRow) => (
-                <MaterialPickerCell
-                    size='small'
-                    value={r.materialName}
-                    material={resolveRowMaterial(r)}
-                    options={matOptions}
-                    status={fieldStatus(r.key, 'name')}
-                    notFoundContent={materialNotFoundContent}
-                    searchQuery={debouncedMaterialSearch}
-                    onSearch={handleMaterialSearch}
-                    onChange={(v) => updateRow(r.key, { materialName: v, materialId: undefined })}
-                    onSelect={(_, opt) => {
-                        updateRow(r.key, {
-                            materialName: opt.item.name,
-                            materialId: opt.materialId,
-                            unit: opt.unit ?? '',
-                        });
-                        focusQuantityRequested(r.key);
-                    }}
-                    placeholder='Tìm mã, tên vật tư hoặc tên không dấu'
-                />
+                <div>
+                    <MaterialPickerCell
+                        size='small'
+                        value={r.materialName}
+                        material={resolveRowMaterial(r)}
+                        options={matOptions}
+                        status={fieldStatus(r.key, 'name')}
+                        notFoundContent={materialNotFoundContent}
+                        searchQuery={debouncedMaterialSearch}
+                        onSearch={handleMaterialSearch}
+                        onChange={(v) => updateRow(r.key, { materialName: v, materialId: undefined })}
+                        onSelect={(_, opt) => {
+                            updateRow(r.key, {
+                                materialName: opt.item.name,
+                                materialId: opt.materialId,
+                                unit: opt.unit ?? '',
+                            });
+                            focusQuantityRequested(r.key);
+                        }}
+                        onBlur={() => autoApplyMaterialMatch(r.key)}
+                        placeholder='Tìm mã, tên vật tư hoặc tên không dấu'
+                    />
+                    {renderCatalogHint(r)}
+                </div>
             ),
         },
         {
@@ -1063,7 +1352,12 @@ const ModalForm: React.FC<ModalFormProps> = ({ open, initial, plants, mainPlantI
             width: 104,
             title: renderHeader('Trạng thái'),
             render: (_: any, r: ItemRow) => {
+                const catalogMatch = getRowCatalogMatch(r);
                 if (getRequiredIssues(r).length) return <Badge status='error' text='Thiếu' />;
+                if (catalogMatch.status === 'unmatched') return <Badge status='warning' text='Chưa khớp' />;
+                if (catalogMatch.status === 'suggested' || catalogMatch.status === 'ambiguous') {
+                    return <Badge status='processing' text='Có gợi ý' />;
+                }
                 if (!r.supplierId && !r.supplierName) return <Badge status='warning' text='Thiếu NCC' />;
                 return <Badge status='success' text='Đủ' />;
             },
@@ -1131,6 +1425,54 @@ const ModalForm: React.FC<ModalFormProps> = ({ open, initial, plants, mainPlantI
                                 title='Các thông tin trong panel này chỉ áp dụng cho dòng vật tư đang chọn.'
                                 style={{ borderRadius: 8, fontSize: 12 }}
                             />
+                            {selectedCatalogMatch && selectedRow.materialName.trim() ? (
+                                <Alert
+                                    type={
+                                        selectedCatalogMatch.status === 'matched'
+                                            ? 'success'
+                                            : selectedCatalogMatch.status === 'unmatched'
+                                              ? 'warning'
+                                              : 'info'
+                                    }
+                                    showIcon
+                                    style={{ borderRadius: 8, fontSize: 12 }}
+                                    title={
+                                        selectedCatalogMatch.status === 'matched'
+                                            ? 'Dòng này đã khớp danh mục vật tư'
+                                            : selectedCatalogMatch.status === 'unmatched'
+                                              ? 'Chưa tìm thấy vật tư trong danh mục'
+                                              : 'Có gợi ý vật tư cần xác nhận'
+                                    }
+                                    description={
+                                        selectedCatalogMatch.material ? (
+                                            <div className='flex flex-wrap items-center gap-2'>
+                                                <span>
+                                                    {selectedCatalogMatch.material.code
+                                                        ? `[${selectedCatalogMatch.material.code}] `
+                                                        : ''}
+                                                    {selectedCatalogMatch.material.name}
+                                                </span>
+                                                {selectedCatalogMatch.status !== 'matched' ? (
+                                                    <Button
+                                                        size='small'
+                                                        type='primary'
+                                                        onClick={() =>
+                                                            applyMaterialToRow(
+                                                                selectedRow.key,
+                                                                selectedCatalogMatch.material!
+                                                            )
+                                                        }
+                                                    >
+                                                        Gắn vật tư này
+                                                    </Button>
+                                                ) : null}
+                                            </div>
+                                        ) : (
+                                            'Nếu đây là vật tư mới, có thể tiếp tục lưu dưới dạng chưa có danh mục.'
+                                        )
+                                    }
+                                />
+                            ) : null}
                             <div>
                                 <FieldLabel req>Người đề xuất</FieldLabel>
                                 <Input
@@ -1426,8 +1768,10 @@ const ModalForm: React.FC<ModalFormProps> = ({ open, initial, plants, mainPlantI
                                                 unit: opt.unit ?? '',
                                             })
                                         }
+                                        onBlur={() => autoApplyMaterialMatch(r.key)}
                                         placeholder='Tìm mã, tên vật tư hoặc tên không dấu'
                                     />
+                                    {renderCatalogHint(r, true)}
                                 </div>
                                 <div>
                                     <div className='mb-1 text-xs text-slate-400'>
@@ -1534,6 +1878,9 @@ const ModalForm: React.FC<ModalFormProps> = ({ open, initial, plants, mainPlantI
                     ))}
                     <Button type='dashed' block icon={<PlusOutlined />} onClick={addRow}>
                         Thêm vật tư
+                    </Button>
+                    <Button block onClick={applySmartCatalogMatch}>
+                        Tự khớp danh mục vật tư
                     </Button>
                 </div>
             </Drawer>
@@ -1719,6 +2066,9 @@ const ModalForm: React.FC<ModalFormProps> = ({ open, initial, plants, mainPlantI
                             </Button>
                         </div>
                         <Space size={8}>
+                            <Button size='small' onClick={applySmartCatalogMatch}>
+                                Tự khớp danh mục
+                            </Button>
                             <Button
                                 size='small'
                                 icon={<FilterOutlined />}
@@ -1824,6 +2174,8 @@ const ModalForm: React.FC<ModalFormProps> = ({ open, initial, plants, mainPlantI
                         ['Thiếu NCC', missingSupplierCount],
                         ['Thiếu nội dung', missingPurposeCount],
                         ['Chưa có đơn giá', missingPriceCount],
+                        ['Cần xác nhận DM', suggestedCatalogCount],
+                        ['Chưa có DM', unmatchedCatalogCount],
                     ].map(([label, value]) => (
                         <Tag
                             key={label}
@@ -1902,7 +2254,28 @@ const DetailDrawer: React.FC<DrawerProps> = ({
 
     const itemCols: TableColumnsType<PurchaseRequestItem> = [
         { title: 'STT', key: 'stt', width: 46, align: 'center', render: (_: any, __: any, i: number) => i + 1 },
-        { title: 'Tên vật tư', key: 'name', render: (_: any, r: PurchaseRequestItem) => r.materialName || '-' },
+        {
+            title: 'Tên vật tư',
+            key: 'name',
+            render: (_: any, r: PurchaseRequestItem) => (
+                <div>
+                    <div className='font-semibold text-slate-800'>{r.materialName || '-'}</div>
+                    {r.catalogStatus === 'matched' && r.materialId ? (
+                        <Tag color='success' style={{ marginTop: 3, fontSize: 10 }}>
+                            Đã khớp danh mục
+                        </Tag>
+                    ) : r.catalogStatus === 'ignored' ? (
+                        <Tag color='default' style={{ marginTop: 3, fontSize: 10 }}>
+                            Không quản tồn
+                        </Tag>
+                    ) : (
+                        <Tag color='orange' style={{ marginTop: 3, fontSize: 10 }}>
+                            Chưa có danh mục
+                        </Tag>
+                    )}
+                </div>
+            ),
+        },
         { title: 'Người đề xuất', dataIndex: 'proposedBy', key: 'proposedBy', width: 130 },
         { title: 'SL cần', dataIndex: 'quantityRequested', key: 'qty', width: 80, align: 'right', render: fmtNum },
         { title: 'ĐVT', dataIndex: 'unit', key: 'unit', width: 70 },
@@ -2139,6 +2512,21 @@ const DetailDrawer: React.FC<DrawerProps> = ({
                                                     {r.materialName || '—'}
                                                 </span>
                                                 <span className='shrink-0 text-xs text-slate-400'>{r.unit || '—'}</span>
+                                            </div>
+                                            <div className='mb-1'>
+                                                {r.catalogStatus === 'matched' && r.materialId ? (
+                                                    <Tag color='success' className='!m-0 !text-[10px]'>
+                                                        Đã khớp danh mục
+                                                    </Tag>
+                                                ) : r.catalogStatus === 'ignored' ? (
+                                                    <Tag color='default' className='!m-0 !text-[10px]'>
+                                                        Không quản tồn
+                                                    </Tag>
+                                                ) : (
+                                                    <Tag color='orange' className='!m-0 !text-[10px]'>
+                                                        Chưa có danh mục
+                                                    </Tag>
+                                                )}
                                             </div>
                                             <div className='flex flex-wrap gap-x-4 gap-y-0.5 text-xs text-slate-500'>
                                                 <span>

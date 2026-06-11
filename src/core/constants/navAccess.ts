@@ -32,6 +32,7 @@ export const ROUTE_ACCESS: Record<string, AccessCheck> = {
     '/qr-labels': requireCap('qrlabel.manage'),
     '/qr-labels/batches/:id/print': requireCap('qrlabel.manage'),
     '/qr/:publicId/activate': requireCap('qrlabel.manage'),
+    '/borrowings/batches/:id': requireCap('borrowing.write'),
     '/brands': requireCap('brand.manage'),
     '/materials': requireCap('material.view'),
     '/materials/suppliers': requireCap('material.view'),

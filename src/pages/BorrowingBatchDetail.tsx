@@ -1,0 +1,642 @@
+import React, { useMemo, useState } from 'react';
+import {
+    Alert,
+    App,
+    Button,
+    Card,
+    DatePicker,
+    Empty,
+    Form,
+    Input,
+    Modal,
+    Select,
+    Skeleton,
+    Space,
+    Statistic,
+    Table,
+    Tabs,
+    Tag,
+    type TableColumnsType,
+} from 'antd';
+import {
+    ArrowLeftOutlined,
+    CheckCircleOutlined,
+    PrinterOutlined,
+    QrcodeOutlined,
+    ReloadOutlined,
+    SaveOutlined,
+    ScanOutlined,
+} from '@ant-design/icons';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useNavigate, useParams } from 'react-router-dom';
+import dayjs from 'dayjs';
+import PageHeader from '../components/shared/PageHeader';
+import QrCameraScanner from '../components/QrCameraScanner';
+import TransactionStatusBadge from '../components/transactions/TransactionStatusBadge';
+import TransactionTypeBadge from '../components/transactions/TransactionTypeBadge';
+import { borrowingBatchStatusMeta, qrReturnActionMeta, qrReturnActionOptions } from '../core/constants/transactions';
+import { extractPublicId } from '../core/lib/qrScan';
+import { brandService, plantService } from '../core/services';
+import { borrowingService } from '../core/services/borrowing.service';
+import { qrLabelService } from '../core/services/qr-label.service';
+import {
+    BorrowingStatus,
+    QrReturnAction,
+    type Borrowing,
+    type BulkReturnBorrowingBatchPayload,
+    type ReceiveBorrowingBatchByQrPayload,
+} from '../core/types';
+
+type ReceiveFormValues = {
+    publicId: string;
+    name: string;
+    machineCode?: string;
+    partnerMachineCode?: string;
+    serial?: string;
+    type: string;
+    model: string;
+    brandId: string;
+    plantId?: string;
+    area?: string;
+    receiveCondition?: string;
+    receiveNote?: string;
+    note?: string;
+};
+
+type ReturnFormValues = {
+    returnTime: dayjs.Dayjs;
+    qrReturnAction: QrReturnAction;
+    returnCondition?: string;
+    returnNote?: string;
+    qrReturnNote?: string;
+};
+
+const formatDateTime = (value?: string) => (value ? dayjs(value).format('DD/MM/YYYY HH:mm') : '-');
+
+const BorrowingBatchDetail: React.FC = () => {
+    const { id = '' } = useParams();
+    const navigate = useNavigate();
+    const queryClient = useQueryClient();
+    const { message } = App.useApp();
+    const [receiveForm] = Form.useForm<ReceiveFormValues>();
+    const [returnForm] = Form.useForm<ReturnFormValues>();
+
+    const [activeTab, setActiveTab] = useState('receive');
+    const [isReceiveModalOpen, setIsReceiveModalOpen] = useState(false);
+    const [isReturnModalOpen, setIsReturnModalOpen] = useState(false);
+    const [selectedReturnIds, setSelectedReturnIds] = useState<React.Key[]>([]);
+    const [resolvingReturnQr, setResolvingReturnQr] = useState(false);
+
+    const { data, isLoading } = useQuery({
+        queryKey: ['borrowing-batch', id],
+        queryFn: () => borrowingService.getBatchById(id),
+        enabled: Boolean(id),
+    });
+
+    const { data: brands = [] } = useQuery({
+        queryKey: ['brands'],
+        queryFn: () => brandService.getAll(),
+    });
+
+    const { data: plants = [] } = useQuery({
+        queryKey: ['plants'],
+        queryFn: () => plantService.getAll(),
+    });
+
+    const batch = data?.batch;
+    const items = data?.items ?? [];
+    const activeItems = useMemo(() => items.filter((item) => item.status === BorrowingStatus.ACTIVE), [items]);
+    const selectedActiveItems = useMemo(
+        () => activeItems.filter((item) => selectedReturnIds.includes(item.id)),
+        [activeItems, selectedReturnIds]
+    );
+
+    const brandOptions = useMemo(() => brands.map((brand) => ({ value: brand.id, label: brand.name })), [brands]);
+    const plantOptions = useMemo(
+        () =>
+            plants.map((plant) => ({
+                value: plant.id,
+                label: plant.code ? `${plant.name} (${plant.code})` : plant.name,
+            })),
+        [plants]
+    );
+
+    const createQrMutation = useMutation({
+        mutationFn: () => borrowingService.createBatchQr(id),
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['borrowing-batch', id] });
+            queryClient.invalidateQueries({ queryKey: ['borrowing-batches'] });
+            queryClient.invalidateQueries({ queryKey: ['qr-label-batches'] });
+            message.success('Đã tạo lô QR tạm');
+        },
+    });
+
+    const receiveMutation = useMutation({
+        mutationFn: (payload: ReceiveBorrowingBatchByQrPayload) => borrowingService.receiveBatchByQr(id, payload),
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['borrowing-batch', id] });
+            queryClient.invalidateQueries({ queryKey: ['borrowing-batches'] });
+            queryClient.invalidateQueries({ queryKey: ['assets'] });
+            queryClient.invalidateQueries({ queryKey: ['qr-label-batches'] });
+            queryClient.invalidateQueries({ queryKey: ['qr-labels'] });
+            setIsReceiveModalOpen(false);
+            receiveForm.resetFields();
+            message.success('Đã nhận máy vào lô');
+        },
+    });
+
+    const bulkReturnMutation = useMutation({
+        mutationFn: (payload: BulkReturnBorrowingBatchPayload) => borrowingService.bulkReturnBatch(id, payload),
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['borrowing-batch', id] });
+            queryClient.invalidateQueries({ queryKey: ['borrowing-batches'] });
+            queryClient.invalidateQueries({ queryKey: ['borrowings'] });
+            queryClient.invalidateQueries({ queryKey: ['assets'] });
+            queryClient.invalidateQueries({ queryKey: ['qr-labels'] });
+            setSelectedReturnIds([]);
+            setIsReturnModalOpen(false);
+            returnForm.resetFields();
+            message.success('Đã trả máy và vô hiệu hóa QR tạm');
+        },
+    });
+
+    const openReceiveModal = (rawValue: string) => {
+        if (!batch) return;
+        const publicId = extractPublicId(rawValue);
+        receiveForm.setFieldsValue({
+            publicId,
+            plantId: batch.plantId,
+            area: batch.area,
+        });
+        setIsReceiveModalOpen(true);
+    };
+
+    const handleReceiveSubmit = async () => {
+        const values = await receiveForm.validateFields();
+        await receiveMutation.mutateAsync({
+            publicId: values.publicId,
+            asset: {
+                name: values.name.trim(),
+                machineCode: values.machineCode?.trim() || undefined,
+                serial: values.serial?.trim() || undefined,
+                type: values.type.trim(),
+                model: values.model.trim(),
+                brandId: values.brandId,
+                plantId: values.plantId,
+                area: values.area?.trim() || undefined,
+                note: values.note?.trim() || undefined,
+            },
+            partnerMachineCode: values.partnerMachineCode?.trim() || undefined,
+            receiveCondition: values.receiveCondition?.trim() || undefined,
+            receiveNote: values.receiveNote?.trim() || undefined,
+        });
+    };
+
+    const handleReturnDetected = async (rawValue: string) => {
+        if (resolvingReturnQr) return;
+        setResolvingReturnQr(true);
+
+        try {
+            const publicId = extractPublicId(rawValue);
+            const resolved = await qrLabelService.resolveInternal(publicId);
+            const assetId = resolved.asset?.id;
+
+            if (!assetId) {
+                message.warning('QR này chưa gắn máy hoặc không còn nhận diện được asset.');
+                return;
+            }
+
+            const target = activeItems.find((item) => item.assetId === assetId);
+            if (!target) {
+                message.warning('Máy này không thuộc lô đang trả hoặc đã được trả trước đó.');
+                return;
+            }
+
+            setSelectedReturnIds((current) => {
+                if (current.includes(target.id)) {
+                    message.info('Máy này đã nằm trong danh sách trả.');
+                    return current;
+                }
+                message.success(`Đã thêm "${target.asset?.name || target.asset?.machineCode}" vào danh sách trả`);
+                return [...current, target.id];
+            });
+        } finally {
+            setResolvingReturnQr(false);
+        }
+    };
+
+    const handleBulkReturn = async () => {
+        const values = await returnForm.validateFields();
+        await bulkReturnMutation.mutateAsync({
+            returnTime: values.returnTime.toISOString(),
+            note: values.returnNote?.trim() || undefined,
+            items: selectedActiveItems.map((item) => ({
+                borrowingId: item.id,
+                qrReturnAction: values.qrReturnAction,
+                returnCondition: values.returnCondition?.trim() || undefined,
+                returnNote: values.returnNote?.trim() || undefined,
+                qrReturnNote: values.qrReturnNote?.trim() || undefined,
+            })),
+        });
+    };
+
+    const columns: TableColumnsType<Borrowing> = [
+        {
+            title: 'MÁY',
+            key: 'asset',
+            render: (_value, record) => (
+                <div className='flex min-w-[240px] flex-col gap-1'>
+                    <span className='text-sm font-black text-slate-900'>{record.asset?.name || '-'}</span>
+                    <span className='font-mono text-xs font-bold text-blue-700'>
+                        {record.asset?.machineCode || '-'}
+                    </span>
+                    {record.partnerMachineCode ? (
+                        <span className='text-xs font-semibold text-slate-500'>
+                            Mã đối tác: {record.partnerMachineCode}
+                        </span>
+                    ) : null}
+                </div>
+            ),
+        },
+        {
+            title: 'TRẠNG THÁI',
+            dataIndex: 'status',
+            width: 150,
+            render: (status) => <TransactionStatusBadge status={status} />,
+        },
+        {
+            title: 'QR TẠM',
+            key: 'qr',
+            width: 180,
+            render: (_value, record) =>
+                record.status === BorrowingStatus.RETURNED ? (
+                    <div className='flex flex-col gap-1'>
+                        <Tag
+                            color={record.qrReturnAction ? qrReturnActionMeta[record.qrReturnAction].color : 'default'}
+                        >
+                            {record.qrReturnAction ? qrReturnActionMeta[record.qrReturnAction].label : 'Đã xử lý'}
+                        </Tag>
+                        <span className='text-xs text-slate-500'>{formatDateTime(record.qrRemovedAt)}</span>
+                    </div>
+                ) : (
+                    <Tag color='processing'>Đang gắn trên máy</Tag>
+                ),
+        },
+        {
+            title: 'THỜI GIAN',
+            key: 'time',
+            width: 220,
+            render: (_value, record) => (
+                <div className='flex flex-col gap-1 text-sm'>
+                    <span>Nhận: {formatDateTime(record.borrowTime)}</span>
+                    <span className='text-slate-500'>Trả: {formatDateTime(record.returnTime)}</span>
+                </div>
+            ),
+        },
+        {
+            title: 'GHI CHÚ',
+            key: 'note',
+            render: (_value, record) => (
+                <span className='text-sm text-slate-600'>
+                    {record.receiveCondition || record.receiveNote || record.returnNote || '-'}
+                </span>
+            ),
+        },
+    ];
+
+    if (isLoading) {
+        return <Skeleton active paragraph={{ rows: 10 }} className='rounded-xl bg-white p-6' />;
+    }
+
+    if (!batch) {
+        return <Empty description='Không tìm thấy lô mượn/thuê' />;
+    }
+
+    const statusMeta = borrowingBatchStatusMeta[batch.status];
+
+    return (
+        <div className='flex flex-col gap-5'>
+            <PageHeader
+                title={batch.code}
+                subtitle='Quản lý nhận/trả nhiều máy mượn hoặc thuê bằng QR tạm thời.'
+                actions={
+                    <Space wrap>
+                        <Button icon={<ArrowLeftOutlined />} onClick={() => navigate('/borrowings')}>
+                            Quay lại
+                        </Button>
+                        {batch.qrBatchId ? (
+                            <Button
+                                icon={<PrinterOutlined />}
+                                onClick={() => navigate(`/qr-labels/batches/${batch.qrBatchId}/print`)}
+                            >
+                                In QR tạm
+                            </Button>
+                        ) : (
+                            <Button
+                                icon={<QrcodeOutlined />}
+                                loading={createQrMutation.isPending}
+                                onClick={() => createQrMutation.mutate()}
+                            >
+                                Tạo QR tạm
+                            </Button>
+                        )}
+                    </Space>
+                }
+            />
+
+            <section className='rounded-3xl border border-violet-100 bg-gradient-to-br from-violet-50 via-white to-cyan-50 p-5 shadow-sm'>
+                <div className='flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between'>
+                    <div className='min-w-0'>
+                        <div className='flex flex-wrap items-center gap-2'>
+                            <TransactionTypeBadge type={batch.type} />
+                            <Tag color={statusMeta?.color}>{statusMeta?.label || batch.status}</Tag>
+                            <Tag color='purple'>QR tạm</Tag>
+                        </div>
+                        <h1 className='m-0 mt-3 text-2xl font-black text-slate-950'>{batch.partnerName}</h1>
+                        <div className='mt-2 text-sm font-semibold text-slate-600'>
+                            {batch.contractNo || 'Chưa có số hợp đồng'} · {batch.plant?.name || '-'}{' '}
+                            {batch.area ? `· ${batch.area}` : ''}
+                        </div>
+                        <div className='mt-2 text-sm text-slate-500'>
+                            Nhận: {formatDateTime(batch.borrowTime)} · Dự kiến trả:{' '}
+                            {formatDateTime(batch.expectedReturnTime)}
+                        </div>
+                    </div>
+                    <div className='grid grid-cols-2 gap-3 sm:grid-cols-4 lg:min-w-[520px]'>
+                        <Card size='small' className='rounded-2xl'>
+                            <Statistic title='Dự kiến' value={batch.plannedQuantity} />
+                        </Card>
+                        <Card size='small' className='rounded-2xl'>
+                            <Statistic title='Đã nhận' value={batch.receivedCount ?? 0} />
+                        </Card>
+                        <Card size='small' className='rounded-2xl'>
+                            <Statistic title='Đang giữ' value={batch.activeCount ?? 0} />
+                        </Card>
+                        <Card size='small' className='rounded-2xl'>
+                            <Statistic title='Đã trả' value={batch.returnedCount ?? 0} />
+                        </Card>
+                    </div>
+                </div>
+            </section>
+
+            <Alert
+                showIcon
+                type='warning'
+                className='rounded-2xl'
+                message='QR của máy mượn/thuê là tem tạm'
+                description='Khi trả máy, hệ thống sẽ bắt buộc chọn trạng thái xử lý QR và vô hiệu hóa publicId để tránh QR Hải Đăng còn hoạt động trên máy đối tác.'
+            />
+
+            <Tabs
+                activeKey={activeTab}
+                onChange={setActiveTab}
+                items={[
+                    {
+                        key: 'receive',
+                        label: 'Quét nhận máy',
+                        children: (
+                            <div className='grid grid-cols-1 gap-4 xl:grid-cols-[420px_1fr]'>
+                                <Card className='rounded-3xl border-slate-200 shadow-sm'>
+                                    <div className='mb-3 flex items-center gap-2 font-black text-slate-950'>
+                                        <ScanOutlined className='text-blue-600' />
+                                        Quét tem QR trắng
+                                    </div>
+                                    {batch.qrBatchId ? (
+                                        <QrCameraScanner
+                                            active={activeTab === 'receive' && !isReceiveModalOpen}
+                                            onDetected={openReceiveModal}
+                                        />
+                                    ) : (
+                                        <Alert
+                                            type='warning'
+                                            message='Lô này chưa có QR tạm. Hãy tạo QR tạm trước khi nhận máy.'
+                                        />
+                                    )}
+                                    <Button
+                                        block
+                                        size='large'
+                                        icon={<QrcodeOutlined />}
+                                        className='mt-3'
+                                        disabled={!batch.qrBatchId}
+                                        onClick={() => openReceiveModal('')}
+                                    >
+                                        Nhập mã QR thủ công
+                                    </Button>
+                                </Card>
+
+                                <Card className='rounded-3xl border-slate-200 shadow-sm'>
+                                    <div className='mb-3 font-black text-slate-950'>Máy đã nhận vào lô</div>
+                                    <Table<Borrowing>
+                                        rowKey='id'
+                                        columns={columns}
+                                        dataSource={items}
+                                        scroll={{ x: 980 }}
+                                        pagination={{ pageSize: 8 }}
+                                    />
+                                </Card>
+                            </div>
+                        ),
+                    },
+                    {
+                        key: 'return',
+                        label: 'Quét trả máy',
+                        children: (
+                            <div className='grid grid-cols-1 gap-4 xl:grid-cols-[420px_1fr]'>
+                                <Card className='rounded-3xl border-slate-200 shadow-sm'>
+                                    <div className='mb-3 flex items-center justify-between gap-3'>
+                                        <div className='flex items-center gap-2 font-black text-slate-950'>
+                                            <ScanOutlined className='text-emerald-600' />
+                                            Quét máy cần trả
+                                        </div>
+                                        {resolvingReturnQr ? <Tag color='processing'>Đang đọc</Tag> : null}
+                                    </div>
+                                    <QrCameraScanner
+                                        active={activeTab === 'return' && !isReturnModalOpen}
+                                        onDetected={handleReturnDetected}
+                                    />
+                                    <div className='mt-3 rounded-2xl border border-emerald-100 bg-emerald-50 p-3 text-sm font-semibold text-emerald-900'>
+                                        Đã chọn {selectedActiveItems.length} máy để trả. Chỉ máy active thuộc lô này mới
+                                        được thêm.
+                                    </div>
+                                    <Button
+                                        block
+                                        size='large'
+                                        type='primary'
+                                        icon={<CheckCircleOutlined />}
+                                        className='mt-3'
+                                        disabled={!selectedActiveItems.length}
+                                        onClick={() => {
+                                            returnForm.setFieldsValue({
+                                                returnTime: dayjs(),
+                                                qrReturnAction: QrReturnAction.REMOVED,
+                                            });
+                                            setIsReturnModalOpen(true);
+                                        }}
+                                    >
+                                        Xác nhận trả {selectedActiveItems.length} máy
+                                    </Button>
+                                </Card>
+
+                                <Card className='rounded-3xl border-slate-200 shadow-sm'>
+                                    <div className='mb-3 flex flex-wrap items-center justify-between gap-2'>
+                                        <div className='font-black text-slate-950'>Danh sách máy đang giữ</div>
+                                        <Button icon={<ReloadOutlined />} onClick={() => setSelectedReturnIds([])}>
+                                            Bỏ chọn
+                                        </Button>
+                                    </div>
+                                    <Table<Borrowing>
+                                        rowKey='id'
+                                        columns={columns}
+                                        dataSource={activeItems}
+                                        rowSelection={{
+                                            selectedRowKeys: selectedReturnIds,
+                                            onChange: setSelectedReturnIds,
+                                        }}
+                                        scroll={{ x: 980 }}
+                                        pagination={{ pageSize: 8 }}
+                                    />
+                                </Card>
+                            </div>
+                        ),
+                    },
+                ]}
+            />
+
+            <Modal
+                open={isReceiveModalOpen}
+                title='Nhận máy vào lô bằng QR'
+                width={760}
+                onCancel={() => setIsReceiveModalOpen(false)}
+                okText='Nhận máy'
+                confirmLoading={receiveMutation.isPending}
+                onOk={handleReceiveSubmit}
+                className='[&_.ant-modal-content]:rounded-2xl'
+            >
+                <Form<ReceiveFormValues>
+                    form={receiveForm}
+                    layout='vertical'
+                    className='pt-2 [&_.ant-form-item-label>label]:font-bold [&_.ant-form-item-label>label]:text-slate-700'
+                >
+                    <div className='grid grid-cols-1 gap-3 md:grid-cols-2'>
+                        <Form.Item
+                            label='Mã QR'
+                            name='publicId'
+                            rules={[{ required: true, whitespace: true, message: 'Nhập mã QR' }]}
+                        >
+                            <Input size='large' placeholder='QR-XXXXXXX' />
+                        </Form.Item>
+                        <Form.Item label='Mã máy tự đặt' name='machineCode'>
+                            <Input size='large' placeholder='Bỏ trống để hệ thống tự tạo' />
+                        </Form.Item>
+                        <Form.Item
+                            label='Tên máy'
+                            name='name'
+                            rules={[{ required: true, whitespace: true, message: 'Nhập tên máy' }]}
+                        >
+                            <Input size='large' placeholder='Ví dụ: Máy may 1 kim Juki' />
+                        </Form.Item>
+                        <Form.Item label='Mã máy đối tác' name='partnerMachineCode'>
+                            <Input size='large' placeholder='Mã/asset tag của bên cho mượn nếu có' />
+                        </Form.Item>
+                        <Form.Item label='Serial' name='serial'>
+                            <Input size='large' placeholder='Serial nếu có' />
+                        </Form.Item>
+                        <Form.Item
+                            label='Nhãn hiệu'
+                            name='brandId'
+                            rules={[{ required: true, message: 'Chọn nhãn hiệu' }]}
+                        >
+                            <Select size='large' showSearch={{ optionFilterProp: 'label' }} options={brandOptions} />
+                        </Form.Item>
+                        <Form.Item
+                            label='Loại máy'
+                            name='type'
+                            rules={[{ required: true, whitespace: true, message: 'Nhập loại máy' }]}
+                        >
+                            <Input size='large' placeholder='Ví dụ: Máy vắt sổ' />
+                        </Form.Item>
+                        <Form.Item
+                            label='Model'
+                            name='model'
+                            rules={[{ required: true, whitespace: true, message: 'Nhập model' }]}
+                        >
+                            <Input size='large' placeholder='Ví dụ: DDL-8000A' />
+                        </Form.Item>
+                        <Form.Item label='Cơ sở' name='plantId'>
+                            <Select size='large' showSearch={{ optionFilterProp: 'label' }} options={plantOptions} />
+                        </Form.Item>
+                        <Form.Item label='Khu vực' name='area'>
+                            <Input size='large' />
+                        </Form.Item>
+                        <Form.Item label='Tình trạng lúc nhận' name='receiveCondition' className='md:col-span-2'>
+                            <Input.TextArea rows={3} placeholder='Trầy xước, thiếu phụ kiện, chạy thử OK...' />
+                        </Form.Item>
+                        <Form.Item label='Ghi chú nhận máy' name='receiveNote' className='md:col-span-2'>
+                            <Input.TextArea rows={3} placeholder='Thông tin bàn giao, người giao, phụ kiện đi kèm...' />
+                        </Form.Item>
+                    </div>
+                </Form>
+            </Modal>
+
+            <Modal
+                open={isReturnModalOpen}
+                title={`Xác nhận trả ${selectedActiveItems.length} máy`}
+                width={720}
+                onCancel={() => setIsReturnModalOpen(false)}
+                okText='Xác nhận trả và khóa QR'
+                confirmLoading={bulkReturnMutation.isPending}
+                onOk={handleBulkReturn}
+                className='[&_.ant-modal-content]:rounded-2xl'
+            >
+                <Alert
+                    showIcon
+                    type='warning'
+                    className='mb-4 rounded-2xl'
+                    message='Bước xử lý QR là bắt buộc'
+                    description='Sau khi xác nhận, hệ thống sẽ clear publicId của máy và retire/lost/damaged QR label theo lựa chọn bên dưới.'
+                />
+                <Form<ReturnFormValues>
+                    form={returnForm}
+                    layout='vertical'
+                    className='[&_.ant-form-item-label>label]:font-bold [&_.ant-form-item-label>label]:text-slate-700'
+                >
+                    <Form.Item
+                        label='Thời gian trả'
+                        name='returnTime'
+                        rules={[{ required: true, message: 'Chọn thời gian trả' }]}
+                    >
+                        <DatePicker showTime size='large' className='w-full' format='DD/MM/YYYY HH:mm' />
+                    </Form.Item>
+                    <Form.Item
+                        label='Trạng thái xử lý QR'
+                        name='qrReturnAction'
+                        rules={[{ required: true, message: 'Chọn trạng thái xử lý QR' }]}
+                    >
+                        <Select
+                            size='large'
+                            options={qrReturnActionOptions}
+                            onChange={(value) => {
+                                const meta = qrReturnActionMeta[value as QrReturnAction];
+                                if (meta) message.info(meta.description);
+                            }}
+                        />
+                    </Form.Item>
+                    <Form.Item label='Tình trạng máy khi trả' name='returnCondition'>
+                        <Input.TextArea rows={3} placeholder='Tình trạng vận hành, hư hỏng, thiếu phụ kiện nếu có...' />
+                    </Form.Item>
+                    <Form.Item label='Ghi chú trả máy' name='returnNote'>
+                        <Input.TextArea rows={3} placeholder='Biên bản trả, người nhận, ghi chú đối tác...' />
+                    </Form.Item>
+                    <Form.Item label='Ghi chú xử lý QR' name='qrReturnNote'>
+                        <Input.TextArea
+                            rows={2}
+                            placeholder='Ví dụ: đã bóc tem tại kho, tem rách khi gỡ, đối tác không cho bóc...'
+                        />
+                    </Form.Item>
+                </Form>
+            </Modal>
+        </div>
+    );
+};
+
+export default BorrowingBatchDetail;

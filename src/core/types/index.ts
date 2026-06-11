@@ -38,10 +38,26 @@ export enum BorrowingStatus {
     RETURNED = 'returned',
 }
 
+export enum BorrowingBatchStatus {
+    DRAFT = 'draft',
+    RECEIVING = 'receiving',
+    ACTIVE = 'active',
+    PARTIALLY_RETURNED = 'partially_returned',
+    RETURNED = 'returned',
+    CANCELLED = 'cancelled',
+}
+
 export enum BorrowingType {
     INTERNAL = 'internal',
     EXTERNAL = 'external',
     RENTAL = 'rental',
+}
+
+export enum QrReturnAction {
+    REMOVED = 'removed',
+    LOST = 'lost',
+    DAMAGED = 'damaged',
+    LEFT_ON_PARTNER = 'left_on_partner',
 }
 
 export enum UserRole {
@@ -292,6 +308,9 @@ export interface Borrowing {
     id: string;
     assetId: string;
     asset?: Asset;
+    batchId?: string;
+    batch?: BorrowingBatch;
+    qrLabelId?: string;
     type: BorrowingType;
     borrowerId?: string;
     borrower?: User;
@@ -299,17 +318,59 @@ export interface Borrowing {
     partnerName?: string;
     borrowTime: string;
     returnTime?: string;
+    expectedReturnTime?: string;
     status: BorrowingStatus;
+    partnerMachineCode?: string;
     purpose?: string;
     location?: string;
     cost?: number;
     note?: string;
     returnNote?: string;
+    receiveCondition?: string;
+    receiveNote?: string;
+    returnCondition?: string;
+    qrReturnAction?: QrReturnAction;
+    qrReturnNote?: string;
+    qrRemovedAt?: string;
+    qrRemovedBy?: string;
+    returnedInBatchAt?: string;
     assetStatusBefore?: AssetStatus;
     createdBy?: string;
     returnedBy?: string;
     createdAt: string;
     updatedAt: string;
+}
+
+export interface BorrowingBatch {
+    id: string;
+    code: string;
+    type: BorrowingType.EXTERNAL | BorrowingType.RENTAL;
+    status: BorrowingBatchStatus;
+    partnerName: string;
+    contractNo?: string;
+    plantId: string;
+    plant?: Plant;
+    area?: string;
+    borrowTime: string;
+    expectedReturnTime?: string;
+    plannedQuantity: number;
+    qrBatchId?: string;
+    qrBatch?: Pick<QrLabelBatch, 'id' | 'code' | 'quantity' | 'status' | 'printedAt'>;
+    labelPolicy: 'temporary';
+    removeQrOnReturn: boolean;
+    note?: string;
+    receivedCount?: number;
+    activeCount?: number;
+    returnedCount?: number;
+    unusedQrCount?: number;
+    closedAt?: string;
+    createdAt: string;
+    updatedAt: string;
+}
+
+export interface BorrowingBatchDetail {
+    batch: BorrowingBatch;
+    items: Borrowing[];
 }
 
 export interface CreateBorrowingPayload {
@@ -333,6 +394,57 @@ export interface BorrowingFilter extends PaginationParams {
     status?: BorrowingStatus;
     startDate?: string;
     endDate?: string;
+}
+
+export interface CreateBorrowingBatchPayload {
+    type: BorrowingType.EXTERNAL | BorrowingType.RENTAL;
+    partnerName: string;
+    contractNo?: string;
+    plantId: string;
+    area?: string;
+    borrowTime: string;
+    expectedReturnTime?: string;
+    plannedQuantity: number;
+    note?: string;
+    createQrBatch?: boolean;
+}
+
+export interface ReceiveBorrowingBatchByQrPayload {
+    publicId: string;
+    asset: {
+        name: string;
+        machineCode?: string;
+        serial?: string;
+        type: string;
+        model: string;
+        brandId: string;
+        plantId?: string;
+        area?: string;
+        note?: string;
+        imageUrl?: string;
+        purchaseDate?: string;
+        purchasePrice?: number;
+        specifications?: Record<string, string | number>;
+    };
+    partnerMachineCode?: string;
+    receiveCondition?: string;
+    receiveNote?: string;
+}
+
+export interface BulkReturnBorrowingBatchPayload {
+    returnTime: string;
+    note?: string;
+    items: Array<{
+        borrowingId: string;
+        qrReturnAction: QrReturnAction;
+        returnCondition?: string;
+        returnNote?: string;
+        qrReturnNote?: string;
+    }>;
+}
+
+export interface BulkReturnBorrowingBatchResponse extends BorrowingBatchDetail {
+    returnedIds: string[];
 }
 
 // ===== USER =====
@@ -577,7 +689,11 @@ export type QrScanAction =
     | 'stocktake'
     | 'transfer_scan'
     | 'maintenance_quick_create'
-    | 'maintenance_quick_create_success';
+    | 'maintenance_quick_create_success'
+    | 'borrowing_receive'
+    | 'borrowing_receive_success'
+    | 'borrowing_return'
+    | 'borrowing_return_success';
 
 export type QrScanResult =
     | 'resolved'

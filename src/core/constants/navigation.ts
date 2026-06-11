@@ -92,6 +92,13 @@ export const PAGE_META: PageMeta[] = [
         searchPlaceholder: 'Tìm theo thiết bị...',
     },
     {
+        path: '/borrowings/batches/:id',
+        title: 'Lô Mượn / Thuê',
+        subtitle: 'Nhận và trả nhiều máy bằng QR tạm thời theo từng lô đối tác.',
+        breadcrumbs: ['Dashboard', 'Giao dịch thiết bị', 'Lô mượn / thuê'],
+        searchPlaceholder: 'Quét QR hoặc tìm máy trong lô...',
+    },
+    {
         path: '/borrowings/:id',
         title: 'Chi Tiết Giao Dịch',
         subtitle: 'Xem đầy đủ thông tin và timeline của giao dịch thiết bị.',

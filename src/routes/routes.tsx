@@ -18,6 +18,7 @@ const TransferDetail = lazy(() => import('../pages/TransferDetail'));
 const BorrowingList = lazy(() => import('../pages/BorrowingList'));
 const BorrowingCreate = lazy(() => import('../pages/BorrowingCreate'));
 const BorrowingDetail = lazy(() => import('../pages/BorrowingDetail'));
+const BorrowingBatchDetail = lazy(() => import('../pages/BorrowingBatchDetail'));
 const PlantList = lazy(() => import('../pages/PlantList'));
 const UserList = lazy(() => import('../pages/UserList'));
 const MaterialListPage = lazy(() => import('../pages/MaterialListPage'));
@@ -98,6 +99,10 @@ export const router = createBrowserRouter([
             { path: 'transfers/:id', element: withSuspense(<TransferDetail />) },
             { path: 'borrowings', element: withSuspense(<BorrowingList />) },
             { path: 'borrowings/new', element: withSuspense(<BorrowingCreate />) },
+            {
+                path: 'borrowings/batches/:id',
+                element: guarded('/borrowings/batches/:id', <BorrowingBatchDetail />),
+            },
             { path: 'borrowings/:id', element: withSuspense(<BorrowingDetail />) },
             { path: 'storage', element: guarded('/storage', <ComingSoonPage />) },
             { path: 'plants', element: guarded('/plants', <PlantList />) },
