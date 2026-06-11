@@ -7,7 +7,7 @@ import LazyBoundary from '../components/shared/LazyBoundary';
 import PageHeader from '../components/shared/PageHeader';
 import { USER_ROLE_LABEL } from '../core/constants';
 import { useAuth } from '../core/contexts/AuthContext';
-import { hasManagerAccess, isAdmin } from '../core/lib/permissions';
+import { can, isAdmin } from '../core/lib/permissions';
 import { normalizeSearchTerm } from '../core/lib/search';
 import { plantService, userService, type UserListApiResponse } from '../core/services';
 import type { CreateUserPayload, PaginatedResponse, UpdateUserPayload, User, UserListParams } from '../core/types';
@@ -99,7 +99,7 @@ const UserList: React.FC = () => {
     const queryClient = useQueryClient();
     const { message, modal } = App.useApp();
     const { role, user, setUser } = useAuth();
-    const canViewUsers = hasManagerAccess(role);
+    const canViewUsers = can(role, 'user.view');
     const canManageUsers = isAdmin(role);
 
     const [filters, setFilters] = useState<UserListParams>(() => createDefaultFilters());

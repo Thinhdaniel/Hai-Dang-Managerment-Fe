@@ -33,7 +33,7 @@ import LazyBoundary from '../components/shared/LazyBoundary';
 import PageHeader from '../components/shared/PageHeader';
 import QrCameraScanner from '../components/QrCameraScanner';
 import { useAuth } from '../core/contexts/AuthContext';
-import { hasManagerAccess } from '../core/lib/permissions';
+import { can } from '../core/lib/permissions';
 import { resolveAssetByScan } from '../core/lib/qrScan';
 import { recordQrScan } from '../core/lib/qrScanAudit';
 import { ASSET_STATUS_LABEL, isReturnedToPartner } from '../core/constants';
@@ -90,7 +90,7 @@ const StocktakePage: React.FC = () => {
     const screens = useBreakpoint();
     const isDesktop = Boolean(screens.lg);
     const { role, user } = useAuth();
-    const canUseStocktake = hasManagerAccess(role);
+    const canUseStocktake = can(role, 'stocktake');
     const { message } = App.useApp();
     const queryClient = useQueryClient();
 

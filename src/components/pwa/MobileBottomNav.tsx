@@ -9,6 +9,8 @@ import {
 import type { ReactNode } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useNotificationContext } from '../../core/contexts/NotificationContext';
+import { useAuth } from '../../core/contexts/AuthContext';
+import { can, type Capability } from '../../core/lib/permissions';
 
 type MobileNavItem = {
     path: string;
@@ -16,6 +18,7 @@ type MobileNavItem = {
     icon: ReactNode;
     match: (pathname: string) => boolean;
     badge?: number;
+    capability?: Capability;
 };
 
 type DockButtonProps = {
@@ -61,8 +64,10 @@ const MobileBottomNav = ({ onOpenMenu }: { onOpenMenu: () => void }) => {
     const navigate = useNavigate();
     const { pathname } = useLocation();
     const { unreadCount } = useNotificationContext();
+    const { user } = useAuth();
+    const role = user?.role;
 
-    const items: MobileNavItem[] = [
+    const allItems: MobileNavItem[] = [
         {
             path: '/dashboard',
             label: 'Tổng quan',
@@ -74,6 +79,7 @@ const MobileBottomNav = ({ onOpenMenu }: { onOpenMenu: () => void }) => {
             path: '/assets',
             label: 'Máy',
             icon: <AppstoreOutlined />,
+            capability: 'asset.view',
             match: (current) =>
                 isExactOrPrefix(current, '/assets') ||
                 isExactOrPrefix(current, '/qr-labels') ||
@@ -86,15 +92,18 @@ const MobileBottomNav = ({ onOpenMenu }: { onOpenMenu: () => void }) => {
             path: '/materials',
             label: 'Vật tư',
             icon: <DatabaseOutlined />,
+            capability: 'material.view',
             match: (current) => materialCatalogPaths.some((path) => isExactOrPrefix(current, path)),
         },
         {
             path: '/materials/supply-requests',
             label: 'Phiếu',
             icon: <FormOutlined />,
+            capability: 'supplyRequest.manage',
             match: (current) => materialWorkflowPaths.some((path) => isExactOrPrefix(current, path)),
         },
     ];
+    const items = allItems.filter((item) => !item.capability || can(role, item.capability));
     const leftItems = items.slice(0, 2);
     const rightItems: MobileNavItem[] = [
         ...items.slice(2),

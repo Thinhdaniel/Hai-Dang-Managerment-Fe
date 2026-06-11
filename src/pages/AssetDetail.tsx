@@ -33,7 +33,7 @@ import TransferHistorySection from '../components/transfer/TransferHistorySectio
 import TransactionStatusBadge from '../components/transactions/TransactionStatusBadge';
 import TransactionTypeBadge from '../components/transactions/TransactionTypeBadge';
 import { useAuth } from '../core/contexts/AuthContext';
-import { hasManagerAccess } from '../core/lib/permissions';
+import { can, hasManagerAccess } from '../core/lib/permissions';
 import { brandService, plantService } from '../core/services';
 import { assetService } from '../core/services/asset.service';
 import { borrowingService } from '../core/services/borrowing.service';
@@ -127,6 +127,7 @@ const AssetDetail: React.FC = () => {
     const queryClient = useQueryClient();
     const { message } = App.useApp();
     const canManage = hasManagerAccess(role);
+    const canUpdateStatus = can(role, 'asset.status');
 
     const [isFormOpen, setIsFormOpen] = useState(false);
     const [isMaintenanceOpen, setIsMaintenanceOpen] = useState(false);
@@ -416,14 +417,16 @@ const AssetDetail: React.FC = () => {
                                 Tạo lệnh điều chuyển
                             </Button>
                         </Tooltip>
-                        <Button
-                            block
-                            icon={<RollbackOutlined />}
-                            disabled={returnedToPartner}
-                            onClick={() => navigate(`/borrowings/new?assetId=${asset.id}`)}
-                        >
-                            Tạo giao dịch mượn / thuê
-                        </Button>
+                        {canManage ? (
+                            <Button
+                                block
+                                icon={<RollbackOutlined />}
+                                disabled={returnedToPartner}
+                                onClick={() => navigate(`/borrowings/new?assetId=${asset.id}`)}
+                            >
+                                Tạo giao dịch mượn / thuê
+                            </Button>
+                        ) : null}
                         <Button
                             block
                             icon={<ToolOutlined />}
@@ -495,13 +498,15 @@ const AssetDetail: React.FC = () => {
             variant='outlined'
             title='Lịch sử giao dịch'
             extra={
-                <Button
-                    size='small'
-                    icon={<RollbackOutlined />}
-                    onClick={() => navigate(`/borrowings/new?assetId=${asset.id}`)}
-                >
-                    Tạo giao dịch
-                </Button>
+                canManage ? (
+                    <Button
+                        size='small'
+                        icon={<RollbackOutlined />}
+                        onClick={() => navigate(`/borrowings/new?assetId=${asset.id}`)}
+                    >
+                        Tạo giao dịch
+                    </Button>
+                ) : null
             }
         >
             {borrowings.length ? (
@@ -653,14 +658,16 @@ const AssetDetail: React.FC = () => {
                                     Điều chuyển
                                 </Button>
                             </Tooltip>
-                            <Button
-                                className='asset-detail-action-button'
-                                icon={<RollbackOutlined />}
-                                disabled={returnedToPartner}
-                                onClick={() => navigate(`/borrowings/new?assetId=${asset.id}`)}
-                            >
-                                Tạo giao dịch
-                            </Button>
+                            {canManage ? (
+                                <Button
+                                    className='asset-detail-action-button'
+                                    icon={<RollbackOutlined />}
+                                    disabled={returnedToPartner}
+                                    onClick={() => navigate(`/borrowings/new?assetId=${asset.id}`)}
+                                >
+                                    Tạo giao dịch
+                                </Button>
+                            ) : null}
                             <Button
                                 className='asset-detail-action-button'
                                 icon={<ToolOutlined />}
@@ -682,7 +689,7 @@ const AssetDetail: React.FC = () => {
                         </div>
                     </div>
 
-                    {canManage ? (
+                    {canUpdateStatus ? (
                         <div className='asset-detail-status-panel rounded-2xl border border-slate-200 bg-slate-50 p-4'>
                             <div className='mb-3 flex items-center gap-2'>
                                 <ToolOutlined className='text-slate-500' />

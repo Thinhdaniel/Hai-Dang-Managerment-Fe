@@ -28,6 +28,8 @@ import type { ReactNode } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../core/contexts/AuthContext';
 import { useNotificationContext } from '../../core/contexts/NotificationContext';
+import { can, type Capability } from '../../core/lib/permissions';
+import { isProcurementPlant } from '../../core/constants/navAccess';
 
 const { Sider } = Layout;
 const { Text } = Typography;
@@ -38,7 +40,8 @@ type NavigationItem = {
     description?: string;
     icon: ReactNode;
     matchMode?: 'exact' | 'prefix';
-    managerOnly?: boolean;
+    capability?: Capability;
+    procurementOnly?: boolean;
 };
 
 type NavigationSection = {
@@ -64,6 +67,7 @@ const navigationSections: NavigationSection[] = [
                 description: 'Chi phí vận hành theo cơ sở',
                 icon: <CalculatorOutlined />,
                 matchMode: 'exact',
+                capability: 'report.view',
             },
             {
                 path: '/materials/reports',
@@ -71,6 +75,7 @@ const navigationSections: NavigationSection[] = [
                 description: 'Mua, cấp phát, tồn kho, NCC',
                 icon: <BarChartOutlined />,
                 matchMode: 'exact',
+                capability: 'report.view',
             },
         ],
     },
@@ -84,6 +89,7 @@ const navigationSections: NavigationSection[] = [
                 description: 'Số lượng theo cơ sở',
                 icon: <InboxOutlined />,
                 matchMode: 'exact',
+                capability: 'inventory.view',
             },
             {
                 path: '/materials/distributions',
@@ -91,6 +97,7 @@ const navigationSections: NavigationSection[] = [
                 description: 'Phiếu xuất và nhận hàng',
                 icon: <SendOutlined />,
                 matchMode: 'exact',
+                capability: 'distribution.view',
             },
             {
                 path: '/materials/supply-requests',
@@ -98,6 +105,7 @@ const navigationSections: NavigationSection[] = [
                 description: 'Yêu cầu từ các cơ sở',
                 icon: <FormOutlined />,
                 matchMode: 'exact',
+                capability: 'supplyRequest.manage',
             },
         ],
     },
@@ -111,6 +119,7 @@ const navigationSections: NavigationSection[] = [
                 description: 'Tổng hợp nhu cầu mua',
                 icon: <FileAddOutlined />,
                 matchMode: 'exact',
+                procurementOnly: true,
             },
             {
                 path: '/materials/purchase-orders',
@@ -118,6 +127,7 @@ const navigationSections: NavigationSection[] = [
                 description: 'PO và nhận hàng',
                 icon: <ShoppingCartOutlined />,
                 matchMode: 'exact',
+                procurementOnly: true,
             },
             {
                 path: '/materials/suppliers',
@@ -125,6 +135,7 @@ const navigationSections: NavigationSection[] = [
                 description: 'Thông tin NCC',
                 icon: <ShopOutlined />,
                 matchMode: 'exact',
+                capability: 'material.view',
             },
             {
                 path: '/materials',
@@ -132,6 +143,7 @@ const navigationSections: NavigationSection[] = [
                 description: 'Mã, nhóm, đơn vị tính',
                 icon: <DatabaseOutlined />,
                 matchMode: 'exact',
+                capability: 'material.view',
             },
         ],
     },
@@ -144,6 +156,7 @@ const navigationSections: NavigationSection[] = [
                 label: 'Máy',
                 description: 'Danh sách máy',
                 icon: <AppstoreOutlined />,
+                capability: 'asset.view',
             },
             {
                 path: '/assets/stocktake',
@@ -151,37 +164,42 @@ const navigationSections: NavigationSection[] = [
                 description: 'Quét đối chiếu hiện trường',
                 icon: <AuditOutlined />,
                 matchMode: 'exact',
-                managerOnly: true,
+                capability: 'stocktake',
             },
             {
                 path: '/qr-labels',
                 label: 'Tem QR',
                 description: 'Tạo, in và kích hoạt tem',
                 icon: <QrcodeOutlined />,
+                capability: 'qrlabel.manage',
             },
             {
                 path: '/transfers',
                 label: 'Chuyển máy',
                 description: 'Điều chuyển giữa cơ sở',
                 icon: <SwapOutlined />,
+                capability: 'transfer.write',
             },
             {
                 path: '/borrowings',
                 label: 'Mượn / Trả',
                 description: 'Theo dõi mượn trả',
                 icon: <DeploymentUnitOutlined />,
+                capability: 'borrowing.write',
             },
             {
                 path: '/maintenances',
                 label: 'Bảo trì',
                 description: 'Lịch và lịch sử bảo trì',
                 icon: <BuildOutlined />,
+                capability: 'maintenance.view',
             },
             {
                 path: '/brands',
                 label: 'Nhãn hiệu',
                 description: 'Hãng và model máy',
                 icon: <TagsOutlined />,
+                capability: 'brand.manage',
             },
         ],
     },
@@ -194,18 +212,21 @@ const navigationSections: NavigationSection[] = [
                 label: 'Cơ sở',
                 description: 'Nhà máy, xưởng, kho',
                 icon: <ClusterOutlined />,
+                capability: 'plant.view',
             },
             {
                 path: '/users',
                 label: 'Người dùng',
                 description: 'Tài khoản và phân quyền',
                 icon: <TeamOutlined />,
+                capability: 'user.view',
             },
             {
                 path: '/storage',
                 label: 'Kho',
                 description: 'Khu vực lưu trữ',
                 icon: <InboxOutlined />,
+                capability: 'storage.view',
             },
         ],
     },
@@ -306,25 +327,21 @@ const AppSidebar: React.FC<AppSidebarProps> = ({
     const { unreadCount } = useNotificationContext();
     const { user } = useAuth();
 
-    const mainPlantId = import.meta.env.VITE_MAIN_PLANT_ID as string | undefined;
-    const procurementPlantIds = String(import.meta.env.VITE_PROCUREMENT_PLANT_IDS || mainPlantId || '')
-        .split(',')
-        .map((id) => id.trim())
-        .filter(Boolean);
-    const isProcurementManager =
-        Boolean(user?.plantId && procurementPlantIds.includes(user.plantId)) &&
-        (user?.role === 'admin' || user?.role === 'manager' || user?.role === 'director');
-    const isMachineManager = user?.role === 'admin' || user?.role === 'manager';
+    const role = user?.role;
+    const isProcurementManager = can(role, 'procurement.operate') && isProcurementPlant(user);
 
     const visibleSections = navigationSections
         .map((section) => ({
             ...section,
-            items: section.items.filter(
-                (item) =>
-                    (!item.managerOnly || isMachineManager) &&
-                    ((item.path !== '/materials/purchase-requests' && item.path !== '/materials/purchase-orders') ||
-                        isProcurementManager)
-            ),
+            items: section.items.filter((item) => {
+                if (item.procurementOnly) {
+                    return isProcurementManager;
+                }
+                if (item.capability) {
+                    return can(role, item.capability);
+                }
+                return true;
+            }),
         }))
         .filter((section) => section.items.length > 0);
 

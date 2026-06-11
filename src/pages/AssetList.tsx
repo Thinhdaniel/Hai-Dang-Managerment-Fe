@@ -41,7 +41,7 @@ import AssetQrModal from '../components/AssetQrModal';
 import AssetAiSearchBar from '../components/AssetAiSearchBar';
 import type { AiAssetSearchFilters } from '../core/services/ai-help.service';
 import { useAuth } from '../core/contexts/AuthContext';
-import { hasManagerAccess, isAdmin } from '../core/lib/permissions';
+import { can } from '../core/lib/permissions';
 import { normalizeSearchTerm } from '../core/lib/search';
 import { brandService, plantService } from '../core/services';
 import { assetService } from '../core/services/asset.service';
@@ -169,9 +169,11 @@ const AssetList: React.FC = () => {
     const { message } = App.useApp();
 
     const initialSearch = normalizeSearchTerm(searchParams.get('search'));
-    const canManageAssets = isAdmin(role);
-    const canExportImport = hasManagerAccess(role);
-    const canQuickUpdate = hasManagerAccess(role);
+    const canWriteAssets = can(role, 'asset.write');
+    const canDeleteAssets = can(role, 'asset.delete');
+    const canExportImport = can(role, 'asset.write');
+    const canQuickUpdate = can(role, 'asset.status');
+    const canCreateTransfer = can(role, 'transfer.write');
     const [selectedRowKeys, setSelectedRowKeys] = useState<React.Key[]>([]);
     const [selectedAssetMap, setSelectedAssetMap] = useState<Record<string, Asset>>({});
     const [isFormModalOpen, setIsFormModalOpen] = useState(false);
@@ -674,7 +676,7 @@ const AssetList: React.FC = () => {
                             }}
                         />
                     </Tooltip>
-                    {canManageAssets ? (
+                    {canWriteAssets ? (
                         <Tooltip title='Chỉnh sửa'>
                             <Button
                                 type='text'
@@ -687,32 +689,34 @@ const AssetList: React.FC = () => {
                             />
                         </Tooltip>
                     ) : null}
-                    <Tooltip
-                        title={
-                            isReturnedToPartner(record.status)
-                                ? 'Máy đã trả đối tác, không thể điều chuyển'
-                                : record.hasOpenTransfer
-                                  ? 'Thiết bị đang có lệnh điều chuyển chờ xử lý'
-                                  : 'Điều chuyển thiết bị'
-                        }
-                    >
-                        <Button
-                            type='text'
-                            disabled={record.hasOpenTransfer || isReturnedToPartner(record.status)}
-                            icon={<SwapOutlined />}
-                            className={`flex h-8 w-8 items-center justify-center rounded-md transition-colors ${
-                                record.hasOpenTransfer || isReturnedToPartner(record.status)
-                                    ? 'cursor-not-allowed bg-slate-50 text-slate-300'
-                                    : 'bg-sky-50 text-sky-600 hover:bg-sky-100 hover:text-sky-700'
-                            }`}
-                            onClick={(e) => {
-                                e.stopPropagation();
-                                if (!record.hasOpenTransfer && !isReturnedToPartner(record.status))
-                                    handleOpenTransfer(record);
-                            }}
-                        />
-                    </Tooltip>
-                    {canManageAssets ? (
+                    {canCreateTransfer ? (
+                        <Tooltip
+                            title={
+                                isReturnedToPartner(record.status)
+                                    ? 'Máy đã trả đối tác, không thể điều chuyển'
+                                    : record.hasOpenTransfer
+                                      ? 'Thiết bị đang có lệnh điều chuyển chờ xử lý'
+                                      : 'Điều chuyển thiết bị'
+                            }
+                        >
+                            <Button
+                                type='text'
+                                disabled={record.hasOpenTransfer || isReturnedToPartner(record.status)}
+                                icon={<SwapOutlined />}
+                                className={`flex h-8 w-8 items-center justify-center rounded-md transition-colors ${
+                                    record.hasOpenTransfer || isReturnedToPartner(record.status)
+                                        ? 'cursor-not-allowed bg-slate-50 text-slate-300'
+                                        : 'bg-sky-50 text-sky-600 hover:bg-sky-100 hover:text-sky-700'
+                                }`}
+                                onClick={(e) => {
+                                    e.stopPropagation();
+                                    if (!record.hasOpenTransfer && !isReturnedToPartner(record.status))
+                                        handleOpenTransfer(record);
+                                }}
+                            />
+                        </Tooltip>
+                    ) : null}
+                    {canWriteAssets ? (
                         <Tooltip title='QR công khai'>
                             <Button
                                 type='text'
@@ -726,7 +730,7 @@ const AssetList: React.FC = () => {
                             />
                         </Tooltip>
                     ) : null}
-                    {canManageAssets ? (
+                    {canDeleteAssets ? (
                         <ConfirmAction
                             title='Xóa thiết bị'
                             description={`Thiết bị “${record.name}” sẽ bị xóa mềm khỏi hệ thống. Không thể hoàn tác.`}
@@ -808,7 +812,7 @@ const AssetList: React.FC = () => {
                                     </Button>
                                 </>
                             ) : null}
-                            {canManageAssets ? (
+                            {canWriteAssets ? (
                                 <Button
                                     type='primary'
                                     icon={<PlusOutlined />}
@@ -1039,28 +1043,30 @@ const AssetList: React.FC = () => {
                             thiết bị đang chọn
                         </div>
                         <div className='asset-selection-actions flex gap-2'>
-                            <Tooltip
-                                title={
-                                    selectedAssets[0]?.hasOpenTransfer
-                                        ? 'Thiết bị đang có lệnh điều chuyển chờ xử lý'
-                                        : selectedAssets.some((asset) => isReturnedToPartner(asset.status))
-                                          ? 'Có máy đã trả đối tác trong danh sách chọn'
-                                          : ''
-                                }
-                            >
-                                <Button
-                                    size='small'
-                                    disabled={
-                                        selectedAssets.length === 0 ||
-                                        selectedAssets.some((asset) => isReturnedToPartner(asset.status))
+                            {canCreateTransfer ? (
+                                <Tooltip
+                                    title={
+                                        selectedAssets[0]?.hasOpenTransfer
+                                            ? 'Thiết bị đang có lệnh điều chuyển chờ xử lý'
+                                            : selectedAssets.some((asset) => isReturnedToPartner(asset.status))
+                                              ? 'Có máy đã trả đối tác trong danh sách chọn'
+                                              : ''
                                     }
-                                    className='rounded-md'
-                                    onClick={handleOpenSelectedTransfer}
                                 >
-                                    Điều chuyển
-                                </Button>
-                            </Tooltip>
-                            {canManageAssets ? (
+                                    <Button
+                                        size='small'
+                                        disabled={
+                                            selectedAssets.length === 0 ||
+                                            selectedAssets.some((asset) => isReturnedToPartner(asset.status))
+                                        }
+                                        className='rounded-md'
+                                        onClick={handleOpenSelectedTransfer}
+                                    >
+                                        Điều chuyển
+                                    </Button>
+                                </Tooltip>
+                            ) : null}
+                            {canDeleteAssets ? (
                                 <ConfirmAction
                                     title='Xóa các thiết bị đã chọn'
                                     description={`${selectedRowKeys.length} thiết bị sẽ bị xóa mềm. Hành động này không thể hoàn tác.`}
@@ -1129,15 +1135,17 @@ const AssetList: React.FC = () => {
                                         >
                                             Xem
                                         </Button>
-                                        <Button
-                                            size='small'
-                                            icon={<SwapOutlined />}
-                                            disabled={transferDisabled}
-                                            onClick={() => handleOpenTransfer(asset)}
-                                        >
-                                            Điều chuyển
-                                        </Button>
-                                        {canManageAssets ? (
+                                        {canCreateTransfer ? (
+                                            <Button
+                                                size='small'
+                                                icon={<SwapOutlined />}
+                                                disabled={transferDisabled}
+                                                onClick={() => handleOpenTransfer(asset)}
+                                            >
+                                                Điều chuyển
+                                            </Button>
+                                        ) : null}
+                                        {canWriteAssets ? (
                                             <Button
                                                 size='small'
                                                 icon={<EditOutlined />}

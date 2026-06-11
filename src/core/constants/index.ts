@@ -113,7 +113,7 @@ export const BORROWING_TYPE_LABEL: Record<BorrowingType, string> = {
 export const USER_ROLE_LABEL: Record<UserRole, string> = {
     [UserRole.ADMIN]: 'Quản trị viên',
     [UserRole.MANAGER]: 'Quản lý',
-    [UserRole.STAFF]: 'Nhân viên',
+    [UserRole.STAFF]: 'Bộ phận kỹ thuật',
     [UserRole.DIRECTOR]: 'Giám đốc',
 };
 

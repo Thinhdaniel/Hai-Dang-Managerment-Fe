@@ -38,6 +38,7 @@ type UserFormModalProps = CreateUserFormModalProps | EditUserFormModalProps;
 
 const roleOptions = [
     { value: UserRole.ADMIN, label: USER_ROLE_LABEL[UserRole.ADMIN] },
+    { value: UserRole.DIRECTOR, label: USER_ROLE_LABEL[UserRole.DIRECTOR] },
     { value: UserRole.MANAGER, label: USER_ROLE_LABEL[UserRole.MANAGER] },
     { value: UserRole.STAFF, label: USER_ROLE_LABEL[UserRole.STAFF] },
 ];

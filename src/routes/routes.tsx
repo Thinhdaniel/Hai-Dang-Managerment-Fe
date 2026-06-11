@@ -3,7 +3,8 @@ import type { ReactNode } from 'react';
 import { Navigate, createBrowserRouter } from 'react-router-dom';
 import AppLayout from '../components/layout/AppLayout';
 import LazyBoundary from '../components/shared/LazyBoundary';
-import ProtectedRoute from './guard';
+import ProtectedRoute, { RequireAccess } from './guard';
+import { ROUTE_ACCESS } from '../core/constants/navAccess';
 
 const Dashboard = lazy(() => import('../pages/Dashboard'));
 const GlobalQrScannerPage = lazy(() => import('../pages/GlobalQrScannerPage'));
@@ -42,6 +43,13 @@ const RouteErrorPage = lazy(() => import('../pages/RouteErrorPage'));
 
 const withSuspense = (element: ReactNode) => <LazyBoundary>{element}</LazyBoundary>;
 
+/** Bọc element trong RequireAccess nếu route đó cần quyền (theo ROUTE_ACCESS). */
+const guarded = (path: string, element: ReactNode) => {
+    const check = ROUTE_ACCESS[path];
+    const node = withSuspense(element);
+    return check ? <RequireAccess check={check}>{node}</RequireAccess> : node;
+};
+
 export const router = createBrowserRouter([
     {
         path: '/login',
@@ -78,28 +86,40 @@ export const router = createBrowserRouter([
             { path: 'assets', element: withSuspense(<AssetList />) },
             { path: 'assets/stocktake', element: withSuspense(<StocktakePage />) },
             { path: 'assets/:id', element: withSuspense(<AssetDetail />) },
-            { path: 'qr-labels', element: withSuspense(<QrLabelListPage />) },
-            { path: 'qr-labels/batches/:id/print', element: withSuspense(<QrBatchPrintPage />) },
-            { path: 'qr/:publicId/activate', element: withSuspense(<QrActivateMachinePage />) },
-            { path: 'brands', element: withSuspense(<BrandList />) },
+            { path: 'qr-labels', element: guarded('/qr-labels', <QrLabelListPage />) },
+            {
+                path: 'qr-labels/batches/:id/print',
+                element: guarded('/qr-labels/batches/:id/print', <QrBatchPrintPage />),
+            },
+            { path: 'qr/:publicId/activate', element: guarded('/qr/:publicId/activate', <QrActivateMachinePage />) },
+            { path: 'brands', element: guarded('/brands', <BrandList />) },
             { path: 'maintenances', element: withSuspense(<MaintenanceList />) },
             { path: 'transfers', element: withSuspense(<TransferList />) },
             { path: 'transfers/:id', element: withSuspense(<TransferDetail />) },
             { path: 'borrowings', element: withSuspense(<BorrowingList />) },
             { path: 'borrowings/new', element: withSuspense(<BorrowingCreate />) },
             { path: 'borrowings/:id', element: withSuspense(<BorrowingDetail />) },
-            { path: 'storage', element: withSuspense(<ComingSoonPage />) },
-            { path: 'plants', element: withSuspense(<PlantList />) },
-            { path: 'users', element: withSuspense(<UserList />) },
-            { path: 'materials', element: withSuspense(<MaterialListPage />) },
-            { path: 'materials/suppliers', element: withSuspense(<MaterialSupplierPage />) },
-            { path: 'materials/inventory', element: withSuspense(<MaterialInventoryPage />) },
-            { path: 'materials/purchase-requests', element: withSuspense(<PurchaseRequestPage />) },
-            { path: 'materials/supply-requests', element: withSuspense(<SupplyRequestPage />) },
-            { path: 'materials/purchase-orders', element: withSuspense(<PurchaseOrderPage />) },
-            { path: 'materials/distributions', element: withSuspense(<DistributionPage />) },
-            { path: 'materials/reports', element: withSuspense(<MaterialReportPage />) },
-            { path: 'reports/facility-costs', element: withSuspense(<FacilityCostReportPage />) },
+            { path: 'storage', element: guarded('/storage', <ComingSoonPage />) },
+            { path: 'plants', element: guarded('/plants', <PlantList />) },
+            { path: 'users', element: guarded('/users', <UserList />) },
+            { path: 'materials', element: guarded('/materials', <MaterialListPage />) },
+            { path: 'materials/suppliers', element: guarded('/materials/suppliers', <MaterialSupplierPage />) },
+            { path: 'materials/inventory', element: guarded('/materials/inventory', <MaterialInventoryPage />) },
+            {
+                path: 'materials/purchase-requests',
+                element: guarded('/materials/purchase-requests', <PurchaseRequestPage />),
+            },
+            {
+                path: 'materials/supply-requests',
+                element: guarded('/materials/supply-requests', <SupplyRequestPage />),
+            },
+            {
+                path: 'materials/purchase-orders',
+                element: guarded('/materials/purchase-orders', <PurchaseOrderPage />),
+            },
+            { path: 'materials/distributions', element: guarded('/materials/distributions', <DistributionPage />) },
+            { path: 'materials/reports', element: guarded('/materials/reports', <MaterialReportPage />) },
+            { path: 'reports/facility-costs', element: guarded('/reports/facility-costs', <FacilityCostReportPage />) },
         ],
     },
     {
