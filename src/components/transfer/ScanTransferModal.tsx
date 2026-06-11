@@ -3,6 +3,7 @@ import { App, Button, Empty, Modal, Tag, Tooltip } from 'antd';
 import { DeleteOutlined, EnvironmentOutlined, QrcodeOutlined, ScanOutlined, SwapOutlined } from '@ant-design/icons';
 import QrCameraScanner from '../QrCameraScanner';
 import { resolveAssetByScan } from '../../core/lib/qrScan';
+import { recordQrScan } from '../../core/lib/qrScanAudit';
 import { isReturnedToPartner } from '../../core/constants';
 import type { Asset } from '../../core/types';
 
@@ -26,8 +27,19 @@ const ScanTransferModal: React.FC<ScanTransferModalProps> = ({ open, onClose, on
         if (resolving) return;
         setResolving(true);
         try {
-            const { asset, ambiguous } = await resolveAssetByScan(rawValue);
+            const { asset, ambiguous, publicId, labelId, source } = await resolveAssetByScan(rawValue);
+            const logBase = {
+                rawValue,
+                publicId,
+                labelId,
+                action: 'transfer_scan' as const,
+                source,
+            };
             if (!asset) {
+                recordQrScan({
+                    ...logBase,
+                    result: ambiguous ? 'ambiguous' : 'not_found',
+                });
                 if (ambiguous) {
                     message.warning('Mã nhập vào khớp nhiều máy — hãy nhập chính xác mã máy hoặc quét QR.');
                 } else {
@@ -36,14 +48,31 @@ const ScanTransferModal: React.FC<ScanTransferModalProps> = ({ open, onClose, on
                 return;
             }
             if (idSet.has(asset.id)) {
+                recordQrScan({
+                    ...logBase,
+                    assetId: asset.id,
+                    result: 'duplicate',
+                });
                 message.info(`"${asset.name}" đã có trong danh sách.`);
                 return;
             }
             if (isReturnedToPartner(asset.status)) {
+                recordQrScan({
+                    ...logBase,
+                    assetId: asset.id,
+                    result: 'failed',
+                    metadata: { reason: 'returned_to_partner' },
+                });
                 message.warning(`"${asset.name}" đã trả đối tác, không thể điều chuyển.`);
                 return;
             }
             if (asset.hasOpenTransfer) {
+                recordQrScan({
+                    ...logBase,
+                    assetId: asset.id,
+                    result: 'failed',
+                    metadata: { reason: 'has_open_transfer' },
+                });
                 message.warning(`"${asset.name}" đang có lệnh điều chuyển chờ xử lý.`);
                 return;
             }
@@ -51,12 +80,30 @@ const ScanTransferModal: React.FC<ScanTransferModalProps> = ({ open, onClose, on
                 const samePlant = asset.plantId === firstAsset.plantId;
                 const sameArea = areaKey(asset) === areaKey(firstAsset);
                 if (!samePlant || !sameArea) {
+                    recordQrScan({
+                        ...logBase,
+                        assetId: asset.id,
+                        result: 'failed',
+                        metadata: {
+                            reason: 'different_origin',
+                            firstAssetId: firstAsset.id,
+                            firstPlantId: firstAsset.plantId,
+                            firstArea: firstAsset.area,
+                            currentPlantId: asset.plantId,
+                            currentArea: asset.area,
+                        },
+                    });
                     message.warning(
                         `"${asset.name}" khác cơ sở/khu vực xuất phát với máy đầu tiên — không thể chung một lệnh.`
                     );
                     return;
                 }
             }
+            recordQrScan({
+                ...logBase,
+                assetId: asset.id,
+                result: 'resolved',
+            });
             setAssets((current) => [...current, asset]);
             message.success(`Đã thêm "${asset.name}".`);
         } finally {

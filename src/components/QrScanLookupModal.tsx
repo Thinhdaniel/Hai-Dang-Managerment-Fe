@@ -3,7 +3,8 @@ import { App, Modal } from 'antd';
 import { ScanOutlined } from '@ant-design/icons';
 import QrCameraScanner from './QrCameraScanner';
 import { resolveAssetByScan } from '../core/lib/qrScan';
-import type { Asset } from '../core/types';
+import { recordQrScan } from '../core/lib/qrScanAudit';
+import type { Asset, QrScanAction } from '../core/types';
 
 type QrScanLookupModalProps = {
     open: boolean;
@@ -12,6 +13,8 @@ type QrScanLookupModalProps = {
     title?: string;
     subtitle?: string;
     successMessage?: (asset: Asset) => string;
+    auditAction?: QrScanAction;
+    auditMetadata?: Record<string, unknown>;
 };
 
 const QrScanLookupModal: React.FC<QrScanLookupModalProps> = ({
@@ -21,6 +24,8 @@ const QrScanLookupModal: React.FC<QrScanLookupModalProps> = ({
     title = 'Quét QR mở hồ sơ máy',
     subtitle = 'Đưa tem QR trên máy vào khung để mở nhanh chi tiết',
     successMessage = (asset) => `Mở hồ sơ "${asset.name}"`,
+    auditAction,
+    auditMetadata,
 }) => {
     const { message } = App.useApp();
     const [resolving, setResolving] = useState(false);
@@ -29,14 +34,37 @@ const QrScanLookupModal: React.FC<QrScanLookupModalProps> = ({
         if (resolving) return;
         setResolving(true);
         try {
-            const { asset, ambiguous } = await resolveAssetByScan(rawValue);
+            const { asset, ambiguous, publicId, labelId, source } = await resolveAssetByScan(rawValue);
             if (!asset) {
+                if (auditAction) {
+                    recordQrScan({
+                        rawValue,
+                        publicId,
+                        labelId,
+                        action: auditAction,
+                        result: ambiguous ? 'ambiguous' : 'not_found',
+                        source,
+                        metadata: auditMetadata,
+                    });
+                }
                 if (ambiguous) {
                     message.warning('Mã nhập vào khớp nhiều máy — hãy nhập chính xác mã máy hoặc quét QR.');
                 } else {
                     message.error('Không tìm thấy máy từ mã vừa quét.');
                 }
                 return;
+            }
+            if (auditAction) {
+                recordQrScan({
+                    rawValue,
+                    publicId,
+                    labelId,
+                    assetId: asset.id,
+                    action: auditAction,
+                    result: 'resolved',
+                    source,
+                    metadata: auditMetadata,
+                });
             }
             message.success(successMessage(asset));
             onResolved(asset);

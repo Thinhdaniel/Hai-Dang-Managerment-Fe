@@ -35,6 +35,7 @@ import QrCameraScanner from '../components/QrCameraScanner';
 import { useAuth } from '../core/contexts/AuthContext';
 import { hasManagerAccess } from '../core/lib/permissions';
 import { resolveAssetByScan } from '../core/lib/qrScan';
+import { recordQrScan } from '../core/lib/qrScanAudit';
 import { ASSET_STATUS_LABEL, isReturnedToPartner } from '../core/constants';
 import { assetService } from '../core/services/asset.service';
 import { plantService } from '../core/services';
@@ -228,9 +229,21 @@ const StocktakePage: React.FC = () => {
 
         setResolving(true);
         try {
-            const { asset, ambiguous } = await resolveAssetByScan(rawValue);
+            const { asset, ambiguous, publicId, labelId, source } = await resolveAssetByScan(rawValue);
+            const logBase = {
+                rawValue,
+                publicId,
+                labelId,
+                action: 'stocktake' as const,
+                source,
+                metadata: { selectedPlantId, selectedArea },
+            };
 
             if (!asset) {
+                recordQrScan({
+                    ...logBase,
+                    result: ambiguous ? 'ambiguous' : 'not_found',
+                });
                 appendRecord({
                     type: 'unknown',
                     rawValue,
@@ -242,17 +255,33 @@ const StocktakePage: React.FC = () => {
             }
 
             if (scannedAssetIds.has(asset.id)) {
+                recordQrScan({
+                    ...logBase,
+                    assetId: asset.id,
+                    result: 'duplicate',
+                });
                 message.info(`"${asset.name}" đã quét rồi`);
                 return;
             }
 
             if (expectedMap.has(asset.id)) {
+                recordQrScan({
+                    ...logBase,
+                    assetId: asset.id,
+                    result: 'present',
+                });
                 appendRecord({ type: 'present', rawValue, asset, message: 'Có mặt trong phạm vi kiểm kê' });
                 message.success(`Có mặt: ${asset.machineCode}`);
                 return;
             }
 
             if (asset.plantId === selectedPlantId) {
+                recordQrScan({
+                    ...logBase,
+                    assetId: asset.id,
+                    result: 'wrong_area',
+                    metadata: { selectedPlantId, selectedArea, currentArea: asset.area },
+                });
                 appendRecord({
                     type: 'wrong_area',
                     rawValue,
@@ -267,6 +296,12 @@ const StocktakePage: React.FC = () => {
                 return;
             }
 
+            recordQrScan({
+                ...logBase,
+                assetId: asset.id,
+                result: 'wrong_plant',
+                metadata: { selectedPlantId, selectedArea, currentPlantId: asset.plantId },
+            });
             appendRecord({
                 type: 'wrong_plant',
                 rawValue,

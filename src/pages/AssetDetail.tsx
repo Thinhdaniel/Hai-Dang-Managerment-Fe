@@ -38,6 +38,7 @@ import { brandService, plantService } from '../core/services';
 import { assetService } from '../core/services/asset.service';
 import { borrowingService } from '../core/services/borrowing.service';
 import { maintenanceService } from '../core/services/maintenance.service';
+import { qrScanLogService } from '../core/services/qr-scan-log.service';
 import { transferService } from '../core/services/transfer.service';
 import { ASSET_OWNERSHIP_LABEL, isReturnedToPartner } from '../core/constants';
 import type { Asset, AssetStatus, Borrowing, CreateTransferPayload, Maintenance, Transfer } from '../core/types';
@@ -65,7 +66,29 @@ const MAINT_LABEL: Record<string, string> = {
     pending: 'Chờ xử lý',
 };
 
+const QR_SCAN_ACTION_LABEL: Record<string, string> = {
+    open_profile: 'Mở hồ sơ',
+    quick_update: 'Cập nhật nhanh',
+    stocktake: 'Kiểm kê',
+    transfer_scan: 'Quét điều chuyển',
+    maintenance_quick_create: 'Tạo bảo trì',
+    maintenance_quick_create_success: 'Tạo bảo trì thành công',
+};
+
+const QR_SCAN_RESULT_LABEL: Record<string, { label: string; color: string }> = {
+    resolved: { label: 'Nhận diện', color: 'blue' },
+    not_found: { label: 'Không tìm thấy', color: 'red' },
+    ambiguous: { label: 'Trùng nhiều máy', color: 'orange' },
+    duplicate: { label: 'Quét trùng', color: 'default' },
+    present: { label: 'Có mặt', color: 'green' },
+    wrong_area: { label: 'Sai khu vực', color: 'orange' },
+    wrong_plant: { label: 'Sai cơ sở', color: 'red' },
+    success: { label: 'Thành công', color: 'green' },
+    failed: { label: 'Không hợp lệ', color: 'red' },
+};
+
 const formatDate = (value?: string) => (value ? dayjs(value).format('DD/MM/YYYY') : '-');
+const formatDateTime = (value?: string) => (value ? dayjs(value).format('DD/MM/YYYY HH:mm') : '-');
 const formatMoney = (value?: number) => (value ? `${value.toLocaleString('vi-VN')} đ` : '-');
 const renderArea = (value?: string) => value || 'Chưa chỉ định khu vực';
 
@@ -135,6 +158,11 @@ const AssetDetail: React.FC = () => {
         queryKey: ['borrowings', 'asset', id],
         queryFn: () => borrowingService.getByAsset(id),
         enabled: Boolean(id),
+    });
+    const { data: qrScanLogResponse } = useQuery({
+        queryKey: ['qr-scan-logs', 'asset', id],
+        queryFn: () => qrScanLogService.getAll({ assetId: id, page: 1, limit: 20 }),
+        enabled: Boolean(id && canManage),
     });
 
     const invalidateAsset = () => {
@@ -511,6 +539,44 @@ const AssetDetail: React.FC = () => {
         </Card>
     );
 
+    const qrScanLogs = qrScanLogResponse?.data ?? [];
+    const qrScanContent = (
+        <Card variant='outlined' title='Lịch sử quét QR' extra={<Tag>{qrScanLogs.length} gần nhất</Tag>}>
+            {qrScanLogs.length ? (
+                <div className='divide-y divide-slate-100'>
+                    {qrScanLogs.map((log) => {
+                        const result = QR_SCAN_RESULT_LABEL[log.result] ?? { label: log.result, color: 'default' };
+                        return (
+                            <div
+                                key={log.id}
+                                className='flex flex-col gap-2 py-3 md:flex-row md:items-start md:justify-between'
+                            >
+                                <div className='min-w-0'>
+                                    <div className='flex flex-wrap items-center gap-2'>
+                                        <Text strong>{QR_SCAN_ACTION_LABEL[log.action] ?? log.action}</Text>
+                                        <Tag color={result.color} className='!m-0'>
+                                            {result.label}
+                                        </Tag>
+                                        {log.publicId ? <Tag className='!m-0 font-mono'>{log.publicId}</Tag> : null}
+                                    </div>
+                                    <div className='mt-1 text-xs text-slate-500'>
+                                        {log.actor?.name || log.actor?.email || log.actorRole || 'Không rõ người quét'}
+                                        {log.source ? ` · ${log.source}` : ''}
+                                    </div>
+                                </div>
+                                <Text type='secondary' className='shrink-0 text-xs'>
+                                    {formatDateTime(log.createdAt)}
+                                </Text>
+                            </div>
+                        );
+                    })}
+                </div>
+            ) : (
+                <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description='Chưa có lịch sử quét QR' />
+            )}
+        </Card>
+    );
+
     const historyContent = (
         <Card variant='outlined' title='Lịch sử hoạt động'>
             {historyItems.length ? (
@@ -669,6 +735,15 @@ const AssetDetail: React.FC = () => {
                         ),
                     },
                     { key: 'borrowing', label: `Giao dịch (${borrowings.length})`, children: borrowingContent },
+                    ...(canManage
+                        ? [
+                              {
+                                  key: 'qr-scan',
+                                  label: `QR (${qrScanLogs.length})`,
+                                  children: qrScanContent,
+                              },
+                          ]
+                        : []),
                     {
                         key: 'history',
                         label: (

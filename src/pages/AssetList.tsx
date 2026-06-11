@@ -54,6 +54,7 @@ const AssetImportModal = lazy(() => import('../components/AssetImportModal'));
 const TransferModal = lazy(() => import('../components/transfer/TransferModal'));
 const QrScanLookupModal = lazy(() => import('../components/QrScanLookupModal'));
 const QrQuickUpdateModal = lazy(() => import('../components/QrQuickUpdateModal'));
+const QrQuickMaintenanceModal = lazy(() => import('../components/QrQuickMaintenanceModal'));
 
 const { Text } = Typography;
 
@@ -178,6 +179,7 @@ const AssetList: React.FC = () => {
     const [isMobileFilterOpen, setIsMobileFilterOpen] = useState(false);
     const [isTransferModalOpen, setIsTransferModalOpen] = useState(false);
     const [isScanLookupOpen, setIsScanLookupOpen] = useState(false);
+    const [isQuickMaintenanceOpen, setIsQuickMaintenanceOpen] = useState(false);
     const [scanMode, setScanMode] = useState<'profile' | 'quick'>('profile');
     const [editingAsset, setEditingAsset] = useState<Asset | null>(null);
     const [transferTarget, setTransferTarget] = useState<Asset | null>(null);
@@ -540,7 +542,11 @@ const AssetList: React.FC = () => {
         }
     };
 
-    const handleOpenScan = (mode: 'profile' | 'quick') => {
+    const handleOpenScan = (mode: 'profile' | 'quick' | 'maintenance') => {
+        if (mode === 'maintenance') {
+            setIsQuickMaintenanceOpen(true);
+            return;
+        }
         setScanMode(mode);
         setIsScanLookupOpen(true);
     };
@@ -754,37 +760,36 @@ const AssetList: React.FC = () => {
                     subtitle='Theo dõi và quản lý toàn bộ thiết bị trong nhà máy'
                     actions={
                         <Space wrap size={8}>
-                            {canQuickUpdate ? (
-                                <Dropdown
-                                    trigger={['click']}
-                                    menu={{
-                                        items: [
-                                            { key: 'profile', label: 'Quét mở hồ sơ', icon: <EyeOutlined /> },
-                                            {
-                                                key: 'quick',
-                                                label: 'Quét cập nhật nhanh',
-                                                icon: <ToolOutlined />,
-                                            },
-                                        ],
-                                        onClick: ({ key }) => handleOpenScan(key as 'profile' | 'quick'),
-                                    }}
-                                >
-                                    <Button
-                                        icon={<ScanOutlined />}
-                                        className='rounded-lg border-blue-200 font-medium text-blue-600 hover:!border-blue-300 hover:!text-blue-700'
-                                    >
-                                        Quét QR <DownOutlined />
-                                    </Button>
-                                </Dropdown>
-                            ) : (
+                            <Dropdown
+                                trigger={['click']}
+                                menu={{
+                                    items: [
+                                        { key: 'profile', label: 'Quét mở hồ sơ', icon: <EyeOutlined /> },
+                                        ...(canQuickUpdate
+                                            ? [
+                                                  {
+                                                      key: 'quick',
+                                                      label: 'Quét cập nhật nhanh',
+                                                      icon: <ToolOutlined />,
+                                                  },
+                                              ]
+                                            : []),
+                                        {
+                                            key: 'maintenance',
+                                            label: 'Quét tạo bảo trì',
+                                            icon: <WarningOutlined />,
+                                        },
+                                    ],
+                                    onClick: ({ key }) => handleOpenScan(key as 'profile' | 'quick' | 'maintenance'),
+                                }}
+                            >
                                 <Button
                                     icon={<ScanOutlined />}
-                                    onClick={() => handleOpenScan('profile')}
                                     className='rounded-lg border-blue-200 font-medium text-blue-600 hover:!border-blue-300 hover:!text-blue-700'
                                 >
-                                    Quét QR
+                                    Quét QR <DownOutlined />
                                 </Button>
-                            )}
+                            </Dropdown>
                             {canExportImport ? (
                                 <>
                                     <Button
@@ -1280,6 +1285,8 @@ const AssetList: React.FC = () => {
                         successMessage={(asset) =>
                             scanMode === 'quick' ? `Đã nhận diện "${asset.name}"` : `Mở hồ sơ "${asset.name}"`
                         }
+                        auditAction={scanMode === 'quick' ? 'quick_update' : 'open_profile'}
+                        auditMetadata={{ screen: 'asset_list' }}
                         onResolved={(asset) => {
                             setIsScanLookupOpen(false);
                             if (scanMode === 'quick') {
@@ -1304,6 +1311,12 @@ const AssetList: React.FC = () => {
                             handleOpenScan('quick');
                         }}
                     />
+                </LazyBoundary>
+            ) : null}
+
+            {isQuickMaintenanceOpen ? (
+                <LazyBoundary mode='overlay'>
+                    <QrQuickMaintenanceModal open onClose={() => setIsQuickMaintenanceOpen(false)} />
                 </LazyBoundary>
             ) : null}
         </div>

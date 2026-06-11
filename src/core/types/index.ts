@@ -571,6 +571,58 @@ export interface InternalQrResolveResponse {
     canActivate: boolean;
 }
 
+export type QrScanAction =
+    | 'open_profile'
+    | 'quick_update'
+    | 'stocktake'
+    | 'transfer_scan'
+    | 'maintenance_quick_create'
+    | 'maintenance_quick_create_success';
+
+export type QrScanResult =
+    | 'resolved'
+    | 'not_found'
+    | 'ambiguous'
+    | 'duplicate'
+    | 'present'
+    | 'wrong_area'
+    | 'wrong_plant'
+    | 'success'
+    | 'failed';
+
+export type QrScanSource = 'camera' | 'manual' | 'qr_label' | 'legacy_asset' | 'search' | 'unknown';
+
+export interface QrScanLog {
+    id: string;
+    rawValue?: string;
+    publicId?: string;
+    labelId?: string;
+    assetId?: string;
+    asset?: Pick<Asset, 'id' | 'name' | 'machineCode' | 'area'>;
+    action: QrScanAction;
+    result: QrScanResult;
+    source: QrScanSource;
+    actorId?: string;
+    actor?: Pick<User, 'id' | 'name' | 'email'>;
+    actorRole?: string;
+    ip?: string;
+    userAgent?: string;
+    metadata?: Record<string, unknown>;
+    createdAt: string;
+    updatedAt?: string;
+}
+
+export type CreateQrScanLogPayload = {
+    rawValue?: string;
+    publicId?: string;
+    labelId?: string;
+    assetId?: string;
+    action: QrScanAction;
+    result: QrScanResult;
+    source?: QrScanSource;
+    metadata?: Record<string, unknown>;
+};
+
 export type CreateQrBatchPayload = {
     type?: QrLabelType;
     quantity: number;

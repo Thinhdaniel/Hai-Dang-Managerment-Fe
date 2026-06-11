@@ -115,7 +115,7 @@ export const useNotifications = (socket: import('socket.io-client').Socket | nul
                     transfer: [['transfers'], ['transfers-stats']],
                     asset: [['assets']],
                     borrowing: [['borrowings']],
-                    maintenance: [['maintenances']],
+                    maintenance: [['maintenances'], ['assets'], ['dashboard']],
                     'purchase-request': [['purchase-requests']],
                     'purchase-order': [['purchase-orders']],
                     'supply-request': [['supply-requests']],

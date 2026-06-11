@@ -28,6 +28,7 @@ import {
     EyeOutlined,
     PlusOutlined,
     ReloadOutlined,
+    ScanOutlined,
     SearchOutlined,
     ToolOutlined,
 } from '@ant-design/icons';
@@ -46,6 +47,7 @@ import { plantService } from '../core/services/plant.service';
 import type { Maintenance, MaintenanceFilter, MaintenanceRepairMode, MaintenanceType } from '../core/types';
 
 const MaintenanceFormModal = lazy(() => import('../components/MaintenanceFormModal'));
+const QrQuickMaintenanceModal = lazy(() => import('../components/QrQuickMaintenanceModal'));
 
 const { RangePicker } = DatePicker;
 const { Text } = Typography;
@@ -151,6 +153,7 @@ const MaintenanceList: React.FC = () => {
     const [filters, setFilters] = useState(initialFilters);
     const [draftFilters, setDraftFilters] = useState(initialFilters);
     const [createOpen, setCreateOpen] = useState(false);
+    const [quickMaintenanceOpen, setQuickMaintenanceOpen] = useState(false);
     const [detailTarget, setDetailTarget] = useState<Maintenance | null>(null);
     const [completeTarget, setCompleteTarget] = useState<Maintenance | null>(null);
     const [rejectTarget, setRejectTarget] = useState<Maintenance | null>(null);
@@ -274,10 +277,7 @@ const MaintenanceList: React.FC = () => {
         if (!completeTarget) return;
         const values = await completeForm.validateFields();
         const costItems = values.externalRepair?.costItems?.filter((item) => item?.name || item?.amount);
-        const cost =
-            completeTarget.repairMode === 'external'
-                ? sumCostItems(costItems)
-                : values.cost;
+        const cost = completeTarget.repairMode === 'external' ? sumCostItems(costItems) : values.cost;
 
         await completeMutation.mutateAsync({
             id: completeTarget.id,
@@ -401,7 +401,9 @@ const MaintenanceList: React.FC = () => {
                 <div className='text-right'>
                     <Text strong>{fmtMoney(record.cost ?? record.externalRepair?.actualCost ?? 0)}</Text>
                     {record.repairMode === 'external' && record.externalRepair?.estimateCost ? (
-                        <div className='text-xs text-slate-500'>Dự kiến: {fmtMoney(record.externalRepair.estimateCost)}</div>
+                        <div className='text-xs text-slate-500'>
+                            Dự kiến: {fmtMoney(record.externalRepair.estimateCost)}
+                        </div>
                     ) : null}
                 </div>
             ),
@@ -433,7 +435,12 @@ const MaintenanceList: React.FC = () => {
                                 </Tooltip>
                             </ConfirmAction>
                             <Tooltip title='Từ chối'>
-                                <Button type='text' danger icon={<CloseOutlined />} onClick={() => setRejectTarget(record)} />
+                                <Button
+                                    type='text'
+                                    danger
+                                    icon={<CloseOutlined />}
+                                    onClick={() => setRejectTarget(record)}
+                                />
                             </Tooltip>
                         </>
                     ) : null}
@@ -456,7 +463,12 @@ const MaintenanceList: React.FC = () => {
                             onConfirm={() => handleDelete(record)}
                         >
                             <Tooltip title='Xóa'>
-                                <Button type='text' danger icon={<DeleteOutlined />} loading={deleteMutation.isPending} />
+                                <Button
+                                    type='text'
+                                    danger
+                                    icon={<DeleteOutlined />}
+                                    loading={deleteMutation.isPending}
+                                />
                             </Tooltip>
                         </ConfirmAction>
                     ) : null}
@@ -471,14 +483,28 @@ const MaintenanceList: React.FC = () => {
                 title='Bảo trì máy móc'
                 subtitle='Theo dõi sửa chữa nội bộ, sửa ngoài và lịch sử bảo trì gắn trực tiếp với từng máy.'
                 actions={
-                    <Button type='primary' icon={<PlusOutlined />} onClick={() => setCreateOpen(true)}>
-                        Tạo phiếu bảo trì
-                    </Button>
+                    <Space wrap size={8}>
+                        <Button
+                            icon={<ScanOutlined />}
+                            onClick={() => setQuickMaintenanceOpen(true)}
+                            className='rounded-lg border-amber-200 font-medium text-amber-700 hover:!border-amber-300 hover:!text-amber-800'
+                        >
+                            Quét QR tạo phiếu
+                        </Button>
+                        <Button type='primary' icon={<PlusOutlined />} onClick={() => setCreateOpen(true)}>
+                            Tạo phiếu bảo trì
+                        </Button>
+                    </Space>
                 }
             />
 
             <div className='grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4'>
-                <StatsCard title='Tổng phiếu' value={maintenanceResponse?.total ?? 0} icon={<ToolOutlined />} accent='#2563eb' />
+                <StatsCard
+                    title='Tổng phiếu'
+                    value={maintenanceResponse?.total ?? 0}
+                    icon={<ToolOutlined />}
+                    accent='#2563eb'
+                />
                 <StatsCard
                     title='Chờ duyệt sửa ngoài'
                     value={report?.summary.pendingApprovalCount ?? 0}
@@ -632,7 +658,11 @@ const MaintenanceList: React.FC = () => {
                                     >
                                         Duyệt
                                     </Button>
-                                    <Button danger icon={<CloseOutlined />} onClick={() => setRejectTarget(detailTarget)}>
+                                    <Button
+                                        danger
+                                        icon={<CloseOutlined />}
+                                        onClick={() => setRejectTarget(detailTarget)}
+                                    >
                                         Từ chối
                                     </Button>
                                 </>
@@ -657,13 +687,24 @@ const MaintenanceList: React.FC = () => {
                                 { key: 'code', label: 'Mã máy', children: detailTarget.asset?.machineCode || '-' },
                                 { key: 'serial', label: 'Serial', children: detailTarget.asset?.serial || '-' },
                                 { key: 'plant', label: 'Cơ sở', children: detailTarget.asset?.plant?.name || '-' },
-                                { key: 'type', label: 'Loại bảo trì', children: typeLabel[detailTarget.type] || detailTarget.type },
-                                { key: 'mode', label: 'Kiểu sửa', children: getRepairModeLabel(detailTarget.repairMode) },
+                                {
+                                    key: 'type',
+                                    label: 'Loại bảo trì',
+                                    children: typeLabel[detailTarget.type] || detailTarget.type,
+                                },
+                                {
+                                    key: 'mode',
+                                    label: 'Kiểu sửa',
+                                    children: getRepairModeLabel(detailTarget.repairMode),
+                                },
                                 { key: 'status', label: 'Trạng thái', children: getStatusTag(detailTarget.status) },
                                 {
                                     key: 'approval',
                                     label: 'Duyệt sửa ngoài',
-                                    children: detailTarget.repairMode === 'external' ? getApprovalTag(detailTarget.approvalStatus) : '-',
+                                    children:
+                                        detailTarget.repairMode === 'external'
+                                            ? getApprovalTag(detailTarget.approvalStatus)
+                                            : '-',
                                 },
                                 { key: 'start', label: 'Ngày bắt đầu', children: fmtDate(detailTarget.startDate) },
                                 { key: 'end', label: 'Ngày hoàn tất', children: fmtDate(detailTarget.endDate) },
@@ -682,20 +723,36 @@ const MaintenanceList: React.FC = () => {
                                     size='small'
                                     column={{ xs: 1, sm: 2 }}
                                     items={[
-                                        { key: 'vendor', label: 'Đơn vị sửa', children: detailTarget.externalRepair?.vendorName || '-' },
+                                        {
+                                            key: 'vendor',
+                                            label: 'Đơn vị sửa',
+                                            children: detailTarget.externalRepair?.vendorName || '-',
+                                        },
                                         {
                                             key: 'estimate',
                                             label: 'Chi phí dự kiến',
                                             children: fmtMoney(detailTarget.externalRepair?.estimateCost ?? 0),
                                         },
-                                        { key: 'sent', label: 'Ngày đem đi', children: fmtDate(detailTarget.externalRepair?.sentOutAt) },
+                                        {
+                                            key: 'sent',
+                                            label: 'Ngày đem đi',
+                                            children: fmtDate(detailTarget.externalRepair?.sentOutAt),
+                                        },
                                         {
                                             key: 'expected',
                                             label: 'Dự kiến nhận',
                                             children: fmtDate(detailTarget.externalRepair?.expectedReturnAt),
                                         },
-                                        { key: 'returned', label: 'Ngày nhận về', children: fmtDate(detailTarget.externalRepair?.returnedAt) },
-                                        { key: 'invoice', label: 'Số hóa đơn', children: detailTarget.externalRepair?.invoiceNo || '-' },
+                                        {
+                                            key: 'returned',
+                                            label: 'Ngày nhận về',
+                                            children: fmtDate(detailTarget.externalRepair?.returnedAt),
+                                        },
+                                        {
+                                            key: 'invoice',
+                                            label: 'Số hóa đơn',
+                                            children: detailTarget.externalRepair?.invoiceNo || '-',
+                                        },
                                         {
                                             key: 'reject',
                                             label: 'Lý do từ chối',
@@ -735,7 +792,9 @@ const MaintenanceList: React.FC = () => {
                                     children: (
                                         <div>
                                             <Text strong>Tạo phiếu</Text>
-                                            <div className='text-sm text-slate-500'>{fmtDate(detailTarget.createdAt)}</div>
+                                            <div className='text-sm text-slate-500'>
+                                                {fmtDate(detailTarget.createdAt)}
+                                            </div>
                                         </div>
                                     ),
                                 },
@@ -749,7 +808,8 @@ const MaintenanceList: React.FC = () => {
                                                       <div className='text-sm text-slate-500'>
                                                           {detailTarget.externalRepair?.approvedAt
                                                               ? fmtDate(detailTarget.externalRepair.approvedAt)
-                                                              : approvalMeta[detailTarget.approvalStatus || 'pending']?.label}
+                                                              : approvalMeta[detailTarget.approvalStatus || 'pending']
+                                                                    ?.label}
                                                       </div>
                                                   </div>
                                               ),
@@ -761,7 +821,9 @@ const MaintenanceList: React.FC = () => {
                                     children: (
                                         <div>
                                             <Text strong>Hoàn tất</Text>
-                                            <div className='text-sm text-slate-500'>{fmtDate(detailTarget.endDate)}</div>
+                                            <div className='text-sm text-slate-500'>
+                                                {fmtDate(detailTarget.endDate)}
+                                            </div>
                                         </div>
                                     ),
                                 },
@@ -783,6 +845,16 @@ const MaintenanceList: React.FC = () => {
                 </LazyBoundary>
             ) : null}
 
+            {quickMaintenanceOpen ? (
+                <LazyBoundary mode='overlay'>
+                    <QrQuickMaintenanceModal
+                        open
+                        onClose={() => setQuickMaintenanceOpen(false)}
+                        onCreated={invalidateMaintenance}
+                    />
+                </LazyBoundary>
+            ) : null}
+
             <Modal
                 open={Boolean(completeTarget)}
                 title='Hoàn tất phiếu bảo trì'
@@ -798,7 +870,11 @@ const MaintenanceList: React.FC = () => {
                 width={720}
             >
                 <Form<CompleteFormValues> form={completeForm} layout='vertical'>
-                    <Form.Item name='endDate' label='Ngày hoàn tất' rules={[{ required: true, message: 'Chọn ngày hoàn tất' }]}>
+                    <Form.Item
+                        name='endDate'
+                        label='Ngày hoàn tất'
+                        rules={[{ required: true, message: 'Chọn ngày hoàn tất' }]}
+                    >
                         <DatePicker className='w-full' format='DD/MM/YYYY' />
                     </Form.Item>
 
@@ -856,7 +932,10 @@ const MaintenanceList: React.FC = () => {
                                             </Button>
                                         </div>
                                         {fields.map((field) => (
-                                            <div key={field.key} className='grid grid-cols-1 gap-2 md:grid-cols-[1fr_170px_40px]'>
+                                            <div
+                                                key={field.key}
+                                                className='grid grid-cols-1 gap-2 md:grid-cols-[1fr_170px_40px]'
+                                            >
                                                 <Form.Item {...field} name={[field.name, 'name']} className='!mb-0'>
                                                     <Input placeholder='Tên hạng mục' />
                                                 </Form.Item>
@@ -867,7 +946,9 @@ const MaintenanceList: React.FC = () => {
                                                         formatter={(value) =>
                                                             `${value ?? ''}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')
                                                         }
-                                                        parser={(value) => Number(String(value ?? '').replace(/\D/g, ''))}
+                                                        parser={(value) =>
+                                                            Number(String(value ?? '').replace(/\D/g, ''))
+                                                        }
                                                     />
                                                 </Form.Item>
                                                 <Button danger onClick={() => remove(field.name)}>
