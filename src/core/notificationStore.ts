@@ -1,32 +1,8 @@
 import { create } from 'zustand';
 import { devtools } from 'zustand/middleware';
+import type { Notification } from './types/notification';
 
-export type NotificationType = 'info' | 'success' | 'warning' | 'error';
-export type NotificationActionType =
-    | 'machine'
-    | 'user'
-    | 'asset'
-    | 'transfer'
-    | 'maintenance'
-    | 'borrowing'
-    | 'purchase_request'
-    | 'supply_request'
-    | 'purchase_order'
-    | 'distribution'
-    | 'system';
-
-export interface Notification {
-    _id: string;
-    userId: string;
-    title: string;
-    message: string;
-    type: NotificationType;
-    actionType: NotificationActionType;
-    actionId?: string;
-    isRead: boolean;
-    createdAt: string;
-    readAt?: string;
-}
+export type { Notification, NotificationActionType, NotificationType } from './types/notification';
 
 interface NotificationStoreState {
     notifications: Notification[];

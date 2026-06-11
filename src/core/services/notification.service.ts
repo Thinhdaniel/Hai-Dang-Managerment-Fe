@@ -43,16 +43,16 @@ export const notificationService = {
     },
 
     /**
-     * Soft-delete a single notification (no-op if backend 404 — handled gracefully).
+     * Delete a single notification.
      */
-    deleteNotification: async (_notificationId: string): Promise<void> => {
-        // Not yet implemented on backend — no-op to prevent uncaught errors
+    deleteNotification: async (notificationId: string): Promise<void> => {
+        await api.delete<ApiResponse<unknown>>(`/notifications/${notificationId}`);
     },
 
     /**
-     * Delete all notifications (no-op if backend doesn't support it yet).
+     * Delete all notifications of the current user.
      */
     deleteAllNotifications: async (): Promise<void> => {
-        // Not yet implemented on backend — no-op to prevent uncaught errors
+        await api.delete<ApiResponse<unknown>>('/notifications');
     },
 };

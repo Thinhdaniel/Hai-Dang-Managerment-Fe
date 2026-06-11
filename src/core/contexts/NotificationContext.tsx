@@ -1,9 +1,10 @@
 import { createContext, useContext, type ReactNode } from 'react';
 import { useNotifications as useNotificationsHook } from '../hooks/useNotifications';
 import { useSocket } from '../hooks/useSocket';
+import type { Notification } from '../types/notification';
 
 interface NotificationContextValue {
-    notifications: any[];
+    notifications: Notification[];
     unreadCount: number;
     loading: boolean;
     error: string | null;
@@ -19,11 +20,7 @@ export const NotificationProvider = ({ children }: { children: ReactNode }) => {
     const { socket } = useSocket();
     const notificationData = useNotificationsHook(socket);
 
-    return (
-        <NotificationContext.Provider value={notificationData}>
-            {children}
-        </NotificationContext.Provider>
-    );
+    return <NotificationContext.Provider value={notificationData}>{children}</NotificationContext.Provider>;
 };
 
 export const useNotificationContext = () => {

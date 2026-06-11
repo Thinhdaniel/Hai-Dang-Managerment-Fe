@@ -16,6 +16,7 @@ import {
     BellOutlined,
     ClockCircleOutlined,
     CloseOutlined,
+    DeleteOutlined,
     DownOutlined,
     LogoutOutlined,
     MenuFoldOutlined,
@@ -52,11 +53,15 @@ interface AppHeaderProps {
 const AppHeader: React.FC<AppHeaderProps> = ({ collapsed, isDesktop, mobileOpen, headerHeight, onToggle }) => {
     const navigate = useNavigate();
     const { role, logout, user } = useAuth();
-    const { notifications, unreadCount, markAsRead, markAllAsRead } = useNotificationContext();
+    const { notifications, unreadCount, markAsRead, markAllAsRead, deleteNotification, deleteAllNotifications } =
+        useNotificationContext();
     const { pathname } = useLocation();
     const [searchParams] = useSearchParams();
     const [searchValue, setSearchValue] = useState('');
     const [notificationOpen, setNotificationOpen] = useState(false);
+    const [notifFilter, setNotifFilter] = useState<'all' | 'unread'>('all');
+    const visibleNotifications =
+        notifFilter === 'unread' ? notifications.filter((item) => !item.isRead) : notifications;
     const screens = useBreakpoint();
     const pageMeta = usePageMeta();
     const supportsSearch = pathname.startsWith('/assets');
@@ -186,6 +191,19 @@ const AppHeader: React.FC<AppHeaderProps> = ({ collapsed, isDesktop, mobileOpen,
                             Đánh dấu đã đọc
                         </Button>
                     ) : null}
+                    {notifications.length > 0 ? (
+                        <Button
+                            type='text'
+                            size='small'
+                            danger
+                            className='!px-2 !text-[12px]'
+                            onClick={async () => {
+                                await deleteAllNotifications();
+                            }}
+                        >
+                            Xoá tất cả
+                        </Button>
+                    ) : null}
                     <span className='rounded-full bg-blue-50 px-2.5 py-1 text-[10px] font-semibold text-blue-700'>
                         {unreadCount} mới
                     </span>
@@ -205,11 +223,30 @@ const AppHeader: React.FC<AppHeaderProps> = ({ collapsed, isDesktop, mobileOpen,
 
             <PushNotificationToggle />
 
+            <div className='flex items-center gap-1 px-3 py-2'>
+                {(['all', 'unread'] as const).map((key) => (
+                    <button
+                        key={key}
+                        type='button'
+                        onClick={() => setNotifFilter(key)}
+                        className={`rounded-full px-3 py-1 text-[12px] font-semibold transition-colors ${
+                            notifFilter === key
+                                ? 'bg-blue-600 text-white'
+                                : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                        }`}
+                    >
+                        {key === 'all' ? 'Tất cả' : `Chưa đọc (${unreadCount})`}
+                    </button>
+                ))}
+            </div>
+
             <div className='notification-panel__list'>
-                {notifications.length === 0 ? (
-                    <div className='py-8 text-center text-sm text-slate-500'>Không có thông báo nào</div>
+                {visibleNotifications.length === 0 ? (
+                    <div className='py-8 text-center text-sm text-slate-500'>
+                        {notifFilter === 'unread' ? 'Không có thông báo chưa đọc' : 'Không có thông báo nào'}
+                    </div>
                 ) : null}
-                {notifications.map((item) => {
+                {visibleNotifications.map((item) => {
                     const itemIcon =
                         item.type === 'error' ? (
                             <WarningOutlined className='text-rose-500' />
@@ -220,8 +257,7 @@ const AppHeader: React.FC<AppHeaderProps> = ({ collapsed, isDesktop, mobileOpen,
                         );
 
                     let href = '/dashboard';
-                    if (item.actionType === 'machine' || item.actionType === 'asset')
-                        href = `/assets${item.actionId ? `/${item.actionId}` : ''}`;
+                    if (item.actionType === 'asset') href = `/assets${item.actionId ? `/${item.actionId}` : ''}`;
                     else if (item.actionType === 'transfer') href = '/transfers';
                     else if (item.actionType === 'maintenance') href = '/maintenances';
                     else if (item.actionType === 'borrowing') href = '/borrowings';
@@ -231,35 +267,47 @@ const AppHeader: React.FC<AppHeaderProps> = ({ collapsed, isDesktop, mobileOpen,
                     else if (item.actionType === 'distribution') href = '/materials/distributions';
 
                     return (
-                        <button
-                            key={item._id}
-                            type='button'
-                            onClick={async () => {
-                                setNotificationOpen(false);
-                                if (!item.isRead) {
-                                    await markAsRead(item._id);
-                                }
-                                navigate(href);
-                            }}
-                            className={`flex w-full items-start gap-3 rounded-xl px-3 py-2.5 text-left transition-colors hover:bg-slate-50 ${item.isRead ? 'opacity-70' : ''}`}
-                        >
-                            <div className='mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-slate-100'>
-                                {itemIcon}
-                            </div>
-                            <div className='min-w-0 flex-1'>
-                                <div className='flex items-start justify-between gap-2'>
-                                    <span
-                                        className={`text-[13px] text-slate-900 ${item.isRead ? 'font-medium' : 'font-semibold'}`}
-                                    >
-                                        {item.title}
-                                    </span>
-                                    <span className='text-[10px] text-slate-400'>
-                                        {new Date(item.createdAt).toLocaleDateString()}
-                                    </span>
+                        <div key={item._id} className='group relative'>
+                            <button
+                                type='button'
+                                onClick={async () => {
+                                    setNotificationOpen(false);
+                                    if (!item.isRead) {
+                                        await markAsRead(item._id);
+                                    }
+                                    navigate(href);
+                                }}
+                                className={`flex w-full items-start gap-3 rounded-xl px-3 py-2.5 pr-9 text-left transition-colors hover:bg-slate-50 ${item.isRead ? 'opacity-70' : ''}`}
+                            >
+                                <div className='mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-slate-100'>
+                                    {itemIcon}
                                 </div>
-                                <p className='mt-1 mb-0 text-[11px] leading-5 text-slate-500'>{item.message}</p>
-                            </div>
-                        </button>
+                                <div className='min-w-0 flex-1'>
+                                    <div className='flex items-start justify-between gap-2'>
+                                        <span
+                                            className={`text-[13px] text-slate-900 ${item.isRead ? 'font-medium' : 'font-semibold'}`}
+                                        >
+                                            {item.title}
+                                        </span>
+                                        <span className='text-[10px] text-slate-400'>
+                                            {new Date(item.createdAt).toLocaleDateString()}
+                                        </span>
+                                    </div>
+                                    <p className='mt-1 mb-0 text-[11px] leading-5 text-slate-500'>{item.message}</p>
+                                </div>
+                            </button>
+                            <button
+                                type='button'
+                                aria-label='Xoá thông báo'
+                                onClick={async (e) => {
+                                    e.stopPropagation();
+                                    await deleteNotification(item._id);
+                                }}
+                                className='absolute top-2 right-2 flex h-6 w-6 items-center justify-center rounded-md text-slate-300 opacity-0 transition-opacity group-hover:opacity-100 hover:bg-rose-50 hover:text-rose-500'
+                            >
+                                <DeleteOutlined />
+                            </button>
+                        </div>
                     );
                 })}
             </div>

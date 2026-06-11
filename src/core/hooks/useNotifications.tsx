@@ -13,6 +13,8 @@ import type { Asset } from '../types';
 const NOTIFICATION_EVENTS = {
     NEW: 'notify:new',
     READ: 'notify:read',
+    READ_ALL: 'notify:read-all',
+    DELETED: 'notify:deleted',
     CLEARED: 'notify:cleared',
     MARK_READ: 'notify:mark-read',
     CLEAR: 'notify:clear',
@@ -116,9 +118,9 @@ export const useNotifications = (socket: import('socket.io-client').Socket | nul
                     asset: [['assets']],
                     borrowing: [['borrowings']],
                     maintenance: [['maintenances'], ['assets'], ['dashboard']],
-                    'purchase-request': [['purchase-requests']],
-                    'purchase-order': [['purchase-orders']],
-                    'supply-request': [['supply-requests']],
+                    purchase_request: [['purchase-requests']],
+                    purchase_order: [['purchase-orders']],
+                    supply_request: [['supply-requests']],
                     distribution: [['distributions']],
                 };
                 const keys = invalidateMap[notification.actionType] ?? [];
@@ -136,6 +138,17 @@ export const useNotifications = (socket: import('socket.io-client').Socket | nul
             NOTIFICATION_EVENTS.READ,
             ({ notificationId }) => {
                 store.markAsRead(notificationId);
+            }
+        );
+
+        const unsubscribeReadAll = socketService.on(NOTIFICATION_EVENTS.READ_ALL, () => {
+            store.markAllAsRead();
+        });
+
+        const unsubscribeDeleted = socketService.on<{ notificationId: string }>(
+            NOTIFICATION_EVENTS.DELETED,
+            ({ notificationId }) => {
+                store.removeNotification(notificationId);
             }
         );
 
@@ -161,6 +174,8 @@ export const useNotifications = (socket: import('socket.io-client').Socket | nul
         return () => {
             unsubscribeNew();
             unsubscribeRead();
+            unsubscribeReadAll();
+            unsubscribeDeleted();
             unsubscribeCleared();
             unsubscribeAssetCreated();
             unsubscribeAssetUpdated();
