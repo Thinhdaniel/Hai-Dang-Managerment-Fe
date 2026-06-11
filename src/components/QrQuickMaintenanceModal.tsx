@@ -402,11 +402,18 @@ const QrQuickMaintenanceModal: React.FC<QrQuickMaintenanceModalProps> = ({ open,
                                 >
                                     <Input size={controlSize} placeholder='Tên tiệm/nhà cung cấp' />
                                 </Form.Item>
-                                <Form.Item name={['externalRepair', 'estimateCost']} label='Chi phí dự kiến'>
+                                <Form.Item
+                                    name={['externalRepair', 'estimateCost']}
+                                    label='Chi phí dự kiến'
+                                    className='maintenance-money-form-item'
+                                >
                                     <InputNumber<number>
                                         size={controlSize}
                                         min={0}
-                                        className='w-full'
+                                        step={10000}
+                                        controls={false}
+                                        placeholder='0'
+                                        className='maintenance-money-input w-full'
                                         formatter={(value) => `${value ?? ''}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')}
                                         parser={(value) => Number(String(value ?? '').replace(/\D/g, ''))}
                                         suffix='VND'

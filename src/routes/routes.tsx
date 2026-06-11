@@ -6,6 +6,7 @@ import LazyBoundary from '../components/shared/LazyBoundary';
 import ProtectedRoute from './guard';
 
 const Dashboard = lazy(() => import('../pages/Dashboard'));
+const GlobalQrScannerPage = lazy(() => import('../pages/GlobalQrScannerPage'));
 const AssetList = lazy(() => import('../pages/AssetList'));
 const AssetDetail = lazy(() => import('../pages/AssetDetail'));
 const StocktakePage = lazy(() => import('../pages/StocktakePage'));
@@ -73,6 +74,7 @@ export const router = createBrowserRouter([
         children: [
             { index: true, element: <Navigate to='/dashboard' replace /> },
             { path: 'dashboard', element: withSuspense(<Dashboard />) },
+            { path: 'scan', element: withSuspense(<GlobalQrScannerPage />) },
             { path: 'assets', element: withSuspense(<AssetList />) },
             { path: 'assets/stocktake', element: withSuspense(<StocktakePage />) },
             { path: 'assets/:id', element: withSuspense(<AssetDetail />) },

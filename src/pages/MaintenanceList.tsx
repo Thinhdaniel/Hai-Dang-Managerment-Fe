@@ -1340,24 +1340,29 @@ const MaintenanceList: React.FC = () => {
                                         {fields.map((field) => (
                                             <div
                                                 key={field.key}
-                                                className='grid grid-cols-1 gap-2 md:grid-cols-[1fr_170px_40px]'
+                                                className='grid grid-cols-1 gap-2 md:grid-cols-[1fr_220px_48px]'
                                             >
                                                 <Form.Item {...field} name={[field.name, 'name']} className='!mb-0'>
-                                                    <Input placeholder='Tên hạng mục' />
+                                                    <Input size='large' placeholder='Tên hạng mục' />
                                                 </Form.Item>
                                                 <Form.Item {...field} name={[field.name, 'amount']} className='!mb-0'>
                                                     <InputNumber<number>
+                                                        size='large'
                                                         min={0}
-                                                        className='w-full'
+                                                        step={10000}
+                                                        controls={false}
+                                                        placeholder='0'
+                                                        className='maintenance-money-input w-full'
                                                         formatter={(value) =>
                                                             `${value ?? ''}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')
                                                         }
                                                         parser={(value) =>
                                                             Number(String(value ?? '').replace(/\D/g, ''))
                                                         }
+                                                        suffix='VND'
                                                     />
                                                 </Form.Item>
-                                                <Button danger onClick={() => remove(field.name)}>
+                                                <Button danger size='large' onClick={() => remove(field.name)}>
                                                     Xóa
                                                 </Button>
                                             </div>
@@ -1376,10 +1381,14 @@ const MaintenanceList: React.FC = () => {
                                     {fmtMoney(completeCostPreview)}
                                 </div>
                             </div>
-                            <Form.Item name='cost' label='Chi phí phát sinh'>
+                            <Form.Item name='cost' label='Chi phí phát sinh' className='maintenance-money-form-item'>
                                 <InputNumber<number>
+                                    size='large'
                                     min={0}
-                                    className='w-full'
+                                    step={10000}
+                                    controls={false}
+                                    placeholder='0'
+                                    className='maintenance-money-input w-full'
                                     formatter={(value) => `${value ?? ''}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')}
                                     parser={(value) => Number(String(value ?? '').replace(/\D/g, ''))}
                                     suffix='VND'

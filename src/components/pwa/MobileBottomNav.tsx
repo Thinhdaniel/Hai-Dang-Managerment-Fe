@@ -1,5 +1,11 @@
-import { Badge } from 'antd';
-import { AppstoreOutlined, DashboardOutlined, DatabaseOutlined, FormOutlined, MenuOutlined } from '@ant-design/icons';
+import {
+    AppstoreOutlined,
+    DashboardOutlined,
+    DatabaseOutlined,
+    FormOutlined,
+    MenuOutlined,
+    QrcodeOutlined,
+} from '@ant-design/icons';
 import type { ReactNode } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useNotificationContext } from '../../core/contexts/NotificationContext';
@@ -12,6 +18,12 @@ type MobileNavItem = {
     badge?: number;
 };
 
+type DockButtonProps = {
+    item: MobileNavItem;
+    active: boolean;
+    onClick: () => void;
+};
+
 const isExactOrPrefix = (pathname: string, path: string) => pathname === path || pathname.startsWith(`${path}/`);
 const materialCatalogPaths = ['/materials', '/materials/inventory', '/materials/suppliers', '/materials/reports'];
 const materialWorkflowPaths = [
@@ -20,6 +32,30 @@ const materialWorkflowPaths = [
     '/materials/purchase-orders',
     '/materials/distributions',
 ];
+
+const formatBadge = (count?: number) => {
+    if (!count) return '';
+    return count > 9 ? '9+' : String(count);
+};
+
+const BottomDockItem = ({ item, active, onClick }: DockButtonProps) => {
+    const badge = formatBadge(item.badge);
+
+    return (
+        <button
+            type='button'
+            aria-current={active ? 'page' : undefined}
+            onClick={onClick}
+            className={`mobile-bottom-nav__item ${active ? 'mobile-bottom-nav__item--active' : ''}`}
+        >
+            <span className='mobile-bottom-nav__icon-wrap'>
+                <span className='mobile-bottom-nav__icon'>{item.icon}</span>
+                {badge ? <span className='mobile-bottom-nav__badge'>{badge}</span> : null}
+            </span>
+            <span className='mobile-bottom-nav__label'>{item.label}</span>
+        </button>
+    );
+};
 
 const MobileBottomNav = ({ onOpenMenu }: { onOpenMenu: () => void }) => {
     const navigate = useNavigate();
@@ -59,39 +95,59 @@ const MobileBottomNav = ({ onOpenMenu }: { onOpenMenu: () => void }) => {
             match: (current) => materialWorkflowPaths.some((path) => isExactOrPrefix(current, path)),
         },
     ];
+    const leftItems = items.slice(0, 2);
+    const rightItems: MobileNavItem[] = [
+        ...items.slice(2),
+        {
+            path: '#menu',
+            label: 'Khác',
+            icon: <MenuOutlined />,
+            match: () => false,
+        },
+    ];
+    const scanActive = pathname === '/scan';
 
     return (
         <nav className='mobile-bottom-nav' aria-label='Điều hướng nhanh trên mobile'>
-            {items.map((item) => {
-                const active = item.match(pathname);
-                const content = (
-                    <button
+            <div className='mobile-bottom-nav__group mobile-bottom-nav__group--left'>
+                {leftItems.map((item) => (
+                    <BottomDockItem
                         key={item.path}
-                        type='button'
-                        aria-current={active ? 'page' : undefined}
+                        item={item}
+                        active={item.match(pathname)}
                         onClick={() => navigate(item.path)}
-                        className={`mobile-bottom-nav__item ${active ? 'mobile-bottom-nav__item--active' : ''}`}
-                    >
-                        <span className='mobile-bottom-nav__icon'>{item.icon}</span>
-                        <span className='mobile-bottom-nav__label'>{item.label}</span>
-                    </button>
-                );
+                    />
+                ))}
+            </div>
 
-                return item.badge ? (
-                    <Badge key={item.path} count={item.badge} size='small' offset={[-8, 4]}>
-                        {content}
-                    </Badge>
-                ) : (
-                    content
-                );
-            })}
-
-            <button type='button' onClick={onOpenMenu} className='mobile-bottom-nav__item'>
-                <span className='mobile-bottom-nav__icon'>
-                    <MenuOutlined />
+            <button
+                type='button'
+                onClick={() => navigate('/scan')}
+                aria-current={scanActive ? 'page' : undefined}
+                aria-label='Quét QR'
+                className={`mobile-bottom-nav__scan ${scanActive ? 'mobile-bottom-nav__scan--active' : ''}`}
+            >
+                <span className='mobile-bottom-nav__scan-core'>
+                    <QrcodeOutlined />
                 </span>
-                <span className='mobile-bottom-nav__label'>Menu</span>
             </button>
+
+            <div className='mobile-bottom-nav__group mobile-bottom-nav__group--right'>
+                {rightItems.map((item) => (
+                    <BottomDockItem
+                        key={item.path}
+                        item={item}
+                        active={item.match(pathname)}
+                        onClick={() => {
+                            if (item.path === '#menu') {
+                                onOpenMenu();
+                                return;
+                            }
+                            navigate(item.path);
+                        }}
+                    />
+                ))}
+            </div>
         </nav>
     );
 };

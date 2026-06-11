@@ -95,7 +95,7 @@ const TopicDetail = ({ topic, onClose }: { topic: HelpTopic; onClose: () => void
             <div className='space-y-4 px-4 py-4'>
                 {topic.prerequisites?.length ? (
                     <div className='rounded-xl border border-blue-100 bg-blue-50 px-3 py-3'>
-                        <div className='mb-2 flex items-center gap-2 text-[12px] font-bold uppercase tracking-wide text-blue-700'>
+                        <div className='mb-2 flex items-center gap-2 text-[12px] font-bold tracking-wide text-blue-700 uppercase'>
                             <CheckCircleOutlined />
                             Điều kiện trước khi thao tác
                         </div>
@@ -108,7 +108,7 @@ const TopicDetail = ({ topic, onClose }: { topic: HelpTopic; onClose: () => void
                 ) : null}
 
                 <div>
-                    <div className='mb-2 flex items-center gap-2 text-[12px] font-bold uppercase tracking-wide text-slate-500'>
+                    <div className='mb-2 flex items-center gap-2 text-[12px] font-bold tracking-wide text-slate-500 uppercase'>
                         <FileSearchOutlined />
                         Quy trình thao tác
                     </div>
@@ -121,7 +121,7 @@ const TopicDetail = ({ topic, onClose }: { topic: HelpTopic; onClose: () => void
 
                 {topic.checkpoints?.length ? (
                     <div className='rounded-xl border border-emerald-100 bg-emerald-50 px-3 py-3'>
-                        <div className='mb-2 flex items-center gap-2 text-[12px] font-bold uppercase tracking-wide text-emerald-700'>
+                        <div className='mb-2 flex items-center gap-2 text-[12px] font-bold tracking-wide text-emerald-700 uppercase'>
                             <CheckCircleOutlined />
                             Sau khi làm xong cần kiểm tra
                         </div>
@@ -135,7 +135,7 @@ const TopicDetail = ({ topic, onClose }: { topic: HelpTopic; onClose: () => void
 
                 {topic.commonMistakes?.length ? (
                     <div className='rounded-xl border border-rose-100 bg-rose-50 px-3 py-3'>
-                        <div className='mb-2 flex items-center gap-2 text-[12px] font-bold uppercase tracking-wide text-rose-700'>
+                        <div className='mb-2 flex items-center gap-2 text-[12px] font-bold tracking-wide text-rose-700 uppercase'>
                             <BulbOutlined />
                             Lỗi hay gặp và cách tránh
                         </div>
@@ -149,7 +149,7 @@ const TopicDetail = ({ topic, onClose }: { topic: HelpTopic; onClose: () => void
 
                 {topic.notes?.length ? (
                     <div className='rounded-xl border border-amber-100 bg-amber-50 px-3 py-3'>
-                        <div className='mb-2 flex items-center gap-2 text-[12px] font-bold uppercase tracking-wide text-amber-700'>
+                        <div className='mb-2 flex items-center gap-2 text-[12px] font-bold tracking-wide text-amber-700 uppercase'>
                             <BulbOutlined />
                             Lưu ý nghiệp vụ
                         </div>
@@ -235,11 +235,11 @@ const AssistantBubble = ({
                 </div>
 
                 <div className='px-4 py-3'>
-                    <p className='m-0 whitespace-pre-line text-[13px] leading-6 text-slate-700'>{message.text}</p>
+                    <p className='m-0 text-[13px] leading-6 whitespace-pre-line text-slate-700'>{message.text}</p>
 
                     {!message.isPending && message.provider === 'ollama' && message.topics?.length ? (
                         <div className='mt-4 border-t border-slate-100 pt-3'>
-                            <div className='mb-2 text-[11px] font-bold uppercase tracking-wide text-slate-400'>
+                            <div className='mb-2 text-[11px] font-bold tracking-wide text-slate-400 uppercase'>
                                 Tài liệu tham chiếu
                             </div>
                             <TopicChips topics={message.topics.slice(0, 3)} onSelect={onSelectTopic} tone='compact' />
@@ -248,7 +248,7 @@ const AssistantBubble = ({
 
                     {!message.isPending && message.provider !== 'ollama' && message.topics?.length ? (
                         <div className='mt-4 space-y-2 border-t border-slate-100 pt-3'>
-                            <div className='text-[11px] font-bold uppercase tracking-wide text-slate-400'>
+                            <div className='text-[11px] font-bold tracking-wide text-slate-400 uppercase'>
                                 Hướng dẫn phù hợp
                             </div>
                             {message.topics.map((topic) => {
@@ -376,7 +376,7 @@ const HelpAssistant = () => {
                 icon={<QuestionCircleOutlined />}
                 tooltip='Trợ lý hướng dẫn'
                 onClick={() => setOpen(true)}
-                style={{ right: 28, bottom: 28 }}
+                className='app-help-float-button'
             />
 
             <Drawer
@@ -393,7 +393,9 @@ const HelpAssistant = () => {
                         </div>
                         <div className='min-w-0'>
                             <div className='flex items-center gap-2'>
-                                <span className='truncate text-[15px] font-bold text-slate-950'>Trợ lý hướng dẫn nội bộ</span>
+                                <span className='truncate text-[15px] font-bold text-slate-950'>
+                                    Trợ lý hướng dẫn nội bộ
+                                </span>
                                 <Tag color='cyan' className='!m-0'>
                                     Ollama local
                                 </Tag>
@@ -441,7 +443,7 @@ const HelpAssistant = () => {
                                             <button
                                                 key={question}
                                                 type='button'
-                                                className='min-h-[48px] rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-left text-[13px] font-medium leading-5 text-slate-700 transition-colors hover:border-blue-200 hover:bg-blue-50 hover:text-blue-700'
+                                                className='min-h-[48px] rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-left text-[13px] leading-5 font-medium text-slate-700 transition-colors hover:border-blue-200 hover:bg-blue-50 hover:text-blue-700'
                                                 onClick={() => handleAsk(question)}
                                             >
                                                 {question}

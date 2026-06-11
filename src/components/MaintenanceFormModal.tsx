@@ -127,7 +127,11 @@ const MaintenanceFormModal = ({
                     <Form.Item name='repairMode' label='Kiểu sửa chữa'>
                         <Radio.Group optionType='button' buttonStyle='solid' options={repairModeOptions} />
                     </Form.Item>
-                    <Form.Item name='type' label='Loại bảo trì' rules={[{ required: true, message: 'Chọn loại bảo trì' }]}>
+                    <Form.Item
+                        name='type'
+                        label='Loại bảo trì'
+                        rules={[{ required: true, message: 'Chọn loại bảo trì' }]}
+                    >
                         <Select options={typeOptions} />
                     </Form.Item>
                 </div>
@@ -141,7 +145,11 @@ const MaintenanceFormModal = ({
                 </Form.Item>
 
                 <div className='grid grid-cols-1 gap-3 md:grid-cols-2'>
-                    <Form.Item name='startDate' label='Ngày ghi nhận' rules={[{ required: true, message: 'Chọn ngày' }]}>
+                    <Form.Item
+                        name='startDate'
+                        label='Ngày ghi nhận'
+                        rules={[{ required: true, message: 'Chọn ngày' }]}
+                    >
                         <DatePicker className='w-full' format='DD/MM/YYYY' />
                     </Form.Item>
                     <Form.Item name='technician' label='Kỹ thuật viên'>
@@ -159,10 +167,18 @@ const MaintenanceFormModal = ({
                             >
                                 <Input placeholder='Tên tiệm/nhà cung cấp sửa máy' />
                             </Form.Item>
-                            <Form.Item name={['externalRepair', 'estimateCost']} label='Chi phí dự kiến'>
+                            <Form.Item
+                                name={['externalRepair', 'estimateCost']}
+                                label='Chi phí dự kiến'
+                                className='maintenance-money-form-item'
+                            >
                                 <InputNumber<number>
+                                    size='large'
                                     min={0}
-                                    className='w-full'
+                                    step={10000}
+                                    controls={false}
+                                    placeholder='0'
+                                    className='maintenance-money-input w-full'
                                     formatter={(value) => `${value ?? ''}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')}
                                     parser={(value) => Number(String(value ?? '').replace(/\D/g, ''))}
                                     suffix='VND'

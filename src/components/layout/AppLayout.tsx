@@ -72,7 +72,7 @@ const AppLayout: React.FC = () => {
                         style={{
                             margin: isDesktop ? '24px' : screens.md ? '18px' : '12px',
                             overflow: 'initial',
-                            paddingBottom: isDesktop ? undefined : 'calc(92px + env(safe-area-inset-bottom))',
+                            paddingBottom: isDesktop ? undefined : 'calc(122px + env(safe-area-inset-bottom))',
                         }}
                     >
                         <div className='flex flex-col gap-6'>

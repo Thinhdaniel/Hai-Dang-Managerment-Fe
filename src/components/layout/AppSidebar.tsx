@@ -17,6 +17,7 @@ import {
     MenuFoldOutlined,
     MenuUnfoldOutlined,
     QrcodeOutlined,
+    ScanOutlined,
     SendOutlined,
     ShopOutlined,
     ShoppingCartOutlined,
@@ -144,6 +145,13 @@ const navigationSections: NavigationSection[] = [
                 label: 'Máy',
                 description: 'Danh sách máy',
                 icon: <AppstoreOutlined />,
+            },
+            {
+                path: '/scan',
+                label: 'Quét QR',
+                description: 'Scanner thao tác nhanh',
+                icon: <ScanOutlined />,
+                matchMode: 'exact',
             },
             {
                 path: '/assets/stocktake',
