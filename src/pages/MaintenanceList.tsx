@@ -6,12 +6,16 @@ import {
     Descriptions,
     Divider,
     Drawer,
+    Empty,
     Form,
+    Grid,
     Input,
     InputNumber,
     Modal,
+    Pagination,
     Select,
     Space,
+    Spin,
     Table,
     Tag,
     Timeline,
@@ -26,6 +30,7 @@ import {
     DeleteOutlined,
     DollarOutlined,
     EyeOutlined,
+    FilterOutlined,
     PlusOutlined,
     ReloadOutlined,
     ScanOutlined,
@@ -51,6 +56,7 @@ const QrQuickMaintenanceModal = lazy(() => import('../components/QrQuickMaintena
 
 const { RangePicker } = DatePicker;
 const { Text } = Typography;
+const { useBreakpoint } = Grid;
 
 type CompleteFormValues = {
     endDate: Dayjs;
@@ -141,6 +147,13 @@ const canCompleteMaintenance = (record: Maintenance) => {
     if (record.repairMode === 'external') return record.approvalStatus === 'approved';
     return true;
 };
+const getMaintenanceAccent = (record: Maintenance) => {
+    if (record.status === 'overdue') return '#dc2626';
+    if (record.status === 'completed') return '#16a34a';
+    if (record.repairMode === 'external') return '#f97316';
+    if (record.status === 'in_progress') return '#0ea5e9';
+    return '#2563eb';
+};
 
 const MaintenanceList: React.FC = () => {
     const queryClient = useQueryClient();
@@ -148,12 +161,15 @@ const MaintenanceList: React.FC = () => {
     const { message } = App.useApp();
     const location = useLocation();
     const canManage = hasManagerAccess(role);
+    const screens = useBreakpoint();
+    const isMobile = !screens.md;
     const initialFilters = useMemo(() => createFiltersFromSearch(location.search), [location.search]);
 
     const [filters, setFilters] = useState(initialFilters);
     const [draftFilters, setDraftFilters] = useState(initialFilters);
     const [createOpen, setCreateOpen] = useState(false);
     const [quickMaintenanceOpen, setQuickMaintenanceOpen] = useState(false);
+    const [mobileFilterOpen, setMobileFilterOpen] = useState(false);
     const [detailTarget, setDetailTarget] = useState<Maintenance | null>(null);
     const [completeTarget, setCompleteTarget] = useState<Maintenance | null>(null);
     const [rejectTarget, setRejectTarget] = useState<Maintenance | null>(null);
@@ -214,6 +230,21 @@ const MaintenanceList: React.FC = () => {
 
     const assets = assetsResponse?.data ?? [];
     const maintenances = maintenanceResponse?.data ?? [];
+    const totalMaintenances = maintenanceResponse?.total ?? 0;
+    const activeFilterItems = useMemo(() => {
+        const items: string[] = [];
+        const selectedPlant = plants.find((plant) => plant.id === filters.plantId);
+
+        if (filters.search.trim()) items.push(`Từ khóa: ${filters.search.trim()}`);
+        if (filters.dateRange) {
+            items.push(`${filters.dateRange[0].format('DD/MM/YYYY')} - ${filters.dateRange[1].format('DD/MM/YYYY')}`);
+        }
+        if (filters.repairMode) items.push(getRepairModeLabel(filters.repairMode));
+        if (filters.status) items.push(statusMeta[filters.status]?.label ?? filters.status);
+        if (selectedPlant) items.push(selectedPlant.name);
+
+        return items;
+    }, [filters, plants]);
 
     const invalidateMaintenance = () => {
         queryClient.invalidateQueries({ queryKey: ['maintenances'] });
@@ -249,6 +280,16 @@ const MaintenanceList: React.FC = () => {
         const next = createDefaultFilters();
         setDraftFilters(next);
         setFilters(next);
+    };
+
+    const applyFiltersAndClose = () => {
+        applyFilters();
+        setMobileFilterOpen(false);
+    };
+
+    const resetFiltersAndClose = () => {
+        resetFilters();
+        setMobileFilterOpen(false);
     };
 
     const handleCreate = async (payload: MaintenancePayload) => {
@@ -321,6 +362,261 @@ const MaintenanceList: React.FC = () => {
         if (detailTarget?.id === record.id) {
             setDetailTarget(null);
         }
+    };
+
+    const renderRecordActions = (
+        record: Maintenance,
+        mode: 'table' | 'mobile' = 'table',
+        options: { showDetail?: boolean } = {}
+    ) => {
+        const isMobileActions = mode === 'mobile';
+        const buttonType = isMobileActions ? 'default' : 'text';
+        const buttonSize = isMobileActions ? 'middle' : 'small';
+        const showDetail = options.showDetail ?? true;
+
+        return (
+            <div
+                className={isMobileActions ? 'grid grid-cols-2 gap-2' : 'flex items-center justify-end gap-1'}
+                onClick={(event) => event.stopPropagation()}
+            >
+                {showDetail ? (
+                    <Tooltip title={isMobileActions ? undefined : 'Xem chi tiết'}>
+                        <Button
+                            block={isMobileActions}
+                            size={buttonSize}
+                            type={buttonType}
+                            icon={<EyeOutlined />}
+                            onClick={() => setDetailTarget(record)}
+                        >
+                            {isMobileActions ? 'Chi tiết' : null}
+                        </Button>
+                    </Tooltip>
+                ) : null}
+
+                {record.repairMode === 'external' &&
+                record.approvalStatus === 'pending' &&
+                record.status === 'pending' &&
+                canManage ? (
+                    <>
+                        <ConfirmAction
+                            title='Duyệt sửa ngoài'
+                            description={`Duyệt phiếu sửa ngoài cho ${record.asset?.name || 'máy này'}?`}
+                            okLabel='Duyệt'
+                            intent='primary'
+                            onConfirm={() => handleApprove(record)}
+                        >
+                            <Tooltip title={isMobileActions ? undefined : 'Duyệt'}>
+                                <Button
+                                    block={isMobileActions}
+                                    size={buttonSize}
+                                    type={isMobileActions ? 'primary' : 'text'}
+                                    icon={<CheckOutlined />}
+                                    loading={approveMutation.isPending}
+                                >
+                                    {isMobileActions ? 'Duyệt' : null}
+                                </Button>
+                            </Tooltip>
+                        </ConfirmAction>
+                        <Tooltip title={isMobileActions ? undefined : 'Từ chối'}>
+                            <Button
+                                block={isMobileActions}
+                                size={buttonSize}
+                                type={buttonType}
+                                danger
+                                icon={<CloseOutlined />}
+                                onClick={() => setRejectTarget(record)}
+                            >
+                                {isMobileActions ? 'Từ chối' : null}
+                            </Button>
+                        </Tooltip>
+                    </>
+                ) : null}
+
+                {canCompleteMaintenance(record) ? (
+                    <Tooltip title={isMobileActions ? undefined : 'Hoàn tất'}>
+                        <Button
+                            block={isMobileActions}
+                            size={buttonSize}
+                            type={buttonType}
+                            icon={<CheckCircleOutlined />}
+                            className='text-emerald-600'
+                            onClick={() => openCompleteModal(record)}
+                        >
+                            {isMobileActions ? 'Hoàn tất' : null}
+                        </Button>
+                    </Tooltip>
+                ) : null}
+
+                {canManage ? (
+                    <ConfirmAction
+                        title='Xóa phiếu bảo trì'
+                        description={`Xóa phiếu ${buildMaintenanceCode(record)}? Thao tác này sẽ ẩn phiếu khỏi danh sách.`}
+                        okLabel='Xóa'
+                        intent='danger'
+                        onConfirm={() => handleDelete(record)}
+                    >
+                        <Tooltip title={isMobileActions ? undefined : 'Xóa'}>
+                            <Button
+                                block={isMobileActions}
+                                size={buttonSize}
+                                type={buttonType}
+                                danger
+                                icon={<DeleteOutlined />}
+                                loading={deleteMutation.isPending}
+                            >
+                                {isMobileActions ? 'Xóa' : null}
+                            </Button>
+                        </Tooltip>
+                    </ConfirmAction>
+                ) : null}
+            </div>
+        );
+    };
+
+    const renderMobileMaintenanceCard = (record: Maintenance, index = 0) => {
+        const accent = getMaintenanceAccent(record);
+
+        return (
+            <article
+                key={record.id}
+                className='maintenance-mobile-card rounded-2xl border border-slate-200 bg-white p-4 shadow-sm'
+                style={{
+                    borderLeft: `4px solid ${accent}`,
+                    animationDelay: `${Math.min(index, 6) * 55}ms`,
+                }}
+                onClick={() => setDetailTarget(record)}
+            >
+                <div className='flex items-start justify-between gap-3'>
+                    <div className='min-w-0'>
+                        <Text code className='!m-0 w-fit text-xs'>
+                            {buildMaintenanceCode(record)}
+                        </Text>
+                        <div className='mt-2 line-clamp-2 text-base leading-snug font-bold text-slate-950'>
+                            {record.asset?.name || 'Máy chưa xác định'}
+                        </div>
+                        <div className='mt-2 flex flex-wrap gap-1.5'>
+                            <Tag color='blue' className='!m-0 font-mono'>
+                                {record.asset?.machineCode || record.assetId}
+                            </Tag>
+                            <Tag color={record.repairMode === 'external' ? 'orange' : 'green'} className='!m-0'>
+                                {getRepairModeLabel(record.repairMode)}
+                            </Tag>
+                            <Tag className='!m-0'>{typeLabel[record.type] || record.type}</Tag>
+                        </div>
+                    </div>
+                    <div className='flex shrink-0 flex-col items-end gap-1'>
+                        {getStatusTag(record.status)}
+                        {record.repairMode === 'external' ? getApprovalTag(record.approvalStatus) : null}
+                    </div>
+                </div>
+
+                <p className='mt-3 line-clamp-3 text-sm leading-6 text-slate-700'>{record.description || '-'}</p>
+
+                <div className='mt-3 grid grid-cols-2 gap-2 text-sm'>
+                    <div className='rounded-xl bg-slate-50 p-2'>
+                        <div className='text-xs font-semibold text-slate-400 uppercase'>Cơ sở</div>
+                        <div className='mt-1 line-clamp-1 font-semibold text-slate-800'>
+                            {record.asset?.plant?.name || '-'}
+                        </div>
+                    </div>
+                    <div className='rounded-xl bg-slate-50 p-2'>
+                        <div className='text-xs font-semibold text-slate-400 uppercase'>Bắt đầu</div>
+                        <div className='mt-1 font-semibold text-slate-800'>{fmtDate(record.startDate)}</div>
+                    </div>
+                    <div className='rounded-xl bg-slate-50 p-2'>
+                        <div className='text-xs font-semibold text-slate-400 uppercase'>
+                            {record.repairMode === 'external' ? 'Đơn vị sửa' : 'Kỹ thuật'}
+                        </div>
+                        <div className='mt-1 line-clamp-1 font-semibold text-slate-800'>
+                            {record.repairMode === 'external'
+                                ? record.externalRepair?.vendorName || '-'
+                                : record.technician || '-'}
+                        </div>
+                    </div>
+                    <div className='rounded-xl bg-slate-50 p-2'>
+                        <div className='text-xs font-semibold text-slate-400 uppercase'>Chi phí</div>
+                        <div className='mt-1 font-bold text-emerald-700'>
+                            {fmtMoney(record.cost ?? record.externalRepair?.actualCost ?? 0)}
+                        </div>
+                    </div>
+                </div>
+
+                <div className='mt-4 border-t border-slate-100 pt-3'>{renderRecordActions(record, 'mobile')}</div>
+            </article>
+        );
+    };
+
+    const renderFilterFields = (mode: 'desktop' | 'mobile') => {
+        const compact = mode === 'mobile';
+        const controlSize = compact ? 'large' : 'middle';
+
+        return (
+            <div
+                className={
+                    compact
+                        ? 'grid grid-cols-1 gap-3'
+                        : 'grid grid-cols-1 gap-2 md:grid-cols-2 md:gap-3 xl:grid-cols-[minmax(240px,1fr)_260px_160px_160px_180px_auto]'
+                }
+            >
+                <Input
+                    size={controlSize}
+                    prefix={<SearchOutlined />}
+                    placeholder='Tìm theo tên máy, mã máy, serial...'
+                    value={draftFilters.search}
+                    allowClear
+                    onChange={(event) => setDraftFilters((prev) => ({ ...prev, search: event.target.value }))}
+                    onPressEnter={compact ? applyFiltersAndClose : applyFilters}
+                />
+                <RangePicker
+                    size={controlSize}
+                    className='w-full'
+                    value={draftFilters.dateRange}
+                    allowClear
+                    format='DD/MM/YYYY'
+                    onChange={(dates) => {
+                        setDraftFilters((prev) => ({
+                            ...prev,
+                            dateRange: dates ? (dates as [Dayjs, Dayjs]) : undefined,
+                        }));
+                    }}
+                />
+                <Select
+                    size={controlSize}
+                    allowClear
+                    placeholder='Kiểu sửa'
+                    value={draftFilters.repairMode}
+                    onChange={(repairMode) => setDraftFilters((prev) => ({ ...prev, repairMode }))}
+                    options={[
+                        { label: 'Nội bộ', value: 'internal' },
+                        { label: 'Sửa ngoài', value: 'external' },
+                    ]}
+                />
+                <Select
+                    size={controlSize}
+                    allowClear
+                    placeholder='Trạng thái'
+                    value={draftFilters.status}
+                    onChange={(status) => setDraftFilters((prev) => ({ ...prev, status }))}
+                    options={Object.entries(statusMeta).map(([value, meta]) => ({ value, label: meta.label }))}
+                />
+                <Select
+                    size={controlSize}
+                    allowClear
+                    showSearch={{ optionFilterProp: 'label' }}
+                    placeholder='Cơ sở'
+                    value={draftFilters.plantId}
+                    onChange={(plantId) => setDraftFilters((prev) => ({ ...prev, plantId }))}
+                    options={plants.map((plant) => ({ value: plant.id, label: plant.name }))}
+                />
+                {!compact ? (
+                    <div className='flex gap-2'>
+                        <Button block type='primary' icon={<SearchOutlined />} onClick={applyFilters}>
+                            Lọc
+                        </Button>
+                    </div>
+                ) : null}
+            </div>
+        );
     };
 
     const columns: TableColumnsType<Maintenance> = [
@@ -413,212 +709,305 @@ const MaintenanceList: React.FC = () => {
             key: 'actions',
             width: 220,
             align: 'right',
-            render: (_value, record) => (
-                <div className='flex justify-end gap-1' onClick={(event) => event.stopPropagation()}>
-                    <Tooltip title='Xem chi tiết'>
-                        <Button type='text' icon={<EyeOutlined />} onClick={() => setDetailTarget(record)} />
-                    </Tooltip>
-                    {record.repairMode === 'external' &&
-                    record.approvalStatus === 'pending' &&
-                    record.status === 'pending' &&
-                    canManage ? (
-                        <>
-                            <ConfirmAction
-                                title='Duyệt sửa ngoài'
-                                description={`Duyệt phiếu sửa ngoài cho ${record.asset?.name || 'máy này'}?`}
-                                okLabel='Duyệt'
-                                intent='primary'
-                                onConfirm={() => handleApprove(record)}
-                            >
-                                <Tooltip title='Duyệt'>
-                                    <Button type='text' icon={<CheckOutlined />} loading={approveMutation.isPending} />
-                                </Tooltip>
-                            </ConfirmAction>
-                            <Tooltip title='Từ chối'>
-                                <Button
-                                    type='text'
-                                    danger
-                                    icon={<CloseOutlined />}
-                                    onClick={() => setRejectTarget(record)}
-                                />
-                            </Tooltip>
-                        </>
-                    ) : null}
-                    {canCompleteMaintenance(record) ? (
-                        <Tooltip title='Hoàn tất'>
-                            <Button
-                                type='text'
-                                icon={<CheckCircleOutlined />}
-                                className='text-emerald-600'
-                                onClick={() => openCompleteModal(record)}
-                            />
-                        </Tooltip>
-                    ) : null}
-                    {canManage ? (
-                        <ConfirmAction
-                            title='Xóa phiếu bảo trì'
-                            description={`Xóa phiếu ${buildMaintenanceCode(record)}? Thao tác này sẽ ẩn phiếu khỏi danh sách.`}
-                            okLabel='Xóa'
-                            intent='danger'
-                            onConfirm={() => handleDelete(record)}
-                        >
-                            <Tooltip title='Xóa'>
-                                <Button
-                                    type='text'
-                                    danger
-                                    icon={<DeleteOutlined />}
-                                    loading={deleteMutation.isPending}
-                                />
-                            </Tooltip>
-                        </ConfirmAction>
-                    ) : null}
-                </div>
-            ),
+            render: (_value, record) => renderRecordActions(record),
         },
     ];
 
     return (
-        <div className='flex w-full max-w-full flex-col gap-6 overflow-hidden'>
+        <div className='flex w-full max-w-full flex-col gap-4 overflow-hidden md:gap-6'>
             <PageHeader
                 title='Bảo trì máy móc'
                 subtitle='Theo dõi sửa chữa nội bộ, sửa ngoài và lịch sử bảo trì gắn trực tiếp với từng máy.'
                 actions={
-                    <Space wrap size={8}>
-                        <Button
-                            icon={<ScanOutlined />}
-                            onClick={() => setQuickMaintenanceOpen(true)}
-                            className='rounded-lg border-amber-200 font-medium text-amber-700 hover:!border-amber-300 hover:!text-amber-800'
-                        >
-                            Quét QR tạo phiếu
-                        </Button>
-                        <Button type='primary' icon={<PlusOutlined />} onClick={() => setCreateOpen(true)}>
-                            Tạo phiếu bảo trì
-                        </Button>
-                    </Space>
+                    !isMobile ? (
+                        <div className='grid w-full grid-cols-1 gap-2 sm:flex sm:w-auto sm:flex-wrap sm:justify-end'>
+                            <Button
+                                icon={<ScanOutlined />}
+                                onClick={() => setQuickMaintenanceOpen(true)}
+                                className='rounded-lg border-amber-200 font-medium text-amber-700 hover:!border-amber-300 hover:!text-amber-800'
+                            >
+                                Quét QR tạo phiếu
+                            </Button>
+                            <Button type='primary' icon={<PlusOutlined />} onClick={() => setCreateOpen(true)}>
+                                Tạo phiếu bảo trì
+                            </Button>
+                        </div>
+                    ) : undefined
                 }
             />
 
-            <div className='grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4'>
-                <StatsCard
-                    title='Tổng phiếu'
-                    value={maintenanceResponse?.total ?? 0}
-                    icon={<ToolOutlined />}
-                    accent='#2563eb'
-                />
-                <StatsCard
-                    title='Chờ duyệt sửa ngoài'
-                    value={report?.summary.pendingApprovalCount ?? 0}
-                    icon={<CheckOutlined />}
-                    accent='#d97706'
-                />
-                <StatsCard
-                    title='Sửa ngoài đang làm'
-                    value={report?.summary.inProgressCount ?? 0}
-                    icon={<ReloadOutlined spin />}
-                    accent='#0ea5e9'
-                />
-                <StatsCard
-                    title='Chi phí sửa ngoài'
-                    value={fmtMoney(report?.summary.totalExternalRepairCost ?? 0)}
-                    icon={<DollarOutlined />}
-                    accent='#16a34a'
-                    caption='Theo khoảng ngày đang lọc'
-                />
-            </div>
-
-            <section className='rounded-xl border border-slate-200 bg-white p-4 shadow-sm'>
-                <div className='mb-3 flex flex-wrap items-center justify-between gap-2'>
-                    <div>
-                        <Text strong>Bộ lọc bảo trì</Text>
-                        <div className='text-xs text-slate-500'>Lọc theo máy, cơ sở, kiểu sửa và trạng thái phiếu.</div>
-                    </div>
-                    <Button icon={<ReloadOutlined />} onClick={resetFilters}>
-                        Đặt lại
-                    </Button>
-                </div>
-                <div className='grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-[minmax(240px,1fr)_260px_160px_160px_180px_auto]'>
-                    <Input
-                        prefix={<SearchOutlined />}
-                        placeholder='Tìm theo tên máy, mã máy, serial...'
-                        value={draftFilters.search}
-                        allowClear
-                        onChange={(event) => setDraftFilters((prev) => ({ ...prev, search: event.target.value }))}
-                        onPressEnter={applyFilters}
-                    />
-                    <RangePicker
-                        value={draftFilters.dateRange}
-                        allowClear
-                        format='DD/MM/YYYY'
-                        onChange={(dates) => {
-                            setDraftFilters((prev) => ({
-                                ...prev,
-                                dateRange: dates ? (dates as [Dayjs, Dayjs]) : undefined,
-                            }));
-                        }}
-                    />
-                    <Select
-                        allowClear
-                        placeholder='Kiểu sửa'
-                        value={draftFilters.repairMode}
-                        onChange={(repairMode) => setDraftFilters((prev) => ({ ...prev, repairMode }))}
-                        options={[
-                            { label: 'Nội bộ', value: 'internal' },
-                            { label: 'Sửa ngoài', value: 'external' },
-                        ]}
-                    />
-                    <Select
-                        allowClear
-                        placeholder='Trạng thái'
-                        value={draftFilters.status}
-                        onChange={(status) => setDraftFilters((prev) => ({ ...prev, status }))}
-                        options={Object.entries(statusMeta).map(([value, meta]) => ({ value, label: meta.label }))}
-                    />
-                    <Select
-                        allowClear
-                        showSearch={{ optionFilterProp: 'label' }}
-                        placeholder='Cơ sở'
-                        value={draftFilters.plantId}
-                        onChange={(plantId) => setDraftFilters((prev) => ({ ...prev, plantId }))}
-                        options={plants.map((plant) => ({ value: plant.id, label: plant.name }))}
-                    />
-                    <div className='flex gap-2'>
-                        <Button block type='primary' icon={<SearchOutlined />} onClick={applyFilters}>
-                            Lọc
-                        </Button>
-                    </div>
-                </div>
-            </section>
-
-            <section className='overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm'>
-                <div className='flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 px-5 py-4'>
-                    <div>
-                        <div className='font-semibold text-slate-900'>Danh sách phiếu bảo trì</div>
-                        <div className='text-sm text-slate-500'>
-                            Bấm vào một dòng hoặc biểu tượng mắt để xem đầy đủ chi tiết phiếu.
+            {isMobile ? (
+                <section className='maintenance-mobile-command'>
+                    <div className='relative z-10'>
+                        <div className='flex items-start justify-between gap-3'>
+                            <div className='min-w-0'>
+                                <div className='text-xs font-bold tracking-[0.14em] text-amber-200 uppercase'>
+                                    HAIDANG MS
+                                </div>
+                                <div className='mt-1 text-2xl leading-tight font-black text-white'>
+                                    Bảo trì hiện trường
+                                </div>
+                                <div className='mt-2 text-sm font-medium text-blue-50'>
+                                    {report?.summary.pendingApprovalCount ?? 0} chờ duyệt ·{' '}
+                                    {report?.summary.inProgressCount ?? 0} sửa ngoài
+                                </div>
+                            </div>
+                            <div className='maintenance-mobile-command__icon'>
+                                <ToolOutlined />
+                            </div>
+                        </div>
+                        <div className='mt-5 grid grid-cols-2 gap-2'>
+                            <Button
+                                size='large'
+                                icon={<ScanOutlined />}
+                                onClick={() => setQuickMaintenanceOpen(true)}
+                                className='maintenance-mobile-command__button maintenance-mobile-command__button--scan'
+                            >
+                                Quét QR
+                            </Button>
+                            <Button
+                                type='primary'
+                                size='large'
+                                icon={<PlusOutlined />}
+                                onClick={() => setCreateOpen(true)}
+                                className='maintenance-mobile-command__button maintenance-mobile-command__button--create'
+                            >
+                                Tạo phiếu
+                            </Button>
                         </div>
                     </div>
-                    <Tag color='blue'>{maintenanceResponse?.total ?? 0} phiếu</Tag>
+                </section>
+            ) : null}
+
+            {isMobile ? (
+                <div className='grid grid-cols-2 gap-2'>
+                    {[
+                        {
+                            label: 'Tổng phiếu',
+                            value: totalMaintenances,
+                            color: '#2563eb',
+                            tint: '#eff6ff',
+                            icon: <ToolOutlined />,
+                        },
+                        {
+                            label: 'Chờ duyệt',
+                            value: report?.summary.pendingApprovalCount ?? 0,
+                            color: '#d97706',
+                            tint: '#fffbeb',
+                            icon: <CheckOutlined />,
+                        },
+                        {
+                            label: 'Sửa ngoài',
+                            value: report?.summary.inProgressCount ?? 0,
+                            color: '#0ea5e9',
+                            tint: '#f0f9ff',
+                            icon: <ReloadOutlined spin />,
+                        },
+                        {
+                            label: 'Chi phí',
+                            value: fmtMoney(report?.summary.totalExternalRepairCost ?? 0),
+                            color: '#16a34a',
+                            tint: '#f0fdf4',
+                            icon: <DollarOutlined />,
+                        },
+                    ].map((item, index) => (
+                        <div
+                            key={item.label}
+                            className='maintenance-mobile-stat'
+                            style={{
+                                borderColor: `${item.color}33`,
+                                background: `linear-gradient(135deg, ${item.tint}, #ffffff 62%)`,
+                                animationDelay: `${index * 45}ms`,
+                            }}
+                        >
+                            <div className='flex items-center justify-between gap-2'>
+                                <div className='text-xs font-bold text-slate-500 uppercase'>{item.label}</div>
+                                <div className='maintenance-mobile-stat__icon' style={{ color: item.color }}>
+                                    {item.icon}
+                                </div>
+                            </div>
+                            <div
+                                className='mt-3 truncate text-xl leading-none font-black'
+                                style={{ color: item.color }}
+                            >
+                                {item.value}
+                            </div>
+                        </div>
+                    ))}
                 </div>
-                <Table<Maintenance>
-                    rowKey='id'
-                    columns={columns}
-                    dataSource={maintenances}
-                    loading={isLoading}
-                    size='middle'
-                    scroll={{ x: 1320 }}
-                    onRow={(record) => ({
-                        onClick: () => setDetailTarget(record),
-                        className: 'cursor-pointer',
-                    })}
-                    pagination={{
-                        current: maintenanceResponse?.page ?? filters.page,
-                        pageSize: maintenanceResponse?.limit ?? filters.limit,
-                        total: maintenanceResponse?.total ?? 0,
-                        showSizeChanger: true,
-                        showTotal: (total, range) => `${range[0]}-${range[1]} / ${total} phiếu`,
-                        onChange: (page, limit) => setFilters((prev) => ({ ...prev, page, limit })),
+            ) : (
+                <div className='grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4'>
+                    <StatsCard title='Tổng phiếu' value={totalMaintenances} icon={<ToolOutlined />} accent='#2563eb' />
+                    <StatsCard
+                        title='Chờ duyệt sửa ngoài'
+                        value={report?.summary.pendingApprovalCount ?? 0}
+                        icon={<CheckOutlined />}
+                        accent='#d97706'
+                    />
+                    <StatsCard
+                        title='Sửa ngoài đang làm'
+                        value={report?.summary.inProgressCount ?? 0}
+                        icon={<ReloadOutlined spin />}
+                        accent='#0ea5e9'
+                    />
+                    <StatsCard
+                        title='Chi phí sửa ngoài'
+                        value={fmtMoney(report?.summary.totalExternalRepairCost ?? 0)}
+                        icon={<DollarOutlined />}
+                        accent='#16a34a'
+                        caption='Theo khoảng ngày đang lọc'
+                    />
+                </div>
+            )}
+
+            {isMobile ? (
+                <section className='maintenance-mobile-filter-panel'>
+                    <div className='flex items-center justify-between gap-3'>
+                        <button
+                            type='button'
+                            className='maintenance-mobile-filter-trigger'
+                            onClick={() => setMobileFilterOpen(true)}
+                        >
+                            <span className='maintenance-mobile-filter-trigger__icon'>
+                                <FilterOutlined />
+                            </span>
+                            <span className='min-w-0 flex-1 text-left'>
+                                <span className='block text-sm font-black text-slate-950'>Bộ lọc bảo trì</span>
+                                <span className='block truncate text-xs font-medium text-slate-500'>
+                                    {activeFilterItems.length
+                                        ? `${activeFilterItems.length} điều kiện đang áp dụng`
+                                        : 'Đang xem tất cả phiếu'}
+                                </span>
+                            </span>
+                        </button>
+                        {activeFilterItems.length ? (
+                            <Button size='small' icon={<ReloadOutlined />} onClick={resetFilters}>
+                                Xóa
+                            </Button>
+                        ) : null}
+                    </div>
+
+                    <div className='maintenance-mobile-filter-chips'>
+                        {activeFilterItems.length ? (
+                            activeFilterItems.map((item) => (
+                                <span key={item} className='maintenance-mobile-filter-chip'>
+                                    {item}
+                                </span>
+                            ))
+                        ) : (
+                            <span className='maintenance-mobile-filter-chip maintenance-mobile-filter-chip--empty'>
+                                Tất cả phiếu
+                            </span>
+                        )}
+                    </div>
+                </section>
+            ) : (
+                <section className='rounded-2xl border border-slate-200 bg-white p-3 shadow-sm md:p-4'>
+                    <div className='mb-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between'>
+                        <div>
+                            <Text strong>Bộ lọc bảo trì</Text>
+                            <div className='text-xs text-slate-500'>
+                                Lọc theo máy, cơ sở, kiểu sửa và trạng thái phiếu.
+                            </div>
+                        </div>
+                        <Button icon={<ReloadOutlined />} onClick={resetFilters} className='w-full sm:w-auto'>
+                            Đặt lại
+                        </Button>
+                    </div>
+                    {renderFilterFields('desktop')}
+                </section>
+            )}
+
+            {isMobile ? (
+                <Drawer
+                    open={mobileFilterOpen}
+                    placement='bottom'
+                    height='78vh'
+                    onClose={() => setMobileFilterOpen(false)}
+                    title='Bộ lọc bảo trì'
+                    destroyOnHidden
+                    className='maintenance-filter-drawer'
+                    styles={{
+                        content: { borderRadius: '24px 24px 0 0' },
+                        body: { padding: 16, background: '#f8fafc' },
                     }}
-                />
+                    footer={
+                        <div className='grid grid-cols-2 gap-2 pb-[env(safe-area-inset-bottom)]'>
+                            <Button size='large' icon={<ReloadOutlined />} onClick={resetFiltersAndClose}>
+                                Đặt lại
+                            </Button>
+                            <Button
+                                size='large'
+                                type='primary'
+                                icon={<SearchOutlined />}
+                                onClick={applyFiltersAndClose}
+                            >
+                                Áp dụng
+                            </Button>
+                        </div>
+                    }
+                >
+                    {renderFilterFields('mobile')}
+                </Drawer>
+            ) : null}
+
+            <section className='overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm'>
+                <div className='flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 px-4 py-4 md:px-5'>
+                    <div>
+                        <div className='font-semibold text-slate-900'>Danh sách phiếu bảo trì</div>
+                        <div className='hidden text-sm text-slate-500 md:block'>
+                            Theo dõi theo máy, trạng thái, kiểu sửa và chi phí phát sinh.
+                        </div>
+                    </div>
+                    <Tag color='blue'>{totalMaintenances} phiếu</Tag>
+                </div>
+                {isMobile ? (
+                    <div className='bg-slate-50/70 p-3'>
+                        {isLoading ? (
+                            <div className='flex min-h-[220px] items-center justify-center'>
+                                <Spin />
+                            </div>
+                        ) : maintenances.length ? (
+                            <div className='flex flex-col gap-3'>{maintenances.map(renderMobileMaintenanceCard)}</div>
+                        ) : (
+                            <div className='rounded-2xl bg-white py-8'>
+                                <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description='Chưa có phiếu bảo trì' />
+                            </div>
+                        )}
+                        {totalMaintenances > 0 ? (
+                            <div className='mt-4 flex justify-center'>
+                                <Pagination
+                                    simple
+                                    current={maintenanceResponse?.page ?? filters.page}
+                                    pageSize={maintenanceResponse?.limit ?? filters.limit}
+                                    total={totalMaintenances}
+                                    onChange={(page, limit) => setFilters((prev) => ({ ...prev, page, limit }))}
+                                />
+                            </div>
+                        ) : null}
+                    </div>
+                ) : (
+                    <Table<Maintenance>
+                        rowKey='id'
+                        columns={columns}
+                        dataSource={maintenances}
+                        loading={isLoading}
+                        size='middle'
+                        scroll={{ x: 1320 }}
+                        onRow={(record) => ({
+                            onClick: () => setDetailTarget(record),
+                            className: 'cursor-pointer',
+                        })}
+                        pagination={{
+                            current: maintenanceResponse?.page ?? filters.page,
+                            pageSize: maintenanceResponse?.limit ?? filters.limit,
+                            total: totalMaintenances,
+                            showSizeChanger: true,
+                            showTotal: (total, range) => `${range[0]}-${range[1]} / ${total} phiếu`,
+                            onChange: (page, limit) => setFilters((prev) => ({ ...prev, page, limit })),
+                        }}
+                    />
+                )}
             </section>
 
             <Drawer
@@ -639,11 +1028,21 @@ const MaintenanceList: React.FC = () => {
                         'Chi tiết phiếu bảo trì'
                     )
                 }
-                size='large'
+                placement={isMobile ? 'bottom' : 'right'}
+                size={isMobile ? 'default' : 'large'}
+                height={isMobile ? '92vh' : undefined}
                 destroyOnHidden
                 onClose={() => setDetailTarget(null)}
+                styles={
+                    isMobile
+                        ? {
+                              content: { borderRadius: '22px 22px 0 0' },
+                              body: { padding: 16, paddingBottom: 96 },
+                          }
+                        : undefined
+                }
                 extra={
-                    detailTarget ? (
+                    isMobile ? null : detailTarget ? (
                         <Space wrap>
                             {detailTarget.repairMode === 'external' &&
                             detailTarget.approvalStatus === 'pending' &&
@@ -673,6 +1072,13 @@ const MaintenanceList: React.FC = () => {
                                 </Button>
                             ) : null}
                         </Space>
+                    ) : null
+                }
+                footer={
+                    isMobile && detailTarget ? (
+                        <div className='pb-[env(safe-area-inset-bottom)]'>
+                            {renderRecordActions(detailTarget, 'mobile', { showDetail: false })}
+                        </div>
                     ) : null
                 }
             >
