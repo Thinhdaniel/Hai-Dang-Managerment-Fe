@@ -163,7 +163,7 @@ const ScanTransferModal: React.FC<ScanTransferModalProps> = ({ open, onClose, on
         >
             <div className='grid grid-cols-1 gap-4 md:grid-cols-2'>
                 <div>
-                    <QrCameraScanner active={open} onDetected={handleDetected} />
+                    <QrCameraScanner active={open} onDetected={handleDetected} cooldownMs={1600} />
                 </div>
 
                 <div className='flex min-h-[320px] flex-col rounded-2xl border border-slate-200 bg-white'>

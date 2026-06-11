@@ -673,7 +673,7 @@ const StocktakePage: React.FC = () => {
                             </div>
                             {started ? <Tag color='green'>Đang kiểm</Tag> : <Tag>Chưa bắt đầu</Tag>}
                         </div>
-                        <QrCameraScanner active={started} onDetected={handleDetected} cooldownMs={1000} />
+                        <QrCameraScanner active={started} onDetected={handleDetected} cooldownMs={1600} />
                     </Card>
 
                     <div className='grid grid-cols-2 gap-2'>

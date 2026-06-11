@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Alert, Input } from 'antd';
 import { CameraOutlined, EnterOutlined, LoadingOutlined, SyncOutlined } from '@ant-design/icons';
 import { BrowserMultiFormatReader, type IScannerControls } from '@zxing/browser';
@@ -15,19 +15,22 @@ const buildReader = () => {
 
 type QrCameraScannerProps = {
     active: boolean;
-    onDetected: (rawValue: string) => void;
-    // Khoang nghi giua 2 lan bao cung mot ma (tranh quet lap) — ms
+    onDetected: (rawValue: string) => void | Promise<void>;
+    // Khoang nghi toi thieu sau moi lan nhan ma, tranh camera/API bi goi lap qua nhanh.
     cooldownMs?: number;
 };
 
-const QrCameraScanner: React.FC<QrCameraScannerProps> = ({ active, onDetected, cooldownMs = 1800 }) => {
+const QrCameraScanner: React.FC<QrCameraScannerProps> = ({ active, onDetected, cooldownMs = 2200 }) => {
     const videoRef = useRef<HTMLVideoElement | null>(null);
     const controlsRef = useRef<IScannerControls | null>(null);
     const lastHitRef = useRef<{ value: string; at: number }>({ value: '', at: 0 });
     const onDetectedRef = useRef(onDetected);
+    const activeRef = useRef(active);
+    const scanLockedRef = useRef(false);
+    const cooldownTimerRef = useRef<number | null>(null);
 
     const [supported] = useState(isScannerSupported);
-    const [status, setStatus] = useState<'idle' | 'starting' | 'running' | 'error'>('idle');
+    const [status, setStatus] = useState<'idle' | 'starting' | 'running' | 'cooldown' | 'error'>('idle');
     const [errorText, setErrorText] = useState('');
     const [manualValue, setManualValue] = useState('');
 
@@ -36,7 +39,72 @@ const QrCameraScanner: React.FC<QrCameraScannerProps> = ({ active, onDetected, c
     }, [onDetected]);
 
     useEffect(() => {
+        activeRef.current = active;
+    }, [active]);
+
+    const clearCooldownTimer = useCallback(() => {
+        if (cooldownTimerRef.current) {
+            window.clearTimeout(cooldownTimerRef.current);
+            cooldownTimerRef.current = null;
+        }
+    }, []);
+
+    useEffect(() => {
+        return () => {
+            clearCooldownTimer();
+        };
+    }, [clearCooldownTimer]);
+
+    const releaseScanLock = useCallback(
+        (delayMs: number) => {
+            clearCooldownTimer();
+            cooldownTimerRef.current = window.setTimeout(
+                () => {
+                    scanLockedRef.current = false;
+                    cooldownTimerRef.current = null;
+                    if (activeRef.current) {
+                        setStatus((current) => (current === 'cooldown' ? 'running' : current));
+                    }
+                },
+                Math.max(250, delayMs)
+            );
+        },
+        [clearCooldownTimer]
+    );
+
+    const acceptDetectedValue = useCallback(
+        (value: string) => {
+            const now = Date.now();
+            if (scanLockedRef.current) return false;
+            if (lastHitRef.current.value === value && now - lastHitRef.current.at < cooldownMs) return false;
+
+            scanLockedRef.current = true;
+            lastHitRef.current = { value, at: now };
+            setStatus((current) => (current === 'running' ? 'cooldown' : current));
+
+            try {
+                const result = onDetectedRef.current(value);
+                void Promise.resolve(result)
+                    .catch(() => {
+                        setErrorText('Có lỗi khi xử lý mã vừa quét. Hãy thử lại sau vài giây.');
+                    })
+                    .finally(() => {
+                        releaseScanLock(cooldownMs - (Date.now() - now));
+                    });
+            } catch {
+                setErrorText('Có lỗi khi xử lý mã vừa quét. Hãy thử lại sau vài giây.');
+                releaseScanLock(cooldownMs - (Date.now() - now));
+            }
+
+            return true;
+        },
+        [cooldownMs, releaseScanLock]
+    );
+
+    useEffect(() => {
         if (!active || !supported) {
+            scanLockedRef.current = false;
+            clearCooldownTimer();
             return;
         }
 
@@ -56,11 +124,8 @@ const QrCameraScanner: React.FC<QrCameraScannerProps> = ({ active, onDetected, c
                     (result) => {
                         if (!result) return;
                         const value = result.getText()?.trim();
-                        const now = Date.now();
                         if (!value) return;
-                        if (lastHitRef.current.value === value && now - lastHitRef.current.at < cooldownMs) return;
-                        lastHitRef.current = { value, at: now };
-                        onDetectedRef.current(value);
+                        acceptDetectedValue(value);
                     }
                 );
 
@@ -89,15 +154,18 @@ const QrCameraScanner: React.FC<QrCameraScannerProps> = ({ active, onDetected, c
             controlsRef.current = null;
             const video = videoRef.current;
             if (video) video.srcObject = null;
+            scanLockedRef.current = false;
+            clearCooldownTimer();
             setStatus('idle');
         };
-    }, [active, supported, cooldownMs]);
+    }, [acceptDetectedValue, active, clearCooldownTimer, supported]);
 
     const submitManual = () => {
         const value = manualValue.trim();
         if (!value) return;
-        onDetectedRef.current(value);
-        setManualValue('');
+        if (acceptDetectedValue(value)) {
+            setManualValue('');
+        }
     };
 
     return (
@@ -117,6 +185,10 @@ const QrCameraScanner: React.FC<QrCameraScannerProps> = ({ active, onDetected, c
                         ) : status === 'running' ? (
                             <>
                                 <SyncOutlined spin /> Đưa mã QR trên máy vào khung
+                            </>
+                        ) : status === 'cooldown' ? (
+                            <>
+                                <LoadingOutlined /> Đã nhận mã, đợi hệ thống xử lý...
                             </>
                         ) : status === 'error' ? (
                             <span className='text-rose-200'>Camera không khả dụng</span>
