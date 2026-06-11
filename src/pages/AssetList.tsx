@@ -956,7 +956,7 @@ const AssetList: React.FC = () => {
             <Drawer
                 title='Bộ lọc thiết bị'
                 placement='bottom'
-                height='auto'
+                size='auto'
                 open={isMobileFilterOpen}
                 onClose={() => setIsMobileFilterOpen(false)}
                 className='asset-filter-drawer'

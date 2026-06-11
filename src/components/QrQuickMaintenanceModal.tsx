@@ -473,13 +473,13 @@ const QrQuickMaintenanceModal: React.FC<QrQuickMaintenanceModalProps> = ({ open,
             <Drawer
                 open={open}
                 placement='bottom'
-                height='92vh'
+                size='92vh'
                 onClose={onClose}
                 destroyOnHidden
                 title={asset ? 'Tạo phiếu bảo trì' : 'Quét QR máy'}
                 styles={{
                     body: { padding: 0, overflow: 'hidden' },
-                    content: { borderRadius: '22px 22px 0 0' },
+                    section: { borderRadius: '22px 22px 0 0' },
                 }}
             >
                 {content}

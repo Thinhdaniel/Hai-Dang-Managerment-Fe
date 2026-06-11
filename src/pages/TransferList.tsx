@@ -717,7 +717,7 @@ const TransferList: React.FC = () => {
             <Drawer
                 title='Bộ lọc lệnh điều chuyển'
                 placement='bottom'
-                height='auto'
+                size='auto'
                 open={isMobileFilterOpen}
                 onClose={() => setIsMobileFilterOpen(false)}
                 className='transfer-filter-drawer'

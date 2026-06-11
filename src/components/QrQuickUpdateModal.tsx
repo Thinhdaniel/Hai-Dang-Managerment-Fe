@@ -219,13 +219,13 @@ const QrQuickUpdateModal: React.FC<QrQuickUpdateModalProps> = ({ open, asset, on
             <Drawer
                 open={open}
                 placement='bottom'
-                height='auto'
+                size='auto'
                 onClose={onClose}
                 destroyOnHidden
                 title='Cập nhật nhanh máy'
                 styles={{
                     body: { padding: 16 },
-                    content: { borderRadius: '20px 20px 0 0' },
+                    section: { borderRadius: '20px 20px 0 0' },
                 }}
             >
                 {content}

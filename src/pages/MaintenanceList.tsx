@@ -922,7 +922,7 @@ const MaintenanceList: React.FC = () => {
                 <Drawer
                     open={mobileFilterOpen}
                     placement='bottom'
-                    height='78vh'
+                    size='78vh'
                     onClose={() => setMobileFilterOpen(false)}
                     title='Bộ lọc bảo trì'
                     destroyOnHidden

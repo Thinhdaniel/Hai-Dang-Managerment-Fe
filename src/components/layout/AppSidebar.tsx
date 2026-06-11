@@ -446,7 +446,7 @@ const AppSidebar: React.FC<AppSidebarProps> = ({
                 open={mobileOpen}
                 onClose={onMobileClose}
                 closable={false}
-                width='min(340px, calc(100vw - 20px))'
+                size='min(340px, calc(100vw - 20px))'
                 styles={{
                     body: { padding: 0 },
                     root: {

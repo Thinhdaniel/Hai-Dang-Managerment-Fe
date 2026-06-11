@@ -22,6 +22,7 @@ import {
     MenuFoldOutlined,
     MenuUnfoldOutlined,
     SearchOutlined,
+    SettingOutlined,
     ToolOutlined,
     UserOutlined,
     WarningOutlined,
@@ -59,6 +60,7 @@ const AppHeader: React.FC<AppHeaderProps> = ({ collapsed, isDesktop, mobileOpen,
     const [searchParams] = useSearchParams();
     const [searchValue, setSearchValue] = useState('');
     const [notificationOpen, setNotificationOpen] = useState(false);
+    const [notificationSettingsOpen, setNotificationSettingsOpen] = useState(false);
     const [notifFilter, setNotifFilter] = useState<'all' | 'unread'>('all');
     const visibleNotifications =
         notifFilter === 'unread' ? notifications.filter((item) => !item.isRead) : notifications;
@@ -133,6 +135,19 @@ const AppHeader: React.FC<AppHeaderProps> = ({ collapsed, isDesktop, mobileOpen,
         ),
     };
 
+    const notificationSettingsItem: NonNullable<MenuProps['items']>[number] = {
+        key: 'notification-settings',
+        icon: <SettingOutlined />,
+        label: 'Cài đặt thông báo',
+    };
+
+    const logoutItem: NonNullable<MenuProps['items']>[number] = {
+        key: 'logout',
+        icon: <LogoutOutlined />,
+        label: 'Logout',
+        danger: true,
+    };
+
     const userMenuItems: MenuProps['items'] = canViewUsers
         ? [
               userSummaryItem,
@@ -142,27 +157,20 @@ const AppHeader: React.FC<AppHeaderProps> = ({ collapsed, isDesktop, mobileOpen,
                   icon: <UserOutlined />,
                   label: 'Profile',
               },
-              {
-                  key: 'logout',
-                  icon: <LogoutOutlined />,
-                  label: 'Logout',
-                  danger: true,
-              },
-          ]
-        : [
-              userSummaryItem,
+              notificationSettingsItem,
               { type: 'divider' },
-              {
-                  key: 'logout',
-                  icon: <LogoutOutlined />,
-                  label: 'Logout',
-                  danger: true,
-              },
-          ];
+              logoutItem,
+          ]
+        : [userSummaryItem, { type: 'divider' }, notificationSettingsItem, { type: 'divider' }, logoutItem];
 
     const handleUserMenuClick: MenuProps['onClick'] = ({ key }) => {
         if (key === 'profile') {
             handleProfile();
+            return;
+        }
+
+        if (key === 'notification-settings') {
+            setNotificationSettingsOpen(true);
             return;
         }
 
@@ -218,10 +226,6 @@ const AppHeader: React.FC<AppHeaderProps> = ({ collapsed, isDesktop, mobileOpen,
                     ) : null}
                 </div>
             </div>
-
-            <NotificationSoundToggle />
-
-            <PushNotificationToggle />
 
             <div className='flex items-center gap-1 px-3 py-2'>
                 {(['all', 'unread'] as const).map((key) => (
@@ -474,15 +478,61 @@ const AppHeader: React.FC<AppHeaderProps> = ({ collapsed, isDesktop, mobileOpen,
                 open={useNotificationDrawer && notificationOpen}
                 onClose={() => setNotificationOpen(false)}
                 closable={false}
-                height='min(82vh, 680px)'
+                size='min(82vh, 680px)'
                 className='mobile-notification-drawer'
                 styles={{
                     body: { padding: 0 },
-                    content: { borderRadius: '24px 24px 0 0', overflow: 'hidden' },
+                    section: { borderRadius: '24px 24px 0 0', overflow: 'hidden' },
                     mask: { backdropFilter: 'blur(4px)', background: 'rgba(15, 23, 42, 0.22)' },
                 }}
             >
                 {renderNotificationContent('drawer')}
+            </Drawer>
+
+            <Drawer
+                placement={useNotificationDrawer ? 'bottom' : 'right'}
+                open={notificationSettingsOpen}
+                onClose={() => setNotificationSettingsOpen(false)}
+                closable={false}
+                size={useNotificationDrawer ? 'min(72vh, 560px)' : 420}
+                className='notification-settings-drawer'
+                styles={{
+                    body: { padding: 0, background: '#f8fafc' },
+                    section: {
+                        borderRadius: useNotificationDrawer ? '24px 24px 0 0' : '24px 0 0 24px',
+                        overflow: 'hidden',
+                    },
+                    mask: { backdropFilter: 'blur(4px)', background: 'rgba(15, 23, 42, 0.22)' },
+                }}
+            >
+                <div className='flex h-full flex-col'>
+                    <div className='border-b border-slate-200/80 bg-white px-4 py-4'>
+                        <div className='flex items-start justify-between gap-3'>
+                            <div className='min-w-0'>
+                                <div className='text-sm font-semibold text-slate-950'>Cài đặt thông báo</div>
+                                <p className='mt-1 mb-0 text-[12px] leading-5 text-slate-500'>
+                                    Thiết lập âm thanh và thông báo ngoài app cho thiết bị đang dùng.
+                                </p>
+                            </div>
+                            <Button
+                                type='text'
+                                size='small'
+                                icon={<CloseOutlined />}
+                                onClick={() => setNotificationSettingsOpen(false)}
+                                className='flex h-8 w-8 shrink-0 items-center justify-center rounded-full'
+                            />
+                        </div>
+                    </div>
+
+                    <div className='flex-1 space-y-3 overflow-y-auto p-3 pb-[calc(16px+env(safe-area-inset-bottom))]'>
+                        <div className='overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm'>
+                            <NotificationSoundToggle />
+                        </div>
+                        <div className='overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm'>
+                            <PushNotificationToggle />
+                        </div>
+                    </div>
+                </div>
             </Drawer>
         </Header>
     );

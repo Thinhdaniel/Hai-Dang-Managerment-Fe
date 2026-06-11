@@ -774,7 +774,7 @@ const MaterialListPage: React.FC = () => {
 
             <Drawer
                 title='Chi tiết vật tư'
-                width={760}
+                size={760}
                 open={Boolean(detailMaterial)}
                 onClose={() => setDetailMaterial(null)}
                 destroyOnHidden

@@ -1019,7 +1019,7 @@ const MaterialInventoryPage: React.FC = () => {
                         ? `Lịch sử giao dịch - ${selectedInventoryItem.materialName} tại ${selectedInventoryItem.plantName}`
                         : 'Lịch sử giao dịch'
                 }
-                width={980}
+                size={980}
                 open={Boolean(selectedInventoryItem)}
                 onClose={() => setSelectedInventoryItem(null)}
                 destroyOnHidden
