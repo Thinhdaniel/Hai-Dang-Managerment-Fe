@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useRef, useState } from 'react';
 import dayjs, { type Dayjs } from 'dayjs';
 import {
     Alert,
@@ -32,7 +32,6 @@ import {
     BarChartOutlined,
     CalendarOutlined,
     DatabaseOutlined,
-    DollarOutlined,
     DownloadOutlined,
     FilterOutlined,
     InboxOutlined,
@@ -43,24 +42,21 @@ import {
     SlidersOutlined,
     WarningOutlined,
 } from '@ant-design/icons';
-import {
-    Bar,
-    BarChart,
-    CartesianGrid,
-    Cell,
-    ComposedChart,
-    Legend,
-    Line,
-    LineChart,
-    Pie,
-    PieChart,
-    ResponsiveContainer,
-    Tooltip as ChartTooltip,
-    XAxis,
-    YAxis,
-} from 'recharts';
 import { useQuery } from '@tanstack/react-query';
 import PageHeader from '../components/shared/PageHeader';
+import EChart, { type ECharts, type EChartsCoreOption } from '../components/charts/EChart';
+import {
+    CHART_SEMANTIC,
+    DeltaBadge,
+    DonutCenter,
+    ECHARTS_AXIS_LABEL,
+    ECHARTS_LEGEND_TOP,
+    ECHARTS_TOOLTIP_STYLE,
+    Sparkline,
+    barGradient,
+    blueByRank,
+    makeAxisTooltipFormatter,
+} from '../components/charts';
 import { useAuth } from '../core/contexts/AuthContext';
 import { hasManagerAccess } from '../core/lib/permissions';
 import { plantService } from '../core/services/plant.service';
@@ -110,6 +106,7 @@ type ActiveFilterChip = {
 type MaterialKpiConfig = {
     title: string;
     value: number;
+    previousValue?: number;
     formatter?: (value: number) => string;
     suffix?: string;
     icon: React.ReactNode;
@@ -128,7 +125,7 @@ type ReportFilters = {
     groupBy: GroupBy;
 };
 
-const CHART_COLORS = ['#1677ff', '#52c41a', '#faad14', '#f5222d', '#722ed1', '#13c2c2', '#eb2f96', '#fa8c16'];
+const truncateLabel = (value: string, max = 16) => (value.length > max ? `${value.slice(0, max - 1)}…` : value);
 
 const STATUS_LABEL: Record<string, { label: string; color: string }> = {
     draft: { label: 'Nháp', color: 'default' },
@@ -157,10 +154,12 @@ const fmtCurrency = (value = 0) =>
 
 const fmtNumber = (value = 0) => new Intl.NumberFormat('vi-VN', { maximumFractionDigits: 2 }).format(value);
 
+// Rút gọn tiền theo cách đọc của kế toán Việt: 1,2 tỷ · 850 tr · 12k
 const fmtShort = (value: number) => {
-    if (Math.abs(value) >= 1_000_000_000) return `${(value / 1_000_000_000).toFixed(1)}B`;
-    if (Math.abs(value) >= 1_000_000) return `${(value / 1_000_000).toFixed(0)}M`;
-    if (Math.abs(value) >= 1_000) return `${(value / 1_000).toFixed(0)}K`;
+    const abs = Math.abs(value);
+    if (abs >= 1_000_000_000) return `${(value / 1_000_000_000).toFixed(1).replace('.', ',')} tỷ`;
+    if (abs >= 1_000_000) return `${(value / 1_000_000).toFixed(abs >= 10_000_000 ? 0 : 1).replace('.', ',')} tr`;
+    if (abs >= 1_000) return `${(value / 1_000).toFixed(0)}k`;
     return String(value);
 };
 
@@ -202,17 +201,16 @@ export default function MaterialReportPage() {
     const isManager = hasManagerAccess(user?.role);
     const isMobile = !screens.md;
     const [quickRange, setQuickRange] = useState<QuickRange>('this_month');
+    // Bộ lọc tự áp dụng ngay khi chọn — không cần nút "Áp dụng"
     const [filters, setFilters] = useState<ReportFilters>(DEFAULT_FILTERS);
-    const [appliedFilters, setAppliedFilters] = useState<ReportFilters>(DEFAULT_FILTERS);
+    const [filterOpen, setFilterOpen] = useState(false);
     const [exportOpen, setExportOpen] = useState(false);
     const [exporting, setExporting] = useState(false);
     const [detail, setDetail] = useState<DetailPayload | null>(null);
     const [drilldown, setDrilldown] = useState<MaterialDrilldownPayload | null>(null);
     const [detailSearch, setDetailSearch] = useState('');
 
-    const params = useMemo(() => toReportParams(appliedFilters), [appliedFilters]);
-    const draftParams = useMemo(() => toReportParams(filters), [filters]);
-    const hasPendingFilterChanges = JSON.stringify(draftParams) !== JSON.stringify(params);
+    const params = useMemo(() => toReportParams(filters), [filters]);
 
     const plantsQuery = useQuery({
         queryKey: ['report-plants'],
@@ -237,6 +235,24 @@ export default function MaterialReportPage() {
         queryFn: () => materialReportService.getSummary(params),
         staleTime: 60_000,
     });
+
+    // Kỳ liền trước (cùng độ dài) để hiện ±% trên KPI
+    const prevParams = useMemo<MaterialReportQueryParams>(() => {
+        const [start, end] = filters.dateRange;
+        const days = end.diff(start, 'day') + 1;
+        return {
+            ...toReportParams(filters),
+            startDate: start.subtract(days, 'day').format('YYYY-MM-DD'),
+            endDate: start.subtract(1, 'day').format('YYYY-MM-DD'),
+        };
+    }, [filters]);
+
+    const prevSummaryQuery = useQuery({
+        queryKey: ['material-report-summary-prev', prevParams],
+        queryFn: () => materialReportService.getSummary(prevParams),
+        staleTime: 60_000,
+    });
+    const prevSummary = prevSummaryQuery.data;
 
     const costQuery = useQuery({
         queryKey: ['material-report-cost', params],
@@ -336,14 +352,9 @@ export default function MaterialReportPage() {
         }
     };
 
-    const handleApplyFilters = () => {
-        setAppliedFilters(filters);
-    };
-
     const handleResetFilters = () => {
         setQuickRange('this_month');
         setFilters(DEFAULT_FILTERS);
-        setAppliedFilters(DEFAULT_FILTERS);
     };
 
     const handleRefresh = () => {
@@ -369,77 +380,55 @@ export default function MaterialReportPage() {
         }
     };
 
-    const activeFilterCount = [
-        appliedFilters.plantId,
-        appliedFilters.materialId,
-        appliedFilters.category,
-        appliedFilters.supplierId,
-        appliedFilters.status,
-    ].filter(Boolean).length;
+    // Số filter phụ đang bật — hiện badge trên nút "Bộ lọc"
+    const advancedFilterCount = [filters.materialId, filters.category, filters.supplierId, filters.status].filter(
+        Boolean
+    ).length;
 
-    const activeFilterChips = useMemo<ActiveFilterChip[]>(() => {
-        const chips: ActiveFilterChip[] = [
-            {
-                key: 'period',
-                label: `Kỳ: ${appliedFilters.dateRange[0].format('DD/MM/YYYY')} - ${appliedFilters.dateRange[1].format('DD/MM/YYYY')}`,
-                color: 'blue',
-            },
-            { key: 'groupBy', label: `Nhóm kỳ: ${GROUP_BY_LABEL[appliedFilters.groupBy]}`, color: 'geekblue' },
-        ];
-        if (appliedFilters.plantId) {
-            chips.push({
-                key: 'plant',
-                label: `Cơ sở: ${plants.find((plant) => plant.id === appliedFilters.plantId)?.name ?? 'Đã chọn'}`,
-                color: 'cyan',
-            });
+    // Chip gỡ nhanh từng filter phụ
+    const advancedFilterChips = useMemo<ActiveFilterChip[]>(() => {
+        const chips: ActiveFilterChip[] = [];
+        if (filters.category) {
+            chips.push({ key: 'category', label: `Nhóm VT: ${filters.category}`, color: 'purple' });
         }
-        if (appliedFilters.category) {
-            chips.push({ key: 'category', label: `Nhóm VT: ${appliedFilters.category}`, color: 'purple' });
-        }
-        if (appliedFilters.materialId) {
+        if (filters.materialId) {
             chips.push({
-                key: 'material',
-                label: `Vật tư: ${materials.find((material) => material.id === appliedFilters.materialId)?.name ?? 'Đã chọn'}`,
+                key: 'materialId',
+                label: `Vật tư: ${materials.find((material) => material.id === filters.materialId)?.name ?? 'Đã chọn'}`,
                 color: 'green',
             });
         }
-        if (appliedFilters.supplierId) {
+        if (filters.supplierId) {
             chips.push({
-                key: 'supplier',
-                label: `NCC: ${suppliers.find((supplier) => supplier.id === appliedFilters.supplierId)?.name ?? 'Đã chọn'}`,
+                key: 'supplierId',
+                label: `NCC: ${suppliers.find((supplier) => supplier.id === filters.supplierId)?.name ?? 'Đã chọn'}`,
                 color: 'gold',
             });
         }
-        if (appliedFilters.status) {
+        if (filters.status) {
             chips.push({
                 key: 'status',
-                label: `Trạng thái: ${STATUS_LABEL[appliedFilters.status]?.label ?? appliedFilters.status}`,
+                label: `Trạng thái: ${STATUS_LABEL[filters.status]?.label ?? filters.status}`,
                 color: 'orange',
             });
         }
         return chips;
-    }, [appliedFilters, materials, plants, suppliers]);
+    }, [filters, materials, suppliers]);
+
+    const clearAdvancedFilter = (key: string) => {
+        setFilters((current) => ({ ...current, [key]: undefined }));
+    };
+
+    const heroPurchaseCost = summary?.totalPurchaseCost ?? summary?.totalMonthlyCost ?? 0;
+    const heroPrevPurchaseCost = prevSummary
+        ? (prevSummary.totalPurchaseCost ?? prevSummary.totalMonthlyCost ?? 0)
+        : undefined;
 
     const kpis: MaterialKpiConfig[] = [
         {
-            title: 'Chi phí mua vật tư',
-            value: summary?.totalPurchaseCost ?? summary?.totalMonthlyCost ?? 0,
-            formatter: fmtCurrency,
-            icon: <DollarOutlined />,
-            color: '#1677ff',
-            hint: 'Tổng giá trị các dòng vật tư đã mua trong kỳ, lọc theo cơ sở của từng dòng vật tư.',
-            onClick: () =>
-                setDrilldown({
-                    kind: 'purchase',
-                    title: 'Chi tiết chi phí mua vật tư',
-                    description: 'Các đơn mua vật tư tạo nên KPI trong kỳ và bộ lọc hiện tại.',
-                    rows: filteredPurchaseDetails,
-                    loading: priceQuery.isLoading,
-                }),
-        },
-        {
             title: 'Giá trị cấp phát vật tư',
             value: summary?.totalDistributionCost ?? 0,
+            previousValue: prevSummary ? (prevSummary.totalDistributionCost ?? 0) : undefined,
             formatter: fmtCurrency,
             icon: <InboxOutlined />,
             color: '#722ed1',
@@ -456,6 +445,7 @@ export default function MaterialReportPage() {
         {
             title: 'Net sau hoàn trả',
             value: summary?.totalNetPurchaseCost ?? 0,
+            previousValue: prevSummary ? (prevSummary.totalNetPurchaseCost ?? 0) : undefined,
             formatter: fmtCurrency,
             icon: <LineChartOutlined />,
             color: '#52c41a',
@@ -483,21 +473,6 @@ export default function MaterialReportPage() {
                     description: 'Danh sách đơn mua có chênh lệch giữa dự tính và thực tế.',
                     rows: priceRows.filter((row) => Math.abs(row.difference ?? 0) > 0),
                     loading: priceQuery.isLoading,
-                }),
-        },
-        {
-            title: 'Phiếu mua chờ duyệt',
-            value: summary?.pendingRequestCount ?? 0,
-            suffix: 'phiếu',
-            icon: <CalendarOutlined />,
-            color: '#faad14',
-            hint: 'Phiếu đề xuất mua vật tư còn ở trạng thái chờ duyệt.',
-            onClick: () =>
-                setDrilldown({
-                    kind: 'message',
-                    title: 'Phiếu mua chờ duyệt',
-                    description:
-                        'KPI này đang lấy từ tổng hợp backend. Phase sau nên bổ sung API danh sách phiếu chờ duyệt để drill-down đầy đủ.',
                 }),
         },
         {
@@ -529,79 +504,90 @@ export default function MaterialReportPage() {
             <style>{REPORT_PAGE_STYLE}</style>
             <PageHeader
                 title='Báo cáo vật tư'
-                subtitle={`Kỳ ${appliedFilters.dateRange[0].format('DD/MM/YYYY')} - ${appliedFilters.dateRange[1].format('DD/MM/YYYY')} · ${activeFilterCount} bộ lọc đang áp dụng`}
-                extra={<ActiveFilterChips chips={activeFilterChips} />}
-                actions={
-                    <Space wrap className='report-header-actions'>
-                        <Button icon={<ReloadOutlined />} onClick={handleRefresh} loading={isLoading}>
-                            Làm mới
-                        </Button>
-                        <Button type='primary' icon={<DownloadOutlined />} onClick={() => setExportOpen(true)}>
-                            Xuất Excel
-                        </Button>
-                    </Space>
-                }
+                subtitle={`Kỳ ${filters.dateRange[0].format('DD/MM/YYYY')} - ${filters.dateRange[1].format('DD/MM/YYYY')}`}
             />
 
-            <Card className='report-filter-card' variant='outlined'>
-                <div className='report-filter-toolbar'>
-                    <div className='report-quick-range-scroll'>
-                        <Segmented
-                            value={quickRange}
-                            onChange={handleQuickRangeChange}
-                            options={[
-                                { label: 'Tháng này', value: 'this_month' },
-                                { label: 'Quý này', value: 'quarter' },
-                                { label: '6 tháng', value: 'six_months' },
-                                { label: 'Năm nay', value: 'year' },
-                                { label: 'Tùy chỉnh', value: 'custom' },
-                            ]}
-                        />
-                    </div>
-                    <Space wrap className='report-filter-actions'>
-                        <Badge count={activeFilterCount} size='small'>
-                            <Button
-                                type={hasPendingFilterChanges ? 'primary' : 'default'}
-                                icon={<FilterOutlined />}
-                                onClick={handleApplyFilters}
-                            >
-                                {hasPendingFilterChanges ? 'Áp dụng thay đổi' : 'Áp dụng'}
-                            </Button>
-                        </Badge>
-                        <Button onClick={handleResetFilters}>Reset</Button>
-                    </Space>
+            <div className='hd-report-toolbar'>
+                <div className='hd-toolbar-scroll'>
+                    <Segmented
+                        value={quickRange}
+                        onChange={handleQuickRangeChange}
+                        options={[
+                            { label: 'Tháng này', value: 'this_month' },
+                            { label: 'Quý này', value: 'quarter' },
+                            { label: '6 tháng', value: 'six_months' },
+                            { label: 'Năm nay', value: 'year' },
+                            { label: 'Tùy chỉnh', value: 'custom' },
+                        ]}
+                    />
                 </div>
+                <RangePicker
+                    value={filters.dateRange}
+                    allowClear={false}
+                    format='DD/MM/YYYY'
+                    style={{ width: 240 }}
+                    onChange={(dates) => {
+                        if (!dates) return;
+                        setQuickRange('custom');
+                        setFilters((current) => ({ ...current, dateRange: dates as [Dayjs, Dayjs] }));
+                    }}
+                />
+                {isManager ? (
+                    <Select
+                        allowClear
+                        showSearch={{ optionFilterProp: 'label' }}
+                        placeholder='Tất cả cơ sở'
+                        style={{ minWidth: 170 }}
+                        value={filters.plantId}
+                        onChange={(plantId) => setFilters((current) => ({ ...current, plantId }))}
+                        options={plants.map((plant) => ({ label: plant.name, value: plant.id }))}
+                    />
+                ) : null}
+                <Badge count={advancedFilterCount} size='small'>
+                    <Button icon={<FilterOutlined />} onClick={() => setFilterOpen(true)}>
+                        Bộ lọc
+                    </Button>
+                </Badge>
+                <Button type='text' size='small' onClick={handleResetFilters}>
+                    Đặt lại
+                </Button>
+                <span className='hd-report-toolbar__spacer' />
+                <Tooltip title='Làm mới dữ liệu'>
+                    <Button icon={<ReloadOutlined />} loading={isLoading} onClick={handleRefresh} />
+                </Tooltip>
+                <Button type='primary' icon={<DownloadOutlined />} onClick={() => setExportOpen(true)}>
+                    Xuất Excel
+                </Button>
+            </div>
 
-                <Row gutter={[12, 12]} className='report-filter-grid'>
-                    <Col xs={24} sm={12} xl={8} xxl={6}>
-                        <Text className='report-filter-label'>Khoảng thời gian</Text>
-                        <RangePicker
-                            value={filters.dateRange}
-                            allowClear={false}
-                            format='DD/MM/YYYY'
-                            className='report-filter-control'
-                            onChange={(dates) => {
-                                if (!dates) return;
-                                setQuickRange('custom');
-                                setFilters((current) => ({ ...current, dateRange: dates as [Dayjs, Dayjs] }));
+            {advancedFilterChips.length ? (
+                <div className='hd-chip-row'>
+                    {advancedFilterChips.map((chip) => (
+                        <Tag
+                            key={chip.key}
+                            color={chip.color}
+                            closable
+                            onClose={(event) => {
+                                event.preventDefault();
+                                clearAdvancedFilter(chip.key);
                             }}
-                        />
-                    </Col>
-                    {isManager ? (
-                        <Col xs={24} sm={12} xl={8} xxl={6}>
-                            <Text className='report-filter-label'>Cơ sở</Text>
-                            <Select
-                                allowClear
-                                showSearch={{ optionFilterProp: 'label' }}
-                                placeholder='Tất cả cơ sở'
-                                className='report-filter-control'
-                                value={filters.plantId}
-                                onChange={(plantId) => setFilters((current) => ({ ...current, plantId }))}
-                                options={plants.map((plant) => ({ label: plant.name, value: plant.id }))}
-                            />
-                        </Col>
-                    ) : null}
-                    <Col xs={24} sm={12} xl={8} xxl={6}>
+                            className='report-filter-chip'
+                        >
+                            {chip.label}
+                        </Tag>
+                    ))}
+                </div>
+            ) : null}
+
+            <Drawer
+                title='Bộ lọc nâng cao'
+                open={filterOpen}
+                onClose={() => setFilterOpen(false)}
+                size={360}
+                destroyOnHidden={false}
+            >
+                <div className='report-filter-drawer'>
+                    <div>
                         <Text className='report-filter-label'>Nhóm vật tư</Text>
                         <Select
                             allowClear
@@ -614,8 +600,8 @@ export default function MaterialReportPage() {
                             }
                             options={categoryOptions}
                         />
-                    </Col>
-                    <Col xs={24} sm={12} xl={8} xxl={6}>
+                    </div>
+                    <div>
                         <Text className='report-filter-label'>Vật tư</Text>
                         <Select
                             allowClear
@@ -631,8 +617,8 @@ export default function MaterialReportPage() {
                                     value: material.id,
                                 }))}
                         />
-                    </Col>
-                    <Col xs={24} sm={12} xl={8} xxl={6}>
+                    </div>
+                    <div>
                         <Text className='report-filter-label'>Nhà cung cấp</Text>
                         <Select
                             allowClear
@@ -643,8 +629,8 @@ export default function MaterialReportPage() {
                             onChange={(supplierId) => setFilters((current) => ({ ...current, supplierId }))}
                             options={suppliers.map((supplier) => ({ label: supplier.name, value: supplier.id }))}
                         />
-                    </Col>
-                    <Col xs={24} sm={12} xl={8} xxl={6}>
+                    </div>
+                    <div>
                         <Text className='report-filter-label'>Trạng thái mua hàng</Text>
                         <Select
                             allowClear
@@ -658,8 +644,8 @@ export default function MaterialReportPage() {
                                 )
                                 .map(([value, info]) => ({ label: info.label, value }))}
                         />
-                    </Col>
-                    <Col xs={24} sm={12} xl={8} xxl={6}>
+                    </div>
+                    <div>
                         <Text className='report-filter-label'>Gom biểu đồ</Text>
                         <Segmented
                             block
@@ -674,10 +660,9 @@ export default function MaterialReportPage() {
                                 { label: 'Quý', value: 'quarter' },
                             ]}
                         />
-                    </Col>
-                </Row>
-                <ActiveFilterChips chips={activeFilterChips} compact />
-            </Card>
+                    </div>
+                </div>
+            </Drawer>
 
             {hasError ? (
                 <Alert
@@ -690,24 +675,150 @@ export default function MaterialReportPage() {
             ) : null}
 
             <Row gutter={[16, 16]}>
-                {kpis.map((kpi) => (
-                    <Col key={kpi.title} xs={24} sm={12} lg={8} xxl={4}>
-                        <ReportKpiCard kpi={kpi} loading={summaryQuery.isLoading} />
-                    </Col>
-                ))}
+                <Col xs={24} lg={10} xxl={8}>
+                    <div className='hd-hero-card'>
+                        <span className='hd-hero-card__title'>Chi phí mua vật tư</span>
+                        {summaryQuery.isLoading ? (
+                            <Skeleton active paragraph={{ rows: 2 }} title={false} />
+                        ) : (
+                            <>
+                                <span className='hd-hero-card__value'>{fmtCurrency(heroPurchaseCost)}</span>
+                                <DeltaBadge
+                                    current={heroPurchaseCost}
+                                    previous={heroPrevPurchaseCost}
+                                    formatter={fmtCurrency}
+                                />
+                                <div className='hd-hero-card__spark'>
+                                    <Sparkline data={costTrend.map((point) => Number(point.totalAmount ?? 0))} />
+                                </div>
+                                <div className='hd-hero-card__subs'>
+                                    <button
+                                        type='button'
+                                        onClick={() =>
+                                            setDrilldown({
+                                                kind: 'purchase',
+                                                title: 'Chi tiết chi phí mua vật tư',
+                                                description:
+                                                    'Các đơn mua vật tư tạo nên KPI trong kỳ và bộ lọc hiện tại.',
+                                                rows: filteredPurchaseDetails,
+                                                loading: priceQuery.isLoading,
+                                            })
+                                        }
+                                    >
+                                        <i style={{ background: CHART_SEMANTIC.purchaseLine }} />
+                                        Net sau hoàn trả <strong>{fmtShort(summary?.totalNetPurchaseCost ?? 0)}</strong>
+                                    </button>
+                                    <button
+                                        type='button'
+                                        onClick={() =>
+                                            setDrilldown({
+                                                kind: 'distribution',
+                                                title: 'Chi tiết cấp phát vật tư',
+                                                description:
+                                                    'Các phiếu cấp phát/xuất vật tư trong kỳ và bộ lọc hiện tại.',
+                                                rows: distributionDetails,
+                                                loading: distributionDetailQuery.isLoading,
+                                            })
+                                        }
+                                    >
+                                        <i style={{ background: CHART_SEMANTIC.material }} />
+                                        Cấp phát <strong>{fmtShort(summary?.totalDistributionCost ?? 0)}</strong>
+                                    </button>
+                                </div>
+                            </>
+                        )}
+                    </div>
+                </Col>
+                <Col xs={24} lg={14} xxl={16}>
+                    <Row gutter={[12, 12]} className='report-kpi-grid'>
+                        {kpis.map((kpi) => (
+                            <Col key={kpi.title} xs={12} xl={6}>
+                                <ReportKpiCard kpi={kpi} loading={summaryQuery.isLoading} />
+                            </Col>
+                        ))}
+                    </Row>
+                </Col>
             </Row>
 
-            <MaterialInsightPanel
-                summary={summary}
-                highVarianceCount={highVarianceCount}
-                topSupplier={topSupplier}
-                topPlant={topPlant}
-                topMaterial={topMaterials[0]}
-                purchaseRows={priceRows}
-                suppliers={supplierRows}
-                materials={topMaterials}
-                onOpenDrilldown={setDrilldown}
-            />
+            <div className='hd-signal-strip'>
+                {(summary?.lowStockCount ?? 0) > 0 ? (
+                    <button
+                        type='button'
+                        className='hd-signal-item hd-signal-item--danger'
+                        onClick={() =>
+                            setDrilldown({
+                                kind: 'materials',
+                                title: 'Vật tư dưới ngưỡng',
+                                description: 'Danh sách vật tư dưới ngưỡng từ dữ liệu đang có trong báo cáo.',
+                                rows: topMaterials.filter(
+                                    (row) => (row.currentStock ?? Number.POSITIVE_INFINITY) < (row.minStockLevel ?? 0)
+                                ),
+                            })
+                        }
+                    >
+                        <WarningOutlined /> <strong>{summary?.lowStockCount}</strong> vật tư dưới ngưỡng tồn
+                    </button>
+                ) : null}
+                {highVarianceCount > 0 ? (
+                    <button
+                        type='button'
+                        className='hd-signal-item hd-signal-item--warning'
+                        onClick={() =>
+                            setDrilldown({
+                                kind: 'purchase',
+                                title: 'Các đơn có lệch giá',
+                                description: 'Chênh lệch giữa giá dự kiến/tham chiếu và giá thực tế.',
+                                rows: priceRows.filter((row) => Math.abs(row.difference ?? 0) > 0),
+                            })
+                        }
+                    >
+                        <AlertOutlined /> <strong>{highVarianceCount}</strong> đơn mua có lệch giá
+                    </button>
+                ) : null}
+                {(summary?.pendingRequestCount ?? 0) > 0 ? (
+                    <button type='button' className='hd-signal-item' disabled>
+                        <CalendarOutlined /> <strong>{summary?.pendingRequestCount}</strong> phiếu mua chờ duyệt
+                    </button>
+                ) : null}
+                {topSupplier ? (
+                    <button
+                        type='button'
+                        className='hd-signal-item'
+                        onClick={() =>
+                            setDrilldown({
+                                kind: 'suppliers',
+                                title: 'Chi phí mua vật tư theo nhà cung cấp',
+                                description: 'Tỷ trọng và giá trị mua vật tư theo NCC trong kỳ.',
+                                rows: supplierRows,
+                            })
+                        }
+                    >
+                        <ShopOutlined /> NCC lớn nhất:{' '}
+                        <strong>
+                            {topSupplier.supplierName} · {fmtShort(topSupplier.totalAmount ?? 0)}
+                        </strong>
+                    </button>
+                ) : null}
+                {topPlant ? (
+                    <button
+                        type='button'
+                        className='hd-signal-item'
+                        onClick={() =>
+                            setDrilldown({
+                                kind: 'materials',
+                                title: 'Top vật tư tiêu hao',
+                                description: 'Các vật tư có lượng xuất/cấp phát lớn trong kỳ.',
+                                rows: topMaterials,
+                            })
+                        }
+                    >
+                        <InboxOutlined /> Cơ sở nhận nhiều nhất:{' '}
+                        <strong>
+                            {topPlant.plantName} · {fmtShort(topPlant.totalWithVat)}
+                        </strong>
+                    </button>
+                ) : null}
+            </div>
 
             <Card className='report-main-card' variant='outlined'>
                 <Tabs
@@ -821,20 +932,6 @@ export default function MaterialReportPage() {
     );
 }
 
-function ActiveFilterChips({ chips, compact = false }: { chips: ActiveFilterChip[]; compact?: boolean }) {
-    if (!chips.length) return null;
-
-    return (
-        <div className={compact ? 'report-active-filters report-active-filters--compact' : 'report-active-filters'}>
-            {chips.map((chip) => (
-                <Tag key={chip.key} color={chip.color ?? 'default'} className='report-filter-chip'>
-                    {chip.label}
-                </Tag>
-            ))}
-        </div>
-    );
-}
-
 function ReportKpiCard({ kpi, loading }: { kpi: MaterialKpiConfig; loading?: boolean }) {
     return (
         <button type='button' className='report-kpi-button' onClick={kpi.onClick} disabled={!kpi.onClick}>
@@ -857,118 +954,16 @@ function ReportKpiCard({ kpi, loading }: { kpi: MaterialKpiConfig; loading?: boo
                         styles={{ content: { color: kpi.color, fontWeight: 700 } }}
                     />
                 </Tooltip>
+                {kpi.previousValue !== undefined ? (
+                    <DeltaBadge
+                        current={kpi.value}
+                        previous={kpi.previousValue}
+                        formatter={kpi.formatter ?? fmtNumber}
+                    />
+                ) : null}
                 {kpi.onClick ? <Text className='report-kpi-action'>Nhấn để xem chi tiết</Text> : null}
             </Card>
         </button>
-    );
-}
-
-function MaterialInsightPanel({
-    summary,
-    highVarianceCount,
-    topSupplier,
-    topPlant,
-    topMaterial,
-    purchaseRows,
-    suppliers,
-    materials,
-    onOpenDrilldown,
-}: {
-    summary?: MaterialReportSummary;
-    highVarianceCount: number;
-    topSupplier?: SupplierReportRow;
-    topPlant?: DistributionCostByPlant;
-    topMaterial?: TopConsumedMaterial;
-    purchaseRows: PriceComparisonReportRow[];
-    suppliers: SupplierReportRow[];
-    materials: TopConsumedMaterial[];
-    onOpenDrilldown: (payload: MaterialDrilldownPayload) => void;
-}) {
-    const lowStockCount = summary?.lowStockCount ?? 0;
-    const lowStockRows = materials.filter(
-        (row) => (row.currentStock ?? Number.POSITIVE_INFINITY) < (row.minStockLevel ?? 0)
-    );
-
-    const insights = [
-        {
-            title: 'Tồn kho',
-            value: lowStockCount ? `${lowStockCount} vật tư dưới ngưỡng` : 'Không có cảnh báo dưới ngưỡng',
-            tone: lowStockCount ? 'warning' : 'success',
-            onClick: () =>
-                onOpenDrilldown({
-                    kind: 'materials',
-                    title: 'Vật tư dưới ngưỡng',
-                    description: 'Danh sách vật tư dưới ngưỡng từ dữ liệu đang có trong báo cáo.',
-                    rows: lowStockRows,
-                }),
-        },
-        {
-            title: 'Lệch giá',
-            value: highVarianceCount ? `${highVarianceCount} đơn có chênh lệch` : 'Chưa ghi nhận lệch giá đáng chú ý',
-            tone: highVarianceCount ? 'info' : 'success',
-            onClick: () =>
-                onOpenDrilldown({
-                    kind: 'purchase',
-                    title: 'Các đơn có lệch giá',
-                    description: 'Chênh lệch giữa giá dự kiến/tham chiếu và giá thực tế.',
-                    rows: purchaseRows.filter((row) => Math.abs(row.difference ?? 0) > 0),
-                }),
-        },
-        {
-            title: 'Nhà cung cấp nổi bật',
-            value: topSupplier
-                ? `${topSupplier.supplierName}: ${fmtCurrency(topSupplier.totalAmount ?? 0)}`
-                : 'Chưa có dữ liệu nhà cung cấp',
-            tone: 'neutral',
-            onClick: () =>
-                onOpenDrilldown({
-                    kind: 'suppliers',
-                    title: 'Chi phí mua vật tư theo nhà cung cấp',
-                    description: 'Tỷ trọng và giá trị mua vật tư theo NCC trong kỳ.',
-                    rows: suppliers,
-                }),
-        },
-        {
-            title: 'Tiêu hao tập trung',
-            value: topMaterial
-                ? `${topMaterial.materialName}: ${fmtNumber(topMaterial.totalQuantityOut ?? 0)} ${topMaterial.unit ?? ''}`
-                : topPlant
-                  ? `${topPlant.plantName}: ${fmtCurrency(topPlant.totalWithVat)}`
-                  : 'Chưa có dữ liệu tiêu hao',
-            tone: 'neutral',
-            onClick: () =>
-                onOpenDrilldown({
-                    kind: 'materials',
-                    title: 'Top vật tư tiêu hao',
-                    description: 'Các vật tư có lượng xuất/cấp phát lớn trong kỳ.',
-                    rows: materials,
-                }),
-        },
-    ];
-
-    return (
-        <Card className='report-insight-card' variant='outlined'>
-            <div className='report-insight-head'>
-                <div>
-                    <Text className='report-section-title'>Gợi ý vận hành vật tư</Text>
-                    <Text type='secondary'>Các điểm cần chú ý từ dữ liệu đang lọc.</Text>
-                </div>
-                <Tag color='blue'>Insight</Tag>
-            </div>
-            <div className='report-insight-grid'>
-                {insights.map((insight) => (
-                    <button
-                        key={insight.title}
-                        type='button'
-                        className={`report-insight-item report-insight-item--${insight.tone}`}
-                        onClick={insight.onClick}
-                    >
-                        <span>{insight.title}</span>
-                        <strong>{insight.value}</strong>
-                    </button>
-                ))}
-            </div>
-        </Card>
     );
 }
 
@@ -1004,112 +999,341 @@ function OverviewTab({
         return Array.from(rows.values()).sort((a, b) => a.period.localeCompare(b.period));
     }, [costTrend, distribution]);
 
+    const trendInstance = useRef<ECharts | null>(null);
+    const downloadTrendPng = () => {
+        const url = trendInstance.current?.getDataURL({ type: 'png', pixelRatio: 2, backgroundColor: '#ffffff' });
+        if (!url) return;
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = 'vat-tu-mua-va-cap-phat.png';
+        link.click();
+    };
+
+    const trendOption = useMemo<EChartsCoreOption>(() => {
+        const many = combinedTrend.length > 18;
+        return {
+            animationDuration: 1100,
+            animationEasing: 'elasticOut',
+            tooltip: {
+                trigger: 'axis',
+                axisPointer: { type: 'shadow', shadowStyle: { color: 'rgba(37, 99, 235, 0.06)' } },
+                ...ECHARTS_TOOLTIP_STYLE,
+                formatter: makeAxisTooltipFormatter(),
+            },
+            legend: ECHARTS_LEGEND_TOP,
+            grid: { left: 8, right: 14, top: 36, bottom: many ? 30 : 8, containLabel: true },
+            xAxis: {
+                type: 'category',
+                data: combinedTrend.map((row) => row.period),
+                axisTick: { show: false },
+                axisLine: { lineStyle: { color: '#e2e8f0' } },
+                axisLabel: { ...ECHARTS_AXIS_LABEL, rotate: many ? 35 : 0, hideOverlap: true },
+            },
+            yAxis: {
+                type: 'value',
+                splitLine: { lineStyle: { color: '#eef2f7', type: 'dashed' } },
+                axisLabel: { ...ECHARTS_AXIS_LABEL, formatter: (value: number) => fmtShort(value) },
+            },
+            dataZoom: many
+                ? [
+                      { type: 'inside' },
+                      {
+                          type: 'slider',
+                          height: 16,
+                          bottom: 4,
+                          borderColor: '#e2e8f0',
+                          fillerColor: 'rgba(37, 99, 235, 0.12)',
+                      },
+                  ]
+                : undefined,
+            series: [
+                {
+                    name: 'Giá trị cấp phát vật tư',
+                    type: 'bar',
+                    data: combinedTrend.map((row) => row.distributionValue),
+                    barMaxWidth: 30,
+                    itemStyle: {
+                        color: barGradient(CHART_SEMANTIC.material),
+                        borderRadius: [8, 8, 0, 0],
+                        shadowBlur: 8,
+                        shadowColor: 'rgba(37, 99, 235, 0.28)',
+                        shadowOffsetY: 4,
+                    },
+                    emphasis: { focus: 'series', itemStyle: { shadowBlur: 16 } },
+                    animationDelay: (idx: number) => idx * 70,
+                },
+                {
+                    name: 'Chi phí mua vật tư net',
+                    type: 'line',
+                    data: combinedTrend.map((row) => row.purchaseCost),
+                    smooth: true,
+                    symbol: 'circle',
+                    symbolSize: 7,
+                    lineStyle: {
+                        width: 3,
+                        color: CHART_SEMANTIC.purchaseLine,
+                        shadowBlur: 8,
+                        shadowColor: 'rgba(30, 58, 138, 0.3)',
+                        shadowOffsetY: 4,
+                    },
+                    itemStyle: { color: CHART_SEMANTIC.purchaseLine, borderColor: '#ffffff', borderWidth: 2 },
+                    areaStyle: {
+                        color: {
+                            type: 'linear',
+                            x: 0,
+                            y: 0,
+                            x2: 0,
+                            y2: 1,
+                            colorStops: [
+                                { offset: 0, color: 'rgba(30, 58, 138, 0.18)' },
+                                { offset: 1, color: 'rgba(30, 58, 138, 0)' },
+                            ],
+                        },
+                    },
+                    emphasis: { focus: 'series' },
+                },
+            ],
+        };
+    }, [combinedTrend]);
+
+    // Sắp tăng dần để cơ sở nhận nhiều nhất nằm trên cùng (trục category vẽ từ dưới lên)
+    const plantRows = useMemo(
+        () => [...(distribution?.byPlant ?? [])].sort((a, b) => a.totalWithVat - b.totalWithVat),
+        [distribution]
+    );
+
+    const plantOption = useMemo<EChartsCoreOption>(
+        () => ({
+            animationDuration: 1000,
+            animationEasing: 'cubicOut',
+            tooltip: {
+                trigger: 'item',
+                ...ECHARTS_TOOLTIP_STYLE,
+                formatter: (params: unknown) => {
+                    const info = params as { marker?: string; name?: string; value?: number };
+                    return `${info.marker ?? ''} ${info.name ?? ''}: <b>${fmtCurrency(Number(info.value ?? 0))}</b>`;
+                },
+            },
+            grid: { left: 8, right: 62, top: 8, bottom: 4, containLabel: true },
+            xAxis: {
+                type: 'value',
+                splitLine: { lineStyle: { color: '#eef2f7', type: 'dashed' } },
+                axisLabel: { ...ECHARTS_AXIS_LABEL, formatter: (value: number) => fmtShort(value) },
+            },
+            yAxis: {
+                type: 'category',
+                data: plantRows.map((row) => row.plantName),
+                axisTick: { show: false },
+                axisLine: { lineStyle: { color: '#e2e8f0' } },
+                axisLabel: { ...ECHARTS_AXIS_LABEL, formatter: (value: string) => truncateLabel(value, 15) },
+            },
+            series: [
+                {
+                    name: 'Giá trị cấp phát',
+                    type: 'bar',
+                    barMaxWidth: 24,
+                    data: plantRows.map((row, index) => ({
+                        value: row.totalWithVat,
+                        itemStyle: {
+                            color: barGradient(blueByRank(plantRows.length - 1 - index, plantRows.length), false),
+                            borderRadius: [0, 8, 8, 0],
+                            shadowBlur: 6,
+                            shadowColor: 'rgba(37, 99, 235, 0.22)',
+                            shadowOffsetY: 3,
+                        },
+                    })),
+                    label: {
+                        show: true,
+                        position: 'right',
+                        formatter: (params: { dataIndex: number }) =>
+                            fmtShort(plantRows[params.dataIndex]?.totalWithVat ?? 0),
+                        color: '#475569',
+                        fontSize: 11,
+                        fontWeight: 600,
+                    },
+                    emphasis: { itemStyle: { shadowBlur: 14 } },
+                    animationDelay: (idx: number) => idx * 90,
+                },
+            ],
+        }),
+        [plantRows]
+    );
+
+    const plantEvents = useMemo(
+        () => ({
+            click: (params: unknown) => {
+                const info = params as { componentType?: string; dataIndex?: number };
+                if (info?.componentType !== 'series') return;
+                const row = plantRows[info.dataIndex ?? -1];
+                if (row) onOpenDetail({ type: 'distribution', title: row.plantName, record: row });
+            },
+        }),
+        [plantRows, onOpenDetail]
+    );
+
+    const supplierMix = useMemo(() => {
+        const topSupplierRows = suppliers.slice(0, 5);
+        const otherSupplierTotal = suppliers.slice(5).reduce((sum, row) => sum + (row.totalAmount ?? 0), 0);
+        return [
+            ...topSupplierRows.map((row, index) => ({
+                name: row.supplierName,
+                value: row.totalAmount ?? 0,
+                color: blueByRank(index, Math.max(topSupplierRows.length, 2)),
+                row: row as SupplierReportRow | undefined,
+            })),
+            ...(otherSupplierTotal > 0
+                ? [{ name: 'Khác', value: otherSupplierTotal, color: CHART_SEMANTIC.other, row: undefined }]
+                : []),
+        ].filter((item) => item.value > 0);
+    }, [suppliers]);
+    const supplierTotal = supplierMix.reduce((sum, item) => sum + item.value, 0);
+
+    const supplierOption = useMemo<EChartsCoreOption>(
+        () => ({
+            tooltip: {
+                trigger: 'item',
+                ...ECHARTS_TOOLTIP_STYLE,
+                formatter: (params: unknown) => {
+                    const info = params as { marker?: string; name?: string; value?: number; percent?: number };
+                    return `${info.marker ?? ''} ${info.name ?? ''}: <b>${fmtCurrency(Number(info.value ?? 0))}</b> (${info.percent ?? 0}%)`;
+                },
+            },
+            series: [
+                {
+                    type: 'pie',
+                    radius: ['62%', '90%'],
+                    center: ['50%', '50%'],
+                    padAngle: 2,
+                    itemStyle: {
+                        borderRadius: 8,
+                        borderColor: '#ffffff',
+                        borderWidth: 2,
+                        shadowBlur: 14,
+                        shadowColor: 'rgba(15, 23, 42, 0.14)',
+                        shadowOffsetY: 4,
+                    },
+                    label: { show: false },
+                    emphasis: { scale: true, scaleSize: 7 },
+                    data: supplierMix.map((item) => ({
+                        name: item.name,
+                        value: item.value,
+                        itemStyle: { color: item.color },
+                    })),
+                    animationType: 'scale',
+                    animationEasing: 'elasticOut',
+                    animationDuration: 1000,
+                    animationDelay: (idx: number) => idx * 150,
+                },
+            ],
+        }),
+        [supplierMix]
+    );
+
+    const supplierEvents = useMemo(
+        () => ({
+            click: (params: unknown) => {
+                const info = params as { dataIndex?: number };
+                const item = supplierMix[info?.dataIndex ?? -1];
+                if (item?.row) onOpenDetail({ type: 'supplier', title: item.row.supplierName, record: item.row });
+            },
+        }),
+        [supplierMix, onOpenDetail]
+    );
+
     if (loading) return <ReportSkeleton />;
 
     return (
         <Row gutter={[16, 16]}>
-            <Col xs={24} xxl={15}>
+            <Col xs={24} xxl={16}>
                 <SectionCard
                     title='Mua vật tư và cấp phát theo thời gian'
-                    extra={<Tag color='blue'>Không cộng double-count</Tag>}
+                    extra={
+                        <Space size={8}>
+                            <Tag color='blue'>Không cộng double-count</Tag>
+                            <Tooltip title='Tải biểu đồ thành ảnh PNG'>
+                                <Button
+                                    size='small'
+                                    className='hd-chart-png-btn'
+                                    icon={<DownloadOutlined />}
+                                    onClick={downloadTrendPng}
+                                />
+                            </Tooltip>
+                        </Space>
+                    }
                 >
                     <ChartFrame empty={!combinedTrend.length}>
-                        <ResponsiveContainer width='100%' height='100%'>
-                            <ComposedChart data={combinedTrend} margin={{ top: 8, right: 24, left: 8, bottom: 8 }}>
-                                <CartesianGrid strokeDasharray='3 3' stroke='#eef2f7' />
-                                <XAxis dataKey='period' tick={{ fontSize: 12 }} />
-                                <YAxis tickFormatter={fmtShort} tick={{ fontSize: 12 }} width={58} />
-                                <ChartTooltip
-                                    formatter={(value: any, name: any) => [fmtCurrency(Number(value)), String(name)]}
-                                />
-                                <Legend />
-                                <Bar
-                                    dataKey='distributionValue'
-                                    name='Giá trị cấp phát vật tư'
-                                    fill='#722ed1'
-                                    radius={[6, 6, 0, 0]}
-                                    barSize={24}
-                                />
-                                <Line
-                                    type='monotone'
-                                    dataKey='purchaseCost'
-                                    name='Chi phí mua vật tư net'
-                                    stroke='#1677ff'
-                                    strokeWidth={3}
-                                    dot={{ r: 4 }}
-                                />
-                            </ComposedChart>
-                        </ResponsiveContainer>
+                        <EChart
+                            option={trendOption}
+                            height='100%'
+                            instanceRef={trendInstance}
+                            className='report-chart-fill'
+                        />
                     </ChartFrame>
+                    <Text type='secondary' className='report-chart-hint'>
+                        Nhấn legend để ẩn/hiện từng chỉ số
+                    </Text>
                 </SectionCard>
             </Col>
-            <Col xs={24} xxl={9}>
-                <SectionCard title='Giá trị cấp phát vật tư theo cơ sở'>
-                    <ChartFrame empty={!distribution?.byPlant?.length}>
-                        <ResponsiveContainer width='100%' height='100%'>
-                            <BarChart
-                                data={distribution?.byPlant ?? []}
-                                layout='vertical'
-                                margin={{ top: 8, right: 24, left: 24, bottom: 8 }}
+            <Col xs={24} xxl={8}>
+                <SectionCard title='Tỷ trọng nhà cung cấp'>
+                    <ChartFrame empty={!supplierMix.length} height={240}>
+                        <div className='hd-donut-wrap report-chart-fill'>
+                            <EChart option={supplierOption} height='100%' onEvents={supplierEvents} />
+                            <DonutCenter title='Tổng mua' value={fmtShort(supplierTotal)} />
+                        </div>
+                    </ChartFrame>
+                    <div className='report-mix-legend'>
+                        {supplierMix.map((item) => (
+                            <button
+                                key={item.name}
+                                type='button'
+                                className='report-mix-legend__row'
+                                disabled={!item.row}
+                                onClick={
+                                    item.row
+                                        ? () =>
+                                              onOpenDetail({
+                                                  type: 'supplier',
+                                                  title: item.row!.supplierName,
+                                                  record: item.row!,
+                                              })
+                                        : undefined
+                                }
                             >
-                                <CartesianGrid strokeDasharray='3 3' stroke='#eef2f7' />
-                                <XAxis type='number' tickFormatter={fmtShort} tick={{ fontSize: 12 }} />
-                                <YAxis type='category' dataKey='plantName' width={120} tick={{ fontSize: 12 }} />
-                                <ChartTooltip
-                                    formatter={(value: any) => [fmtCurrency(Number(value)), 'Giá trị cấp phát']}
-                                />
-                                <Bar
-                                    dataKey='totalWithVat'
-                                    name='Giá trị cấp phát'
-                                    radius={[0, 6, 6, 0]}
-                                    onClick={(entry: any) => {
-                                        const row = entry?.payload as DistributionCostByPlant | undefined;
-                                        if (row)
-                                            onOpenDetail({ type: 'distribution', title: row.plantName, record: row });
-                                    }}
-                                >
-                                    {(distribution?.byPlant ?? []).map((_, index) => (
-                                        <Cell
-                                            key={index}
-                                            fill={CHART_COLORS[index % CHART_COLORS.length]}
-                                            cursor='pointer'
-                                        />
-                                    ))}
-                                </Bar>
-                            </BarChart>
-                        </ResponsiveContainer>
-                    </ChartFrame>
+                                <span className='report-mix-legend__dot' style={{ background: item.color }} />
+                                <span className='report-mix-legend__name'>{item.name}</span>
+                                <span className='report-mix-legend__value'>
+                                    {fmtCurrency(item.value)}
+                                    <em>
+                                        {supplierTotal ? ` · ${((item.value / supplierTotal) * 100).toFixed(1)}%` : ''}
+                                    </em>
+                                </span>
+                            </button>
+                        ))}
+                    </div>
                 </SectionCard>
             </Col>
-            <Col xs={24} xl={12}>
+            <Col xs={24} xl={14}>
+                <SectionCard title='Giá trị cấp phát vật tư theo cơ sở'>
+                    {plantRows.length ? (
+                        <>
+                            <EChart
+                                option={plantOption}
+                                height={Math.max(200, plantRows.length * 44 + 50)}
+                                onEvents={plantEvents}
+                            />
+                            <Text type='secondary' className='report-chart-hint'>
+                                Nhấn vào thanh để xem chi tiết cơ sở
+                            </Text>
+                        </>
+                    ) : (
+                        <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description='Không có dữ liệu trong kỳ đã chọn' />
+                    )}
+                </SectionCard>
+            </Col>
+            <Col xs={24} xl={10}>
                 <SectionCard title='Top vật tư tiêu hao'>
                     <TopMaterialMiniList data={topMaterials} onOpenDetail={onOpenDetail} />
-                </SectionCard>
-            </Col>
-            <Col xs={24} xl={12}>
-                <SectionCard title='Tỷ trọng nhà cung cấp'>
-                    <ChartFrame empty={!suppliers.length} height={300}>
-                        <ResponsiveContainer width='100%' height='100%'>
-                            <PieChart>
-                                <Pie
-                                    data={suppliers.slice(0, 8)}
-                                    dataKey='totalAmount'
-                                    nameKey='supplierName'
-                                    cx='50%'
-                                    cy='50%'
-                                    outerRadius={105}
-                                    innerRadius={48}
-                                    paddingAngle={2}
-                                >
-                                    {suppliers.slice(0, 8).map((_, index) => (
-                                        <Cell key={index} fill={CHART_COLORS[index % CHART_COLORS.length]} />
-                                    ))}
-                                </Pie>
-                                <ChartTooltip formatter={(value: any) => fmtCurrency(Number(value))} />
-                                <Legend />
-                            </PieChart>
-                        </ResponsiveContainer>
-                    </ChartFrame>
                 </SectionCard>
             </Col>
         </Row>
@@ -1125,11 +1349,110 @@ function ConsumptionTab({
     loading: boolean;
     onOpenDetail: (detail: DetailPayload) => void;
 }) {
+    const screens = useBreakpoint();
+    const isMobile = !screens.md;
+    const chartData = useMemo(() => data.slice(0, isMobile ? 10 : 15), [data, isMobile]);
+
+    const consumptionOption = useMemo<EChartsCoreOption>(() => {
+        const horizontal = isMobile;
+        // Bar ngang: đảo mảng để hạng 1 nằm trên cùng (trục category vẽ từ dưới lên)
+        const source = horizontal ? [...chartData].reverse() : chartData;
+        const seriesData = source.map((row, index) => ({
+            value: row.totalQuantityOut ?? 0,
+            itemStyle: {
+                color: barGradient(
+                    blueByRank(horizontal ? source.length - 1 - index : index, source.length),
+                    !horizontal
+                ),
+                borderRadius: horizontal ? ([0, 8, 8, 0] as number[]) : ([8, 8, 0, 0] as number[]),
+                shadowBlur: 6,
+                shadowColor: 'rgba(37, 99, 235, 0.22)',
+                shadowOffsetY: 3,
+            },
+        }));
+        const categoryAxis = {
+            type: 'category' as const,
+            data: source.map((row) => row.materialName),
+            axisTick: { show: false },
+            axisLine: { lineStyle: { color: '#e2e8f0' } },
+            axisLabel: {
+                ...ECHARTS_AXIS_LABEL,
+                formatter: (value: string) => truncateLabel(value, horizontal ? 16 : 13),
+                ...(horizontal ? {} : { rotate: 30, hideOverlap: false, interval: 0 }),
+            },
+        };
+        const valueAxis = {
+            type: 'value' as const,
+            splitLine: { lineStyle: { color: '#eef2f7', type: 'dashed' as const } },
+            axisLabel: { ...ECHARTS_AXIS_LABEL, formatter: (value: number) => fmtShort(value) },
+        };
+
+        return {
+            animationDuration: 1000,
+            animationEasing: 'elasticOut',
+            tooltip: {
+                trigger: 'item',
+                ...ECHARTS_TOOLTIP_STYLE,
+                formatter: (params: unknown) => {
+                    const info = params as { dataIndex?: number; marker?: string };
+                    const row = source[info.dataIndex ?? -1];
+                    if (!row) return '';
+                    return `${info.marker ?? ''} ${row.materialName}: <b>${fmtNumber(row.totalQuantityOut ?? 0)} ${row.unit ?? ''}</b>`;
+                },
+            },
+            grid: horizontal
+                ? { left: 8, right: 52, top: 8, bottom: 4, containLabel: true }
+                : { left: 8, right: 16, top: 16, bottom: 8, containLabel: true },
+            xAxis: horizontal ? valueAxis : categoryAxis,
+            yAxis: horizontal ? categoryAxis : valueAxis,
+            series: [
+                {
+                    name: 'SL xuất',
+                    type: 'bar',
+                    data: seriesData,
+                    barMaxWidth: 26,
+                    label: horizontal
+                        ? {
+                              show: true,
+                              position: 'right',
+                              formatter: (params: { dataIndex: number }) =>
+                                  fmtShort(source[params.dataIndex]?.totalQuantityOut ?? 0),
+                              color: '#475569',
+                              fontSize: 11,
+                              fontWeight: 600,
+                          }
+                        : undefined,
+                    emphasis: { itemStyle: { shadowBlur: 14 } },
+                    animationDelay: (idx: number) => idx * 60,
+                },
+            ],
+        };
+    }, [chartData, isMobile]);
+
+    const consumptionEvents = useMemo(
+        () => ({
+            click: (params: unknown) => {
+                const info = params as { componentType?: string; dataIndex?: number };
+                if (info?.componentType !== 'series') return;
+                const source = isMobile ? [...chartData].reverse() : chartData;
+                const row = source[info.dataIndex ?? -1];
+                if (row) onOpenDetail({ type: 'material', title: row.materialName, record: row });
+            },
+        }),
+        [chartData, isMobile, onOpenDetail]
+    );
+
     const columns: ColumnsType<TopConsumedMaterial> = [
-        { title: 'Mã VT', dataIndex: 'materialCode', width: 120, render: (value) => <Text code>{value || '-'}</Text> },
+        {
+            title: 'Mã VT',
+            dataIndex: 'materialCode',
+            width: 120,
+            responsive: ['md'],
+            render: (value) => <Text code>{value || '-'}</Text>,
+        },
         { title: 'Tên vật tư', dataIndex: 'materialName', ellipsis: true },
-        { title: 'Nhóm', dataIndex: 'category', width: 160, render: (value) => value || '-' },
-        { title: 'ĐVT', dataIndex: 'unit', width: 90 },
+        { title: 'Nhóm', dataIndex: 'category', width: 160, responsive: ['lg'], render: (value) => value || '-' },
+        { title: 'ĐVT', dataIndex: 'unit', width: 90, responsive: ['md'] },
         {
             title: 'SL xuất',
             dataIndex: 'totalQuantityOut',
@@ -1137,7 +1460,13 @@ function ConsumptionTab({
             sorter: (a, b) => (a.totalQuantityOut ?? 0) - (b.totalQuantityOut ?? 0),
             render: (value) => fmtNumber(value),
         },
-        { title: 'Tồn hiện tại', dataIndex: 'currentStock', align: 'right', render: (value) => fmtNumber(value) },
+        {
+            title: 'Tồn hiện tại',
+            dataIndex: 'currentStock',
+            align: 'right',
+            responsive: ['sm'],
+            render: (value) => fmtNumber(value),
+        },
         {
             title: 'Trạng thái',
             width: 150,
@@ -1156,32 +1485,20 @@ function ConsumptionTab({
         <Row gutter={[16, 16]}>
             <Col xs={24}>
                 <SectionCard title='Biểu đồ top vật tư xuất kho'>
-                    <ChartFrame empty={!data.length}>
-                        <ResponsiveContainer width='100%' height='100%'>
-                            <BarChart data={data} margin={{ top: 8, right: 24, left: 8, bottom: 64 }}>
-                                <CartesianGrid strokeDasharray='3 3' stroke='#eef2f7' />
-                                <XAxis
-                                    dataKey='materialName'
-                                    tick={{ fontSize: 11 }}
-                                    angle={-30}
-                                    textAnchor='end'
-                                    interval={0}
-                                />
-                                <YAxis tickFormatter={fmtShort} tick={{ fontSize: 12 }} />
-                                <ChartTooltip
-                                    formatter={(value: any, _name: any, entry: any) => [
-                                        `${fmtNumber(Number(value))} ${entry.payload.unit || ''}`,
-                                        'Số lượng',
-                                    ]}
-                                />
-                                <Bar dataKey='totalQuantityOut' name='SL xuất' radius={[6, 6, 0, 0]}>
-                                    {data.map((_, index) => (
-                                        <Cell key={index} fill={CHART_COLORS[index % CHART_COLORS.length]} />
-                                    ))}
-                                </Bar>
-                            </BarChart>
-                        </ResponsiveContainer>
+                    <ChartFrame
+                        empty={!chartData.length}
+                        height={isMobile ? Math.max(280, chartData.length * 34 + 40) : 340}
+                    >
+                        <EChart
+                            option={consumptionOption}
+                            height='100%'
+                            onEvents={consumptionEvents}
+                            className='report-chart-fill'
+                        />
                     </ChartFrame>
+                    <Text type='secondary' className='report-chart-hint'>
+                        Nhấn vào thanh để xem chi tiết vật tư
+                    </Text>
                 </SectionCard>
             </Col>
             <Col xs={24}>
@@ -1191,7 +1508,7 @@ function ConsumptionTab({
                     columns={columns}
                     dataSource={data}
                     size='small'
-                    scroll={{ x: 980 }}
+                    scroll={isMobile ? undefined : { x: 980 }}
                     pagination={{ pageSize: 10, showSizeChanger: true }}
                     onRow={(record) => ({
                         onClick: () => onOpenDetail({ type: 'material', title: record.materialName, record }),
@@ -1213,6 +1530,8 @@ function SupplierPriceTab({
     loading: boolean;
     onOpenDetail: (detail: DetailPayload) => void;
 }) {
+    const screens = useBreakpoint();
+    const isMobile = !screens.md;
     const totalSupplierCost = suppliers.reduce((sum, row) => sum + (row.totalAmount ?? 0), 0);
     const supplierColumns: ColumnsType<SupplierReportRow> = [
         { title: 'Nhà cung cấp', dataIndex: 'supplierName', ellipsis: true },
@@ -1221,6 +1540,7 @@ function SupplierPriceTab({
             dataIndex: 'orderCount',
             width: 110,
             align: 'right',
+            responsive: ['sm'],
             sorter: (a, b) => (a.orderCount ?? 0) - (b.orderCount ?? 0),
         },
         {
@@ -1242,11 +1562,12 @@ function SupplierPriceTab({
 
     const priceColumns: ColumnsType<PriceComparisonReportRow> = [
         { title: 'Mã PO', dataIndex: 'orderCode', width: 130, render: (value) => <Text code>{value || '-'}</Text> },
-        { title: 'Nhà cung cấp', dataIndex: 'supplierName', ellipsis: true },
+        { title: 'Nhà cung cấp', dataIndex: 'supplierName', ellipsis: true, responsive: ['sm'] },
         {
             title: 'Đề xuất',
             dataIndex: 'requestCodes',
             width: 220,
+            responsive: ['lg'],
             render: (codes?: string[]) => (codes ?? []).map((code) => <Tag key={code}>{code}</Tag>),
         },
         {
@@ -1254,6 +1575,7 @@ function SupplierPriceTab({
             dataIndex: 'estimatedTotal',
             width: 150,
             align: 'right',
+            responsive: ['md'],
             render: (value) => fmtCurrency(value),
         },
         {
@@ -1275,7 +1597,7 @@ function SupplierPriceTab({
                 </Text>
             ),
         },
-        { title: 'Trạng thái', dataIndex: 'status', width: 130, render: renderStatus },
+        { title: 'Trạng thái', dataIndex: 'status', width: 130, responsive: ['md'], render: renderStatus },
     ];
 
     return (
@@ -1303,7 +1625,7 @@ function SupplierPriceTab({
                         columns={priceColumns}
                         dataSource={prices}
                         size='small'
-                        scroll={{ x: 1050 }}
+                        scroll={isMobile ? undefined : { x: 1050 }}
                         pagination={{ pageSize: 8, showSizeChanger: true }}
                         rowClassName={(row) => ((row.difference ?? 0) > 0 ? 'report-row-danger' : '')}
                         onRow={(record) => ({
@@ -1326,8 +1648,68 @@ function DistributionTab({
     loading: boolean;
     onOpenDetail: (detail: DetailPayload) => void;
 }) {
+    const screens = useBreakpoint();
+    const isMobile = !screens.md;
     const rows = data?.byPlant ?? [];
     const total = rows.reduce((sum, row) => sum + row.totalWithVat, 0);
+
+    const distributionOption = useMemo<EChartsCoreOption>(() => {
+        const periods = data?.byPeriod ?? [];
+        const many = periods.length > 18;
+        return {
+            animationDuration: 1000,
+            animationEasing: 'elasticOut',
+            tooltip: {
+                trigger: 'axis',
+                axisPointer: { type: 'shadow', shadowStyle: { color: 'rgba(37, 99, 235, 0.06)' } },
+                ...ECHARTS_TOOLTIP_STYLE,
+                formatter: makeAxisTooltipFormatter(),
+            },
+            grid: { left: 8, right: 14, top: 16, bottom: many ? 30 : 8, containLabel: true },
+            xAxis: {
+                type: 'category',
+                data: periods.map((row) => row.period),
+                axisTick: { show: false },
+                axisLine: { lineStyle: { color: '#e2e8f0' } },
+                axisLabel: { ...ECHARTS_AXIS_LABEL, rotate: many ? 35 : 0, hideOverlap: true },
+            },
+            yAxis: {
+                type: 'value',
+                splitLine: { lineStyle: { color: '#eef2f7', type: 'dashed' } },
+                axisLabel: { ...ECHARTS_AXIS_LABEL, formatter: (value: number) => fmtShort(value) },
+            },
+            dataZoom: many
+                ? [
+                      { type: 'inside' },
+                      {
+                          type: 'slider',
+                          height: 16,
+                          bottom: 4,
+                          borderColor: '#e2e8f0',
+                          fillerColor: 'rgba(37, 99, 235, 0.12)',
+                      },
+                  ]
+                : undefined,
+            series: [
+                {
+                    name: 'Giá trị cấp phát vật tư',
+                    type: 'bar',
+                    data: periods.map((row) => row.totalWithVat),
+                    barMaxWidth: 34,
+                    itemStyle: {
+                        color: barGradient(CHART_SEMANTIC.material),
+                        borderRadius: [8, 8, 0, 0],
+                        shadowBlur: 8,
+                        shadowColor: 'rgba(37, 99, 235, 0.28)',
+                        shadowOffsetY: 4,
+                    },
+                    emphasis: { itemStyle: { shadowBlur: 16 } },
+                    animationDelay: (idx: number) => idx * 70,
+                },
+            ],
+        };
+    }, [data]);
+
     const columns: ColumnsType<DistributionCostByPlant> = [
         { title: 'Cơ sở nhận', dataIndex: 'plantName', ellipsis: true, width: 180 },
         { title: 'Số phiếu', dataIndex: 'count', width: 100, align: 'right', responsive: ['md'] },
@@ -1361,22 +1743,7 @@ function DistributionTab({
             <Col xs={24} xl={14}>
                 <SectionCard title='Giá trị cấp phát vật tư theo thời gian'>
                     <ChartFrame empty={!data?.byPeriod?.length}>
-                        <ResponsiveContainer width='100%' height='100%'>
-                            <BarChart data={data?.byPeriod ?? []} margin={{ top: 8, right: 24, left: 8, bottom: 8 }}>
-                                <CartesianGrid strokeDasharray='3 3' stroke='#eef2f7' />
-                                <XAxis dataKey='period' tick={{ fontSize: 12 }} />
-                                <YAxis tickFormatter={fmtShort} tick={{ fontSize: 12 }} width={58} />
-                                <ChartTooltip
-                                    formatter={(value: any) => [fmtCurrency(Number(value)), 'Giá trị cấp phát']}
-                                />
-                                <Bar
-                                    dataKey='totalWithVat'
-                                    name='Giá trị cấp phát vật tư'
-                                    fill='#722ed1'
-                                    radius={[6, 6, 0, 0]}
-                                />
-                            </BarChart>
-                        </ResponsiveContainer>
+                        <EChart option={distributionOption} height='100%' className='report-chart-fill' />
                     </ChartFrame>
                 </SectionCard>
             </Col>
@@ -1389,7 +1756,7 @@ function DistributionTab({
                         columns={columns}
                         dataSource={rows}
                         size='small'
-                        scroll={{ x: 360 }}
+                        scroll={isMobile ? undefined : { x: 360 }}
                         pagination={{ pageSize: 8 }}
                         onRow={(record) => ({
                             onClick: () => onOpenDetail({ type: 'distribution', title: record.plantName, record }),
@@ -1416,13 +1783,22 @@ function DetailTab({
     loading: boolean;
     onOpenDetail: (detail: DetailPayload) => void;
 }) {
+    const screens = useBreakpoint();
+    const isMobile = !screens.md;
     const purchaseColumns: ColumnsType<PriceComparisonReportRow> = [
         { title: 'Mã PO', dataIndex: 'orderCode', width: 140, render: (value) => <Text code>{value || '-'}</Text> },
-        { title: 'Nhà cung cấp', dataIndex: 'supplierName', ellipsis: true, render: (value) => value || '-' },
+        {
+            title: 'Nhà cung cấp',
+            dataIndex: 'supplierName',
+            ellipsis: true,
+            responsive: ['sm'],
+            render: (value) => value || '-',
+        },
         {
             title: 'Phiếu đề xuất',
             dataIndex: 'requestCodes',
             width: 210,
+            responsive: ['lg'],
             render: (codes?: string[]) => (codes ?? []).map((code) => <Tag key={code}>{code}</Tag>),
         },
         {
@@ -1430,6 +1806,7 @@ function DetailTab({
             dataIndex: 'estimatedTotal',
             width: 140,
             align: 'right',
+            responsive: ['md'],
             render: (value) => fmtCurrency(value ?? 0),
         },
         {
@@ -1439,11 +1816,12 @@ function DetailTab({
             align: 'right',
             render: (_value, row) => fmtCurrency(row.netActual ?? row.actualTotal ?? 0),
         },
-        { title: 'Trạng thái', dataIndex: 'status', width: 140, render: renderStatus },
+        { title: 'Trạng thái', dataIndex: 'status', width: 140, responsive: ['sm'], render: renderStatus },
         {
             title: 'Ngày nhận',
             dataIndex: 'receivedAt',
             width: 140,
+            responsive: ['md'],
             render: (value) => (value ? dayjs(value).format('DD/MM/YYYY') : '-'),
         },
     ];
@@ -1461,7 +1839,14 @@ function DetailTab({
             ellipsis: true,
             render: (_value, row) => row.toPlant?.name || '-',
         },
-        { title: 'Số dòng', dataIndex: 'items', width: 100, align: 'right', render: (items) => items?.length ?? 0 },
+        {
+            title: 'Số dòng',
+            dataIndex: 'items',
+            width: 100,
+            align: 'right',
+            responsive: ['md'],
+            render: (items) => items?.length ?? 0,
+        },
         {
             title: 'Tổng tiền',
             dataIndex: 'items',
@@ -1470,11 +1855,12 @@ function DetailTab({
             render: (items) =>
                 fmtCurrency((items ?? []).reduce((sum: number, item: any) => sum + (item.totalWithVat ?? 0), 0)),
         },
-        { title: 'Trạng thái', dataIndex: 'status', width: 140, render: renderStatus },
+        { title: 'Trạng thái', dataIndex: 'status', width: 140, responsive: ['sm'], render: renderStatus },
         {
             title: 'Ngày xuất',
             dataIndex: 'distributedAt',
             width: 140,
+            responsive: ['md'],
             render: (value) => (value ? dayjs(value).format('DD/MM/YYYY') : '-'),
         },
     ];
@@ -1498,7 +1884,7 @@ function DetailTab({
                             columns={purchaseColumns}
                             dataSource={purchaseRows}
                             size='small'
-                            scroll={{ x: 850 }}
+                            scroll={isMobile ? undefined : { x: 850 }}
                             pagination={{ pageSize: 8 }}
                             onRow={(record) => ({
                                 onClick: () =>
@@ -1519,7 +1905,7 @@ function DetailTab({
                             columns={distributionColumns}
                             dataSource={distributionRows}
                             size='small'
-                            scroll={{ x: 850 }}
+                            scroll={isMobile ? undefined : { x: 850 }}
                             pagination={{ pageSize: 8 }}
                             onRow={(record) => ({
                                 onClick: () =>
@@ -1953,6 +2339,80 @@ const REPORT_PAGE_STYLE = `
 }
 .report-chart-frame {
     min-width: 0;
+}
+.report-chart-fill {
+    width: 100%;
+    height: 100%;
+    min-width: 0;
+}
+.report-kpi-grid {
+    height: 100%;
+}
+.report-kpi-grid > .ant-col {
+    display: flex;
+}
+.report-kpi-grid .report-kpi-button {
+    width: 100%;
+}
+.report-filter-drawer {
+    display: grid;
+    gap: 16px;
+}
+.report-chart-hint {
+    display: block;
+    margin-top: 6px;
+    font-size: 11px;
+    text-align: center;
+}
+.report-mix-legend {
+    display: grid;
+    gap: 4px;
+    margin-top: 10px;
+}
+.report-mix-legend__row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+    padding: 4px 6px;
+    border: 0;
+    border-radius: 8px;
+    background: transparent;
+    font-size: 12px;
+    text-align: left;
+    cursor: pointer;
+    transition: background 140ms ease;
+}
+.report-mix-legend__row:disabled {
+    cursor: default;
+}
+.report-mix-legend__row:not(:disabled):hover {
+    background: #f1f5f9;
+}
+.report-mix-legend__dot {
+    width: 9px;
+    height: 9px;
+    flex: 0 0 9px;
+    border-radius: 999px;
+}
+.report-mix-legend__name {
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    color: #475569;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.report-mix-legend__value {
+    flex-shrink: 0;
+    color: #0f172a;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+}
+.report-mix-legend__value em {
+    color: #94a3b8;
+    font-style: normal;
+    font-weight: 500;
 }
 .report-insight-card .ant-card-body {
     padding: 16px;

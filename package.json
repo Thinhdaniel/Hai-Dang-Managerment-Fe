@@ -17,6 +17,7 @@
     "@zxing/library": "^0.22.0",
     "antd": "^6.3.5",
     "axios": "^1.15.0",
+    "echarts": "^6.1.0",
     "jspdf": "^4.2.1",
     "lucide-react": "^1.8.0",
     "qr-code-styling": "^1.9.2",
@@ -25,7 +26,6 @@
     "react-dom": "^19.2.4",
     "react-hook-form": "^7.72.1",
     "react-router-dom": "^7.14.0",
-    "recharts": "^3.8.1",
     "socket.io-client": "^4.8.3",
     "tailwindcss": "^4.2.2",
     "zustand": "^5.0.12"

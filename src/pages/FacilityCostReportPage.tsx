@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useRef, useState } from 'react';
 import dayjs, { type Dayjs } from 'dayjs';
 import {
     App,
@@ -8,7 +8,6 @@ import {
     DatePicker,
     Drawer,
     Empty,
-    Grid,
     Row,
     Segmented,
     Select,
@@ -16,13 +15,11 @@ import {
     Space,
     Statistic,
     Table,
-    Tag,
     Tooltip,
     Typography,
 } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import {
-    BarChartOutlined,
     BuildOutlined,
     DownloadOutlined,
     InboxOutlined,
@@ -33,20 +30,18 @@ import {
 } from '@ant-design/icons';
 import { useQuery } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
-import {
-    Bar,
-    BarChart,
-    CartesianGrid,
-    Cell,
-    Legend,
-    Pie,
-    PieChart,
-    ResponsiveContainer,
-    Tooltip as ChartTooltip,
-    XAxis,
-    YAxis,
-} from 'recharts';
 import PageHeader from '../components/shared/PageHeader';
+import EChart, { type ECharts, type EChartsCoreOption } from '../components/charts/EChart';
+import {
+    CHART_SEMANTIC,
+    DeltaBadge,
+    DonutCenter,
+    ECHARTS_AXIS_LABEL,
+    ECHARTS_TOOLTIP_STYLE,
+    Sparkline,
+    barGradient,
+    stackedTooltipFormatter,
+} from '../components/charts';
 import { useAuth } from '../core/contexts/AuthContext';
 import { hasManagerAccess } from '../core/lib/permissions';
 import { plantService } from '../core/services/plant.service';
@@ -62,7 +57,6 @@ import {
 
 const { RangePicker } = DatePicker;
 const { Text } = Typography;
-const { useBreakpoint } = Grid;
 
 type QuickRange = 'this_month' | 'quarter' | 'six_months' | 'year' | 'custom';
 
@@ -70,12 +64,6 @@ type ReportFilters = {
     plantId?: string;
     dateRange: [Dayjs, Dayjs];
     groupBy: FacilityCostGroupBy;
-};
-
-type ActiveFilterChip = {
-    key: string;
-    label: string;
-    color?: string;
 };
 
 type FacilityDrilldownPayload =
@@ -92,6 +80,21 @@ type FacilityDrilldownPayload =
           rows: TopExternalRepairAsset[];
       }
     | {
+          kind: 'period';
+          title: string;
+          description: string;
+          row: FacilityCostByPeriod;
+          plantId?: string;
+      }
+    | {
+          kind: 'plantDetail';
+          title: string;
+          description: string;
+          row: FacilityCostByPlant;
+          startDate?: string;
+          endDate?: string;
+      }
+    | {
           kind: 'message';
           title: string;
           description: string;
@@ -103,24 +106,20 @@ const DEFAULT_FILTERS: ReportFilters = {
 };
 
 const COST_COLORS = {
-    material: '#1677ff',
-    repair: '#fa8c16',
+    material: CHART_SEMANTIC.material,
+    repair: CHART_SEMANTIC.repair,
     total: '#13c2c2',
-};
-
-const GROUP_BY_LABEL: Record<FacilityCostGroupBy, string> = {
-    day: 'Ngày',
-    month: 'Tháng',
-    quarter: 'Quý',
 };
 
 const fmtCurrency = (value = 0) =>
     new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND', maximumFractionDigits: 0 }).format(value);
 
+// Rút gọn tiền theo cách đọc của kế toán Việt: 1,2 tỷ · 850 tr · 12k
 const fmtShort = (value: number) => {
-    if (Math.abs(value) >= 1_000_000_000) return `${(value / 1_000_000_000).toFixed(1)}B`;
-    if (Math.abs(value) >= 1_000_000) return `${(value / 1_000_000).toFixed(0)}M`;
-    if (Math.abs(value) >= 1_000) return `${(value / 1_000).toFixed(0)}K`;
+    const abs = Math.abs(value);
+    if (abs >= 1_000_000_000) return `${(value / 1_000_000_000).toFixed(1).replace('.', ',')} tỷ`;
+    if (abs >= 1_000_000) return `${(value / 1_000_000).toFixed(abs >= 10_000_000 ? 0 : 1).replace('.', ',')} tr`;
+    if (abs >= 1_000) return `${(value / 1_000).toFixed(0)}k`;
     return String(value);
 };
 
@@ -148,22 +147,35 @@ const getPeriodLabel = (period: string) => {
     return period;
 };
 
+// Đổi nhãn kỳ (YYYY-MM-DD | YYYY-MM | YYYY-Qn) thành khoảng ngày để điều hướng sang màn nguồn
+const getPeriodRange = (period: string): { start: string; end: string } => {
+    if (period.includes('-Q')) {
+        const [year, quarter] = period.split('-Q');
+        const start = dayjs(`${year}-01-01`).month((Number(quarter) - 1) * 3);
+        return { start: start.format('YYYY-MM-DD'), end: start.add(2, 'month').endOf('month').format('YYYY-MM-DD') };
+    }
+    if (/^\d{4}-\d{2}-\d{2}$/.test(period)) return { start: period, end: period };
+    if (/^\d{4}-\d{2}$/.test(period)) {
+        const start = dayjs(`${period}-01`);
+        return { start: start.format('YYYY-MM-DD'), end: start.endOf('month').format('YYYY-MM-DD') };
+    }
+    return { start: period, end: period };
+};
+
+const truncateName = (value: string, max = 14) => (value.length > max ? `${value.slice(0, max - 1)}…` : value);
+
 export default function FacilityCostReportPage() {
     const { message } = App.useApp();
     const navigate = useNavigate();
     const { user } = useAuth();
-    const screens = useBreakpoint();
     const isManager = hasManagerAccess(user?.role);
-    const isMobile = !screens.md;
     const [quickRange, setQuickRange] = useState<QuickRange>('this_month');
+    // Bộ lọc tự áp dụng ngay khi chọn — không cần nút "Áp dụng"
     const [filters, setFilters] = useState<ReportFilters>(DEFAULT_FILTERS);
-    const [appliedFilters, setAppliedFilters] = useState<ReportFilters>(DEFAULT_FILTERS);
     const [exporting, setExporting] = useState(false);
     const [drilldown, setDrilldown] = useState<FacilityDrilldownPayload | null>(null);
 
-    const params = useMemo(() => toReportParams(appliedFilters), [appliedFilters]);
-    const draftParams = useMemo(() => toReportParams(filters), [filters]);
-    const hasPendingFilterChanges = JSON.stringify(draftParams) !== JSON.stringify(params);
+    const params = useMemo(() => toReportParams(filters), [filters]);
 
     const plantsQuery = useQuery({
         queryKey: ['facility-cost-report-plants'],
@@ -177,6 +189,35 @@ export default function FacilityCostReportPage() {
         staleTime: 60_000,
     });
 
+    // Kỳ liền trước (cùng độ dài) để hiện ±% trên KPI
+    const prevParams = useMemo<FacilityCostQueryParams>(() => {
+        const [start, end] = filters.dateRange;
+        const days = end.diff(start, 'day') + 1;
+        return {
+            plantId: filters.plantId,
+            startDate: start.subtract(days, 'day').format('YYYY-MM-DD'),
+            endDate: start.subtract(1, 'day').format('YYYY-MM-DD'),
+            groupBy: filters.groupBy,
+        };
+    }, [filters]);
+
+    const prevReportQuery = useQuery({
+        queryKey: ['facility-cost-report-prev', prevParams],
+        queryFn: () => facilityCostReportService.getSummary(prevParams),
+        staleTime: 60_000,
+    });
+    const prevSummary = prevReportQuery.data?.summary;
+
+    const trendChartInstance = useRef<ECharts | null>(null);
+    const downloadTrendPng = () => {
+        const url = trendChartInstance.current?.getDataURL({ type: 'png', pixelRatio: 2, backgroundColor: '#ffffff' });
+        if (!url) return;
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = `chi-phi-van-hanh-${params.startDate}-${params.endDate}.png`;
+        link.click();
+    };
+
     const plants = plantsQuery.data ?? [];
     const report = reportQuery.data;
     const summary = report?.summary;
@@ -184,25 +225,7 @@ export default function FacilityCostReportPage() {
     const costByPeriod = report?.costByPeriod ?? [];
     const topAssets = report?.topExternalRepairAssets ?? [];
     const topPlant = costByPlant[0];
-    const activeFilterCount = [appliedFilters.plantId].filter(Boolean).length;
-    const activeFilterChips = useMemo<ActiveFilterChip[]>(() => {
-        const chips: ActiveFilterChip[] = [
-            {
-                key: 'period',
-                label: `Kỳ: ${appliedFilters.dateRange[0].format('DD/MM/YYYY')} - ${appliedFilters.dateRange[1].format('DD/MM/YYYY')}`,
-                color: 'blue',
-            },
-            { key: 'groupBy', label: `Nhóm kỳ: ${GROUP_BY_LABEL[appliedFilters.groupBy]}`, color: 'geekblue' },
-        ];
-        if (appliedFilters.plantId) {
-            chips.push({
-                key: 'plant',
-                label: `Cơ sở: ${plants.find((plant) => plant.id === appliedFilters.plantId)?.name ?? 'Đã chọn'}`,
-                color: 'cyan',
-            });
-        }
-        return chips;
-    }, [appliedFilters, plants]);
+    const topAsset = topAssets[0];
 
     const buildLinkedParams = (extra: Record<string, string | undefined>) => {
         const search = new URLSearchParams({
@@ -225,14 +248,9 @@ export default function FacilityCostReportPage() {
         }
     };
 
-    const handleApplyFilters = () => {
-        setAppliedFilters(filters);
-    };
-
     const handleResetFilters = () => {
         setQuickRange('this_month');
         setFilters(DEFAULT_FILTERS);
-        setAppliedFilters(DEFAULT_FILTERS);
     };
 
     const handleExport = async () => {
@@ -247,250 +265,76 @@ export default function FacilityCostReportPage() {
         }
     };
 
-    const plantColumns: ColumnsType<FacilityCostByPlant> = [
-        {
-            title: 'Cơ sở',
-            dataIndex: 'plantName',
-            fixed: isMobile ? undefined : 'left',
-            width: 210,
-            ellipsis: true,
-            render: (value) => <Text strong>{value}</Text>,
-        },
-        {
-            title: 'Chi phí vật tư đã cấp phát',
-            dataIndex: 'materialDistributionCost',
-            width: 170,
-            align: 'right',
-            sorter: (a, b) => a.materialDistributionCost - b.materialDistributionCost,
-            render: (value) => fmtCurrency(value),
-        },
-        {
-            title: 'Sửa ngoài',
-            dataIndex: 'externalRepairCost',
-            width: 160,
-            align: 'right',
-            sorter: (a, b) => a.externalRepairCost - b.externalRepairCost,
-            render: (value) => fmtCurrency(value),
-        },
-        {
-            title: 'Tổng chi phí',
-            dataIndex: 'totalCost',
-            width: 170,
-            align: 'right',
-            sorter: (a, b) => a.totalCost - b.totalCost,
-            defaultSortOrder: 'descend',
-            render: (value) => <Text strong>{fmtCurrency(value)}</Text>,
-        },
-        {
-            title: 'Tỷ trọng sửa',
-            dataIndex: 'repairSharePercent',
-            width: 130,
-            align: 'right',
-            render: (value) => <Tag color={value > 30 ? 'orange' : 'blue'}>{Number(value ?? 0).toFixed(1)}%</Tag>,
-        },
-        {
-            title: 'Phiếu cấp phát',
-            dataIndex: 'distributionCount',
-            width: 130,
-            align: 'right',
-            responsive: ['md'],
-        },
-        {
-            title: 'Phiếu sửa ngoài',
-            dataIndex: 'externalRepairCount',
-            width: 135,
-            align: 'right',
-            responsive: ['md'],
-        },
-        {
-            title: 'Máy sửa ngoài',
-            dataIndex: 'externalRepairAssetCount',
-            width: 130,
-            align: 'right',
-            responsive: ['lg'],
-        },
-        {
-            title: 'Nguồn',
-            key: 'actions',
-            width: 180,
-            fixed: isMobile ? undefined : 'right',
-            render: (_, row) => (
-                <Space size={4}>
-                    <Button
-                        size='small'
-                        onClick={() =>
-                            navigate(`/materials/distributions?${buildLinkedParams({ toPlantId: row.plantId })}`)
-                        }
-                    >
-                        Cấp phát
-                    </Button>
-                    <Button
-                        size='small'
-                        onClick={() =>
-                            navigate(
-                                `/maintenances?${buildLinkedParams({
-                                    plantId: row.plantId,
-                                    repairMode: 'external',
-                                    status: 'completed',
-                                })}`
-                            )
-                        }
-                    >
-                        Sửa ngoài
-                    </Button>
-                </Space>
-            ),
-        },
-    ];
-
-    const assetColumns: ColumnsType<TopExternalRepairAsset> = [
-        {
-            title: 'Máy',
-            key: 'asset',
-            render: (_, row) => (
-                <div className='facility-cost-asset-cell'>
-                    <Text strong>{row.assetName}</Text>
-                    <Space size={4} wrap>
-                        {row.machineCode ? <Tag color='blue'>{row.machineCode}</Tag> : null}
-                        {row.plantName ? <Tag>{row.plantName}</Tag> : null}
-                    </Space>
-                </div>
-            ),
-        },
-        {
-            title: 'Số lần',
-            dataIndex: 'count',
-            width: 90,
-            align: 'right',
-        },
-        {
-            title: 'Chi phí',
-            dataIndex: 'totalCost',
-            width: 150,
-            align: 'right',
-            sorter: (a, b) => a.totalCost - b.totalCost,
-            render: (value) => <Text strong>{fmtCurrency(value)}</Text>,
-        },
-        {
-            title: 'Nguồn',
-            key: 'actions',
-            width: 110,
-            align: 'right',
-            render: (_, row) => (
-                <Button
-                    size='small'
-                    onClick={() =>
-                        navigate(
-                            `/maintenances?${buildLinkedParams({
-                                assetId: row.assetId,
-                                repairMode: 'external',
-                                status: 'completed',
-                            })}`
-                        )
-                    }
-                >
-                    Lịch sử
-                </Button>
-            ),
-        },
-    ];
-
     return (
         <div className='facility-cost-page'>
             <style>{FACILITY_COST_STYLE}</style>
             <PageHeader
                 title='Báo cáo chi phí vận hành'
-                subtitle={`Kỳ ${appliedFilters.dateRange[0].format('DD/MM/YYYY')} - ${appliedFilters.dateRange[1].format('DD/MM/YYYY')} · Scope hiện tại: vật tư đã cấp phát + sửa ngoài hoàn tất`}
-                extra={<ActiveFilterChips chips={activeFilterChips} />}
-                actions={
-                    <Space wrap className='facility-cost-header-actions'>
-                        <Button
-                            icon={<ReloadOutlined />}
-                            loading={reportQuery.isFetching}
-                            onClick={() => reportQuery.refetch()}
-                        >
-                            Làm mới
-                        </Button>
-                        <Button type='primary' icon={<DownloadOutlined />} loading={exporting} onClick={handleExport}>
-                            Xuất Excel
-                        </Button>
-                    </Space>
-                }
+                subtitle={`Kỳ ${filters.dateRange[0].format('DD/MM/YYYY')} - ${filters.dateRange[1].format('DD/MM/YYYY')}`}
             />
 
-            <Card className='facility-cost-filter-card' variant='outlined'>
-                <div className='facility-cost-filter-toolbar'>
-                    <div className='facility-cost-segmented-scroll'>
-                        <Segmented
-                            value={quickRange}
-                            onChange={handleQuickRangeChange}
-                            options={[
-                                { label: 'Tháng này', value: 'this_month' },
-                                { label: 'Quý này', value: 'quarter' },
-                                { label: '6 tháng', value: 'six_months' },
-                                { label: 'Năm nay', value: 'year' },
-                                { label: 'Tùy chỉnh', value: 'custom' },
-                            ]}
-                        />
-                    </div>
-                    <Space wrap>
-                        <Button type={hasPendingFilterChanges ? 'primary' : 'default'} onClick={handleApplyFilters}>
-                            {hasPendingFilterChanges ? 'Áp dụng thay đổi' : 'Áp dụng'}
-                        </Button>
-                        <Button onClick={handleResetFilters}>Reset</Button>
-                    </Space>
+            <div className='hd-report-toolbar'>
+                <div className='hd-toolbar-scroll'>
+                    <Segmented
+                        value={quickRange}
+                        onChange={handleQuickRangeChange}
+                        options={[
+                            { label: 'Tháng này', value: 'this_month' },
+                            { label: 'Quý này', value: 'quarter' },
+                            { label: '6 tháng', value: 'six_months' },
+                            { label: 'Năm nay', value: 'year' },
+                            { label: 'Tùy chỉnh', value: 'custom' },
+                        ]}
+                    />
                 </div>
-                <Row gutter={[12, 12]} align='bottom'>
-                    <Col xs={24} md={12} xl={8}>
-                        <Text className='facility-cost-filter-label'>Khoảng thời gian</Text>
-                        <RangePicker
-                            value={filters.dateRange}
-                            allowClear={false}
-                            format='DD/MM/YYYY'
-                            className='facility-cost-control'
-                            onChange={(dates) => {
-                                if (!dates) return;
-                                setQuickRange('custom');
-                                setFilters((current) => ({ ...current, dateRange: dates as [Dayjs, Dayjs] }));
-                            }}
-                        />
-                    </Col>
-                    {isManager ? (
-                        <Col xs={24} md={12} xl={8}>
-                            <Text className='facility-cost-filter-label'>Cơ sở</Text>
-                            <Select
-                                allowClear
-                                showSearch={{ optionFilterProp: 'label' }}
-                                placeholder='Tất cả cơ sở'
-                                className='facility-cost-control'
-                                value={filters.plantId}
-                                loading={plantsQuery.isLoading}
-                                onChange={(plantId) => setFilters((current) => ({ ...current, plantId }))}
-                                options={plants.map((plant) => ({ label: plant.name, value: plant.id }))}
-                            />
-                        </Col>
-                    ) : null}
-                    <Col xs={24} md={12} xl={8}>
-                        <Text className='facility-cost-filter-label'>Nhóm kỳ</Text>
-                        <Select
-                            className='facility-cost-control'
-                            value={filters.groupBy}
-                            onChange={(groupBy) => setFilters((current) => ({ ...current, groupBy }))}
-                            options={[
-                                { label: 'Theo ngày', value: 'day' },
-                                { label: 'Theo tháng', value: 'month' },
-                                { label: 'Theo quý', value: 'quarter' },
-                            ]}
-                        />
-                    </Col>
-                </Row>
-                {activeFilterCount ? (
-                    <Text className='facility-cost-filter-note'>
-                        Đang lọc theo {activeFilterCount} điều kiện cơ sở.
-                    </Text>
+                <RangePicker
+                    value={filters.dateRange}
+                    allowClear={false}
+                    format='DD/MM/YYYY'
+                    style={{ width: 240 }}
+                    onChange={(dates) => {
+                        if (!dates) return;
+                        setQuickRange('custom');
+                        setFilters((current) => ({ ...current, dateRange: dates as [Dayjs, Dayjs] }));
+                    }}
+                />
+                {isManager ? (
+                    <Select
+                        allowClear
+                        showSearch={{ optionFilterProp: 'label' }}
+                        placeholder='Tất cả cơ sở'
+                        style={{ minWidth: 170 }}
+                        value={filters.plantId}
+                        loading={plantsQuery.isLoading}
+                        onChange={(plantId) => setFilters((current) => ({ ...current, plantId }))}
+                        options={plants.map((plant) => ({ label: plant.name, value: plant.id }))}
+                    />
                 ) : null}
-                <ActiveFilterChips chips={activeFilterChips} compact />
-            </Card>
+                <Select
+                    style={{ width: 110 }}
+                    value={filters.groupBy}
+                    onChange={(groupBy) => setFilters((current) => ({ ...current, groupBy }))}
+                    options={[
+                        { label: 'Theo ngày', value: 'day' },
+                        { label: 'Theo tháng', value: 'month' },
+                        { label: 'Theo quý', value: 'quarter' },
+                    ]}
+                />
+                <Button type='text' size='small' onClick={handleResetFilters}>
+                    Đặt lại
+                </Button>
+                <span className='hd-report-toolbar__spacer' />
+                <Tooltip title='Làm mới dữ liệu'>
+                    <Button
+                        icon={<ReloadOutlined />}
+                        loading={reportQuery.isFetching}
+                        onClick={() => reportQuery.refetch()}
+                    />
+                </Tooltip>
+                <Button type='primary' icon={<DownloadOutlined />} loading={exporting} onClick={handleExport}>
+                    Xuất Excel
+                </Button>
+            </div>
 
             {reportQuery.isError ? (
                 <Card variant='outlined'>
@@ -499,50 +343,156 @@ export default function FacilityCostReportPage() {
             ) : null}
 
             <Row gutter={[16, 16]}>
-                <Col xs={24} sm={12} lg={8} xxl={4}>
-                    <MetricCard
-                        title='Tổng chi phí vận hành'
-                        value={summary?.totalFacilityCost ?? 0}
-                        loading={reportQuery.isLoading}
-                        icon={<BarChartOutlined />}
-                        color={COST_COLORS.total}
-                        hint='Tổng các chi phí được tính trong trang này theo scope hiện tại, không tự động cộng chi phí mua vật tư vào chi phí tiêu hao.'
+                <Col xs={24} lg={10} xxl={8}>
+                    <div className='hd-hero-card'>
+                        <span className='hd-hero-card__title'>Tổng chi phí vận hành</span>
+                        {reportQuery.isLoading ? (
+                            <Skeleton active paragraph={{ rows: 2 }} title={false} />
+                        ) : (
+                            <>
+                                <span className='hd-hero-card__value'>
+                                    {fmtCurrency(summary?.totalFacilityCost ?? 0)}
+                                </span>
+                                <DeltaBadge
+                                    current={summary?.totalFacilityCost ?? 0}
+                                    previous={prevSummary?.totalFacilityCost}
+                                    formatter={fmtCurrency}
+                                />
+                                <div className='hd-hero-card__spark'>
+                                    <Sparkline
+                                        data={costByPeriod.map(
+                                            (row) =>
+                                                Number(row.materialDistributionCost ?? 0) +
+                                                Number(row.externalRepairCost ?? 0)
+                                        )}
+                                    />
+                                </div>
+                                <div className='hd-hero-card__subs'>
+                                    <button
+                                        type='button'
+                                        onClick={() =>
+                                            setDrilldown({
+                                                kind: 'plant',
+                                                title: 'Chi phí vật tư đã cấp phát theo cơ sở',
+                                                description: 'Giá trị vật tư đã cấp phát/phân bổ theo cơ sở nhận.',
+                                                rows: costByPlant.filter((row) => row.materialDistributionCost > 0),
+                                            })
+                                        }
+                                    >
+                                        <i style={{ background: COST_COLORS.material }} />
+                                        Vật tư <strong>{fmtShort(summary?.materialDistributionCost ?? 0)}</strong>
+                                    </button>
+                                    <button
+                                        type='button'
+                                        onClick={() =>
+                                            setDrilldown({
+                                                kind: 'asset',
+                                                title: 'Top máy phát sinh chi phí sửa ngoài',
+                                                description: 'Các máy có tổng chi phí sửa ngoài cao nhất trong kỳ lọc.',
+                                                rows: topAssets,
+                                            })
+                                        }
+                                    >
+                                        <i style={{ background: COST_COLORS.repair }} />
+                                        Sửa ngoài <strong>{fmtShort(summary?.externalRepairCost ?? 0)}</strong>
+                                    </button>
+                                </div>
+                            </>
+                        )}
+                    </div>
+                </Col>
+                <Col xs={24} lg={14} xxl={16}>
+                    <Row gutter={[12, 12]} className='facility-cost-kpi-grid'>
+                        <Col xs={12} xl={6}>
+                            <MetricCard
+                                title='Chi phí vật tư'
+                                value={summary?.materialDistributionCost ?? 0}
+                                previousValue={prevSummary?.materialDistributionCost}
+                                loading={reportQuery.isLoading}
+                                icon={<InboxOutlined />}
+                                color={COST_COLORS.material}
+                                hint='Giá trị vật tư đã tiêu hao hoặc phân bổ cho cơ sở nhận, không phải dòng tiền mua vật tư.'
+                                onClick={() =>
+                                    setDrilldown({
+                                        kind: 'plant',
+                                        title: 'Chi phí vật tư đã cấp phát theo cơ sở',
+                                        description: 'Giá trị vật tư đã cấp phát/phân bổ theo cơ sở nhận.',
+                                        rows: costByPlant.filter((row) => row.materialDistributionCost > 0),
+                                    })
+                                }
+                            />
+                        </Col>
+                        <Col xs={12} xl={6}>
+                            <MetricCard
+                                title='Chi phí sửa ngoài'
+                                value={summary?.externalRepairCost ?? 0}
+                                previousValue={prevSummary?.externalRepairCost}
+                                loading={reportQuery.isLoading}
+                                icon={<BuildOutlined />}
+                                color={COST_COLORS.repair}
+                                hint='Chi phí sửa chữa hoặc bảo trì thuê ngoài đã hoàn tất trong kỳ.'
+                                onClick={() =>
+                                    setDrilldown({
+                                        kind: 'asset',
+                                        title: 'Top máy phát sinh chi phí sửa ngoài',
+                                        description: 'Các máy có tổng chi phí sửa ngoài cao nhất trong kỳ lọc.',
+                                        rows: topAssets,
+                                    })
+                                }
+                            />
+                        </Col>
+                        <Col xs={12} xl={6}>
+                            <MetricCard
+                                title='Sửa ngoài chờ duyệt'
+                                value={summary?.pendingApprovalCount ?? 0}
+                                loading={reportQuery.isLoading}
+                                suffix='phiếu'
+                                icon={<WarningOutlined />}
+                                color='#faad14'
+                                hint='Số phiếu sửa ngoài đang chờ duyệt trong phạm vi cơ sở đã lọc.'
+                            />
+                        </Col>
+                        <Col xs={12} xl={6}>
+                            <MetricCard
+                                title='Sửa ngoài đang xử lý'
+                                value={summary?.inProgressCount ?? 0}
+                                loading={reportQuery.isLoading}
+                                suffix='phiếu'
+                                icon={<ToolOutlined />}
+                                color='#1677ff'
+                                hint='Số phiếu sửa ngoài đang xử lý trong phạm vi cơ sở đã lọc.'
+                            />
+                        </Col>
+                    </Row>
+                </Col>
+            </Row>
+
+            <div className='hd-signal-strip'>
+                {topPlant ? (
+                    <button
+                        type='button'
+                        className='hd-signal-item'
                         onClick={() =>
                             setDrilldown({
-                                kind: 'plant',
-                                title: 'Chi phí vận hành theo cơ sở',
-                                description: 'Các cơ sở tạo nên tổng chi phí vận hành trong kỳ lọc.',
-                                rows: costByPlant,
+                                kind: 'plantDetail',
+                                title: topPlant.plantName,
+                                description: 'Cơ sở phát sinh chi phí cao nhất trong kỳ lọc.',
+                                row: topPlant,
+                                startDate: params.startDate,
+                                endDate: params.endDate,
                             })
                         }
-                    />
-                </Col>
-                <Col xs={24} sm={12} lg={8} xxl={4}>
-                    <MetricCard
-                        title='Chi phí vật tư đã cấp phát'
-                        value={summary?.materialDistributionCost ?? 0}
-                        loading={reportQuery.isLoading}
-                        icon={<InboxOutlined />}
-                        color={COST_COLORS.material}
-                        hint='Giá trị vật tư đã tiêu hao hoặc phân bổ cho cơ sở nhận, không phải dòng tiền mua vật tư.'
-                        onClick={() =>
-                            setDrilldown({
-                                kind: 'plant',
-                                title: 'Chi phí vật tư đã cấp phát theo cơ sở',
-                                description: 'Giá trị vật tư đã cấp phát/phân bổ theo cơ sở nhận.',
-                                rows: costByPlant.filter((row) => row.materialDistributionCost > 0),
-                            })
-                        }
-                    />
-                </Col>
-                <Col xs={24} sm={12} lg={8} xxl={4}>
-                    <MetricCard
-                        title='Chi phí sửa ngoài'
-                        value={summary?.externalRepairCost ?? 0}
-                        loading={reportQuery.isLoading}
-                        icon={<BuildOutlined />}
-                        color={COST_COLORS.repair}
-                        hint='Chi phí sửa chữa hoặc bảo trì thuê ngoài đã hoàn tất trong kỳ.'
+                    >
+                        <ShopOutlined /> Cơ sở cao nhất:{' '}
+                        <strong>
+                            {topPlant.plantName} · {fmtShort(topPlant.totalCost)}
+                        </strong>
+                    </button>
+                ) : null}
+                {topAsset ? (
+                    <button
+                        type='button'
+                        className='hd-signal-item hd-signal-item--warning'
                         onClick={() =>
                             setDrilldown({
                                 kind: 'asset',
@@ -551,66 +501,18 @@ export default function FacilityCostReportPage() {
                                 rows: topAssets,
                             })
                         }
-                    />
-                </Col>
-                <Col xs={24} sm={12} lg={8} xxl={4}>
-                    <MetricCard
-                        title='Sửa ngoài chờ duyệt'
-                        value={summary?.pendingApprovalCount ?? 0}
-                        loading={reportQuery.isLoading}
-                        suffix='phiếu'
-                        icon={<WarningOutlined />}
-                        color='#faad14'
-                        hint='Số phiếu sửa ngoài đang chờ duyệt trong phạm vi cơ sở đã lọc.'
-                        onClick={() =>
-                            setDrilldown({
-                                kind: 'message',
-                                title: 'Sửa ngoài chờ duyệt',
-                                description:
-                                    'KPI này là tổng hợp trạng thái. Phase sau nên bổ sung API danh sách phiếu sửa ngoài chờ duyệt để drill-down sâu.',
-                            })
-                        }
-                    />
-                </Col>
-                <Col xs={24} sm={12} lg={8} xxl={4}>
-                    <MetricCard
-                        title='Sửa ngoài đang xử lý'
-                        value={summary?.inProgressCount ?? 0}
-                        loading={reportQuery.isLoading}
-                        suffix='phiếu'
-                        icon={<ToolOutlined />}
-                        color='#1677ff'
-                        hint='Số phiếu sửa ngoài đang xử lý trong phạm vi cơ sở đã lọc.'
-                        onClick={() =>
-                            setDrilldown({
-                                kind: 'message',
-                                title: 'Sửa ngoài đang xử lý',
-                                description:
-                                    'KPI này là tổng hợp trạng thái. Phase sau nên bổ sung API danh sách phiếu đang xử lý để xem chi tiết.',
-                            })
-                        }
-                    />
-                </Col>
-                <Col xs={24} sm={12} lg={8} xxl={4}>
-                    <MetricCard
-                        title='Cơ sở phát sinh cao nhất'
-                        value={topPlant?.totalCost ?? 0}
-                        loading={reportQuery.isLoading}
-                        icon={<ShopOutlined />}
-                        color='#52c41a'
-                        hint='Cơ sở có tổng chi phí vận hành cao nhất trong kỳ lọc.'
-                        meta={topPlant?.plantName ?? 'Chưa có dữ liệu'}
-                        onClick={() =>
-                            setDrilldown({
-                                kind: 'plant',
-                                title: 'Cơ sở phát sinh cao nhất',
-                                description: 'Cơ sở đứng đầu theo tổng chi phí vận hành.',
-                                rows: topPlant ? [topPlant] : [],
-                            })
-                        }
-                    />
-                </Col>
-            </Row>
+                    >
+                        <ToolOutlined /> Máy tốn nhất:{' '}
+                        <strong>
+                            {topAsset.assetName} · {fmtShort(topAsset.totalCost)}
+                        </strong>
+                    </button>
+                ) : null}
+                <button type='button' className='hd-signal-item' disabled>
+                    <BuildOutlined /> {summary?.externalRepairCount ?? 0} phiếu sửa hoàn tất ·{' '}
+                    {summary?.distributionRecordCount ?? 0} phiếu cấp phát
+                </button>
+            </div>
 
             <Row gutter={[16, 16]}>
                 <Col xs={24} xxl={16}>
@@ -618,38 +520,62 @@ export default function FacilityCostReportPage() {
                         className='facility-cost-section-card'
                         title='Xu hướng chi phí vận hành theo kỳ'
                         variant='outlined'
+                        extra={
+                            <Tooltip title='Tải biểu đồ thành ảnh PNG'>
+                                <Button
+                                    size='small'
+                                    className='hd-chart-png-btn'
+                                    icon={<DownloadOutlined />}
+                                    onClick={downloadTrendPng}
+                                />
+                            </Tooltip>
+                        }
                     >
                         {reportQuery.isLoading ? (
                             <Skeleton active paragraph={{ rows: 8 }} />
                         ) : (
-                            <CostTrendChart data={costByPeriod} />
+                            <CostTrendChart
+                                data={costByPeriod}
+                                instanceRef={trendChartInstance}
+                                onSelectPeriod={(row) =>
+                                    setDrilldown({
+                                        kind: 'period',
+                                        title: `Chi phí kỳ ${getPeriodLabel(row.period)}`,
+                                        description:
+                                            'Cơ cấu chi phí của kỳ này. Dùng các nút bên dưới để mở danh sách phiếu nguồn.',
+                                        row,
+                                        plantId: filters.plantId,
+                                    })
+                                }
+                            />
                         )}
                     </Card>
                 </Col>
                 <Col xs={24} xxl={8}>
-                    <CostCompositionPanel
-                        summary={summary}
-                        topPlant={topPlant}
-                        topAsset={topAssets[0]}
-                        onOpenDrilldown={setDrilldown}
-                        costByPlant={costByPlant}
-                        topAssets={topAssets}
-                    />
+                    <CostCompositionPanel summary={summary} />
                 </Col>
             </Row>
 
             <Row gutter={[16, 16]}>
                 <Col xs={24} xxl={15}>
                     <Card className='facility-cost-section-card' title='Chi phí vận hành theo cơ sở' variant='outlined'>
-                        <Table
-                            rowKey={(row) => row.plantId || row.plantName}
-                            loading={reportQuery.isLoading}
-                            columns={plantColumns}
-                            dataSource={costByPlant}
-                            size='small'
-                            scroll={{ x: 1300 }}
-                            pagination={{ pageSize: 10, showSizeChanger: true }}
-                        />
+                        {reportQuery.isLoading ? (
+                            <Skeleton active paragraph={{ rows: 6 }} />
+                        ) : (
+                            <PlantCostChart
+                                data={costByPlant}
+                                onSelectPlant={(row) =>
+                                    setDrilldown({
+                                        kind: 'plantDetail',
+                                        title: row.plantName,
+                                        description: 'Cơ cấu chi phí của cơ sở trong kỳ lọc hiện tại.',
+                                        row,
+                                        startDate: params.startDate,
+                                        endDate: params.endDate,
+                                    })
+                                }
+                            />
+                        )}
                     </Card>
                 </Col>
                 <Col xs={24} xxl={9}>
@@ -658,15 +584,22 @@ export default function FacilityCostReportPage() {
                         title='Top máy phát sinh chi phí sửa ngoài'
                         variant='outlined'
                     >
-                        <Table
-                            rowKey={(row) => row.assetId}
-                            loading={reportQuery.isLoading}
-                            columns={assetColumns}
-                            dataSource={topAssets}
-                            size='small'
-                            scroll={{ x: 640 }}
-                            pagination={{ pageSize: 8 }}
-                        />
+                        {reportQuery.isLoading ? (
+                            <Skeleton active paragraph={{ rows: 6 }} />
+                        ) : (
+                            <TopAssetRankList
+                                data={topAssets}
+                                onOpenHistory={(row) =>
+                                    navigate(
+                                        `/maintenances?${buildLinkedParams({
+                                            assetId: row.assetId,
+                                            repairMode: 'external',
+                                            status: 'completed',
+                                        })}`
+                                    )
+                                }
+                            />
+                        )}
                     </Card>
                 </Col>
             </Row>
@@ -676,41 +609,7 @@ export default function FacilityCostReportPage() {
     );
 }
 
-function ActiveFilterChips({ chips, compact = false }: { chips: ActiveFilterChip[]; compact?: boolean }) {
-    if (!chips.length) return null;
-
-    return (
-        <div
-            className={
-                compact
-                    ? 'facility-cost-active-filters facility-cost-active-filters--compact'
-                    : 'facility-cost-active-filters'
-            }
-        >
-            {chips.map((chip) => (
-                <Tag key={chip.key} color={chip.color ?? 'default'} className='facility-cost-filter-chip'>
-                    {chip.label}
-                </Tag>
-            ))}
-        </div>
-    );
-}
-
-function CostCompositionPanel({
-    summary,
-    topPlant,
-    topAsset,
-    costByPlant,
-    topAssets,
-    onOpenDrilldown,
-}: {
-    summary?: FacilityCostSummary;
-    topPlant?: FacilityCostByPlant;
-    topAsset?: TopExternalRepairAsset;
-    costByPlant: FacilityCostByPlant[];
-    topAssets: TopExternalRepairAsset[];
-    onOpenDrilldown: (payload: FacilityDrilldownPayload) => void;
-}) {
+function CostCompositionPanel({ summary }: { summary?: FacilityCostSummary }) {
     const mixData = [
         {
             name: 'Chi phí vật tư đã cấp phát',
@@ -719,6 +618,54 @@ function CostCompositionPanel({
         },
         { name: 'Chi phí sửa ngoài', value: summary?.externalRepairCost ?? 0, color: COST_COLORS.repair },
     ].filter((item) => item.value > 0);
+    const mixTotal = mixData.reduce((sum, item) => sum + item.value, 0);
+    const materialCost = summary?.materialDistributionCost ?? 0;
+    const repairCost = summary?.externalRepairCost ?? 0;
+
+    const donutOption = useMemo<EChartsCoreOption>(() => {
+        const items = [
+            { name: 'Chi phí vật tư đã cấp phát', value: materialCost, color: COST_COLORS.material },
+            { name: 'Chi phí sửa ngoài', value: repairCost, color: COST_COLORS.repair },
+        ].filter((item) => item.value > 0);
+
+        return {
+            tooltip: {
+                trigger: 'item',
+                ...ECHARTS_TOOLTIP_STYLE,
+                formatter: (params: unknown) => {
+                    const info = params as { marker?: string; name?: string; value?: number; percent?: number };
+                    return `${info.marker ?? ''} ${info.name ?? ''}: <b>${fmtCurrency(Number(info.value ?? 0))}</b> (${info.percent ?? 0}%)`;
+                },
+            },
+            series: [
+                {
+                    type: 'pie',
+                    radius: ['64%', '92%'],
+                    center: ['50%', '50%'],
+                    padAngle: 2,
+                    itemStyle: {
+                        borderRadius: 8,
+                        borderColor: '#ffffff',
+                        borderWidth: 2,
+                        shadowBlur: 14,
+                        shadowColor: 'rgba(15, 23, 42, 0.14)',
+                        shadowOffsetY: 4,
+                    },
+                    label: { show: false },
+                    emphasis: { scale: true, scaleSize: 7 },
+                    data: items.map((item) => ({
+                        name: item.name,
+                        value: item.value,
+                        itemStyle: { color: item.color },
+                    })),
+                    animationType: 'scale',
+                    animationEasing: 'elasticOut',
+                    animationDuration: 1000,
+                    animationDelay: (idx: number) => idx * 200,
+                },
+            ],
+        };
+    }, [materialCost, repairCost]);
 
     return (
         <Card
@@ -726,94 +673,30 @@ function CostCompositionPanel({
             title='Cơ cấu và tín hiệu'
             variant='outlined'
         >
-            <div className='facility-cost-donut-frame'>
+            <div className='facility-cost-donut-frame hd-donut-wrap'>
                 {mixData.length ? (
-                    <ResponsiveContainer width='100%' height='100%'>
-                        <PieChart>
-                            <Pie
-                                data={mixData}
-                                dataKey='value'
-                                nameKey='name'
-                                cx='50%'
-                                cy='50%'
-                                innerRadius={54}
-                                outerRadius={86}
-                                paddingAngle={2}
-                            >
-                                {mixData.map((item) => (
-                                    <Cell key={item.name} fill={item.color} />
-                                ))}
-                            </Pie>
-                            <ChartTooltip
-                                formatter={(value, name) => [fmtCurrency(Number(value ?? 0)), String(name)]}
-                            />
-                            <Legend />
-                        </PieChart>
-                    </ResponsiveContainer>
+                    <>
+                        <EChart option={donutOption} height='100%' />
+                        <DonutCenter title='Tổng chi phí' value={fmtShort(mixTotal)} />
+                    </>
                 ) : (
                     <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description='Không có dữ liệu chi phí trong kỳ' />
                 )}
             </div>
-            <div className='facility-cost-insight-list'>
-                <button
-                    type='button'
-                    onClick={() =>
-                        onOpenDrilldown({
-                            kind: 'plant',
-                            title: 'Chi phí vận hành theo cơ sở',
-                            description: 'Các cơ sở tạo nên tổng chi phí vận hành.',
-                            rows: costByPlant,
-                        })
-                    }
-                >
-                    <span>Cơ sở cao nhất</span>
-                    <strong>
-                        {topPlant ? `${topPlant.plantName}: ${fmtCurrency(topPlant.totalCost)}` : 'Chưa có dữ liệu'}
-                    </strong>
-                </button>
-                <button
-                    type='button'
-                    onClick={() =>
-                        onOpenDrilldown({
-                            kind: 'asset',
-                            title: 'Top máy phát sinh chi phí sửa ngoài',
-                            description: 'Các máy có chi phí sửa ngoài cao nhất trong kỳ.',
-                            rows: topAssets,
-                        })
-                    }
-                >
-                    <span>Máy nổi bật</span>
-                    <strong>
-                        {topAsset ? `${topAsset.assetName}: ${fmtCurrency(topAsset.totalCost)}` : 'Chưa có dữ liệu'}
-                    </strong>
-                </button>
-                <div className='facility-cost-status-grid facility-cost-status-grid--compact'>
-                    <StatusTile
-                        icon={<BuildOutlined />}
-                        label='Hoàn tất'
-                        value={summary?.externalRepairCount ?? 0}
-                        color='#52c41a'
-                    />
-                    <StatusTile
-                        icon={<WarningOutlined />}
-                        label='Chờ duyệt'
-                        value={summary?.pendingApprovalCount ?? 0}
-                        color='#faad14'
-                    />
-                    <StatusTile
-                        icon={<ToolOutlined />}
-                        label='Đang xử lý'
-                        value={summary?.inProgressCount ?? 0}
-                        color='#1677ff'
-                    />
-                    <StatusTile
-                        icon={<ShopOutlined />}
-                        label='Cấp phát VT'
-                        value={summary?.distributionRecordCount ?? 0}
-                        color='#722ed1'
-                    />
+            {mixData.length ? (
+                <div className='facility-cost-mix-legend'>
+                    {mixData.map((item) => (
+                        <div key={item.name} className='facility-cost-mix-legend__row'>
+                            <span className='facility-cost-mix-legend__dot' style={{ background: item.color }} />
+                            <span className='facility-cost-mix-legend__name'>{item.name}</span>
+                            <span className='facility-cost-mix-legend__value'>
+                                {fmtCurrency(item.value)}
+                                <em>{mixTotal ? ` · ${((item.value / mixTotal) * 100).toFixed(1)}%` : ''}</em>
+                            </span>
+                        </div>
+                    ))}
                 </div>
-            </div>
+            ) : null}
         </Card>
     );
 }
@@ -821,6 +704,7 @@ function CostCompositionPanel({
 function MetricCard({
     title,
     value,
+    previousValue,
     suffix,
     icon,
     color,
@@ -831,6 +715,7 @@ function MetricCard({
 }: {
     title: string;
     value: number;
+    previousValue?: number;
     suffix?: string;
     icon: React.ReactNode;
     color: string;
@@ -862,13 +747,141 @@ function MetricCard({
                         }
                     />
                 </Tooltip>
+                {!loading && previousValue !== undefined ? (
+                    <DeltaBadge current={value} previous={previousValue} formatter={fmtCurrency} />
+                ) : null}
                 {meta ? <Text className='facility-cost-metric-meta'>{meta}</Text> : null}
             </Card>
         </button>
     );
 }
 
-function CostTrendChart({ data }: { data: FacilityCostByPeriod[] }) {
+function CostTrendChart({
+    data,
+    onSelectPeriod,
+    instanceRef,
+}: {
+    data: FacilityCostByPeriod[];
+    onSelectPeriod?: (row: FacilityCostByPeriod) => void;
+    instanceRef?: React.RefObject<ECharts | null>;
+}) {
+    const option = useMemo<EChartsCoreOption>(() => {
+        const labels = data.map((row) => getPeriodLabel(row.period));
+        const material = data.map((row) => Number(row.materialDistributionCost ?? 0));
+        const repair = data.map((row) => Number(row.externalRepairCost ?? 0));
+        const totals = material.map((value, index) => value + repair[index]);
+        const average = totals.reduce((sum, value) => sum + value, 0) / Math.max(totals.length, 1);
+        const many = data.length > 18;
+
+        return {
+            animationDuration: 1100,
+            animationEasing: 'elasticOut',
+            animationDurationUpdate: 500,
+            tooltip: {
+                trigger: 'axis',
+                axisPointer: { type: 'shadow', shadowStyle: { color: 'rgba(37, 99, 235, 0.06)' } },
+                ...ECHARTS_TOOLTIP_STYLE,
+                formatter: stackedTooltipFormatter,
+            },
+            legend: {
+                top: 0,
+                icon: 'roundRect',
+                itemWidth: 12,
+                itemHeight: 8,
+                itemGap: 16,
+                textStyle: { color: '#334155', fontSize: 12, fontWeight: 600 },
+            },
+            grid: { left: 8, right: 14, top: 36, bottom: many ? 30 : 8, containLabel: true },
+            xAxis: {
+                type: 'category',
+                data: labels,
+                axisTick: { show: false },
+                axisLine: { lineStyle: { color: '#e2e8f0' } },
+                axisLabel: { ...ECHARTS_AXIS_LABEL, rotate: many ? 35 : 0, hideOverlap: true },
+            },
+            yAxis: {
+                type: 'value',
+                splitLine: { lineStyle: { color: '#eef2f7', type: 'dashed' } },
+                axisLabel: { ...ECHARTS_AXIS_LABEL, formatter: (value: number) => fmtShort(value) },
+            },
+            dataZoom: many
+                ? [
+                      { type: 'inside' },
+                      {
+                          type: 'slider',
+                          height: 16,
+                          bottom: 4,
+                          borderColor: '#e2e8f0',
+                          fillerColor: 'rgba(37, 99, 235, 0.12)',
+                      },
+                  ]
+                : undefined,
+            series: [
+                {
+                    name: 'Chi phí vật tư đã cấp phát',
+                    type: 'bar',
+                    stack: 'cost',
+                    data: material,
+                    barMaxWidth: 38,
+                    itemStyle: {
+                        color: barGradient(CHART_SEMANTIC.material),
+                        shadowBlur: 8,
+                        shadowColor: 'rgba(37, 99, 235, 0.28)',
+                        shadowOffsetY: 4,
+                    },
+                    emphasis: { focus: 'series', itemStyle: { shadowBlur: 16 } },
+                    animationDelay: (idx: number) => idx * 70,
+                },
+                {
+                    name: 'Chi phí sửa ngoài',
+                    type: 'bar',
+                    stack: 'cost',
+                    data: repair,
+                    barMaxWidth: 38,
+                    itemStyle: {
+                        color: barGradient(CHART_SEMANTIC.repair),
+                        borderRadius: [8, 8, 0, 0],
+                        shadowBlur: 8,
+                        shadowColor: 'rgba(245, 158, 11, 0.28)',
+                        shadowOffsetY: 4,
+                    },
+                    emphasis: { focus: 'series', itemStyle: { shadowBlur: 16 } },
+                    animationDelay: (idx: number) => idx * 70 + 150,
+                    markLine:
+                        data.length > 1 && average > 0
+                            ? {
+                                  silent: true,
+                                  symbol: 'none',
+                                  lineStyle: { color: CHART_SEMANTIC.reference, type: 'dashed' },
+                                  label: {
+                                      formatter: `TB ${fmtShort(average)}`,
+                                      color: '#64748b',
+                                      fontSize: 11,
+                                      position: 'insideEndTop',
+                                  },
+                                  data: [{ yAxis: average }],
+                              }
+                            : undefined,
+                },
+            ],
+        };
+    }, [data]);
+
+    const events = useMemo(
+        () =>
+            onSelectPeriod
+                ? {
+                      click: (params: unknown) => {
+                          const info = params as { componentType?: string; dataIndex?: number };
+                          if (info?.componentType !== 'series') return;
+                          const row = data[info.dataIndex ?? -1];
+                          if (row) onSelectPeriod(row);
+                      },
+                  }
+                : undefined,
+        [data, onSelectPeriod]
+    );
+
     if (!data.length) {
         return (
             <div className='facility-cost-empty-chart'>
@@ -878,61 +891,189 @@ function CostTrendChart({ data }: { data: FacilityCostByPeriod[] }) {
     }
 
     return (
-        <div className='facility-cost-chart-frame'>
-            <ResponsiveContainer width='100%' height='100%'>
-                <BarChart data={data} margin={{ top: 8, right: 24, left: 8, bottom: 8 }}>
-                    <CartesianGrid strokeDasharray='3 3' stroke='#eef2f7' />
-                    <XAxis dataKey='period' tickFormatter={getPeriodLabel} tick={{ fontSize: 12 }} />
-                    <YAxis tickFormatter={fmtShort} tick={{ fontSize: 12 }} width={58} />
-                    <ChartTooltip
-                        labelFormatter={(label) => getPeriodLabel(String(label ?? ''))}
-                        formatter={(value, name) => [fmtCurrency(Number(value ?? 0)), String(name ?? '')]}
-                    />
-                    <Legend />
-                    <Bar
-                        dataKey='materialDistributionCost'
-                        name='Chi phí vật tư đã cấp phát'
-                        stackId='cost'
-                        fill={COST_COLORS.material}
-                        radius={[0, 0, 0, 0]}
-                    />
-                    <Bar
-                        dataKey='externalRepairCost'
-                        name='Chi phí sửa ngoài'
-                        stackId='cost'
-                        fill={COST_COLORS.repair}
-                        radius={[6, 6, 0, 0]}
-                    >
-                        {data.map((entry) => (
-                            <Cell key={entry.period} />
-                        ))}
-                    </Bar>
-                </BarChart>
-            </ResponsiveContainer>
-        </div>
+        <>
+            <div className='facility-cost-chart-frame'>
+                <EChart option={option} height='100%' onEvents={events} instanceRef={instanceRef} />
+            </div>
+            {onSelectPeriod ? (
+                <Text type='secondary' className='facility-cost-chart-hint'>
+                    Nhấn vào cột để xem chi tiết kỳ đó · Nhấn legend để ẩn/hiện
+                </Text>
+            ) : null}
+        </>
     );
 }
 
-function StatusTile({
-    icon,
-    label,
-    value,
-    color,
+function PlantCostChart({
+    data,
+    onSelectPlant,
 }: {
-    icon: React.ReactNode;
-    label: string;
-    value: number;
-    color: string;
+    data: FacilityCostByPlant[];
+    onSelectPlant?: (row: FacilityCostByPlant) => void;
 }) {
+    // Sắp tăng dần để cơ sở chi nhiều nhất nằm trên cùng (trục category vẽ từ dưới lên)
+    const rows = useMemo(() => [...data].sort((a, b) => a.totalCost - b.totalCost), [data]);
+
+    const option = useMemo<EChartsCoreOption>(() => {
+        const names = rows.map((row) => row.plantName);
+        const material = rows.map((row) => Number(row.materialDistributionCost ?? 0));
+        const repair = rows.map((row) => Number(row.externalRepairCost ?? 0));
+
+        return {
+            animationDuration: 1000,
+            animationEasing: 'cubicOut',
+            tooltip: {
+                trigger: 'axis',
+                axisPointer: { type: 'shadow', shadowStyle: { color: 'rgba(37, 99, 235, 0.06)' } },
+                ...ECHARTS_TOOLTIP_STYLE,
+                formatter: stackedTooltipFormatter,
+            },
+            legend: {
+                top: 0,
+                icon: 'roundRect',
+                itemWidth: 12,
+                itemHeight: 8,
+                itemGap: 16,
+                textStyle: { color: '#334155', fontSize: 12, fontWeight: 600 },
+            },
+            grid: { left: 8, right: 66, top: 32, bottom: 4, containLabel: true },
+            xAxis: {
+                type: 'value',
+                splitLine: { lineStyle: { color: '#eef2f7', type: 'dashed' } },
+                axisLabel: { ...ECHARTS_AXIS_LABEL, formatter: (value: number) => fmtShort(value) },
+            },
+            yAxis: {
+                type: 'category',
+                data: names,
+                axisTick: { show: false },
+                axisLine: { lineStyle: { color: '#e2e8f0' } },
+                axisLabel: {
+                    ...ECHARTS_AXIS_LABEL,
+                    formatter: (value: string) => truncateName(value),
+                },
+            },
+            series: [
+                {
+                    name: 'Chi phí vật tư đã cấp phát',
+                    type: 'bar',
+                    stack: 'cost',
+                    data: material,
+                    barMaxWidth: 26,
+                    itemStyle: {
+                        color: barGradient(CHART_SEMANTIC.material, false),
+                        shadowBlur: 6,
+                        shadowColor: 'rgba(37, 99, 235, 0.22)',
+                        shadowOffsetY: 3,
+                    },
+                    emphasis: { focus: 'series' },
+                    animationDelay: (idx: number) => idx * 90,
+                },
+                {
+                    name: 'Chi phí sửa ngoài',
+                    type: 'bar',
+                    stack: 'cost',
+                    data: repair,
+                    barMaxWidth: 26,
+                    itemStyle: {
+                        color: barGradient(CHART_SEMANTIC.repair, false),
+                        borderRadius: [0, 8, 8, 0],
+                        shadowBlur: 6,
+                        shadowColor: 'rgba(245, 158, 11, 0.22)',
+                        shadowOffsetY: 3,
+                    },
+                    emphasis: { focus: 'series' },
+                    animationDelay: (idx: number) => idx * 90 + 120,
+                    label: {
+                        show: true,
+                        position: 'right',
+                        formatter: (params: { dataIndex: number }) => fmtShort(rows[params.dataIndex]?.totalCost ?? 0),
+                        color: '#475569',
+                        fontSize: 11,
+                        fontWeight: 600,
+                    },
+                },
+            ],
+        };
+    }, [rows]);
+
+    const events = useMemo(
+        () =>
+            onSelectPlant
+                ? {
+                      click: (params: unknown) => {
+                          const info = params as { componentType?: string; dataIndex?: number };
+                          if (info?.componentType !== 'series') return;
+                          const row = rows[info.dataIndex ?? -1];
+                          if (row) onSelectPlant(row);
+                      },
+                  }
+                : undefined,
+        [rows, onSelectPlant]
+    );
+
+    if (!data.length) {
+        return <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description='Không có dữ liệu trong kỳ đã chọn' />;
+    }
+
     return (
-        <div className='facility-cost-status-tile'>
-            <span className='facility-cost-status-icon' style={{ color, backgroundColor: `${color}14` }}>
-                {icon}
-            </span>
-            <span className='facility-cost-status-content'>
-                <Text type='secondary'>{label}</Text>
-                <Text strong>{new Intl.NumberFormat('vi-VN').format(value)}</Text>
-            </span>
+        <>
+            <EChart option={option} height={Math.max(220, rows.length * 46 + 70)} onEvents={events} />
+            {onSelectPlant ? (
+                <Text type='secondary' className='facility-cost-chart-hint'>
+                    Nhấn vào thanh để xem chi tiết cơ sở
+                </Text>
+            ) : null}
+        </>
+    );
+}
+
+function TopAssetRankList({
+    data,
+    onOpenHistory,
+}: {
+    data: TopExternalRepairAsset[];
+    onOpenHistory: (row: TopExternalRepairAsset) => void;
+}) {
+    if (!data.length) {
+        return <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description='Không có máy sửa ngoài trong kỳ' />;
+    }
+
+    const max = Math.max(...data.map((row) => row.totalCost), 1);
+
+    return (
+        <div className='facility-cost-rank-list'>
+            {data.slice(0, 8).map((row, index) => (
+                <button
+                    key={row.assetId}
+                    type='button'
+                    className='facility-cost-rank-item'
+                    onClick={() => onOpenHistory(row)}
+                    title='Xem lịch sử sửa ngoài của máy'
+                >
+                    <span
+                        className={
+                            index < 3
+                                ? 'facility-cost-rank-badge facility-cost-rank-badge--top'
+                                : 'facility-cost-rank-badge'
+                        }
+                    >
+                        {index + 1}
+                    </span>
+                    <span className='facility-cost-rank-main'>
+                        <strong>{row.assetName}</strong>
+                        <span className='facility-cost-rank-meta'>
+                            {[row.machineCode, row.plantName].filter(Boolean).join(' · ')}
+                        </span>
+                        <span className='facility-cost-rank-bar'>
+                            <i style={{ width: `${Math.max((row.totalCost / max) * 100, 4)}%` }} />
+                        </span>
+                    </span>
+                    <span className='facility-cost-rank-value'>
+                        <strong>{fmtCurrency(row.totalCost)}</strong>
+                        <em>{row.count} lần sửa</em>
+                    </span>
+                </button>
+            ))}
         </div>
     );
 }
@@ -944,6 +1085,7 @@ function FacilityDrilldownDrawer({
     drilldown: FacilityDrilldownPayload | null;
     onClose: () => void;
 }) {
+    const navigate = useNavigate();
     const plantColumns: ColumnsType<FacilityCostByPlant> = [
         { title: 'Cơ sở', dataIndex: 'plantName', ellipsis: true, render: (value) => <Text strong>{value}</Text> },
         {
@@ -976,6 +1118,120 @@ function FacilityDrilldownDrawer({
         if (!drilldown) return null;
         if (drilldown.kind === 'message') {
             return <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={drilldown.description} />;
+        }
+        if (drilldown.kind === 'period') {
+            const { row, plantId } = drilldown;
+            const material = Number(row.materialDistributionCost ?? 0);
+            const repair = Number(row.externalRepairCost ?? 0);
+            const total = material + repair;
+            const range = getPeriodRange(row.period);
+            const search = (extra: Record<string, string | undefined>) => {
+                const query = new URLSearchParams({ startDate: range.start, endDate: range.end });
+                Object.entries(extra).forEach(([key, value]) => {
+                    if (value) query.set(key, value);
+                });
+                return query.toString();
+            };
+            const items = [
+                { label: 'Chi phí vật tư đã cấp phát', value: material, color: COST_COLORS.material },
+                { label: 'Chi phí sửa ngoài', value: repair, color: COST_COLORS.repair },
+            ];
+            return (
+                <div className='facility-cost-period-detail'>
+                    {items.map((item) => (
+                        <div key={item.label} className='facility-cost-period-detail__row'>
+                            <span className='facility-cost-mix-legend__dot' style={{ background: item.color }} />
+                            <span className='facility-cost-mix-legend__name'>{item.label}</span>
+                            <span className='facility-cost-mix-legend__value'>
+                                {fmtCurrency(item.value)}
+                                <em>{total ? ` · ${((item.value / total) * 100).toFixed(1)}%` : ''}</em>
+                            </span>
+                        </div>
+                    ))}
+                    <div className='facility-cost-period-detail__row facility-cost-period-detail__row--total'>
+                        <span className='facility-cost-mix-legend__dot' style={{ background: '#0f172a' }} />
+                        <span className='facility-cost-mix-legend__name'>Tổng chi phí kỳ</span>
+                        <span className='facility-cost-mix-legend__value'>{fmtCurrency(total)}</span>
+                    </div>
+                    <Space wrap>
+                        <Button onClick={() => navigate(`/materials/distributions?${search({ toPlantId: plantId })}`)}>
+                            Phiếu cấp phát kỳ này
+                        </Button>
+                        <Button
+                            onClick={() =>
+                                navigate(
+                                    `/maintenances?${search({ plantId, repairMode: 'external', status: 'completed' })}`
+                                )
+                            }
+                        >
+                            Phiếu sửa ngoài kỳ này
+                        </Button>
+                    </Space>
+                </div>
+            );
+        }
+        if (drilldown.kind === 'plantDetail') {
+            const { row, startDate, endDate } = drilldown;
+            const material = Number(row.materialDistributionCost ?? 0);
+            const repair = Number(row.externalRepairCost ?? 0);
+            const total = Number(row.totalCost ?? material + repair);
+            const search = (extra: Record<string, string | undefined>) => {
+                const query = new URLSearchParams({ startDate: startDate ?? '', endDate: endDate ?? '' });
+                Object.entries(extra).forEach(([key, value]) => {
+                    if (value) query.set(key, value);
+                });
+                return query.toString();
+            };
+            const breakdown = [
+                { label: 'Chi phí vật tư đã cấp phát', value: material, color: COST_COLORS.material },
+                { label: 'Chi phí sửa ngoài', value: repair, color: COST_COLORS.repair },
+            ];
+            return (
+                <div className='facility-cost-period-detail'>
+                    {breakdown.map((item) => (
+                        <div key={item.label} className='facility-cost-period-detail__row'>
+                            <span className='facility-cost-mix-legend__dot' style={{ background: item.color }} />
+                            <span className='facility-cost-mix-legend__name'>{item.label}</span>
+                            <span className='facility-cost-mix-legend__value'>
+                                {fmtCurrency(item.value)}
+                                <em>{total ? ` · ${((item.value / total) * 100).toFixed(1)}%` : ''}</em>
+                            </span>
+                        </div>
+                    ))}
+                    <div className='facility-cost-period-detail__row facility-cost-period-detail__row--total'>
+                        <span className='facility-cost-mix-legend__dot' style={{ background: '#0f172a' }} />
+                        <span className='facility-cost-mix-legend__name'>Tổng chi phí</span>
+                        <span className='facility-cost-mix-legend__value'>{fmtCurrency(total)}</span>
+                    </div>
+                    <div className='facility-cost-period-detail__row'>
+                        <span className='facility-cost-mix-legend__name'>Phiếu cấp phát / sửa ngoài / máy sửa</span>
+                        <span className='facility-cost-mix-legend__value'>
+                            {row.distributionCount ?? 0} / {row.externalRepairCount ?? 0} /{' '}
+                            {row.externalRepairAssetCount ?? 0}
+                        </span>
+                    </div>
+                    <Space wrap>
+                        <Button
+                            onClick={() => navigate(`/materials/distributions?${search({ toPlantId: row.plantId })}`)}
+                        >
+                            Phiếu cấp phát
+                        </Button>
+                        <Button
+                            onClick={() =>
+                                navigate(
+                                    `/maintenances?${search({
+                                        plantId: row.plantId,
+                                        repairMode: 'external',
+                                        status: 'completed',
+                                    })}`
+                                )
+                            }
+                        >
+                            Phiếu sửa ngoài
+                        </Button>
+                    </Space>
+                </div>
+            );
         }
         if (drilldown.kind === 'asset') {
             return (
@@ -1024,11 +1280,18 @@ const FACILITY_COST_STYLE = `
     gap: 16px;
 }
 .facility-cost-page .page-header-card {
-    border: 1px solid #dbeafe;
-    background:
-        linear-gradient(135deg, rgba(19, 194, 194, 0.12), rgba(250, 140, 22, 0.08)),
-        #ffffff;
-    box-shadow: 0 16px 36px rgba(15, 23, 42, 0.06);
+    border: 1px solid #e8edf4;
+    background: #ffffff;
+    box-shadow: 0 8px 24px rgba(15, 23, 42, 0.05);
+}
+.facility-cost-kpi-grid {
+    height: 100%;
+}
+.facility-cost-kpi-grid > .ant-col {
+    display: flex;
+}
+.facility-cost-kpi-grid .facility-cost-metric-button {
+    width: 100%;
 }
 .facility-cost-filter-card,
 .facility-cost-metric-card,
@@ -1163,6 +1426,149 @@ const FACILITY_COST_STYLE = `
 .facility-cost-empty-chart {
     height: 340px;
     min-width: 0;
+}
+.facility-cost-chart-hint {
+    display: block;
+    margin-top: 6px;
+    font-size: 11px;
+    text-align: center;
+}
+.facility-cost-mix-legend {
+    display: grid;
+    gap: 6px;
+}
+.facility-cost-mix-legend__row,
+.facility-cost-period-detail__row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 12px;
+}
+.facility-cost-period-detail__row--total {
+    padding-top: 8px;
+    border-top: 1px dashed #e2e8f0;
+    font-weight: 700;
+}
+.facility-cost-mix-legend__dot {
+    width: 9px;
+    height: 9px;
+    flex: 0 0 9px;
+    border-radius: 999px;
+}
+.facility-cost-mix-legend__name {
+    flex: 1 1 auto;
+    min-width: 0;
+    color: #475569;
+}
+.facility-cost-mix-legend__value {
+    flex-shrink: 0;
+    color: #0f172a;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+}
+.facility-cost-mix-legend__value em {
+    color: #94a3b8;
+    font-style: normal;
+    font-weight: 500;
+}
+.facility-cost-period-detail {
+    display: grid;
+    gap: 10px;
+}
+.facility-cost-rank-list {
+    display: grid;
+    gap: 8px;
+}
+.facility-cost-rank-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    width: 100%;
+    min-width: 0;
+    padding: 10px 12px;
+    border: 1px solid #eef2f7;
+    border-radius: 10px;
+    background: #ffffff;
+    text-align: left;
+    cursor: pointer;
+    transition:
+        transform 160ms ease,
+        border-color 160ms ease,
+        box-shadow 160ms ease;
+}
+.facility-cost-rank-item:hover {
+    transform: translateY(-1px);
+    border-color: #93c5fd;
+    box-shadow: 0 8px 20px rgba(15, 23, 42, 0.08);
+}
+.facility-cost-rank-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 26px;
+    height: 26px;
+    flex: 0 0 26px;
+    border-radius: 999px;
+    background: #f1f5f9;
+    color: #475569;
+    font-size: 12px;
+    font-weight: 800;
+}
+.facility-cost-rank-badge--top {
+    background: linear-gradient(135deg, #1d4ed8, #3b82f6);
+    color: #ffffff;
+    box-shadow: 0 4px 10px rgba(37, 99, 235, 0.35);
+}
+.facility-cost-rank-main {
+    display: grid;
+    flex: 1 1 auto;
+    min-width: 0;
+    gap: 3px;
+}
+.facility-cost-rank-main > strong {
+    overflow: hidden;
+    color: #0f172a;
+    font-size: 13px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.facility-cost-rank-meta {
+    overflow: hidden;
+    color: #94a3b8;
+    font-size: 11px;
+    font-weight: 600;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.facility-cost-rank-bar {
+    display: block;
+    height: 5px;
+    border-radius: 999px;
+    background: #f1f5f9;
+    overflow: hidden;
+}
+.facility-cost-rank-bar > i {
+    display: block;
+    height: 100%;
+    border-radius: 999px;
+    background: linear-gradient(90deg, #f59e0b, #fbbf24);
+}
+.facility-cost-rank-value {
+    display: grid;
+    flex-shrink: 0;
+    justify-items: end;
+    gap: 2px;
+}
+.facility-cost-rank-value > strong {
+    color: #0f172a;
+    font-size: 12.5px;
+    font-variant-numeric: tabular-nums;
+}
+.facility-cost-rank-value > em {
+    color: #94a3b8;
+    font-size: 11px;
+    font-style: normal;
+    font-weight: 600;
 }
 .facility-cost-section-card {
     transition:
