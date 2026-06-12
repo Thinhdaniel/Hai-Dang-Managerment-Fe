@@ -24,7 +24,6 @@ import {
     PrinterOutlined,
     QrcodeOutlined,
     ReloadOutlined,
-    SaveOutlined,
     ScanOutlined,
 } from '@ant-design/icons';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -240,6 +239,89 @@ const BorrowingBatchDetail: React.FC = () => {
         });
     };
 
+    const toggleReturnSelection = (itemId: string) => {
+        setSelectedReturnIds((current) =>
+            current.includes(itemId) ? current.filter((currentId) => currentId !== itemId) : [...current, itemId]
+        );
+    };
+
+    const renderMobileBorrowingCard = (record: Borrowing, index: number, selectable = false) => {
+        const selected = selectedReturnIds.includes(record.id);
+        const returned = record.status === BorrowingStatus.RETURNED;
+        const qrMeta = record.qrReturnAction ? qrReturnActionMeta[record.qrReturnAction] : null;
+        const machineCode = record.asset?.machineCode || record.assetId;
+
+        return (
+            <article
+                key={record.id}
+                role={selectable ? 'button' : undefined}
+                tabIndex={selectable ? 0 : undefined}
+                className={`borrowing-batch-mobile-item${selected ? 'borrowing-batch-mobile-item--selected' : ''}${
+                    returned ? 'borrowing-batch-mobile-item--returned' : ''
+                }`}
+                style={{ animationDelay: `${Math.min(index * 60, 420)}ms` }}
+                onClick={() => selectable && toggleReturnSelection(record.id)}
+                onKeyDown={(event) => {
+                    if (!selectable) return;
+                    if (event.key === 'Enter' || event.key === ' ') {
+                        event.preventDefault();
+                        toggleReturnSelection(record.id);
+                    }
+                }}
+            >
+                <div className='borrowing-batch-mobile-item__shine' />
+                <div className='relative z-[1] flex items-start justify-between gap-3'>
+                    <div className='min-w-0'>
+                        <div className='flex flex-wrap items-center gap-2'>
+                            <TransactionStatusBadge status={record.status} />
+                            {qrMeta ? (
+                                <Tag color={qrMeta.color}>{qrMeta.label}</Tag>
+                            ) : (
+                                <Tag color='processing'>QR tạm</Tag>
+                            )}
+                        </div>
+                        <h3 className='mt-2 mb-0 line-clamp-2 text-base font-black text-slate-950'>
+                            {record.asset?.name || '-'}
+                        </h3>
+                        <div className='mt-1 flex flex-wrap items-center gap-2'>
+                            <span className='borrowing-batch-mobile-item__code'>{machineCode}</span>
+                            {record.partnerMachineCode ? (
+                                <span className='text-[11px] font-bold text-slate-500'>
+                                    Đối tác: {record.partnerMachineCode}
+                                </span>
+                            ) : null}
+                        </div>
+                    </div>
+                    <div
+                        className={`borrowing-batch-mobile-item__select${
+                            selected ? 'borrowing-batch-mobile-item__select--active' : ''
+                        }`}
+                    >
+                        {selected ? <CheckCircleOutlined /> : <QrcodeOutlined />}
+                    </div>
+                </div>
+
+                <div className='relative z-[1] mt-4 grid grid-cols-2 gap-2'>
+                    <div className='borrowing-batch-mobile-time'>
+                        <span>Nhận máy</span>
+                        <strong>{formatDateTime(record.borrowTime)}</strong>
+                    </div>
+                    <div className='borrowing-batch-mobile-time'>
+                        <span>Trả máy</span>
+                        <strong>{formatDateTime(record.returnTime)}</strong>
+                    </div>
+                </div>
+
+                <p className='relative z-[1] mt-3 mb-0 line-clamp-2 rounded-2xl bg-white/72 px-3 py-2 text-xs font-semibold text-slate-600 ring-1 ring-slate-100'>
+                    {record.receiveCondition ||
+                        record.receiveNote ||
+                        record.returnNote ||
+                        'Chưa có ghi chú tình trạng.'}
+                </p>
+            </article>
+        );
+    };
+
     const columns: TableColumnsType<Borrowing> = [
         {
             title: 'MÁY',
@@ -315,7 +397,7 @@ const BorrowingBatchDetail: React.FC = () => {
     const statusMeta = borrowingBatchStatusMeta[batch.status];
 
     return (
-        <div className='flex flex-col gap-5'>
+        <div className='borrowing-batch-mobile-page flex flex-col gap-5'>
             <PageHeader
                 title={batch.code}
                 subtitle='Quản lý nhận/trả nhiều máy mượn hoặc thuê bằng QR tạm thời.'
@@ -344,7 +426,7 @@ const BorrowingBatchDetail: React.FC = () => {
                 }
             />
 
-            <section className='rounded-3xl border border-violet-100 bg-gradient-to-br from-violet-50 via-white to-cyan-50 p-5 shadow-sm'>
+            <section className='borrowing-batch-hero rounded-3xl border border-violet-100 bg-gradient-to-br from-violet-50 via-white to-cyan-50 p-5 shadow-sm'>
                 <div className='flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between'>
                     <div className='min-w-0'>
                         <div className='flex flex-wrap items-center gap-2'>
@@ -363,16 +445,16 @@ const BorrowingBatchDetail: React.FC = () => {
                         </div>
                     </div>
                     <div className='grid grid-cols-2 gap-3 sm:grid-cols-4 lg:min-w-[520px]'>
-                        <Card size='small' className='rounded-2xl'>
+                        <Card size='small' className='borrowing-batch-stat rounded-2xl'>
                             <Statistic title='Dự kiến' value={batch.plannedQuantity} />
                         </Card>
-                        <Card size='small' className='rounded-2xl'>
+                        <Card size='small' className='borrowing-batch-stat rounded-2xl'>
                             <Statistic title='Đã nhận' value={batch.receivedCount ?? 0} />
                         </Card>
-                        <Card size='small' className='rounded-2xl'>
+                        <Card size='small' className='borrowing-batch-stat rounded-2xl'>
                             <Statistic title='Đang giữ' value={batch.activeCount ?? 0} />
                         </Card>
-                        <Card size='small' className='rounded-2xl'>
+                        <Card size='small' className='borrowing-batch-stat rounded-2xl'>
                             <Statistic title='Đã trả' value={batch.returnedCount ?? 0} />
                         </Card>
                     </div>
@@ -382,7 +464,7 @@ const BorrowingBatchDetail: React.FC = () => {
             <Alert
                 showIcon
                 type='warning'
-                className='rounded-2xl'
+                className='borrowing-batch-alert rounded-2xl'
                 message='QR của máy mượn/thuê là tem tạm'
                 description='Khi trả máy, hệ thống sẽ bắt buộc chọn trạng thái xử lý QR và vô hiệu hóa publicId để tránh QR Hải Đăng còn hoạt động trên máy đối tác.'
             />
@@ -396,7 +478,7 @@ const BorrowingBatchDetail: React.FC = () => {
                         label: 'Quét nhận máy',
                         children: (
                             <div className='grid grid-cols-1 gap-4 xl:grid-cols-[420px_1fr]'>
-                                <Card className='rounded-3xl border-slate-200 shadow-sm'>
+                                <Card className='borrowing-scan-panel borrowing-scan-panel--receive rounded-3xl border-slate-200 shadow-sm'>
                                     <div className='mb-3 flex items-center gap-2 font-black text-slate-950'>
                                         <ScanOutlined className='text-blue-600' />
                                         Quét tem QR trắng
@@ -426,13 +508,24 @@ const BorrowingBatchDetail: React.FC = () => {
 
                                 <Card className='rounded-3xl border-slate-200 shadow-sm'>
                                     <div className='mb-3 font-black text-slate-950'>Máy đã nhận vào lô</div>
-                                    <Table<Borrowing>
-                                        rowKey='id'
-                                        columns={columns}
-                                        dataSource={items}
-                                        scroll={{ x: 980 }}
-                                        pagination={{ pageSize: 8 }}
-                                    />
+                                    <div className='block md:hidden'>
+                                        <div className='borrowing-batch-mobile-list'>
+                                            {items.length ? (
+                                                items.map((item, index) => renderMobileBorrowingCard(item, index))
+                                            ) : (
+                                                <Empty description='Chưa nhận máy nào vào lô' />
+                                            )}
+                                        </div>
+                                    </div>
+                                    <div className='hidden md:block'>
+                                        <Table<Borrowing>
+                                            rowKey='id'
+                                            columns={columns}
+                                            dataSource={items}
+                                            scroll={{ x: 980 }}
+                                            pagination={{ pageSize: 8 }}
+                                        />
+                                    </div>
                                 </Card>
                             </div>
                         ),
@@ -442,7 +535,7 @@ const BorrowingBatchDetail: React.FC = () => {
                         label: 'Quét trả máy',
                         children: (
                             <div className='grid grid-cols-1 gap-4 xl:grid-cols-[420px_1fr]'>
-                                <Card className='rounded-3xl border-slate-200 shadow-sm'>
+                                <Card className='borrowing-scan-panel borrowing-scan-panel--return rounded-3xl border-slate-200 shadow-sm'>
                                     <div className='mb-3 flex items-center justify-between gap-3'>
                                         <div className='flex items-center gap-2 font-black text-slate-950'>
                                             <ScanOutlined className='text-emerald-600' />
@@ -484,17 +577,34 @@ const BorrowingBatchDetail: React.FC = () => {
                                             Bỏ chọn
                                         </Button>
                                     </div>
-                                    <Table<Borrowing>
-                                        rowKey='id'
-                                        columns={columns}
-                                        dataSource={activeItems}
-                                        rowSelection={{
-                                            selectedRowKeys: selectedReturnIds,
-                                            onChange: setSelectedReturnIds,
-                                        }}
-                                        scroll={{ x: 980 }}
-                                        pagination={{ pageSize: 8 }}
-                                    />
+                                    <div className='block md:hidden'>
+                                        <div className='borrowing-return-mobile-summary'>
+                                            <span>{selectedActiveItems.length} máy đã chọn</span>
+                                            <strong>{activeItems.length} máy đang giữ</strong>
+                                        </div>
+                                        <div className='borrowing-batch-mobile-list'>
+                                            {activeItems.length ? (
+                                                activeItems.map((item, index) =>
+                                                    renderMobileBorrowingCard(item, index, true)
+                                                )
+                                            ) : (
+                                                <Empty description='Không còn máy đang giữ trong lô' />
+                                            )}
+                                        </div>
+                                    </div>
+                                    <div className='hidden md:block'>
+                                        <Table<Borrowing>
+                                            rowKey='id'
+                                            columns={columns}
+                                            dataSource={activeItems}
+                                            rowSelection={{
+                                                selectedRowKeys: selectedReturnIds,
+                                                onChange: setSelectedReturnIds,
+                                            }}
+                                            scroll={{ x: 980 }}
+                                            pagination={{ pageSize: 8 }}
+                                        />
+                                    </div>
                                 </Card>
                             </div>
                         ),

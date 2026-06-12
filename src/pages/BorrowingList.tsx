@@ -4,10 +4,12 @@ import {
     Button,
     Checkbox,
     DatePicker,
+    Empty,
     Form,
     Input,
     InputNumber,
     Modal,
+    Pagination,
     Select,
     Space,
     Table,
@@ -70,7 +72,7 @@ const getCounterpartySubLabel = (item: Borrowing) => {
 };
 
 const summaryCardClassName =
-    'relative overflow-hidden rounded-xl border border-slate-200 bg-white p-5 shadow-sm transition-shadow hover:shadow-md';
+    'borrowing-mobile-stat-card relative overflow-hidden rounded-xl border border-slate-200 bg-white p-5 shadow-sm transition-shadow hover:shadow-md';
 
 type BatchFormValues = {
     type: BorrowingType.EXTERNAL | BorrowingType.RENTAL;
@@ -377,8 +379,163 @@ const BorrowingList: React.FC = () => {
         },
     ];
 
+    const renderBatchMobileCard = (record: BorrowingBatch, index: number) => {
+        const meta = borrowingBatchStatusMeta[record.status];
+        const receivedCount = record.receivedCount ?? 0;
+        const progress = Math.min(100, Math.round((receivedCount / Math.max(record.plannedQuantity, 1)) * 100));
+
+        return (
+            <article
+                key={record.id}
+                className='borrowing-mobile-card borrowing-mobile-card--batch'
+                style={{ animationDelay: `${Math.min(index * 70, 420)}ms` }}
+            >
+                <div className='borrowing-mobile-card__glow' />
+                <div className='relative z-[1] flex items-start justify-between gap-3'>
+                    <div className='min-w-0'>
+                        <div className='flex flex-wrap items-center gap-2'>
+                            <span className='borrowing-mobile-card__code'>{record.code}</span>
+                            <Tag color={meta?.color}>{meta?.label || record.status}</Tag>
+                        </div>
+                        <h3 className='mt-2 mb-0 line-clamp-2 text-base font-black text-slate-950'>
+                            {record.partnerName}
+                        </h3>
+                        <p className='mt-1 mb-0 text-xs font-semibold text-slate-500'>
+                            {record.type === BorrowingType.RENTAL ? 'Thuê máy' : 'Mượn ngoài'} ·{' '}
+                            {record.contractNo || 'Chưa có hợp đồng'}
+                        </p>
+                    </div>
+                    <div className='borrowing-mobile-card__orb'>
+                        <QrcodeOutlined />
+                    </div>
+                </div>
+
+                <div className='relative z-[1] mt-4 grid grid-cols-3 gap-2'>
+                    <div className='borrowing-mobile-metric'>
+                        <span>Dự kiến</span>
+                        <strong>{record.plannedQuantity}</strong>
+                    </div>
+                    <div className='borrowing-mobile-metric'>
+                        <span>Đã nhận</span>
+                        <strong>{receivedCount}</strong>
+                    </div>
+                    <div className='borrowing-mobile-metric'>
+                        <span>Đang giữ</span>
+                        <strong>{record.activeCount ?? 0}</strong>
+                    </div>
+                </div>
+
+                <div className='relative z-[1] mt-4'>
+                    <div className='mb-1 flex items-center justify-between text-[11px] font-black text-slate-500 uppercase'>
+                        <span>Tiến độ nhận máy</span>
+                        <span>{progress}%</span>
+                    </div>
+                    <div className='borrowing-mobile-progress'>
+                        <span style={{ width: `${progress}%` }} />
+                    </div>
+                    <div className='mt-2 flex flex-wrap items-center gap-2 text-xs font-bold text-slate-500'>
+                        <span>{record.plant?.name || '-'}</span>
+                        {record.area ? <span>· {record.area}</span> : null}
+                        <span>· Còn {record.unusedQrCount ?? 0} QR trắng</span>
+                    </div>
+                </div>
+
+                <div className='relative z-[1] mt-4 grid grid-cols-2 gap-2'>
+                    <Button
+                        size='large'
+                        icon={<EyeOutlined />}
+                        className='borrowing-mobile-action'
+                        onClick={() => navigate(`/borrowings/batches/${record.id}`)}
+                    >
+                        Mở lô
+                    </Button>
+                    <Button
+                        size='large'
+                        icon={<QrcodeOutlined />}
+                        disabled={!record.qrBatchId}
+                        className='borrowing-mobile-action borrowing-mobile-action--primary'
+                        onClick={() => record.qrBatchId && navigate(`/qr-labels/batches/${record.qrBatchId}/print`)}
+                    >
+                        In QR
+                    </Button>
+                </div>
+            </article>
+        );
+    };
+
+    const renderTransactionMobileCard = (record: Borrowing, index: number) => {
+        const isActive = record.status === 'active';
+
+        return (
+            <article
+                key={record.id}
+                className={`borrowing-mobile-card borrowing-mobile-card--transaction${
+                    isActive ? 'borrowing-mobile-card--live' : ''
+                }`}
+                style={{ animationDelay: `${Math.min(index * 60, 420)}ms` }}
+            >
+                <div className='relative z-[1] flex items-start justify-between gap-3'>
+                    <div className='min-w-0'>
+                        <div className='flex flex-wrap items-center gap-2'>
+                            <TransactionTypeBadge type={record.type} />
+                            <TransactionStatusBadge status={record.status} />
+                        </div>
+                        <h3 className='mt-2 mb-0 line-clamp-2 text-base font-black text-slate-950'>
+                            {record.asset?.name || '-'}
+                        </h3>
+                        <span className='mt-1 inline-flex rounded-full bg-blue-50 px-2.5 py-1 font-mono text-[11px] font-black text-blue-700'>
+                            {record.asset?.machineCode || record.assetId}
+                        </span>
+                    </div>
+                    <div className='borrowing-mobile-card__orb borrowing-mobile-card__orb--green'>
+                        <RollbackOutlined />
+                    </div>
+                </div>
+
+                <div className='relative z-[1] mt-4 rounded-2xl bg-white/74 p-3 ring-1 ring-slate-100'>
+                    <div className='text-sm font-black text-slate-800'>{getCounterpartyLabel(record)}</div>
+                    <div className='mt-1 text-xs font-semibold text-slate-500'>{getCounterpartySubLabel(record)}</div>
+                    <div className='mt-3 grid grid-cols-2 gap-2 text-xs'>
+                        <div>
+                            <span className='block font-black text-slate-400 uppercase'>Bắt đầu</span>
+                            <span className='font-bold text-slate-700'>
+                                {dayjs(record.borrowTime).format('DD/MM HH:mm')}
+                            </span>
+                        </div>
+                        <div>
+                            <span className='block font-black text-slate-400 uppercase'>Trả</span>
+                            <span className='font-bold text-slate-700'>
+                                {record.returnTime ? dayjs(record.returnTime).format('DD/MM HH:mm') : 'Chưa trả'}
+                            </span>
+                        </div>
+                    </div>
+                </div>
+
+                <div className='relative z-[1] mt-4 grid grid-cols-2 gap-2'>
+                    <Button
+                        size='large'
+                        icon={<EyeOutlined />}
+                        className='borrowing-mobile-action'
+                        onClick={() => navigate(`/borrowings/${record.id}`)}
+                    >
+                        Chi tiết
+                    </Button>
+                    <Button
+                        size='large'
+                        icon={<RollbackOutlined />}
+                        disabled={!isActive}
+                        className='borrowing-mobile-action borrowing-mobile-action--return'
+                        onClick={() => isActive && setSelectedTransaction(record)}
+                    >
+                        Trả máy
+                    </Button>
+                </div>
+            </article>
+        );
+    };
+
     return (
-        <div className='flex flex-col gap-6'>
+        <div className='borrowing-mobile-page flex flex-col gap-6'>
             <PageHeader
                 title='Borrow / Return Management'
                 subtitle='Theo dõi mượn nội bộ, mượn ngoài và thuê máy trong cùng một luồng vận hành thống nhất.'
@@ -401,7 +558,7 @@ const BorrowingList: React.FC = () => {
                 }
             />
 
-            <div className='grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4'>
+            <div className='borrowing-mobile-summary-grid grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4'>
                 <div className={summaryCardClassName}>
                     <div className='absolute top-0 left-0 h-full w-1 rounded-l-xl bg-blue-500' />
                     <div className='text-xs font-bold tracking-wider text-slate-500 uppercase'>Tổng giao dịch</div>
@@ -431,8 +588,8 @@ const BorrowingList: React.FC = () => {
             </div>
 
             {canManageBorrowing ? (
-                <section className='overflow-hidden rounded-xl border border-violet-100 bg-white shadow-sm'>
-                    <div className='flex flex-col gap-3 border-b border-violet-100 bg-gradient-to-r from-violet-50 via-white to-cyan-50 px-5 py-4 md:flex-row md:items-center md:justify-between'>
+                <section className='borrowing-mobile-section overflow-hidden rounded-xl border border-violet-100 bg-white shadow-sm'>
+                    <div className='borrowing-mobile-section__head flex flex-col gap-3 border-b border-violet-100 bg-gradient-to-r from-violet-50 via-white to-cyan-50 px-5 py-4 md:flex-row md:items-center md:justify-between'>
                         <div>
                             <div className='text-sm font-black tracking-[0.16em] text-violet-600 uppercase'>
                                 QR tạm cho máy mượn/thuê
@@ -447,22 +604,35 @@ const BorrowingList: React.FC = () => {
                             Tạo lô mới
                         </Button>
                     </div>
-                    <Table<BorrowingBatch>
-                        rowKey='id'
-                        loading={isLoadingBatches}
-                        columns={batchColumns}
-                        dataSource={batches}
-                        scroll={{ x: 980 }}
-                        pagination={false}
-                        className='[&_.ant-table-thead_th]:!bg-white [&_.ant-table-thead_th]:!text-[12px] [&_.ant-table-thead_th]:!font-black [&_.ant-table-thead_th]:!tracking-wider [&_.ant-table-thead_th]:!text-slate-500'
-                        onRow={(record) => ({
-                            onDoubleClick: () => navigate(`/borrowings/batches/${record.id}`),
-                        })}
-                    />
+                    <div className='block md:hidden'>
+                        <div className='borrowing-mobile-list p-3'>
+                            {isLoadingBatches ? (
+                                <div className='borrowing-mobile-empty'>Đang tải lô QR tạm...</div>
+                            ) : batches.length ? (
+                                batches.map(renderBatchMobileCard)
+                            ) : (
+                                <Empty description='Chưa có lô mượn/thuê QR tạm' />
+                            )}
+                        </div>
+                    </div>
+                    <div className='hidden md:block'>
+                        <Table<BorrowingBatch>
+                            rowKey='id'
+                            loading={isLoadingBatches}
+                            columns={batchColumns}
+                            dataSource={batches}
+                            scroll={{ x: 980 }}
+                            pagination={false}
+                            className='[&_.ant-table-thead_th]:!bg-white [&_.ant-table-thead_th]:!text-[12px] [&_.ant-table-thead_th]:!font-black [&_.ant-table-thead_th]:!tracking-wider [&_.ant-table-thead_th]:!text-slate-500'
+                            onRow={(record) => ({
+                                onDoubleClick: () => navigate(`/borrowings/batches/${record.id}`),
+                            })}
+                        />
+                    </div>
                 </section>
             ) : null}
 
-            <section className='rounded-xl border border-slate-200 bg-white p-4 shadow-sm'>
+            <section className='borrowing-mobile-filter-panel rounded-xl border border-slate-200 bg-white p-4 shadow-sm'>
                 <div className='flex flex-col gap-4 lg:flex-row'>
                     <Input
                         prefix={<SearchOutlined className='text-slate-400' />}
@@ -512,17 +682,49 @@ const BorrowingList: React.FC = () => {
                         </Button>
                     </div>
                 </div>
+                <div className='borrowing-mobile-filter-chips lg:hidden'>
+                    <span>{draftFilters.search.trim() || 'Tất cả từ khóa'}</span>
+                    <span>
+                        {borrowingTypeOptions.find((item) => item.value === draftFilters.type)?.label || 'Mọi loại'}
+                    </span>
+                    <span>
+                        {borrowingStatusOptions.find((item) => item.value === draftFilters.status)?.label ||
+                            'Mọi trạng thái'}
+                    </span>
+                </div>
             </section>
 
-            <section className='overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm'>
-                <div className='border-b border-slate-100 px-5 py-4'>
+            <section className='borrowing-mobile-section overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm'>
+                <div className='borrowing-mobile-section__head border-b border-slate-100 px-5 py-4'>
                     <div className='text-sm font-semibold text-slate-800'>Danh sách giao dịch thiết bị</div>
                     <div className='mt-1 text-sm text-slate-500'>
                         Quản lý tập trung các giao dịch mượn nội bộ, mượn ngoài và thuê máy.
                     </div>
                 </div>
 
-                <div className='[&_.ant-table]:!bg-white [&_.ant-table-row:hover_td]:!bg-slate-50/70 [&_.ant-table-thead_th]:!bg-slate-50 [&_.ant-table-thead_th]:!text-[12px] [&_.ant-table-thead_th]:!font-bold [&_.ant-table-thead_th]:!tracking-wider [&_.ant-table-thead_th]:!text-slate-500'>
+                <div className='block lg:hidden'>
+                    <div className='borrowing-mobile-list p-3'>
+                        {isLoading ? (
+                            <div className='borrowing-mobile-empty'>Đang tải giao dịch mượn trả...</div>
+                        ) : transactions.length ? (
+                            transactions.map(renderTransactionMobileCard)
+                        ) : (
+                            <Empty description='Không có giao dịch phù hợp bộ lọc' />
+                        )}
+                    </div>
+                    <div className='borrowing-mobile-pagination'>
+                        <Pagination
+                            size='small'
+                            current={transactionResponse?.page ?? filters.page}
+                            total={transactionResponse?.total ?? 0}
+                            pageSize={transactionResponse?.limit ?? filters.limit}
+                            showSizeChanger={false}
+                            onChange={(page, pageSize) => setFilters((prev) => ({ ...prev, page, limit: pageSize }))}
+                        />
+                    </div>
+                </div>
+
+                <div className='hidden lg:block [&_.ant-table]:!bg-white [&_.ant-table-row:hover_td]:!bg-slate-50/70 [&_.ant-table-thead_th]:!bg-slate-50 [&_.ant-table-thead_th]:!text-[12px] [&_.ant-table-thead_th]:!font-bold [&_.ant-table-thead_th]:!tracking-wider [&_.ant-table-thead_th]:!text-slate-500'>
                     <Table<Borrowing>
                         rowKey='id'
                         columns={columns}
