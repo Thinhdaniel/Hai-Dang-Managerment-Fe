@@ -7,6 +7,7 @@ import ProtectedRoute, { RequireAccess } from './guard';
 import { ROUTE_ACCESS } from '../core/constants/navAccess';
 
 const Dashboard = lazy(() => import('../pages/Dashboard'));
+const ChatPage = lazy(() => import('../pages/ChatPage'));
 const GlobalQrScannerPage = lazy(() => import('../pages/GlobalQrScannerPage'));
 const AssetList = lazy(() => import('../pages/AssetList'));
 const AssetDetail = lazy(() => import('../pages/AssetDetail'));
@@ -83,6 +84,7 @@ export const router = createBrowserRouter([
         children: [
             { index: true, element: <Navigate to='/dashboard' replace /> },
             { path: 'dashboard', element: withSuspense(<Dashboard />) },
+            { path: 'chat', element: withSuspense(<ChatPage />) },
             { path: 'scan', element: withSuspense(<GlobalQrScannerPage />) },
             { path: 'assets', element: withSuspense(<AssetList />) },
             { path: 'assets/stocktake', element: withSuspense(<StocktakePage />) },

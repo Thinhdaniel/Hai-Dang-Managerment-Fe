@@ -4,6 +4,7 @@ import { router } from './routes/routes';
 import { RouterProvider } from 'react-router-dom';
 import { AuthProvider } from './core/contexts/AuthContext';
 import { NotificationProvider } from './core/contexts/NotificationContext';
+import { ChatProvider } from './core/contexts/ChatContext';
 import { queryClient } from './core/queryClient';
 import OfflineStatus from './components/pwa/OfflineStatus';
 import ServiceWorkerManager from './components/pwa/ServiceWorkerManager';
@@ -38,9 +39,11 @@ function App() {
                 <QueryClientProvider client={queryClient}>
                     <AuthProvider>
                         <NotificationProvider>
-                            <RouterProvider router={router} />
-                            <OfflineStatus />
-                            <ServiceWorkerManager />
+                            <ChatProvider>
+                                <RouterProvider router={router} />
+                                <OfflineStatus />
+                                <ServiceWorkerManager />
+                            </ChatProvider>
                         </NotificationProvider>
                     </AuthProvider>
                 </QueryClientProvider>

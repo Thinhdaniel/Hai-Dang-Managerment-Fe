@@ -8,6 +8,7 @@ import {
     Grid,
     Input,
     Layout,
+    Modal,
     Popover,
     Typography,
     type MenuProps,
@@ -36,6 +37,7 @@ import { useNotificationContext } from '../../core/contexts/NotificationContext'
 import PushNotificationToggle from '../notifications/PushNotificationToggle';
 import NotificationSoundToggle from '../notifications/NotificationSoundToggle';
 import InstallPrompt from '../pwa/InstallPrompt';
+import { pushNotificationService } from '../../core/services/push-notification.service';
 
 const { Header } = Layout;
 const { Text, Title } = Typography;
@@ -61,6 +63,8 @@ const AppHeader: React.FC<AppHeaderProps> = ({ collapsed, isDesktop, mobileOpen,
     const [searchValue, setSearchValue] = useState('');
     const [notificationOpen, setNotificationOpen] = useState(false);
     const [notificationSettingsOpen, setNotificationSettingsOpen] = useState(false);
+    const [logoutOpen, setLogoutOpen] = useState(false);
+    const [logoutAction, setLogoutAction] = useState<'keep-push' | 'disable-push' | null>(null);
     const [notifFilter, setNotifFilter] = useState<'all' | 'unread'>('all');
     const visibleNotifications =
         notifFilter === 'unread' ? notifications.filter((item) => !item.isRead) : notifications;
@@ -112,9 +116,25 @@ const AppHeader: React.FC<AppHeaderProps> = ({ collapsed, isDesktop, mobileOpen,
         navigate(`/assets?search=${encodeURIComponent(query)}`);
     };
 
-    const handleLogout = async () => {
-        await logout();
-        navigate('/login');
+    const handleLogout = () => {
+        setLogoutOpen(true);
+    };
+
+    const completeLogout = async (disablePush: boolean) => {
+        setLogoutAction(disablePush ? 'disable-push' : 'keep-push');
+
+        try {
+            if (disablePush) {
+                await pushNotificationService.unsubscribeCurrentDevice();
+            }
+        } catch {
+            // Logout must not be blocked by browser push permission or network failures.
+        } finally {
+            void logout();
+            setLogoutOpen(false);
+            setLogoutAction(null);
+            navigate('/login', { replace: true });
+        }
     };
 
     const handleProfile = () => {
@@ -269,6 +289,9 @@ const AppHeader: React.FC<AppHeaderProps> = ({ collapsed, isDesktop, mobileOpen,
                     else if (item.actionType === 'supply_request') href = '/materials/supply-requests';
                     else if (item.actionType === 'purchase_order') href = '/materials/purchase-orders';
                     else if (item.actionType === 'distribution') href = '/materials/distributions';
+                    else if (item.actionType === 'chat') {
+                        href = `/chat${item.actionId ? `?conversation=${encodeURIComponent(item.actionId)}` : ''}`;
+                    }
 
                     return (
                         <div key={item._id} className='group relative'>
@@ -534,6 +557,56 @@ const AppHeader: React.FC<AppHeaderProps> = ({ collapsed, isDesktop, mobileOpen,
                     </div>
                 </div>
             </Drawer>
+
+            <Modal
+                open={logoutOpen}
+                centered
+                footer={null}
+                width={420}
+                onCancel={() => setLogoutOpen(false)}
+                title='Đăng xuất khỏi hệ thống'
+            >
+                <div className='space-y-3'>
+                    <p className='mb-0 text-[13px] leading-6 text-slate-600'>
+                        Nếu đây là thiết bị cá nhân, bạn có thể giữ thông báo ngoài app để vẫn nhận cảnh báo vận hành
+                        sau khi phiên đăng nhập hết hạn. Nếu là máy dùng chung, hãy tắt thông báo trên thiết bị này.
+                    </p>
+                    <div className='grid gap-2'>
+                        <Button
+                            type='primary'
+                            size='large'
+                            loading={logoutAction === 'keep-push'}
+                            disabled={Boolean(logoutAction)}
+                            onClick={() => void completeLogout(false)}
+                            className='h-auto justify-start rounded-xl py-3 text-left'
+                        >
+                            <span className='block'>
+                                <span className='block text-sm font-semibold'>Đăng xuất, vẫn giữ thông báo</span>
+                                <span className='block text-[11px] font-normal opacity-80'>
+                                    Phù hợp với điện thoại hoặc máy cá nhân.
+                                </span>
+                            </span>
+                        </Button>
+                        <Button
+                            danger
+                            size='large'
+                            loading={logoutAction === 'disable-push'}
+                            disabled={Boolean(logoutAction)}
+                            onClick={() => void completeLogout(true)}
+                            className='h-auto justify-start rounded-xl py-3 text-left'
+                        >
+                            <span className='block'>
+                                <span className='block text-sm font-semibold'>
+                                    Đăng xuất và tắt thông báo thiết bị này
+                                </span>
+                                <span className='block text-[11px] font-normal opacity-80'>
+                                    Nên dùng khi đăng xuất khỏi máy dùng chung.
+                                </span>
+                            </span>
+                        </Button>
+                    </div>
+                </div>
+            </Modal>
         </Header>
     );
 };

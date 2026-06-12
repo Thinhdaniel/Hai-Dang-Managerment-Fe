@@ -10,6 +10,7 @@ export type NotificationActionType =
     | 'supply_request'
     | 'purchase_order'
     | 'distribution'
+    | 'chat'
     | 'system';
 
 export interface Notification {

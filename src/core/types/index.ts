@@ -462,6 +462,85 @@ export interface User {
     updatedAt: string;
 }
 
+// ===== INTERNAL CHAT =====
+export type ChatConversationType = 'direct' | 'group' | 'plant_group' | 'role_group' | 'workflow_thread';
+
+export type ChatWorkflowContextType =
+    | 'asset'
+    | 'maintenance'
+    | 'transfer'
+    | 'borrowing'
+    | 'purchase_request'
+    | 'supply_request'
+    | 'purchase_order'
+    | 'distribution'
+    | 'system';
+
+export interface ChatUserSummary {
+    id: string;
+    name: string;
+    email?: string;
+    role: UserRole;
+    plantId?: string;
+    plant?: Pick<Plant, 'id' | 'name' | 'code'>;
+    avatarUrl?: string;
+    isActive: boolean;
+}
+
+export interface ChatConversation {
+    id: string;
+    type: ChatConversationType;
+    title: string;
+    plantId?: string;
+    plant?: Pick<Plant, 'id' | 'name' | 'code'>;
+    context?: {
+        type: ChatWorkflowContextType;
+        id?: string;
+        label?: string;
+        path?: string;
+    };
+    participants: ChatUserSummary[];
+    lastMessagePreview?: string;
+    lastMessageAt?: string;
+    lastMessageSenderId?: string;
+    unreadCount: number;
+    muted: boolean;
+    archivedAt?: string;
+    createdAt: string;
+    updatedAt: string;
+}
+
+export interface ChatMessage {
+    id: string;
+    conversationId: string;
+    senderId: string;
+    sender?: ChatUserSummary;
+    body: string;
+    attachments?: Array<{
+        type: 'image' | 'file';
+        url: string;
+        publicId?: string;
+        name?: string;
+        mimeType?: string;
+        size?: number;
+        width?: number;
+        height?: number;
+    }>;
+    system: boolean;
+    isDeleted: boolean;
+    createdAt: string;
+    updatedAt: string;
+}
+
+export interface ChatConversationListResponse {
+    conversations: ChatConversation[];
+    unreadCount: number;
+}
+
+export interface ChatUnreadSummary {
+    unreadCount: number;
+}
+
 export interface UserListParams {
     search?: string;
     role?: UserRole;

@@ -2,14 +2,14 @@ import {
     AppstoreOutlined,
     DashboardOutlined,
     DatabaseOutlined,
-    FormOutlined,
     MenuOutlined,
+    MessageOutlined,
     QrcodeOutlined,
 } from '@ant-design/icons';
 import type { ReactNode } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { useNotificationContext } from '../../core/contexts/NotificationContext';
 import { useAuth } from '../../core/contexts/AuthContext';
+import { useChatContext } from '../../core/contexts/ChatContext';
 import { can, type Capability } from '../../core/lib/permissions';
 
 type MobileNavItem = {
@@ -29,13 +29,6 @@ type DockButtonProps = {
 
 const isExactOrPrefix = (pathname: string, path: string) => pathname === path || pathname.startsWith(`${path}/`);
 const materialCatalogPaths = ['/materials', '/materials/inventory', '/materials/suppliers', '/materials/reports'];
-const materialWorkflowPaths = [
-    '/materials/supply-requests',
-    '/materials/purchase-requests',
-    '/materials/purchase-orders',
-    '/materials/distributions',
-];
-
 const formatBadge = (count?: number) => {
     if (!count) return '';
     return count > 9 ? '9+' : String(count);
@@ -63,7 +56,7 @@ const BottomDockItem = ({ item, active, onClick }: DockButtonProps) => {
 const MobileBottomNav = ({ onOpenMenu }: { onOpenMenu: () => void }) => {
     const navigate = useNavigate();
     const { pathname } = useLocation();
-    const { unreadCount } = useNotificationContext();
+    const { unreadCount: chatUnreadCount } = useChatContext();
     const { user } = useAuth();
     const role = user?.role;
 
@@ -73,7 +66,13 @@ const MobileBottomNav = ({ onOpenMenu }: { onOpenMenu: () => void }) => {
             label: 'Tổng quan',
             icon: <DashboardOutlined />,
             match: (current) => current === '/' || current === '/dashboard',
-            badge: unreadCount,
+        },
+        {
+            path: '/chat',
+            label: 'Tin nhắn',
+            icon: <MessageOutlined />,
+            match: (current) => isExactOrPrefix(current, '/chat'),
+            badge: chatUnreadCount,
         },
         {
             path: '/assets',
@@ -94,13 +93,6 @@ const MobileBottomNav = ({ onOpenMenu }: { onOpenMenu: () => void }) => {
             icon: <DatabaseOutlined />,
             capability: 'material.view',
             match: (current) => materialCatalogPaths.some((path) => isExactOrPrefix(current, path)),
-        },
-        {
-            path: '/materials/supply-requests',
-            label: 'Phiếu',
-            icon: <FormOutlined />,
-            capability: 'supplyRequest.manage',
-            match: (current) => materialWorkflowPaths.some((path) => isExactOrPrefix(current, path)),
         },
     ];
     const items = allItems.filter((item) => !item.capability || can(role, item.capability));

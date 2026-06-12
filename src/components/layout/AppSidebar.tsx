@@ -16,6 +16,7 @@ import {
     InboxOutlined,
     MenuFoldOutlined,
     MenuUnfoldOutlined,
+    MessageOutlined,
     QrcodeOutlined,
     SendOutlined,
     ShopOutlined,
@@ -27,6 +28,7 @@ import {
 import type { ReactNode } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../core/contexts/AuthContext';
+import { useChatContext } from '../../core/contexts/ChatContext';
 import { useNotificationContext } from '../../core/contexts/NotificationContext';
 import { can, type Capability } from '../../core/lib/permissions';
 import { isProcurementPlant } from '../../core/constants/navAccess';
@@ -60,6 +62,13 @@ const navigationSections: NavigationSection[] = [
                 label: 'Bảng điều khiển',
                 description: 'Tình hình vận hành',
                 icon: <DashboardOutlined />,
+            },
+            {
+                path: '/chat',
+                label: 'Tin nhắn nội bộ',
+                description: 'Trao đổi theo cấp vận hành',
+                icon: <MessageOutlined />,
+                matchMode: 'exact',
             },
             {
                 path: '/reports/facility-costs',
@@ -259,13 +268,27 @@ const SidebarNavButton = ({
     item,
     collapsed,
     active,
+    badge,
     onSelect,
 }: {
     item: NavigationItem;
     collapsed: boolean;
     active: boolean;
+    badge?: number;
     onSelect: () => void;
 }) => {
+    const icon = (
+        <span
+            className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border text-[17px] transition-all ${
+                active
+                    ? 'border-blue-200 bg-white text-blue-600 shadow-sm'
+                    : 'border-slate-200 bg-white/80 text-slate-500 group-hover:border-slate-300 group-hover:text-slate-700'
+            }`}
+        >
+            {item.icon}
+        </span>
+    );
+
     const button = (
         <button
             type='button'
@@ -276,15 +299,13 @@ const SidebarNavButton = ({
                     : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
             } ${collapsed ? 'justify-center px-2.5' : ''}`}
         >
-            <span
-                className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border text-[17px] transition-all ${
-                    active
-                        ? 'border-blue-200 bg-white text-blue-600 shadow-sm'
-                        : 'border-slate-200 bg-white/80 text-slate-500 group-hover:border-slate-300 group-hover:text-slate-700'
-                }`}
-            >
-                {item.icon}
-            </span>
+            {badge ? (
+                <Badge count={badge} size='small' offset={[-2, 4]}>
+                    {icon}
+                </Badge>
+            ) : (
+                icon
+            )}
             {!collapsed ? (
                 <>
                     <span className='min-w-0 flex-1'>
@@ -325,6 +346,7 @@ const AppSidebar: React.FC<AppSidebarProps> = ({
     const navigate = useNavigate();
     const location = useLocation();
     const { unreadCount } = useNotificationContext();
+    const { unreadCount: chatUnreadCount } = useChatContext();
     const { user } = useAuth();
 
     const role = user?.role;
@@ -398,6 +420,7 @@ const AppSidebar: React.FC<AppSidebarProps> = ({
                                         item={item}
                                         collapsed={isCollapsed}
                                         active={isActivePath(location.pathname, item)}
+                                        badge={item.path === '/chat' ? chatUnreadCount : undefined}
                                         onSelect={() => handleSelect(item.path)}
                                     />
                                 ))}

@@ -31,6 +31,7 @@ import {
     DollarOutlined,
     EyeOutlined,
     FilterOutlined,
+    MessageOutlined,
     PlusOutlined,
     ReloadOutlined,
     ScanOutlined,
@@ -44,6 +45,7 @@ import PageHeader from '../components/shared/PageHeader';
 import ConfirmAction from '../components/shared/ConfirmAction';
 import LazyBoundary from '../components/shared/LazyBoundary';
 import StatsCard from '../components/shared/StatsCard';
+import ContextChatDrawer from '../components/chat/ContextChatDrawer';
 import { useAuth } from '../core/contexts/AuthContext';
 import { hasManagerAccess } from '../core/lib/permissions';
 import { assetService } from '../core/services/asset.service';
@@ -171,6 +173,7 @@ const MaintenanceList: React.FC = () => {
     const [quickMaintenanceOpen, setQuickMaintenanceOpen] = useState(false);
     const [mobileFilterOpen, setMobileFilterOpen] = useState(false);
     const [detailTarget, setDetailTarget] = useState<Maintenance | null>(null);
+    const [chatTarget, setChatTarget] = useState<Maintenance | null>(null);
     const [completeTarget, setCompleteTarget] = useState<Maintenance | null>(null);
     const [rejectTarget, setRejectTarget] = useState<Maintenance | null>(null);
     const [rejectReason, setRejectReason] = useState('');
@@ -392,6 +395,19 @@ const MaintenanceList: React.FC = () => {
                         </Button>
                     </Tooltip>
                 ) : null}
+
+                <Tooltip title={isMobileActions ? undefined : 'Trao đổi'}>
+                    <Button
+                        block={isMobileActions}
+                        size={buttonSize}
+                        type={buttonType}
+                        icon={<MessageOutlined />}
+                        className='text-blue-600'
+                        onClick={() => setChatTarget(record)}
+                    >
+                        {isMobileActions ? 'Trao đổi' : null}
+                    </Button>
+                </Tooltip>
 
                 {record.repairMode === 'external' &&
                 record.approvalStatus === 'pending' &&
@@ -707,7 +723,7 @@ const MaintenanceList: React.FC = () => {
         {
             title: 'Thao tác',
             key: 'actions',
-            width: 220,
+            width: 250,
             align: 'right',
             render: (_value, record) => renderRecordActions(record),
         },
@@ -1071,6 +1087,9 @@ const MaintenanceList: React.FC = () => {
                                     Hoàn tất
                                 </Button>
                             ) : null}
+                            <Button icon={<MessageOutlined />} onClick={() => setChatTarget(detailTarget)}>
+                                Trao đổi
+                            </Button>
                         </Space>
                     ) : null
                 }
@@ -1423,6 +1442,17 @@ const MaintenanceList: React.FC = () => {
                     onChange={(event) => setRejectReason(event.target.value)}
                 />
             </Modal>
+
+            {chatTarget ? (
+                <ContextChatDrawer
+                    open={Boolean(chatTarget)}
+                    contextType='maintenance'
+                    contextId={chatTarget.id}
+                    title={`Trao đổi ${buildMaintenanceCode(chatTarget)}`}
+                    subtitle={`${chatTarget.asset?.machineCode || chatTarget.assetId} · ${chatTarget.asset?.name || 'Máy chưa xác định'}`}
+                    onClose={() => setChatTarget(null)}
+                />
+            ) : null}
         </div>
     );
 };
