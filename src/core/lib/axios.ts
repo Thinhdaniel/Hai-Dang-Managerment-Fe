@@ -1,19 +1,35 @@
 import axios, { AxiosHeaders, type InternalAxiosRequestConfig } from 'axios';
+import {
+    clearStoredAccessToken,
+    getStoredAccessToken,
+    notifyAuthSessionExpired,
+    setStoredAccessToken,
+} from './auth-session';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000/api';
 const API_TIMEOUT_MS = Number(import.meta.env.VITE_API_TIMEOUT_MS || 60000);
-const ACCESS_TOKEN_KEY = 'access_token';
+const AUTH_REFRESH_TIMEOUT_MS = Number(import.meta.env.VITE_AUTH_REFRESH_TIMEOUT_MS || 10000);
 const REFRESH_ENDPOINT = '/auth/refresh-token';
 const AUTH_SKIP_REFRESH_PATHS = [
     REFRESH_ENDPOINT,
     '/auth/login',
+    '/auth/logout',
     '/auth/register',
     '/auth/forgot-password',
     '/auth/reset-password',
 ];
 
+declare module 'axios' {
+    export interface AxiosRequestConfig<D = any> {
+        skipAuthRefresh?: boolean;
+        skipAuthRedirect?: boolean;
+    }
+}
+
 type RetryableRequestConfig = InternalAxiosRequestConfig & {
     _retry?: boolean;
+    skipAuthRefresh?: boolean;
+    skipAuthRedirect?: boolean;
 };
 
 type PendingRequest = {
@@ -33,7 +49,7 @@ const axiosInstance = axios.create({
 
 const refreshClient = axios.create({
     baseURL: API_BASE_URL,
-    timeout: API_TIMEOUT_MS,
+    timeout: AUTH_REFRESH_TIMEOUT_MS,
     withCredentials: true,
     headers: {
         'Content-Type': 'application/json',
@@ -42,16 +58,6 @@ const refreshClient = axios.create({
 
 let isRefreshing = false;
 let pendingRequests: PendingRequest[] = [];
-
-const getStoredAccessToken = () => localStorage.getItem(ACCESS_TOKEN_KEY);
-
-const setStoredAccessToken = (token: string) => {
-    localStorage.setItem(ACCESS_TOKEN_KEY, token);
-};
-
-const clearStoredAccessToken = () => {
-    localStorage.removeItem(ACCESS_TOKEN_KEY);
-};
 
 const redirectToLogin = () => {
     if (typeof window === 'undefined') {
@@ -63,9 +69,13 @@ const redirectToLogin = () => {
     }
 };
 
-const handleAuthFailure = () => {
+const handleAuthFailure = (reason?: string, shouldRedirect = true) => {
     clearStoredAccessToken();
-    redirectToLogin();
+    notifyAuthSessionExpired({ reason });
+
+    if (shouldRedirect) {
+        redirectToLogin();
+    }
 };
 
 const normalizeAxiosError = (error: unknown) => {
@@ -156,16 +166,16 @@ axiosInstance.interceptors.response.use(
             return Promise.reject(normalizeAxiosError(error));
         }
 
-        if (shouldSkipRefresh(originalRequest.url)) {
+        if (originalRequest.skipAuthRefresh || shouldSkipRefresh(originalRequest.url)) {
             if (originalRequest.url?.includes(REFRESH_ENDPOINT)) {
-                handleAuthFailure();
+                handleAuthFailure('refresh-endpoint-failed', !originalRequest.skipAuthRedirect);
             }
 
             return Promise.reject(normalizeAxiosError(error));
         }
 
         if (originalRequest._retry) {
-            handleAuthFailure();
+            handleAuthFailure('retry-unauthorized', !originalRequest.skipAuthRedirect);
             return Promise.reject(normalizeAxiosError(error));
         }
 
@@ -190,7 +200,7 @@ axiosInstance.interceptors.response.use(
             return axiosInstance(originalRequest);
         } catch (refreshError) {
             rejectPendingRequests(refreshError);
-            handleAuthFailure();
+            handleAuthFailure('refresh-failed', !originalRequest.skipAuthRedirect);
             return Promise.reject(normalizeAxiosError(refreshError));
         } finally {
             isRefreshing = false;

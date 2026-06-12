@@ -1,5 +1,13 @@
 import api from '../lib/api';
-import type { Brand, CreateUserPayload, Notification, PaginatedResponse, UpdateUserPayload, User, UserListParams } from '../types';
+import type {
+    Brand,
+    CreateUserPayload,
+    Notification,
+    PaginatedResponse,
+    UpdateUserPayload,
+    User,
+    UserListParams,
+} from '../types';
 export { dashboardService } from './dashboard.service';
 export { plantService } from './plant.service';
 export { facilityCostReportService } from './report.service';
@@ -18,7 +26,7 @@ export interface Supplier {
 }
 
 export const supplierService = {
-    getAll: (params?: { limit?: number; search?: string }): Promise<Supplier[]> => 
+    getAll: (params?: { limit?: number; search?: string }): Promise<Supplier[]> =>
         api.get<Supplier[]>('/material-suppliers', { params }),
 };
 
@@ -34,7 +42,8 @@ export const brandService = {
 };
 
 export const userService = {
-    getAll: (params?: UserListParams): Promise<UserListApiResponse> => api.get<UserListApiResponse>('/users', { params }),
+    getAll: (params?: UserListParams): Promise<UserListApiResponse> =>
+        api.get<UserListApiResponse>('/users', { params }),
 
     getById: (id: string): Promise<User> => api.get<User>(`/users/${id}`),
 
@@ -65,5 +74,10 @@ export const authService = {
     resetPassword: (token: string, password: string): Promise<{ access_token: string; user: User }> =>
         api.post<{ access_token: string; user: User }>('/auth/reset-password', { token, password }),
 
-    logout: (): Promise<void> => api.post('/auth/logout'),
+    logout: (): Promise<void> =>
+        api.post('/auth/logout', undefined, {
+            skipAuthRefresh: true,
+            skipAuthRedirect: true,
+            timeout: 8000,
+        }),
 };

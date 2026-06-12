@@ -3,7 +3,6 @@ import { Grid, Layout } from 'antd';
 import { Outlet } from 'react-router-dom';
 import AppHeader from './AppHeader';
 import AppSidebar from './AppSidebar';
-import HelpAssistant from '../help/HelpAssistant';
 import MobileBottomNav from '../pwa/MobileBottomNav';
 
 const { Content } = Layout;
@@ -83,7 +82,6 @@ const AppLayout: React.FC = () => {
             </Layout>
 
             {!isDesktop ? <MobileBottomNav onOpenMenu={() => setMobileSidebarOpen(true)} /> : null}
-            <HelpAssistant />
         </Layout>
     );
 };

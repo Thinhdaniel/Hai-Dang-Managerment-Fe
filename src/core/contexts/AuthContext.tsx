@@ -1,16 +1,21 @@
-import {
-    createContext,
-    useContext,
-    useEffect,
-    useMemo,
-    useState,
-    type PropsWithChildren,
-} from 'react';
+import { createContext, useContext, useEffect, useMemo, useCallback, useState, type PropsWithChildren } from 'react';
 import { authService, userService } from '../services';
 import type { User } from '../types';
 import { useNotificationStore } from '../notificationStore';
-
-const ACCESS_TOKEN_KEY = 'access_token';
+import { queryClient } from '../queryClient';
+import { pushNotificationService } from '../services/push-notification.service';
+import { socketService } from '../services/socket.service';
+import { syncAppBadge } from '../lib/app-badge';
+import {
+    ACCESS_TOKEN_KEY,
+    AUTH_SESSION_EXPIRED_EVENT,
+    AUTH_TOKEN_CHANGED_EVENT,
+    clearStoredAccessToken,
+    getAccessTokenExpirationMs,
+    getStoredAccessToken,
+    setStoredAccessToken,
+    type AuthTokenChangedDetail,
+} from '../lib/auth-session';
 
 type LoginResult = {
     access_token: string;
@@ -29,19 +34,29 @@ type AuthContextValue = {
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 
-const getStoredAccessToken = () => localStorage.getItem(ACCESS_TOKEN_KEY);
-
-const setStoredAccessToken = (token: string) => {
-    localStorage.setItem(ACCESS_TOKEN_KEY, token);
-};
-
-const clearStoredAccessToken = () => {
-    localStorage.removeItem(ACCESS_TOKEN_KEY);
-};
-
 export const AuthProvider = ({ children }: PropsWithChildren) => {
     const [user, setUserState] = useState<User | null>(null);
     const [accessToken, setAccessToken] = useState<string | null>(() => getStoredAccessToken());
+
+    const clearLocalSession = useCallback(() => {
+        clearStoredAccessToken();
+        setAccessToken(null);
+        setUserState(null);
+        socketService.disconnect();
+        queryClient.clear();
+        useNotificationStore.getState().clearNotifications();
+        void syncAppBadge(0);
+    }, []);
+
+    const verifyCurrentSession = useCallback(async () => {
+        try {
+            const currentUser = await userService.getMe();
+            setUserState(currentUser);
+            void pushNotificationService.syncCurrentDevice().catch(() => {});
+        } catch {
+            clearLocalSession();
+        }
+    }, [clearLocalSession]);
 
     useEffect(() => {
         if (!accessToken) {
@@ -56,12 +71,11 @@ export const AuthProvider = ({ children }: PropsWithChildren) => {
                 const currentUser = await userService.getMe();
                 if (!ignore) {
                     setUserState(currentUser);
+                    void pushNotificationService.syncCurrentDevice().catch(() => {});
                 }
             } catch {
                 if (!ignore) {
-                    clearStoredAccessToken();
-                    setAccessToken(null);
-                    setUserState(null);
+                    clearLocalSession();
                 }
             }
         };
@@ -71,7 +85,71 @@ export const AuthProvider = ({ children }: PropsWithChildren) => {
         return () => {
             ignore = true;
         };
-    }, [accessToken]);
+    }, [accessToken, clearLocalSession]);
+
+    useEffect(() => {
+        const onSessionExpired = () => {
+            clearLocalSession();
+        };
+
+        window.addEventListener(AUTH_SESSION_EXPIRED_EVENT, onSessionExpired);
+        return () => window.removeEventListener(AUTH_SESSION_EXPIRED_EVENT, onSessionExpired);
+    }, [clearLocalSession]);
+
+    useEffect(() => {
+        const onTokenChanged = (event: Event) => {
+            const nextToken =
+                (event as CustomEvent<AuthTokenChangedDetail>).detail?.accessToken ?? getStoredAccessToken();
+            setAccessToken(nextToken);
+        };
+
+        const onStorage = (event: StorageEvent) => {
+            if (event.key !== ACCESS_TOKEN_KEY) return;
+
+            if (event.newValue) {
+                setAccessToken(event.newValue);
+                return;
+            }
+
+            clearLocalSession();
+        };
+
+        window.addEventListener(AUTH_TOKEN_CHANGED_EVENT, onTokenChanged);
+        window.addEventListener('storage', onStorage);
+
+        return () => {
+            window.removeEventListener(AUTH_TOKEN_CHANGED_EVENT, onTokenChanged);
+            window.removeEventListener('storage', onStorage);
+        };
+    }, [clearLocalSession]);
+
+    useEffect(() => {
+        if (!accessToken) return;
+
+        const expiresAt = getAccessTokenExpirationMs(accessToken);
+        if (!expiresAt) return;
+
+        const checkSession = () => {
+            void verifyCurrentSession();
+        };
+        const delay = Math.max(expiresAt - Date.now() + 1000, 0);
+        const timeoutId = window.setTimeout(checkSession, delay);
+
+        const checkWhenVisible = () => {
+            if (document.visibilityState !== 'visible') return;
+            if (Date.now() < expiresAt) return;
+            checkSession();
+        };
+
+        window.addEventListener('focus', checkWhenVisible);
+        document.addEventListener('visibilitychange', checkWhenVisible);
+
+        return () => {
+            window.clearTimeout(timeoutId);
+            window.removeEventListener('focus', checkWhenVisible);
+            document.removeEventListener('visibilitychange', checkWhenVisible);
+        };
+    }, [accessToken, verifyCurrentSession]);
 
     const setUser = (nextUser: User | null) => {
         setUserState(nextUser);
@@ -83,22 +161,18 @@ export const AuthProvider = ({ children }: PropsWithChildren) => {
         setStoredAccessToken(result.access_token);
         setAccessToken(result.access_token);
         setUserState(result.user);
+        void pushNotificationService.syncCurrentDevice().catch(() => {});
 
         return result;
     };
 
-    const logout = async () => {
-        try {
-            await authService.logout();
-        } catch {
-            // Clear local auth state even if the server session is already invalid.
-        } finally {
-            clearStoredAccessToken();
-            setAccessToken(null);
-            setUserState(null);
-            // Clear notifications so the next user starts with a fresh state
-            useNotificationStore.getState().clearNotifications();
-        }
+    const logout = () => {
+        clearLocalSession();
+        void authService.logout().catch(() => {
+            // Server logout is best-effort; local session is already cleared.
+        });
+
+        return Promise.resolve();
     };
 
     const value = useMemo<AuthContextValue>(
@@ -111,7 +185,7 @@ export const AuthProvider = ({ children }: PropsWithChildren) => {
             logout,
             setUser,
         }),
-        [accessToken, user]
+        [accessToken, clearLocalSession, user]
     );
 
     return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

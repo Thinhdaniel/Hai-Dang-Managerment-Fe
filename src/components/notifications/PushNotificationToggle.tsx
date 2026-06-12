@@ -1,7 +1,17 @@
 import { useCallback, useEffect, useState } from 'react';
 import { App, Button, Space, Tag, Typography } from 'antd';
-import { BellOutlined, CheckCircleOutlined, CloseCircleOutlined, SendOutlined } from '@ant-design/icons';
-import { pushNotificationService, type PushNotificationState } from '../../core/services/push-notification.service';
+import {
+    BellOutlined,
+    CheckCircleOutlined,
+    CloseCircleOutlined,
+    SafetyCertificateOutlined,
+    SendOutlined,
+} from '@ant-design/icons';
+import {
+    pushNotificationService,
+    type PushDevice,
+    type PushNotificationState,
+} from '../../core/services/push-notification.service';
 
 const { Text } = Typography;
 
@@ -14,6 +24,16 @@ const DEFAULT_STATE: PushNotificationState = {
 };
 
 const getStateCopy = (state: PushNotificationState) => ({ ...state });
+
+const formatDateTime = (value?: string) => {
+    if (!value) return 'Chưa có dữ liệu';
+    return new Date(value).toLocaleString('vi-VN', {
+        hour: '2-digit',
+        minute: '2-digit',
+        day: '2-digit',
+        month: '2-digit',
+    });
+};
 
 const isAppleMobile = () =>
     typeof navigator !== 'undefined' &&
@@ -76,16 +96,25 @@ const getStatus = (state: PushNotificationState) => {
 const PushNotificationToggle = () => {
     const { message } = App.useApp();
     const [state, setState] = useState<PushNotificationState>(DEFAULT_STATE);
+    const [devices, setDevices] = useState<PushDevice[]>([]);
     const [loading, setLoading] = useState(true);
     const [actionLoading, setActionLoading] = useState<'enable' | 'disable' | 'test' | null>(null);
+    const [deviceActionId, setDeviceActionId] = useState<string | null>(null);
 
     const refresh = useCallback(async () => {
         try {
             setLoading(true);
             const nextState = await pushNotificationService.getState();
             setState(getStateCopy(nextState));
+            if (nextState.supported && nextState.enabled) {
+                const nextDevices = await pushNotificationService.getDevices();
+                setDevices(nextDevices);
+            } else {
+                setDevices([]);
+            }
         } catch {
             setState(DEFAULT_STATE);
+            setDevices([]);
         } finally {
             setLoading(false);
         }
@@ -98,6 +127,7 @@ const PushNotificationToggle = () => {
     const status = getStatus(state);
     const canEnable = state.supported && state.enabled && state.permission !== 'denied';
     const canTest = state.supported && state.enabled && (state.subscribed || state.activeDevices > 0);
+    const activeDevices = devices.filter((device) => device.isActive);
 
     const handleEnable = async () => {
         try {
@@ -122,6 +152,32 @@ const PushNotificationToggle = () => {
             message.error('Không thể tắt thông báo');
         } finally {
             setActionLoading(null);
+        }
+    };
+
+    const handleToggleTrust = async (device: PushDevice) => {
+        try {
+            setDeviceActionId(device.id);
+            await pushNotificationService.updateDevice(device.id, { trusted: !device.trusted });
+            message.success(!device.trusted ? 'Đã bật hiển thị chi tiết cho thiết bị' : 'Đã ẩn chi tiết trên thiết bị');
+            await refresh();
+        } catch {
+            message.error('Không thể cập nhật thiết bị');
+        } finally {
+            setDeviceActionId(null);
+        }
+    };
+
+    const handleDeactivateDevice = async (device: PushDevice) => {
+        try {
+            setDeviceActionId(device.id);
+            await pushNotificationService.deactivateDevice(device.id);
+            message.success('Đã tắt thông báo trên thiết bị');
+            await refresh();
+        } catch {
+            message.error('Không thể tắt thiết bị');
+        } finally {
+            setDeviceActionId(null);
         }
     };
 
@@ -207,6 +263,72 @@ const PushNotificationToggle = () => {
                     Gửi thử
                 </Button>
             </Space>
+
+            {devices.length > 0 ? (
+                <div className='mt-4 border-t border-slate-200 pt-3'>
+                    <div className='mb-2 flex items-center justify-between gap-2'>
+                        <Text className='text-[12px] font-semibold text-slate-800'>Thiết bị nhận thông báo</Text>
+                        <Tag className='m-0 rounded-full text-[10px]'>{activeDevices.length} đang bật</Tag>
+                    </div>
+                    <div className='space-y-2'>
+                        {devices.slice(0, 5).map((device) => (
+                            <div key={device.id} className='rounded-xl border border-slate-200 bg-white p-3'>
+                                <div className='flex items-start justify-between gap-2'>
+                                    <div className='min-w-0'>
+                                        <div className='flex flex-wrap items-center gap-1.5'>
+                                            <Text className='block truncate text-[12px] font-semibold text-slate-900'>
+                                                {device.deviceName}
+                                            </Text>
+                                            <Tag
+                                                color={device.isActive ? 'green' : 'default'}
+                                                className='m-0 rounded-full text-[10px]'
+                                            >
+                                                {device.isActive ? 'Đang bật' : 'Đã tắt'}
+                                            </Tag>
+                                            <Tag
+                                                color={device.trusted ? 'blue' : 'orange'}
+                                                className='m-0 rounded-full text-[10px]'
+                                            >
+                                                {device.trusted ? 'Tin cậy' : 'Ẩn chi tiết'}
+                                            </Tag>
+                                        </div>
+                                        <p className='mt-1 mb-0 text-[11px] leading-5 text-slate-500'>
+                                            Gửi gần nhất: {formatDateTime(device.lastSuccessAt || device.lastSentAt)}
+                                        </p>
+                                        {device.failureCount > 0 ? (
+                                            <p className='mt-0.5 mb-0 text-[11px] text-amber-600'>
+                                                {device.failureCount} lần gửi lỗi gần đây
+                                            </p>
+                                        ) : null}
+                                    </div>
+                                    <SafetyCertificateOutlined
+                                        className={device.trusted ? 'text-blue-500' : 'text-slate-300'}
+                                    />
+                                </div>
+                                {device.isActive ? (
+                                    <div className='mt-2 flex flex-wrap gap-2'>
+                                        <Button
+                                            size='small'
+                                            loading={deviceActionId === device.id}
+                                            onClick={() => handleToggleTrust(device)}
+                                        >
+                                            {device.trusted ? 'Ẩn chi tiết' : 'Tin cậy'}
+                                        </Button>
+                                        <Button
+                                            size='small'
+                                            danger
+                                            loading={deviceActionId === device.id}
+                                            onClick={() => handleDeactivateDevice(device)}
+                                        >
+                                            Tắt thiết bị
+                                        </Button>
+                                    </div>
+                                ) : null}
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            ) : null}
         </div>
     );
 };

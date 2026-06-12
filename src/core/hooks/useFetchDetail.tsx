@@ -2,6 +2,7 @@ import { useQuery, type QueryObserverOptions } from '@tanstack/react-query';
 import type { AxiosRequestConfig } from 'axios';
 import { useParams } from 'react-router-dom';
 import useSendMessage from './useSendMessage';
+import { shouldRetryQuery } from '../lib/query-retry';
 
 type BaseOptions<T> = Partial<
     Pick<
@@ -51,7 +52,7 @@ export const useFetchDetail = <T,>({ queryFn, queryKey, param, errorFn, ...rest 
         refetchOnMount: true,
         staleTime: 5 * 60 * 1000,
         gcTime: 15 * 60 * 1000,
-        retry: 1,
+        retry: shouldRetryQuery,
         retryDelay: 3000,
         ...rest,
     });

@@ -29,6 +29,25 @@ export type PushNotificationState = {
     activeDevices: number;
 };
 
+export type PushDevice = {
+    id: string;
+    deviceName: string;
+    platform?: string;
+    userAgent?: string;
+    endpointTail?: string;
+    trusted: boolean;
+    isActive: boolean;
+    lastSeenAt?: string;
+    lastConfirmedAt?: string;
+    lastSentAt?: string;
+    lastSuccessAt?: string;
+    lastFailureAt?: string;
+    failureCount: number;
+    revokedAt?: string | null;
+    createdAt?: string;
+    updatedAt?: string;
+};
+
 type SerializedPushSubscription = {
     endpoint?: string;
     expirationTime?: number | null;
@@ -70,6 +89,12 @@ const getSubscription = async () => {
     if (!isSupported()) return null;
     const registration = await getRegistration();
     return registration.pushManager.getSubscription();
+};
+
+const getSerializedSubscription = async () => {
+    const subscription = await getSubscription();
+    if (!subscription) return null;
+    return subscription.toJSON() as SerializedPushSubscription;
 };
 
 const getPublicKey = () => api.get<PushPublicKeyResponse>('/notifications/push/public-key');
@@ -136,14 +161,36 @@ export const pushNotificationService = {
                     .filter(Boolean)
                     .join(' · '),
             platform: navigator.platform,
+            trusted: true,
         });
 
         return subscription;
     },
 
+    syncCurrentDevice: async () => {
+        if (!isSupported()) return null;
+
+        const serialized = await getSerializedSubscription();
+        if (!serialized?.endpoint || !serialized.keys) return null;
+
+        return api.post('/notifications/push/sync', {
+            endpoint: serialized.endpoint,
+            expirationTime: serialized.expirationTime ?? null,
+            keys: serialized.keys,
+            deviceName: [navigator.platform, navigator.userAgent.includes('Mobile') ? 'Mobile' : 'Desktop']
+                .filter(Boolean)
+                .join(' · '),
+            platform: navigator.platform,
+        });
+    },
+
     unsubscribeCurrentDevice: async () => {
         const subscription = await getSubscription();
         const endpoint = subscription?.endpoint;
+
+        if (!endpoint) {
+            return;
+        }
 
         if (subscription) {
             await subscription.unsubscribe();
@@ -151,6 +198,13 @@ export const pushNotificationService = {
 
         await api.post('/notifications/push/unsubscribe', { endpoint });
     },
+
+    getDevices: () => api.get<PushDevice[]>('/notifications/push/devices'),
+
+    updateDevice: (deviceId: string, data: { deviceName?: string; trusted?: boolean }) =>
+        api.patch<PushDevice>(`/notifications/push/devices/${deviceId}`, data),
+
+    deactivateDevice: (deviceId: string) => api.delete(`/notifications/push/devices/${deviceId}`),
 
     sendTest: () => api.post<PushTestResponse>('/notifications/push/test'),
 };

@@ -1,4 +1,4 @@
-const CACHE_NAME = 'hai-dang-manager-pwa-v2';
+const CACHE_NAME = 'hai-dang-manager-pwa-v3';
 const APP_SHELL_URL = '/index.html';
 const OFFLINE_URL = '/offline.html';
 const PRECACHE_URLS = [

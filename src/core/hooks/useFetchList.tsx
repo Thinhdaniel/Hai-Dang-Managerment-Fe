@@ -4,6 +4,7 @@ import { useSearchParams } from 'react-router-dom';
 import useAbortController from './useAbortController';
 import useSendMessage from './useSendMessage';
 import { buildParams } from '../lib/route';
+import { shouldRetryQuery } from '../lib/query-retry';
 
 type BaseOptions<T> = Partial<
     Pick<
@@ -54,7 +55,7 @@ export const useFetchList = <T,>({ queryFn: fn, queryKey, errorFn, ...rest }: Tu
 
         staleTime: 3 * 60 * 1000,
         gcTime: 15 * 60 * 1000,
-        retry: 1,
+        retry: shouldRetryQuery,
         retryDelay: 3000,
 
         ...rest,
