@@ -79,6 +79,7 @@ const normalizeSearchText = (value?: string | number | null) =>
         .replace(/đ/g, 'd')
         .replace(/Đ/g, 'D')
         .toLowerCase()
+        .replace(/[^a-z0-9]+/g, ' ')
         .trim()
         .replace(/\s+/g, ' ');
 
@@ -94,6 +95,7 @@ type MaterialSearchItem = {
     codeNorm: string;
     codeCompact: string;
     nameNorm: string;
+    nameCompact: string;
     unitNorm: string;
     categoryNorm: string;
     searchText: string;
@@ -157,6 +159,7 @@ const buildMaterialSearchIndex = (materials: Material[]): MaterialSearchItem[] =
             codeNorm,
             codeCompact: compactSearchText(code),
             nameNorm,
+            nameCompact: compactSearchText(name),
             unitNorm,
             categoryNorm,
             searchText: normalizeSearchText([code, name, unit, category, m.description].filter(Boolean).join(' ')),
@@ -173,9 +176,16 @@ const scoreMaterial = (item: MaterialSearchItem, query: string) => {
 
     if (item.codeNorm === q || item.codeCompact === qCompact) score += 1000;
     if (item.codeNorm.startsWith(q) || item.codeCompact.startsWith(qCompact)) score += 820;
-    if (item.nameNorm === q) score += 760;
+    if (item.nameNorm === q || item.nameCompact === qCompact) score += 760;
     if (item.nameNorm.startsWith(q)) score += 680;
     if (item.nameNorm.includes(q)) score += 560;
+    if (
+        qCompact.length >= 4 &&
+        item.nameCompact.length >= 4 &&
+        (item.nameCompact.includes(qCompact) || qCompact.includes(item.nameCompact))
+    ) {
+        score += 430;
+    }
     if (item.searchText.includes(q)) score += 450;
     if (tokens.length && tokens.every((token) => item.searchText.includes(token))) score += 360 + tokens.length * 18;
 
@@ -198,6 +208,8 @@ const pushToMaterialMap = (map: Map<string, MaterialSearchItem[]>, key: string, 
 };
 
 const uniqueMaterial = (items?: MaterialSearchItem[]) => (items?.length === 1 ? items[0] : undefined);
+const uniqueMaterialCandidates = (items: MaterialSearchItem[]) =>
+    Array.from(new Map(items.map((item) => [item.id, item])).values());
 
 const materialNameUnitKey = (name?: string | number | null, unit?: string | number | null) =>
     `${normalizeSearchText(name)}::${normalizeSearchText(unit)}`;
@@ -248,11 +260,22 @@ const findSmartMaterialMatch = (row: MaterialMatchSource, matcher: MaterialMatch
         return { status: 'unmatched', confidence: 0, reason: 'empty_name', candidateCount: 0 };
     }
 
-    const exactCode =
-        uniqueMaterial(matcher.materialByCode.get(nameNorm)) ??
-        uniqueMaterial(matcher.materialByCodeCompact.get(nameCompact));
+    const exactCodeCandidates = uniqueMaterialCandidates([
+        ...(matcher.materialByCode.get(nameNorm) ?? []),
+        ...(matcher.materialByCodeCompact.get(nameCompact) ?? []),
+    ]);
+    const exactCode = uniqueMaterial(exactCodeCandidates);
     if (exactCode) {
         return { status: 'matched', material: exactCode, confidence: 100, reason: 'exact_code', candidateCount: 1 };
+    }
+    if (exactCodeCandidates.length > 1) {
+        return {
+            status: 'ambiguous',
+            material: exactCodeCandidates[0],
+            confidence: 92,
+            reason: 'exact_code_ambiguous',
+            candidateCount: exactCodeCandidates.length,
+        };
     }
 
     const exactNameUnit = unitNorm
@@ -281,8 +304,24 @@ const findSmartMaterialMatch = (row: MaterialMatchSource, matcher: MaterialMatch
     }
 
     if (exactNameCandidates.length > 1) {
+        const sameUnitCandidates = unitNorm
+            ? exactNameCandidates.filter((candidate) => candidate.unitNorm === unitNorm)
+            : [];
+        const sameUnitMatch = uniqueMaterial(sameUnitCandidates);
+        if (sameUnitMatch) {
+            return {
+                status: 'matched',
+                material: sameUnitMatch,
+                confidence: 98,
+                reason: 'exact_name_unit_from_candidates',
+                candidateCount: exactNameCandidates.length,
+            };
+        }
+
+        const suggestedMaterial = sameUnitCandidates[0] ?? exactNameCandidates[0];
         return {
             status: 'ambiguous',
+            material: suggestedMaterial,
             confidence: 88,
             reason: 'exact_name_ambiguous',
             candidateCount: exactNameCandidates.length,
@@ -422,6 +461,20 @@ const materialCodePillStyle: React.CSSProperties = {
     whiteSpace: 'nowrap',
 };
 
+const emptyMaterialPrefixStyle: React.CSSProperties = {
+    display: 'inline-flex',
+    width: 0,
+    overflow: 'hidden',
+};
+
+const materialSuffixSlotStyle: React.CSSProperties = {
+    display: 'inline-flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    width: 14,
+    height: 16,
+};
+
 const MaterialPickerCell = React.memo(
     ({
         value,
@@ -436,44 +489,61 @@ const MaterialPickerCell = React.memo(
         onChange,
         onSelect,
         onBlur,
-    }: MaterialPickerCellProps) => (
-        <AutoComplete
-            size={size}
-            value={value}
-            options={options}
-            style={{ width: '100%' }}
-            status={status}
-            filterOption={false}
-            popupMatchSelectWidth={520}
-            notFoundContent={notFoundContent}
-            onSearch={onSearch}
-            onChange={(nextValue) => {
-                const selectedOption = options.find((option) => option.value === nextValue);
-                onChange(selectedOption?.item.name ?? nextValue);
-            }}
-            onSelect={(nextValue, option) => {
-                const selectedOption =
-                    (option as MaterialOptionData) ?? options.find((item) => item.value === nextValue);
-                onSelect(nextValue, selectedOption);
-            }}
-            optionRender={(option: any) => {
-                const item = (option?.data?.item ?? option?.item) as MaterialSearchItem | undefined;
-                return item ? <MaterialDropdownOption item={item} query={searchQuery} /> : option?.label;
-            }}
-            placeholder={placeholder}
-        >
-            <Input
-                size={size}
+    }: MaterialPickerCellProps) => {
+        const hasMaterialCode = Boolean(material?.code);
+
+        return (
+            <AutoComplete
+                value={value}
+                options={options}
+                style={{ width: '100%' }}
                 status={status}
+                filterOption={false}
+                popupMatchSelectWidth={520}
+                notFoundContent={notFoundContent}
+                onSearch={onSearch}
+                onChange={(nextValue) => {
+                    const selectedOption = options.find((option) => option.value === nextValue);
+                    onChange(selectedOption?.item.name ?? nextValue);
+                }}
+                onSelect={(nextValue, option) => {
+                    const selectedOption =
+                        (option as MaterialOptionData) ?? options.find((item) => item.value === nextValue);
+                    onSelect(nextValue, selectedOption);
+                }}
+                optionRender={(option: any) => {
+                    const item = (option?.data?.item ?? option?.item) as MaterialSearchItem | undefined;
+                    return item ? <MaterialDropdownOption item={item} query={searchQuery} /> : option?.label;
+                }}
                 placeholder={placeholder}
-                title={material ? `${material.code ? `${material.code} - ` : ''}${material.name}` : value}
-                prefix={material?.code ? <span style={materialCodePillStyle}>{material.code}</span> : undefined}
-                suffix={material ? <MaterialInfoTooltip material={material} /> : undefined}
-                style={{ height: size === 'large' ? 40 : 30 }}
-                onBlur={onBlur}
-            />
-        </AutoComplete>
-    )
+            >
+                <Input
+                    size={size}
+                    status={status}
+                    placeholder={placeholder}
+                    title={material ? `${material.code ? `${material.code} - ` : ''}${material.name}` : value}
+                    prefix={
+                        hasMaterialCode ? (
+                            <span style={materialCodePillStyle}>{material!.code}</span>
+                        ) : (
+                            <span aria-hidden='true' style={emptyMaterialPrefixStyle} />
+                        )
+                    }
+                    suffix={
+                        <span style={materialSuffixSlotStyle}>
+                            {material ? (
+                                <MaterialInfoTooltip material={material} />
+                            ) : (
+                                <InfoCircleOutlined aria-hidden='true' style={{ fontSize: 13, visibility: 'hidden' }} />
+                            )}
+                        </span>
+                    }
+                    style={{ height: size === 'large' ? 40 : 30 }}
+                    onBlur={onBlur}
+                />
+            </AutoComplete>
+        );
+    }
 );
 MaterialPickerCell.displayName = 'MaterialPickerCell';
 
@@ -539,8 +609,10 @@ type ItemRow = {
     totalWithVat: number;
 };
 
+const createRowKey = () => `row-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+
 const newRow = (): ItemRow => ({
-    key: `row-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+    key: createRowKey(),
     materialId: undefined,
     materialName: '',
     plantId: '',
@@ -822,6 +894,7 @@ const ModalForm: React.FC<ModalFormProps> = ({ open, initial, plants, mainPlantI
         items: items.map((r) => {
             const match = getRowCatalogMatch(r);
             const matchedMaterial = match.status === 'matched' ? match.material : undefined;
+            const hasExplicitMaterial = Boolean(matchedMaterial?.id || r.materialId);
 
             return {
                 materialId: matchedMaterial?.id ?? r.materialId,
@@ -841,7 +914,7 @@ const ModalForm: React.FC<ModalFormProps> = ({ open, initial, plants, mainPlantI
                 receivedDate: r.receivedDate?.toISOString(),
                 supplierId: r.supplierId,
                 supplierName: r.supplierName,
-                catalogStatus: matchedMaterial ? 'matched' : 'unmatched',
+                catalogStatus: hasExplicitMaterial ? 'matched' : 'unmatched',
                 note: r.note?.trim() || undefined,
             };
         }),
@@ -858,25 +931,34 @@ const ModalForm: React.FC<ModalFormProps> = ({ open, initial, plants, mainPlantI
         window.setTimeout(() => setRecentlyUpdatedKeys(new Set()), 650);
     };
 
-    const updateRow = (key: string, patch: Partial<ItemRow>) => {
-        setItems((p) => patchRow(p, key, patch));
-        if (!errors.size) return;
-        const fieldMap: Record<string, string[]> = {
-            materialName: ['name'],
-            plantId: ['plant'],
-            proposedBy: ['proposedBy'],
-            quantityRequested: ['qty'],
-            unit: ['unit'],
-            quantityOrdered: ['qtyOrdered'],
-            unitPrice: ['unitPrice'],
-            vatRate: ['vat'],
-            purpose: ['purpose'],
-        };
+    const fieldErrorMap: Record<string, string[]> = {
+        materialName: ['name'],
+        plantId: ['plant'],
+        proposedBy: ['proposedBy'],
+        quantityRequested: ['qty'],
+        unit: ['unit'],
+        quantityOrdered: ['qtyOrdered'],
+        unitPrice: ['unitPrice'],
+        vatRate: ['vat'],
+        purpose: ['purpose'],
+    };
+
+    const clearPatchedErrors = (keys: string[], patch: Partial<ItemRow>) => {
+        const touchedFields = Object.keys(patch).flatMap((field) => fieldErrorMap[field] ?? []);
+        if (!touchedFields.length) return;
+
         setErrors((prev) => {
+            if (!prev.size) return prev;
+
             const next = new Set(prev);
-            Object.keys(patch).forEach((field) => (fieldMap[field] ?? []).forEach((f) => next.delete(`${key}-${f}`)));
+            keys.forEach((key) => touchedFields.forEach((field) => next.delete(`${key}-${field}`)));
             return next;
         });
+    };
+
+    const updateRow = (key: string, patch: Partial<ItemRow>) => {
+        setItems((p) => patchRow(p, key, patch));
+        clearPatchedErrors([key], patch);
     };
 
     const applyMaterialToRow = (key: string, material: MaterialSearchItem) => {
@@ -966,13 +1048,23 @@ const ModalForm: React.FC<ModalFormProps> = ({ open, initial, plants, mainPlantI
                 <Button
                     type='link'
                     size='small'
-                    style={{ height: 22, padding: 0, fontSize: compact ? 12 : 11, fontWeight: 600 }}
+                    style={{
+                        height: compact ? 'auto' : 22,
+                        maxWidth: '100%',
+                        padding: 0,
+                        whiteSpace: 'normal',
+                        textAlign: 'left',
+                        lineHeight: 1.3,
+                        fontSize: compact ? 12 : 11,
+                        fontWeight: 600,
+                    }}
                     onClick={(event) => {
                         event.stopPropagation();
                         applyMaterialToRow(row.key, match.material!);
                     }}
                 >
-                    Gợi ý: {match.material.code ? `[${match.material.code}] ` : ''}
+                    {match.status === 'ambiguous' ? `Cần xác nhận (${match.candidateCount} mã): ` : 'Gợi ý: '}
+                    {match.material.code ? `[${match.material.code}] ` : ''}
                     {match.material.name}
                 </Button>
             );
@@ -1002,7 +1094,7 @@ const ModalForm: React.FC<ModalFormProps> = ({ open, initial, plants, mainPlantI
     };
 
     const duplicateRow = (r: ItemRow) => {
-        const dup = computeRow({ ...r, key: `row-${Date.now()}-${Math.random().toString(36).slice(2)}` });
+        const dup = computeRow({ ...r, key: createRowKey() });
         setItems((p) => {
             const idx = p.findIndex((x) => x.key === r.key);
             const next = [...p];
@@ -1108,6 +1200,7 @@ const ModalForm: React.FC<ModalFormProps> = ({ open, initial, plants, mainPlantI
             return;
         }
         setItems((prev) => prev.map((r) => (checkedKeys.has(r.key) ? computeRow({ ...r, ...patch }) : r)));
+        clearPatchedErrors(keys, patch);
         markRecent(keys);
         notification.success({ title: `Đã áp dụng ${label} cho ${keys.length} dòng` });
     };
@@ -1142,12 +1235,20 @@ const ModalForm: React.FC<ModalFormProps> = ({ open, initial, plants, mainPlantI
         />
     );
 
+    const tableCellProps = () => ({ style: { verticalAlign: 'top', paddingTop: 8, paddingBottom: 8 } });
+    const controlCellStyle: React.CSSProperties = {
+        minHeight: 30,
+        display: 'flex',
+        alignItems: 'flex-start',
+    };
+
     // ── Grid columns for left panel (workspace mode) ──
     const gridColumns: TableColumnsType<ItemRow> = [
         {
             key: 'select',
             width: 42,
             align: 'center',
+            onCell: tableCellProps,
             title: (
                 <Checkbox
                     checked={allVisibleChecked}
@@ -1174,6 +1275,7 @@ const ModalForm: React.FC<ModalFormProps> = ({ open, initial, plants, mainPlantI
             key: 'stt',
             width: 48,
             align: 'center',
+            onCell: tableCellProps,
             title: <span style={{ color: '#94a3b8' }}>STT</span>,
             render: (_: any, r: ItemRow) => (
                 <span style={{ color: '#94a3b8', fontSize: 12 }}>{items.findIndex((x) => x.key === r.key) + 1}</span>
@@ -1181,14 +1283,15 @@ const ModalForm: React.FC<ModalFormProps> = ({ open, initial, plants, mainPlantI
         },
         {
             key: 'name',
-            width: 250,
+            width: 292,
+            onCell: tableCellProps,
             title: (
                 <span style={{ whiteSpace: 'nowrap' }}>
                     Tên vật tư <Text type='danger'>*</Text>
                 </span>
             ),
             render: (_: any, r: ItemRow) => (
-                <div>
+                <div style={{ minWidth: 0 }}>
                     <MaterialPickerCell
                         size='small'
                         value={r.materialName}
@@ -1216,159 +1319,192 @@ const ModalForm: React.FC<ModalFormProps> = ({ open, initial, plants, mainPlantI
         },
         {
             key: 'plant',
-            width: 110,
+            width: 112,
+            onCell: tableCellProps,
             title: (
                 <span style={{ whiteSpace: 'nowrap' }}>
                     Cơ sở <Text type='danger'>*</Text>
                 </span>
             ),
             render: (_: any, r: ItemRow) => (
-                <Select
-                    size='small'
-                    value={r.plantId || undefined}
-                    style={{ width: '100%' }}
-                    status={fieldStatus(r.key, 'plant')}
-                    placeholder='Chọn CS'
-                    options={plantOptions}
-                    onChange={(v) => updateRow(r.key, { plantId: v })}
-                />
+                <div style={controlCellStyle}>
+                    <Select
+                        size='small'
+                        value={r.plantId || undefined}
+                        style={{ width: '100%' }}
+                        status={fieldStatus(r.key, 'plant')}
+                        placeholder='Chọn CS'
+                        options={plantOptions}
+                        onChange={(v) => updateRow(r.key, { plantId: v })}
+                    />
+                </div>
             ),
         },
         {
             key: 'proposedBy',
             width: 150,
+            onCell: tableCellProps,
             title: renderHeader('Người đề xuất', true),
             render: (_: any, r: ItemRow) => (
-                <Input
-                    size='small'
-                    value={r.proposedBy}
-                    status={fieldStatus(r.key, 'proposedBy')}
-                    placeholder='Người đề xuất'
-                    onChange={(e) => updateRow(r.key, { proposedBy: e.target.value })}
-                />
+                <div style={controlCellStyle}>
+                    <Input
+                        size='small'
+                        value={r.proposedBy}
+                        status={fieldStatus(r.key, 'proposedBy')}
+                        placeholder='Người đề xuất'
+                        onChange={(e) => updateRow(r.key, { proposedBy: e.target.value })}
+                    />
+                </div>
             ),
         },
         {
             key: 'qty',
-            width: 65,
+            width: 76,
+            onCell: tableCellProps,
             title: (
                 <span style={{ whiteSpace: 'nowrap' }}>
                     SL cần <Text type='danger'>*</Text>
                 </span>
             ),
             render: (_: any, r: ItemRow) => (
-                <InputNumber
-                    size='small'
-                    min={1}
-                    value={r.quantityRequested}
-                    className='purchase-request-qty'
-                    style={{ width: '100%' }}
-                    status={fieldStatus(r.key, 'qty')}
-                    onChange={(v) => updateRow(r.key, { quantityRequested: v ?? 1, quantityOrdered: v ?? 1 })}
-                />
+                <div style={controlCellStyle}>
+                    <InputNumber
+                        size='small'
+                        min={1}
+                        value={r.quantityRequested}
+                        className='purchase-request-qty'
+                        style={{ width: '100%' }}
+                        status={fieldStatus(r.key, 'qty')}
+                        onChange={(v) => updateRow(r.key, { quantityRequested: v ?? 1, quantityOrdered: v ?? 1 })}
+                    />
+                </div>
             ),
         },
         {
             key: 'unit',
-            width: 58,
+            width: 68,
+            onCell: tableCellProps,
             title: (
                 <span style={{ whiteSpace: 'nowrap' }}>
                     ĐVT <Text type='danger'>*</Text>
                 </span>
             ),
             render: (_: any, r: ItemRow) => (
-                <Input
-                    size='small'
-                    value={r.unit}
-                    status={fieldStatus(r.key, 'unit')}
-                    placeholder='Cái...'
-                    onChange={(e) => updateRow(r.key, { unit: e.target.value })}
-                />
+                <div style={controlCellStyle}>
+                    <Input
+                        size='small'
+                        value={r.unit}
+                        status={fieldStatus(r.key, 'unit')}
+                        placeholder='Cái...'
+                        onChange={(e) => updateRow(r.key, { unit: e.target.value })}
+                    />
+                </div>
             ),
         },
         {
             key: 'qtyO',
-            width: 65,
+            width: 76,
+            onCell: tableCellProps,
             title: 'SL mua',
             render: (_: any, r: ItemRow) => (
-                <InputNumber
-                    size='small'
-                    min={0}
-                    value={r.quantityOrdered}
-                    style={{ width: '100%' }}
-                    status={fieldStatus(r.key, 'qtyOrdered')}
-                    onChange={(v) => updateRow(r.key, { quantityOrdered: v ?? 0 })}
-                />
+                <div style={controlCellStyle}>
+                    <InputNumber
+                        size='small'
+                        min={0}
+                        value={r.quantityOrdered}
+                        style={{ width: '100%' }}
+                        status={fieldStatus(r.key, 'qtyOrdered')}
+                        onChange={(v) => updateRow(r.key, { quantityOrdered: v ?? 0 })}
+                    />
+                </div>
             ),
         },
         {
             key: 'price',
-            width: 108,
+            width: 112,
+            onCell: tableCellProps,
             title: 'Đơn giá',
             render: (_: any, r: ItemRow) => (
-                <InputNumber
-                    size='small'
-                    min={0}
-                    value={r.unitPrice}
-                    style={{ width: '100%' }}
-                    formatter={(v) => `${v}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')}
-                    parser={(v) => Number(String(v).replace(/,/g, '')) as any}
-                    status={fieldStatus(r.key, 'unitPrice')}
-                    onChange={(v) => updateRow(r.key, { unitPrice: v ?? 0 })}
-                />
+                <div style={controlCellStyle}>
+                    <InputNumber
+                        size='small'
+                        min={0}
+                        value={r.unitPrice}
+                        style={{ width: '100%' }}
+                        formatter={(v) => `${v}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')}
+                        parser={(v) => Number(String(v).replace(/,/g, '')) as any}
+                        status={fieldStatus(r.key, 'unitPrice')}
+                        onChange={(v) => updateRow(r.key, { unitPrice: v ?? 0 })}
+                    />
+                </div>
             ),
         },
         {
             key: 'total',
             width: 112,
             align: 'right',
+            onCell: tableCellProps,
             title: 'Thành tiền',
             render: (_: any, r: ItemRow) => (
-                <span style={{ fontSize: 12, fontWeight: 600, color: r.totalPrice > 0 ? '#1A3A5C' : '#cbd5e1' }}>
-                    {fmtVND(r.totalPrice)}
-                </span>
+                <div
+                    style={{
+                        ...controlCellStyle,
+                        justifyContent: 'flex-end',
+                        color: r.totalPrice > 0 ? '#1A3A5C' : '#cbd5e1',
+                    }}
+                >
+                    <span style={{ fontSize: 12, fontWeight: 600 }}>{fmtVND(r.totalPrice)}</span>
+                </div>
             ),
         },
         {
             key: 'supplier',
-            width: 132,
+            width: 120,
+            onCell: tableCellProps,
             title: renderHeader('NCC'),
-            render: (_: any, r: ItemRow) =>
-                r.supplierName ? (
-                    <Tag
-                        color='blue'
-                        style={{ maxWidth: 120, margin: 0, overflow: 'hidden', textOverflow: 'ellipsis' }}
-                    >
-                        {r.supplierName}
-                    </Tag>
-                ) : (
-                    <Tag color='warning' style={{ margin: 0 }}>
-                        Thiếu NCC
-                    </Tag>
-                ),
+            render: (_: any, r: ItemRow) => (
+                <div style={controlCellStyle}>
+                    {r.supplierName ? (
+                        <Tag
+                            color='blue'
+                            style={{ maxWidth: 112, margin: 0, overflow: 'hidden', textOverflow: 'ellipsis' }}
+                        >
+                            {r.supplierName}
+                        </Tag>
+                    ) : (
+                        <Tag color='warning' style={{ margin: 0 }}>
+                            Thiếu NCC
+                        </Tag>
+                    )}
+                </div>
+            ),
         },
         {
             key: 'lineStatus',
             width: 104,
+            onCell: tableCellProps,
             title: renderHeader('Trạng thái'),
             render: (_: any, r: ItemRow) => {
                 const catalogMatch = getRowCatalogMatch(r);
-                if (getRequiredIssues(r).length) return <Badge status='error' text='Thiếu' />;
-                if (catalogMatch.status === 'unmatched') return <Badge status='warning' text='Chưa khớp' />;
-                if (catalogMatch.status === 'suggested' || catalogMatch.status === 'ambiguous') {
-                    return <Badge status='processing' text='Có gợi ý' />;
-                }
-                if (!r.supplierId && !r.supplierName) return <Badge status='warning' text='Thiếu NCC' />;
-                return <Badge status='success' text='Đủ' />;
+                let badge: React.ReactNode;
+                if (getRequiredIssues(r).length) badge = <Badge status='error' text='Thiếu' />;
+                else if (catalogMatch.status === 'unmatched') badge = <Badge status='warning' text='Chưa khớp' />;
+                else if (catalogMatch.status === 'suggested' || catalogMatch.status === 'ambiguous') {
+                    badge = <Badge status='processing' text='Có gợi ý' />;
+                } else if (!r.supplierId && !r.supplierName) badge = <Badge status='warning' text='Thiếu NCC' />;
+                else badge = <Badge status='success' text='Đủ' />;
+
+                return <div style={controlCellStyle}>{badge}</div>;
             },
         },
         {
             key: 'rowActions',
             width: 64,
             align: 'center',
+            onCell: tableCellProps,
             title: '',
             render: (_: any, r: ItemRow) => (
-                <Space size={2}>
+                <Space size={2} style={{ minHeight: 30, alignItems: 'flex-start' }}>
                     <Tooltip title='Nhân đôi dòng'>
                         <Button
                             type='text'
@@ -1734,7 +1870,7 @@ const ModalForm: React.FC<ModalFormProps> = ({ open, initial, plants, mainPlantI
                 </div>
                 <div className='flex flex-col gap-3'>
                     {items.map((r, index) => (
-                        <div key={r.key} className='rounded-xl border border-slate-200 bg-slate-50 p-3'>
+                        <div key={r.key} className='min-w-0 rounded-xl border border-slate-200 bg-slate-50 p-3'>
                             <div className='mb-2 flex items-center justify-between'>
                                 <span className='text-xs font-semibold text-slate-500'>Vật tư #{index + 1}</span>
                                 <Button
@@ -1746,8 +1882,8 @@ const ModalForm: React.FC<ModalFormProps> = ({ open, initial, plants, mainPlantI
                                     onClick={() => deleteRow(r.key)}
                                 />
                             </div>
-                            <div className='grid grid-cols-2 gap-2'>
-                                <div className='col-span-2'>
+                            <div className='grid min-w-0 grid-cols-1 gap-2 sm:grid-cols-2'>
+                                <div className='min-w-0 sm:col-span-2'>
                                     <div className='mb-1 text-xs text-slate-400'>
                                         Tên vật tư <Text type='danger'>*</Text>
                                     </div>
@@ -1773,7 +1909,7 @@ const ModalForm: React.FC<ModalFormProps> = ({ open, initial, plants, mainPlantI
                                     />
                                     {renderCatalogHint(r, true)}
                                 </div>
-                                <div>
+                                <div className='min-w-0'>
                                     <div className='mb-1 text-xs text-slate-400'>
                                         Cơ sở <Text type='danger'>*</Text>
                                     </div>
@@ -1781,25 +1917,25 @@ const ModalForm: React.FC<ModalFormProps> = ({ open, initial, plants, mainPlantI
                                         size='large'
                                         value={r.plantId || undefined}
                                         style={{ width: '100%' }}
+                                        status={fieldStatus(r.key, 'plant')}
                                         placeholder='Cơ sở'
                                         options={plants.map((p) => ({ value: p.id, label: p.name }))}
-                                        onChange={(v) => setItems((p) => patchRow(p, r.key, { plantId: v }))}
+                                        onChange={(v) => updateRow(r.key, { plantId: v })}
                                     />
                                 </div>
-                                <div>
+                                <div className='min-w-0'>
                                     <div className='mb-1 text-xs text-slate-400'>
                                         Người đề xuất <Text type='danger'>*</Text>
                                     </div>
                                     <Input
                                         size='large'
                                         value={r.proposedBy}
+                                        status={fieldStatus(r.key, 'proposedBy')}
                                         placeholder='Người đề xuất'
-                                        onChange={(e) =>
-                                            setItems((p) => patchRow(p, r.key, { proposedBy: e.target.value }))
-                                        }
+                                        onChange={(e) => updateRow(r.key, { proposedBy: e.target.value })}
                                     />
                                 </div>
-                                <div>
+                                <div className='min-w-0'>
                                     <div className='mb-1 text-xs text-slate-400'>
                                         SL cần <Text type='danger'>*</Text>
                                     </div>
@@ -1808,28 +1944,28 @@ const ModalForm: React.FC<ModalFormProps> = ({ open, initial, plants, mainPlantI
                                         min={1}
                                         value={r.quantityRequested}
                                         style={{ width: '100%' }}
+                                        status={fieldStatus(r.key, 'qty')}
                                         onChange={(v) =>
-                                            setItems((p) =>
-                                                patchRow(p, r.key, {
-                                                    quantityRequested: v ?? 1,
-                                                    quantityOrdered: v ?? 1,
-                                                })
-                                            )
+                                            updateRow(r.key, {
+                                                quantityRequested: v ?? 1,
+                                                quantityOrdered: v ?? 1,
+                                            })
                                         }
                                     />
                                 </div>
-                                <div>
+                                <div className='min-w-0'>
                                     <div className='mb-1 text-xs text-slate-400'>
                                         ĐVT <Text type='danger'>*</Text>
                                     </div>
                                     <Input
                                         size='large'
                                         value={r.unit}
+                                        status={fieldStatus(r.key, 'unit')}
                                         placeholder='Cái, Kg...'
-                                        onChange={(e) => setItems((p) => patchRow(p, r.key, { unit: e.target.value }))}
+                                        onChange={(e) => updateRow(r.key, { unit: e.target.value })}
                                     />
                                 </div>
-                                <div>
+                                <div className='min-w-0'>
                                     <div className='mb-1 text-xs text-slate-400'>Đơn giá</div>
                                     <InputNumber
                                         size='large'
@@ -1838,10 +1974,11 @@ const ModalForm: React.FC<ModalFormProps> = ({ open, initial, plants, mainPlantI
                                         style={{ width: '100%' }}
                                         formatter={(v) => `${v}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')}
                                         parser={(v) => Number(String(v).replace(/,/g, '')) as any}
-                                        onChange={(v) => setItems((p) => patchRow(p, r.key, { unitPrice: v ?? 0 }))}
+                                        status={fieldStatus(r.key, 'unitPrice')}
+                                        onChange={(v) => updateRow(r.key, { unitPrice: v ?? 0 })}
                                     />
                                 </div>
-                                <div>
+                                <div className='min-w-0'>
                                     <div className='mb-1 text-xs text-slate-400'>VAT%</div>
                                     <InputNumber
                                         size='large'
@@ -1851,10 +1988,11 @@ const ModalForm: React.FC<ModalFormProps> = ({ open, initial, plants, mainPlantI
                                         style={{ width: '100%' }}
                                         formatter={(v) => `${v}%`}
                                         parser={(v) => Number(String(v).replace('%', '')) as any}
-                                        onChange={(v) => setItems((p) => patchRow(p, r.key, { vatRate: v ?? 0 }))}
+                                        status={fieldStatus(r.key, 'vat')}
+                                        onChange={(v) => updateRow(r.key, { vatRate: v ?? 0 })}
                                     />
                                 </div>
-                                <div className='col-span-2'>
+                                <div className='min-w-0 sm:col-span-2'>
                                     <div className='mb-1 text-xs text-slate-400'>
                                         Nội dung <Text type='danger'>*</Text>
                                     </div>
@@ -1863,13 +2001,11 @@ const ModalForm: React.FC<ModalFormProps> = ({ open, initial, plants, mainPlantI
                                         value={r.purpose}
                                         status={errors.has(`${r.key}-purpose`) ? 'error' : undefined}
                                         placeholder='Nội dung mua...'
-                                        onChange={(e) =>
-                                            setItems((p) => patchRow(p, r.key, { purpose: e.target.value }))
-                                        }
+                                        onChange={(e) => updateRow(r.key, { purpose: e.target.value })}
                                     />
                                 </div>
                                 {r.totalWithVat > 0 && (
-                                    <div className='col-span-2 text-right text-sm font-bold text-[#1A3A5C]'>
+                                    <div className='min-w-0 text-right text-sm font-bold text-[#1A3A5C] sm:col-span-2'>
                                         Tổng: {fmtVND(r.totalWithVat)}
                                     </div>
                                 )}

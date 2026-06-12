@@ -39,10 +39,10 @@ import { brandService, plantService } from '../core/services';
 import { borrowingService } from '../core/services/borrowing.service';
 import { qrLabelService } from '../core/services/qr-label.service';
 import {
-    BorrowingStatus,
-    QrReturnAction,
     type Borrowing,
+    type BorrowingStatus,
     type BulkReturnBorrowingBatchPayload,
+    type QrReturnAction,
     type ReceiveBorrowingBatchByQrPayload,
 } from '../core/types';
 
@@ -71,6 +71,9 @@ type ReturnFormValues = {
 };
 
 const formatDateTime = (value?: string) => (value ? dayjs(value).format('DD/MM/YYYY HH:mm') : '-');
+const BORROWING_STATUS_ACTIVE = 'active' as BorrowingStatus;
+const BORROWING_STATUS_RETURNED = 'returned' as BorrowingStatus;
+const QR_RETURN_ACTION_REMOVED = 'removed' as QrReturnAction;
 
 const BorrowingBatchDetail: React.FC = () => {
     const { id = '' } = useParams();
@@ -104,7 +107,7 @@ const BorrowingBatchDetail: React.FC = () => {
 
     const batch = data?.batch;
     const items = data?.items ?? [];
-    const activeItems = useMemo(() => items.filter((item) => item.status === BorrowingStatus.ACTIVE), [items]);
+    const activeItems = useMemo(() => items.filter((item) => item.status === BORROWING_STATUS_ACTIVE), [items]);
     const selectedActiveItems = useMemo(
         () => activeItems.filter((item) => selectedReturnIds.includes(item.id)),
         [activeItems, selectedReturnIds]
@@ -247,7 +250,7 @@ const BorrowingBatchDetail: React.FC = () => {
 
     const renderMobileBorrowingCard = (record: Borrowing, index: number, selectable = false) => {
         const selected = selectedReturnIds.includes(record.id);
-        const returned = record.status === BorrowingStatus.RETURNED;
+        const returned = record.status === BORROWING_STATUS_RETURNED;
         const qrMeta = record.qrReturnAction ? qrReturnActionMeta[record.qrReturnAction] : null;
         const machineCode = record.asset?.machineCode || record.assetId;
 
@@ -256,9 +259,13 @@ const BorrowingBatchDetail: React.FC = () => {
                 key={record.id}
                 role={selectable ? 'button' : undefined}
                 tabIndex={selectable ? 0 : undefined}
-                className={`borrowing-batch-mobile-item${selected ? 'borrowing-batch-mobile-item--selected' : ''}${
-                    returned ? 'borrowing-batch-mobile-item--returned' : ''
-                }`}
+                className={[
+                    'borrowing-batch-mobile-item',
+                    selected ? 'borrowing-batch-mobile-item--selected' : '',
+                    returned ? 'borrowing-batch-mobile-item--returned' : '',
+                ]
+                    .filter(Boolean)
+                    .join(' ')}
                 style={{ animationDelay: `${Math.min(index * 60, 420)}ms` }}
                 onClick={() => selectable && toggleReturnSelection(record.id)}
                 onKeyDown={(event) => {
@@ -293,9 +300,12 @@ const BorrowingBatchDetail: React.FC = () => {
                         </div>
                     </div>
                     <div
-                        className={`borrowing-batch-mobile-item__select${
-                            selected ? 'borrowing-batch-mobile-item__select--active' : ''
-                        }`}
+                        className={[
+                            'borrowing-batch-mobile-item__select',
+                            selected ? 'borrowing-batch-mobile-item__select--active' : '',
+                        ]
+                            .filter(Boolean)
+                            .join(' ')}
                     >
                         {selected ? <CheckCircleOutlined /> : <QrcodeOutlined />}
                     </div>
@@ -351,7 +361,7 @@ const BorrowingBatchDetail: React.FC = () => {
             key: 'qr',
             width: 180,
             render: (_value, record) =>
-                record.status === BorrowingStatus.RETURNED ? (
+                record.status === BORROWING_STATUS_RETURNED ? (
                     <div className='flex flex-col gap-1'>
                         <Tag
                             color={record.qrReturnAction ? qrReturnActionMeta[record.qrReturnAction].color : 'default'}
@@ -426,7 +436,7 @@ const BorrowingBatchDetail: React.FC = () => {
                 }
             />
 
-            <section className='borrowing-batch-hero rounded-3xl border border-violet-100 bg-gradient-to-br from-violet-50 via-white to-cyan-50 p-5 shadow-sm'>
+            <section className='borrowing-batch-hero rounded-3xl border border-slate-200 bg-white p-5 shadow-sm'>
                 <div className='flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between'>
                     <div className='min-w-0'>
                         <div className='flex flex-wrap items-center gap-2'>
@@ -561,7 +571,7 @@ const BorrowingBatchDetail: React.FC = () => {
                                         onClick={() => {
                                             returnForm.setFieldsValue({
                                                 returnTime: dayjs(),
-                                                qrReturnAction: QrReturnAction.REMOVED,
+                                                qrReturnAction: QR_RETURN_ACTION_REMOVED,
                                             });
                                             setIsReturnModalOpen(true);
                                         }}

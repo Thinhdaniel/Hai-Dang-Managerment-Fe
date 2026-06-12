@@ -1,4 +1,4 @@
-import { BorrowingBatchStatus, BorrowingStatus, BorrowingType, QrReturnAction } from '../types';
+import type { BorrowingBatchStatus, BorrowingStatus, BorrowingType, QrReturnAction } from '../types';
 
 export const borrowingTypeMeta: Record<
     BorrowingType,

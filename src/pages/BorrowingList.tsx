@@ -42,7 +42,7 @@ import { plantService } from '../core/services';
 import { borrowingService } from '../core/services/borrowing.service';
 import { useAuth } from '../core/contexts/AuthContext';
 import { can } from '../core/lib/permissions';
-import { BorrowingType, type Borrowing, type BorrowingBatch, type BorrowingFilter } from '../core/types';
+import type { Borrowing, BorrowingBatch, BorrowingFilter } from '../core/types';
 
 const ReturnTransactionModal = lazy(() => import('../components/transactions/ReturnTransactionModal'));
 
@@ -73,9 +73,11 @@ const getCounterpartySubLabel = (item: Borrowing) => {
 
 const summaryCardClassName =
     'borrowing-mobile-stat-card relative overflow-hidden rounded-xl border border-slate-200 bg-white p-5 shadow-sm transition-shadow hover:shadow-md';
+const BORROWING_TYPE_EXTERNAL = 'external' as BorrowingBatch['type'];
+const BORROWING_TYPE_RENTAL = 'rental' as BorrowingBatch['type'];
 
 type BatchFormValues = {
-    type: BorrowingType.EXTERNAL | BorrowingType.RENTAL;
+    type: BorrowingBatch['type'];
     partnerName: string;
     contractNo?: string;
     plantId: string;
@@ -224,7 +226,7 @@ const BorrowingList: React.FC = () => {
                         {record.code}
                     </button>
                     <span className='text-xs font-semibold text-slate-500'>
-                        {record.type === BorrowingType.RENTAL ? 'Thuê máy' : 'Mượn ngoài'} ·{' '}
+                        {record.type === BORROWING_TYPE_RENTAL ? 'Thuê máy' : 'Mượn ngoài'} ·{' '}
                         {record.contractNo || 'Chưa có hợp đồng'}
                     </span>
                 </div>
@@ -401,7 +403,7 @@ const BorrowingList: React.FC = () => {
                             {record.partnerName}
                         </h3>
                         <p className='mt-1 mb-0 text-xs font-semibold text-slate-500'>
-                            {record.type === BorrowingType.RENTAL ? 'Thuê máy' : 'Mượn ngoài'} ·{' '}
+                            {record.type === BORROWING_TYPE_RENTAL ? 'Thuê máy' : 'Mượn ngoài'} ·{' '}
                             {record.contractNo || 'Chưa có hợp đồng'}
                         </p>
                     </div>
@@ -469,9 +471,12 @@ const BorrowingList: React.FC = () => {
         return (
             <article
                 key={record.id}
-                className={`borrowing-mobile-card borrowing-mobile-card--transaction${
-                    isActive ? 'borrowing-mobile-card--live' : ''
-                }`}
+                className={[
+                    'borrowing-mobile-card borrowing-mobile-card--transaction',
+                    isActive ? 'borrowing-mobile-card--live' : '',
+                ]
+                    .filter(Boolean)
+                    .join(' ')}
                 style={{ animationDelay: `${Math.min(index * 60, 420)}ms` }}
             >
                 <div className='relative z-[1] flex items-start justify-between gap-3'>
@@ -588,10 +593,10 @@ const BorrowingList: React.FC = () => {
             </div>
 
             {canManageBorrowing ? (
-                <section className='borrowing-mobile-section overflow-hidden rounded-xl border border-violet-100 bg-white shadow-sm'>
-                    <div className='borrowing-mobile-section__head flex flex-col gap-3 border-b border-violet-100 bg-gradient-to-r from-violet-50 via-white to-cyan-50 px-5 py-4 md:flex-row md:items-center md:justify-between'>
+                <section className='borrowing-mobile-section overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm'>
+                    <div className='borrowing-mobile-section__head flex flex-col gap-3 border-b border-slate-100 bg-slate-50 px-5 py-4 md:flex-row md:items-center md:justify-between'>
                         <div>
-                            <div className='text-sm font-black tracking-[0.16em] text-violet-600 uppercase'>
+                            <div className='text-sm font-black tracking-[0.16em] text-blue-700 uppercase'>
                                 QR tạm cho máy mượn/thuê
                             </div>
                             <div className='mt-1 text-base font-black text-slate-950'>Lô nhận/trả nhiều máy</div>
@@ -762,7 +767,7 @@ const BorrowingList: React.FC = () => {
                     form={batchForm}
                     layout='vertical'
                     initialValues={{
-                        type: BorrowingType.EXTERNAL,
+                        type: BORROWING_TYPE_EXTERNAL,
                         borrowTime: dayjs(),
                         plannedQuantity: 10,
                         createQrBatch: true,
@@ -778,8 +783,8 @@ const BorrowingList: React.FC = () => {
                             <Select
                                 size='large'
                                 options={[
-                                    { value: BorrowingType.EXTERNAL, label: 'Mượn máy đối tác' },
-                                    { value: BorrowingType.RENTAL, label: 'Thuê máy' },
+                                    { value: BORROWING_TYPE_EXTERNAL, label: 'Mượn máy đối tác' },
+                                    { value: BORROWING_TYPE_RENTAL, label: 'Thuê máy' },
                                 ]}
                             />
                         </Form.Item>

@@ -1649,15 +1649,17 @@ textarea {
 .borrowing-batch-mobile-item {
     position: relative;
     overflow: hidden;
-    border: 1px solid rgba(148, 163, 184, 0.2);
-    border-radius: 24px;
+    border: 1px solid rgba(203, 213, 225, 0.82);
+    border-radius: 22px;
     background:
-        linear-gradient(135deg, rgba(255, 255, 255, 0.96), rgba(248, 250, 252, 0.92)),
-        radial-gradient(circle at 6% 0%, rgba(37, 99, 235, 0.12), transparent 34%);
+        linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(248, 250, 252, 0.96)),
+        repeating-linear-gradient(90deg, rgba(15, 23, 42, 0.018) 0 1px, transparent 1px 8px);
     padding: 14px;
-    box-shadow: 0 16px 34px rgba(15, 23, 42, 0.09);
+    box-shadow:
+        0 14px 30px rgba(15, 23, 42, 0.08),
+        inset 0 1px 0 rgba(255, 255, 255, 0.92);
     transform-origin: center top;
-    animation: borrowing-card-enter 420ms cubic-bezier(0.2, 0.9, 0.25, 1.1) both;
+    animation: borrowing-card-enter 360ms cubic-bezier(0.2, 0.9, 0.25, 1.05) both;
     transition:
         transform 180ms ease,
         box-shadow 180ms ease,
@@ -1667,12 +1669,13 @@ textarea {
 .borrowing-mobile-card::before,
 .borrowing-batch-mobile-item::before {
     position: absolute;
-    inset: 0;
-    background: linear-gradient(110deg, transparent 0%, rgba(255, 255, 255, 0.72) 48%, transparent 72%);
+    inset: 0 16px auto;
+    height: 1px;
+    background: linear-gradient(90deg, transparent 0%, rgba(37, 99, 235, 0.34) 42%, transparent 78%);
     content: '';
     opacity: 0;
-    transform: translateX(-80%);
-    animation: borrowing-card-sheen 4.8s ease-in-out infinite;
+    transform: translateX(-115%);
+    animation: borrowing-card-sheen 5.8s ease-in-out infinite;
     pointer-events: none;
 }
 
@@ -1683,33 +1686,39 @@ textarea {
 }
 
 .borrowing-mobile-card--batch {
-    border-color: rgba(59, 130, 246, 0.2);
+    border-color: rgba(37, 99, 235, 0.24);
+    border-left: 3px solid #1d4ed8;
     background:
-        linear-gradient(135deg, rgba(239, 246, 255, 0.98), rgba(255, 255, 255, 0.94) 58%),
-        radial-gradient(circle at 100% 10%, rgba(14, 165, 233, 0.2), transparent 35%);
+        linear-gradient(180deg, rgba(255, 255, 255, 0.99), rgba(248, 250, 252, 0.97)),
+        repeating-linear-gradient(90deg, rgba(29, 78, 216, 0.025) 0 1px, transparent 1px 8px);
 }
 
 .borrowing-mobile-card--transaction {
+    border-left: 3px solid #64748b;
     background:
-        linear-gradient(135deg, rgba(255, 255, 255, 0.97), rgba(248, 250, 252, 0.94)),
-        radial-gradient(circle at 92% 0%, rgba(20, 184, 166, 0.13), transparent 35%);
+        linear-gradient(180deg, rgba(255, 255, 255, 0.99), rgba(248, 250, 252, 0.96)),
+        repeating-linear-gradient(90deg, rgba(15, 23, 42, 0.018) 0 1px, transparent 1px 8px);
 }
 
 .borrowing-mobile-card--live {
-    border-color: rgba(16, 185, 129, 0.22);
+    border-color: rgba(15, 118, 110, 0.26);
+    border-left-color: #0f766e;
+    box-shadow:
+        0 16px 32px rgba(15, 23, 42, 0.09),
+        0 0 0 1px rgba(15, 118, 110, 0.04),
+        inset 0 1px 0 rgba(255, 255, 255, 0.92);
 }
 
 .borrowing-mobile-card__glow {
     position: absolute;
-    inset: -1px;
+    inset: 0;
     border-radius: inherit;
-    background: conic-gradient(from 180deg, rgba(37, 99, 235, 0.2), transparent, rgba(20, 184, 166, 0.2), transparent);
-    opacity: 0.5;
-    mask:
-        linear-gradient(#000 0 0) content-box,
-        linear-gradient(#000 0 0);
-    mask-composite: exclude;
-    padding: 1px;
+    background: linear-gradient(115deg, transparent 0%, rgba(15, 23, 42, 0.045) 50%, transparent 74%);
+    opacity: 0.46;
+    mask: none;
+    padding: 0;
+    transform: translateX(-64%);
+    animation: borrowing-metal-sweep 7.2s ease-in-out infinite;
     pointer-events: none;
 }
 
@@ -1717,11 +1726,11 @@ textarea {
 .borrowing-batch-mobile-item__code {
     display: inline-flex;
     align-items: center;
-    border: 1px solid rgba(37, 99, 235, 0.16);
+    border: 1px solid rgba(37, 99, 235, 0.18);
     border-radius: 999px;
-    background: #eff6ff;
+    background: #f8fafc;
     padding: 5px 9px;
-    color: #1d4ed8;
+    color: #1e40af;
     font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;
     font-size: 11px;
     font-weight: 900;
@@ -1736,23 +1745,27 @@ textarea {
     align-items: center;
     justify-content: center;
     border: 1px solid rgba(255, 255, 255, 0.7);
-    border-radius: 18px;
-    background: linear-gradient(135deg, #2563eb, #0891b2);
+    border-radius: 16px;
+    background: linear-gradient(180deg, #1e40af, #1e3a8a);
     color: #fff;
     font-size: 20px;
-    box-shadow: 0 14px 26px rgba(37, 99, 235, 0.24);
-    animation: borrowing-icon-float 3.8s ease-in-out infinite;
+    box-shadow:
+        0 12px 22px rgba(30, 64, 175, 0.22),
+        inset 0 1px 0 rgba(255, 255, 255, 0.22);
+    animation: borrowing-icon-float 4.2s ease-in-out infinite;
 }
 
 .borrowing-mobile-card__orb--green {
-    background: linear-gradient(135deg, #059669, #0d9488);
-    box-shadow: 0 14px 26px rgba(5, 150, 105, 0.2);
+    background: linear-gradient(180deg, #0f766e, #115e59);
+    box-shadow:
+        0 12px 22px rgba(15, 118, 110, 0.18),
+        inset 0 1px 0 rgba(255, 255, 255, 0.2);
 }
 
 .borrowing-mobile-metric {
-    border: 1px solid rgba(226, 232, 240, 0.82);
-    border-radius: 16px;
-    background: rgba(255, 255, 255, 0.74);
+    border: 1px solid rgba(226, 232, 240, 0.95);
+    border-radius: 14px;
+    background: rgba(255, 255, 255, 0.88);
     padding: 9px;
     text-align: center;
 }
@@ -1780,6 +1793,7 @@ textarea {
     height: 9px;
     border-radius: 999px;
     background: #e2e8f0;
+    box-shadow: inset 0 1px 2px rgba(15, 23, 42, 0.08);
 }
 
 .borrowing-mobile-progress span {
@@ -1787,8 +1801,9 @@ textarea {
     inset: 0 auto 0 0;
     min-width: 7%;
     border-radius: inherit;
-    background: linear-gradient(90deg, #2563eb, #06b6d4, #10b981);
-    box-shadow: 0 0 18px rgba(14, 165, 233, 0.32);
+    background: linear-gradient(90deg, #1d4ed8 0%, #0f766e 50%, #1d4ed8 100%);
+    background-size: 220% 100%;
+    box-shadow: 0 0 12px rgba(37, 99, 235, 0.2);
     animation: borrowing-progress-flow 2.6s ease-in-out infinite;
 }
 
@@ -1805,14 +1820,14 @@ textarea {
 .borrowing-mobile-action--primary.ant-btn:not(:disabled),
 .borrowing-mobile-action--return.ant-btn:not(:disabled) {
     border: 0;
-    background: linear-gradient(135deg, #2563eb, #0891b2);
+    background: linear-gradient(180deg, #1d4ed8, #1e40af);
     color: #fff;
-    box-shadow: 0 12px 22px rgba(37, 99, 235, 0.22);
+    box-shadow: 0 10px 20px rgba(29, 78, 216, 0.2);
 }
 
 .borrowing-mobile-action--return.ant-btn:not(:disabled) {
-    background: linear-gradient(135deg, #059669, #0d9488);
-    box-shadow: 0 12px 22px rgba(5, 150, 105, 0.2);
+    background: linear-gradient(180deg, #0f766e, #115e59);
+    box-shadow: 0 10px 20px rgba(15, 118, 110, 0.18);
 }
 
 .borrowing-mobile-filter-chips {
@@ -1832,11 +1847,11 @@ textarea {
     display: inline-flex;
     flex: 0 0 auto;
     align-items: center;
-    border: 1px solid rgba(37, 99, 235, 0.16);
+    border: 1px solid rgba(203, 213, 225, 0.9);
     border-radius: 999px;
-    background: #eff6ff;
+    background: #fff;
     padding: 6px 10px;
-    color: #1e40af;
+    color: #334155;
     font-size: 11px;
     font-weight: 900;
 }
@@ -1862,34 +1877,40 @@ textarea {
 .borrowing-batch-hero {
     position: relative;
     overflow: hidden;
+    background:
+        linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(248, 250, 252, 0.96)),
+        repeating-linear-gradient(90deg, rgba(15, 23, 42, 0.018) 0 1px, transparent 1px 10px) !important;
+    border-color: rgba(203, 213, 225, 0.82) !important;
     animation: borrowing-hero-enter 480ms ease both;
 }
 
 .borrowing-batch-hero::before {
     position: absolute;
-    inset: -40% -20% auto 35%;
-    height: 180px;
+    inset: 0 18px auto;
+    height: 2px;
     border-radius: 999px;
-    background: linear-gradient(90deg, rgba(37, 99, 235, 0.14), rgba(16, 185, 129, 0.14), rgba(245, 158, 11, 0.12));
+    background: linear-gradient(90deg, transparent, rgba(29, 78, 216, 0.52), rgba(15, 118, 110, 0.42), transparent);
     content: '';
-    filter: blur(10px);
-    transform: rotate(-8deg);
+    filter: none;
+    transform: translateX(-120%);
     animation: borrowing-aurora 6.4s ease-in-out infinite;
     pointer-events: none;
 }
 
 .borrowing-batch-stat {
     overflow: hidden;
-    border: 1px solid rgba(255, 255, 255, 0.75) !important;
-    background: rgba(255, 255, 255, 0.78) !important;
-    box-shadow: 0 12px 26px rgba(15, 23, 42, 0.06);
+    border: 1px solid rgba(226, 232, 240, 0.95) !important;
+    background: rgba(255, 255, 255, 0.88) !important;
+    box-shadow:
+        0 10px 22px rgba(15, 23, 42, 0.055),
+        inset 0 1px 0 rgba(255, 255, 255, 0.92);
     backdrop-filter: blur(12px);
 }
 
 .borrowing-batch-alert {
-    border-color: rgba(245, 158, 11, 0.2) !important;
-    background: linear-gradient(135deg, #fffbeb, #ffffff 72%) !important;
-    box-shadow: 0 12px 26px rgba(146, 64, 14, 0.06);
+    border-color: rgba(245, 158, 11, 0.26) !important;
+    background: linear-gradient(180deg, #fffdf5, #ffffff 72%) !important;
+    box-shadow: 0 10px 22px rgba(146, 64, 14, 0.045);
 }
 
 .borrowing-scan-panel {
@@ -1900,14 +1921,18 @@ textarea {
 
 .borrowing-scan-panel::before {
     position: absolute;
-    inset: 0;
-    background: linear-gradient(130deg, rgba(37, 99, 235, 0.08), transparent 45%, rgba(16, 185, 129, 0.08));
+    inset: 0 0 auto;
+    height: 3px;
+    background: linear-gradient(90deg, #1d4ed8, #0f766e, #64748b);
+    background-size: 220% 100%;
     content: '';
+    animation: borrowing-progress-flow 3.2s ease-in-out infinite;
     pointer-events: none;
 }
 
 .borrowing-scan-panel--return::before {
-    background: linear-gradient(130deg, rgba(5, 150, 105, 0.1), transparent 45%, rgba(245, 158, 11, 0.08));
+    background: linear-gradient(90deg, #0f766e, #d97706, #334155);
+    background-size: 220% 100%;
 }
 
 .borrowing-batch-mobile-item {
@@ -1924,41 +1949,47 @@ textarea {
 }
 
 .borrowing-batch-mobile-item--selected {
-    border-color: rgba(16, 185, 129, 0.38);
+    border-color: rgba(15, 118, 110, 0.42);
+    border-left: 3px solid #0f766e;
     background:
-        linear-gradient(135deg, rgba(236, 253, 245, 0.98), rgba(255, 255, 255, 0.95) 58%),
-        radial-gradient(circle at 100% 0%, rgba(16, 185, 129, 0.2), transparent 36%);
-    box-shadow: 0 18px 34px rgba(5, 150, 105, 0.15);
+        linear-gradient(180deg, rgba(255, 255, 255, 0.99), rgba(240, 253, 250, 0.98)),
+        repeating-linear-gradient(90deg, rgba(15, 118, 110, 0.03) 0 1px, transparent 1px 8px);
+    box-shadow:
+        0 18px 34px rgba(15, 118, 110, 0.12),
+        0 0 0 1px rgba(15, 118, 110, 0.05);
 }
 
 .borrowing-batch-mobile-item--returned {
     border-color: rgba(148, 163, 184, 0.18);
     background:
-        linear-gradient(135deg, rgba(248, 250, 252, 0.98), rgba(255, 255, 255, 0.94)),
-        radial-gradient(circle at 90% 0%, rgba(100, 116, 139, 0.1), transparent 34%);
+        linear-gradient(180deg, rgba(248, 250, 252, 0.98), rgba(255, 255, 255, 0.94)),
+        repeating-linear-gradient(90deg, rgba(100, 116, 139, 0.018) 0 1px, transparent 1px 8px);
 }
 
 .borrowing-batch-mobile-item__shine {
     position: absolute;
-    inset: auto -25% -55% 42%;
-    height: 120px;
+    inset: 0 auto 0 -32px;
+    width: 2px;
     border-radius: 999px;
-    background: rgba(14, 165, 233, 0.08);
-    filter: blur(18px);
+    background: linear-gradient(180deg, transparent, rgba(29, 78, 216, 0.28), transparent);
+    filter: none;
+    animation: borrowing-vertical-scan 5.6s ease-in-out infinite;
     pointer-events: none;
 }
 
 .borrowing-batch-mobile-item__select--active {
-    background: linear-gradient(135deg, #059669, #0d9488);
+    background: linear-gradient(180deg, #0f766e, #115e59);
     box-shadow:
-        0 14px 26px rgba(5, 150, 105, 0.24),
-        0 0 0 6px rgba(16, 185, 129, 0.12);
+        0 12px 22px rgba(15, 118, 110, 0.2),
+        0 0 0 5px rgba(15, 118, 110, 0.1),
+        inset 0 1px 0 rgba(255, 255, 255, 0.2);
+    animation: borrowing-selected-pulse 2.8s ease-in-out infinite;
 }
 
 .borrowing-batch-mobile-time {
-    border: 1px solid rgba(226, 232, 240, 0.82);
-    border-radius: 16px;
-    background: rgba(255, 255, 255, 0.74);
+    border: 1px solid rgba(226, 232, 240, 0.95);
+    border-radius: 14px;
+    background: rgba(255, 255, 255, 0.88);
     padding: 10px;
 }
 
@@ -1979,14 +2010,14 @@ textarea {
     justify-content: space-between;
     gap: 10px;
     margin-bottom: 12px;
-    border: 1px solid rgba(16, 185, 129, 0.18);
-    border-radius: 18px;
-    background: rgba(236, 253, 245, 0.92);
+    border: 1px solid rgba(15, 118, 110, 0.22);
+    border-radius: 16px;
+    background: rgba(240, 253, 250, 0.94);
     padding: 10px 12px;
     color: #065f46;
     font-size: 12px;
     font-weight: 900;
-    box-shadow: 0 10px 24px rgba(5, 150, 105, 0.08);
+    box-shadow: 0 10px 24px rgba(15, 118, 110, 0.07);
     backdrop-filter: blur(12px);
 }
 
@@ -2031,8 +2062,8 @@ textarea {
 
     .borrowing-mobile-filter-panel {
         background:
-            linear-gradient(135deg, rgba(255, 255, 255, 0.98), rgba(248, 250, 252, 0.94)),
-            radial-gradient(circle at 0% 0%, rgba(37, 99, 235, 0.12), transparent 34%) !important;
+            linear-gradient(180deg, rgba(255, 255, 255, 0.99), rgba(248, 250, 252, 0.96)),
+            repeating-linear-gradient(90deg, rgba(15, 23, 42, 0.018) 0 1px, transparent 1px 9px) !important;
         padding: 12px !important;
     }
 
@@ -2102,34 +2133,38 @@ textarea {
     56%,
     100% {
         opacity: 0;
-        transform: translateX(-80%);
+        transform: translateX(-115%);
     }
     68% {
-        opacity: 0.78;
+        opacity: 0.92;
     }
     86% {
         opacity: 0;
-        transform: translateX(86%);
+        transform: translateX(115%);
     }
 }
 
 @keyframes borrowing-icon-float {
     0%,
     100% {
-        transform: translateY(0);
+        transform: translateY(0) scale(1);
+        filter: brightness(1);
     }
     50% {
-        transform: translateY(-3px);
+        transform: translateY(-2px) scale(1.025);
+        filter: brightness(1.04);
     }
 }
 
 @keyframes borrowing-progress-flow {
     0%,
     100% {
+        background-position: 0% 50%;
         filter: saturate(1);
     }
     50% {
-        filter: saturate(1.35) brightness(1.05);
+        background-position: 100% 50%;
+        filter: saturate(1.12) brightness(1.03);
     }
 }
 
@@ -2147,11 +2182,64 @@ textarea {
 @keyframes borrowing-aurora {
     0%,
     100% {
-        transform: translateX(0) rotate(-8deg);
-        opacity: 0.7;
+        transform: translateX(-120%);
+        opacity: 0;
     }
     50% {
-        transform: translateX(-16px) rotate(-4deg);
+        transform: translateX(0);
+        opacity: 1;
+    }
+    74% {
+        transform: translateX(120%);
+        opacity: 0;
+    }
+}
+
+@keyframes borrowing-metal-sweep {
+    0%,
+    58%,
+    100% {
+        opacity: 0;
+        transform: translateX(-64%);
+    }
+    68% {
+        opacity: 0.46;
+    }
+    88% {
+        opacity: 0;
+        transform: translateX(64%);
+    }
+}
+
+@keyframes borrowing-vertical-scan {
+    0%,
+    54%,
+    100% {
+        opacity: 0;
+        transform: translateX(0);
+    }
+    64% {
+        opacity: 0.9;
+    }
+    88% {
+        transform: translateX(calc(100vw - 70px));
+        opacity: 0;
+    }
+}
+
+@keyframes borrowing-selected-pulse {
+    0%,
+    100% {
+        box-shadow:
+            0 12px 22px rgba(15, 118, 110, 0.2),
+            0 0 0 5px rgba(15, 118, 110, 0.1),
+            inset 0 1px 0 rgba(255, 255, 255, 0.2);
+    }
+    50% {
+        box-shadow:
+            0 14px 26px rgba(15, 118, 110, 0.24),
+            0 0 0 7px rgba(15, 118, 110, 0.08),
+            inset 0 1px 0 rgba(255, 255, 255, 0.2);
         opacity: 1;
     }
 }
@@ -2242,13 +2330,16 @@ textarea {
     .borrowing-mobile-stat-card,
     .borrowing-mobile-card,
     .borrowing-mobile-card::before,
+    .borrowing-mobile-card__glow,
     .borrowing-mobile-card__orb,
     .borrowing-mobile-progress span,
     .borrowing-batch-hero,
     .borrowing-batch-hero::before,
     .borrowing-scan-panel,
+    .borrowing-scan-panel::before,
     .borrowing-batch-mobile-item,
     .borrowing-batch-mobile-item::before,
+    .borrowing-batch-mobile-item__shine,
     .borrowing-batch-mobile-item__select {
         animation: none !important;
         transition: none !important;
