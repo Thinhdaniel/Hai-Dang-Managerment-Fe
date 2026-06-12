@@ -4241,7 +4241,14 @@ textarea {
     align-content: stretch;
 }
 
-.qr-print-label--cut-border .qr-print-label__content {
+/* Tem branded: card bo góc viền xanh thương hiệu (kiêm đường cắt) */
+.qr-print-label--branded_compact .qr-print-label__content,
+.qr-print-label--branded_full .qr-print-label__content {
+    border: 0.3mm solid #1d4ed8;
+    border-radius: 1.6mm;
+}
+
+.qr-print-label--qr_only.qr-print-label--cut-border .qr-print-label__content {
     outline: 0.2mm dashed #d0d7de;
     outline-offset: -0.2mm;
 }
@@ -4288,10 +4295,8 @@ textarea {
     height: var(--qr-template-header-height);
     box-sizing: border-box;
     align-items: center;
-    justify-content: space-between;
-    gap: 0.8mm;
-    border-bottom: 0.1mm solid var(--qr-label-badge-border, #bfdbfe);
-    background: linear-gradient(90deg, #ffffff 0%, var(--qr-label-badge-bg, #eff6ff) 140%);
+    justify-content: center;
+    gap: 0.6mm;
     padding: 0 0.2mm;
 }
 
@@ -4306,17 +4311,16 @@ textarea {
 
 .qr-print-label__brand span {
     color: #1d4ed8;
-    font-size: 1.25mm;
+    font-size: 1.7mm;
     font-weight: 900;
-    letter-spacing: 0;
+    letter-spacing: 0.12mm;
 }
 
 .qr-print-label__brand strong {
     color: var(--qr-label-badge-color, #334155);
-    font-size: 1.1mm;
+    font-size: 1.4mm;
     font-weight: 900;
     letter-spacing: 0;
-    text-align: right;
 }
 
 .qr-print-label__qr {
@@ -4330,7 +4334,7 @@ textarea {
     overflow: visible;
 }
 
-.qr-print-label__qr .ant-qrcode {
+.qr-print-label__qr > div {
     display: block !important;
     width: var(--qr-template-code-size) !important;
     min-width: var(--qr-template-code-size) !important;
@@ -4358,7 +4362,7 @@ textarea {
     overflow: hidden;
     color: #0f172a;
     font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', monospace;
-    font-size: 1.45mm;
+    font-size: 1.7mm;
     font-weight: 800;
     letter-spacing: 0;
     line-height: var(--qr-template-code-height);
@@ -4372,7 +4376,7 @@ textarea {
     height: var(--qr-template-detail-height);
     overflow: hidden;
     color: #64748b;
-    font-size: 1.15mm;
+    font-size: 1.3mm;
     font-weight: 700;
     letter-spacing: 0;
     line-height: var(--qr-template-detail-height);
@@ -4454,7 +4458,7 @@ textarea {
         page-break-after: auto;
     }
 
-    .qr-print-label--cut-border .qr-print-label__content {
+    .qr-print-label--qr_only.qr-print-label--cut-border .qr-print-label__content {
         outline-color: #cbd5e1;
     }
 }

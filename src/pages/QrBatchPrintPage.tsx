@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Alert, App, Button, Card, InputNumber, QRCode, Result, Select, Skeleton, Switch, Typography } from 'antd';
+import { Alert, App, Button, Card, InputNumber, Result, Select, Skeleton, Switch, Typography } from 'antd';
 import {
     ArrowLeftOutlined,
     CheckCircleOutlined,
@@ -10,6 +10,7 @@ import {
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate, useParams } from 'react-router-dom';
 import { qrLabelService } from '../core/services/qr-label.service';
+import BrandQr from '../components/BrandQr';
 import { AssetOwnershipType, QrLabelStatus, type QrLabel } from '../core/types';
 
 const { Text } = Typography;
@@ -17,10 +18,15 @@ const { Text } = Typography;
 const A4_WIDTH_MM = 210;
 const A4_HEIGHT_MM = 297;
 const STORAGE_KEY = 'hai-dang-qr-print-template-v1';
-const QR_TEXT_HEIGHT_MM = 2.4;
+const QR_TEXT_HEIGHT_MM = 2.6;
 const QR_TEXT_GAP_MM = 0.35;
-const QR_BRAND_HEIGHT_MM = 2.4;
-const QR_DETAIL_HEIGHT_MM = 2.3;
+const QR_BRAND_HEIGHT_MM = 2.8;
+const QR_DETAIL_HEIGHT_MM = 2.5;
+// Quiet zone: viền trắng tối thiểu quanh QR để máy quét đọc ổn định, không để mã sát mép tem
+const QR_QUIET_ZONE_MM = 0.8;
+const CARD_BORDER_COLOR: [number, number, number] = [29, 78, 216];
+const CARD_BORDER_WIDTH_MM = 0.3;
+const CARD_BORDER_RADIUS_MM = 1.6;
 const CROP_MARK_LENGTH_MM = 3.2;
 const CROP_MARK_OFFSET_MM = 0.35;
 const CUT_BORDER_WIDTH_MM = 0.18;
@@ -259,7 +265,7 @@ const QrBatchPrintPage: React.FC = () => {
     const brandReserve = hasBrand ? QR_BRAND_HEIGHT_MM + QR_TEXT_GAP_MM : 0;
     const codeReserve = template.showCode ? QR_TEXT_HEIGHT_MM + QR_TEXT_GAP_MM : 0;
     const detailReserve = hasDetail ? QR_DETAIL_HEIGHT_MM + QR_TEXT_GAP_MM : 0;
-    const availableWidth = Math.max(4, template.labelWidth - template.safePadding * 2);
+    const availableWidth = Math.max(4, template.labelWidth - template.safePadding * 2 - QR_QUIET_ZONE_MM * 2);
     const availableHeight = Math.max(
         4,
         template.labelHeight - template.safePadding * 2 - brandReserve - codeReserve - detailReserve
@@ -267,7 +273,8 @@ const QrBatchPrintPage: React.FC = () => {
     const maxQrSize = Math.max(4, Math.min(availableWidth, availableHeight));
     const qrVisualSize = Math.min(template.qrSize, maxQrSize);
     const isQrSizeClamped = qrVisualSize < template.qrSize;
-    const canvasSize = Math.max(160, Math.round(qrVisualSize * 10));
+    // ~20px/mm ≈ 508 DPI để QR in ra sắc nét, không vỡ khi phóng vào PDF
+    const canvasSize = Math.max(512, Math.round(qrVisualSize * 20));
     const cropMarkLength = Math.max(
         1.2,
         Math.min(
@@ -338,6 +345,8 @@ const QrBatchPrintPage: React.FC = () => {
         if (template.cutMode === 'none') return;
 
         if (template.cutMode === 'border') {
+            // Tem branded đã có viền card bo góc làm đường cắt, không vẽ thêm dashed
+            if (hasBrand) return;
             doc.setDrawColor(208, 215, 222);
             doc.setLineWidth(CUT_BORDER_WIDTH_MM);
             doc.setLineDashPattern?.([1.2, 0.8], 0);
@@ -347,6 +356,20 @@ const QrBatchPrintPage: React.FC = () => {
         }
 
         drawCropMarks(doc, x, y, template.labelWidth, template.labelHeight);
+    };
+
+    const drawCardBorder = (doc: any, x: number, y: number) => {
+        const inset = CARD_BORDER_WIDTH_MM / 2;
+        doc.setDrawColor(CARD_BORDER_COLOR[0], CARD_BORDER_COLOR[1], CARD_BORDER_COLOR[2]);
+        doc.setLineWidth(CARD_BORDER_WIDTH_MM);
+        doc.roundedRect(
+            x + inset,
+            y + inset,
+            template.labelWidth - CARD_BORDER_WIDTH_MM,
+            template.labelHeight - CARD_BORDER_WIDTH_MM,
+            CARD_BORDER_RADIUS_MM,
+            CARD_BORDER_RADIUS_MM
+        );
     };
 
     const handleDownloadPdf = async () => {
@@ -378,19 +401,21 @@ const QrBatchPrintPage: React.FC = () => {
             drawLabelFrame(doc, x, y);
 
             if (hasBrand) {
-                doc.setDrawColor(ownership.border[0], ownership.border[1], ownership.border[2]);
-                doc.setLineWidth(0.08);
-                doc.line(innerX, cursorY + QR_BRAND_HEIGHT_MM, innerX + innerWidth, cursorY + QR_BRAND_HEIGHT_MM);
+                drawCardBorder(doc, x, y);
                 doc.setFont('helvetica', 'bold');
-                doc.setTextColor(29, 78, 216);
-                doc.setFontSize(4.4);
-                doc.text('HAIDANG MS', innerX, cursorY + 1.55, { baseline: 'middle' });
-                doc.setTextColor(ownership.color[0], ownership.color[1], ownership.color[2]);
-                doc.setFontSize(3.9);
-                doc.text(ownership.pdfLabel, innerX + innerWidth, cursorY + 1.55, {
-                    align: 'right',
-                    baseline: 'middle',
-                });
+                doc.setFontSize(6.2);
+                const brandText = 'HAI DANG';
+                const ownershipText = ownership.pdfLabel !== 'HAI DANG' ? ` · ${ownership.pdfLabel}` : '';
+                const brandWidth = doc.getTextWidth(brandText);
+                const totalWidth = brandWidth + (ownershipText ? doc.getTextWidth(ownershipText) : 0);
+                const brandStartX = x + template.labelWidth / 2 - totalWidth / 2;
+                const brandMidY = cursorY + QR_BRAND_HEIGHT_MM / 2 + 0.2;
+                doc.setTextColor(CARD_BORDER_COLOR[0], CARD_BORDER_COLOR[1], CARD_BORDER_COLOR[2]);
+                doc.text(brandText, brandStartX, brandMidY, { baseline: 'middle' });
+                if (ownershipText) {
+                    doc.setTextColor(ownership.color[0], ownership.color[1], ownership.color[2]);
+                    doc.text(ownershipText, brandStartX + brandWidth, brandMidY, { baseline: 'middle' });
+                }
                 cursorY += QR_BRAND_HEIGHT_MM + QR_TEXT_GAP_MM;
             }
 
@@ -416,7 +441,7 @@ const QrBatchPrintPage: React.FC = () => {
             if (template.showCode) {
                 doc.setFont('helvetica', 'bold');
                 doc.setTextColor(15, 23, 42);
-                doc.setFontSize(4.8);
+                doc.setFontSize(6);
                 doc.text(primaryText, x + template.labelWidth / 2, qrY + qrVisualSize + QR_TEXT_GAP_MM + 0.2, {
                     align: 'center',
                     baseline: 'top',
@@ -427,7 +452,7 @@ const QrBatchPrintPage: React.FC = () => {
             if (hasDetail) {
                 doc.setFont('helvetica', 'normal');
                 doc.setTextColor(71, 85, 105);
-                doc.setFontSize(3.8);
+                doc.setFontSize(4.6);
                 doc.text(
                     detailText.slice(0, 34),
                     x + template.labelWidth / 2,
@@ -692,8 +717,10 @@ const QrBatchPrintPage: React.FC = () => {
                                         <div className='qr-print-label__content'>
                                             {template.printStyle !== 'qr_only' ? (
                                                 <div className='qr-print-label__brand'>
-                                                    <span>HAIDANG MS</span>
-                                                    <strong>{ownership.label}</strong>
+                                                    <span>HẢI ĐĂNG</span>
+                                                    {ownership.label !== 'HẢI ĐĂNG' ? (
+                                                        <strong>· {ownership.label}</strong>
+                                                    ) : null}
                                                 </div>
                                             ) : null}
                                             <div
@@ -702,12 +729,7 @@ const QrBatchPrintPage: React.FC = () => {
                                                 }}
                                                 className='qr-print-label__qr'
                                             >
-                                                <QRCode
-                                                    value={getQrUrl(label.publicId)}
-                                                    size={canvasSize}
-                                                    type='canvas'
-                                                    bordered={false}
-                                                />
+                                                <BrandQr value={getQrUrl(label.publicId)} size={canvasSize} />
                                             </div>
                                             {template.showCode ? (
                                                 <div className='qr-print-label__code'>{getLabelPrimaryText(label)}</div>

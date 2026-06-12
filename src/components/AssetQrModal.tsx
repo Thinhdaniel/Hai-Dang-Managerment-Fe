@@ -1,6 +1,7 @@
 import React, { useMemo, useRef } from 'react';
-import { App, Button, Divider, Modal, QRCode, Space, Typography } from 'antd';
+import { App, Button, Divider, Modal, Space, Typography } from 'antd';
 import { CopyOutlined, DownloadOutlined, LinkOutlined } from '@ant-design/icons';
+import BrandQr from './BrandQr';
 
 const { Paragraph, Text, Title } = Typography;
 
@@ -15,6 +16,7 @@ type AssetQrModalProps = {
 const AssetQrModal: React.FC<AssetQrModalProps> = ({ open, assetName, machineCode, publicId, onClose }) => {
     const { message } = App.useApp();
     const qrContainerRef = useRef<HTMLDivElement | null>(null);
+    const qrDownloadRef = useRef<HTMLDivElement | null>(null);
 
     const publicUrl = useMemo(() => {
         if (!publicId) {
@@ -34,13 +36,28 @@ const AssetQrModal: React.FC<AssetQrModalProps> = ({ open, assetName, machineCod
     };
 
     const handleDownload = () => {
-        const canvas = qrContainerRef.current?.querySelector('canvas');
-        if (!canvas || !publicId) {
+        // Xuất từ canvas ẩn 1024px (không phải bản preview 180px) để ảnh in/zoom không vỡ
+        const source =
+            qrDownloadRef.current?.querySelector('canvas') ?? qrContainerRef.current?.querySelector('canvas');
+        if (!source || !publicId) {
             return;
         }
 
+        // Quiet zone: viền trắng chuẩn quanh QR để máy quét đọc ổn định
+        const quietZone = Math.round(source.width * 0.08);
+        const output = document.createElement('canvas');
+        output.width = source.width + quietZone * 2;
+        output.height = source.height + quietZone * 2;
+        const ctx = output.getContext('2d');
+        if (!ctx) {
+            return;
+        }
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(0, 0, output.width, output.height);
+        ctx.drawImage(source, quietZone, quietZone);
+
         const link = document.createElement('a');
-        link.href = canvas.toDataURL('image/png');
+        link.href = output.toDataURL('image/png');
         link.download = `${machineCode || publicId}-qr.png`;
         document.body.appendChild(link);
         link.click();
@@ -83,7 +100,14 @@ const AssetQrModal: React.FC<AssetQrModalProps> = ({ open, assetName, machineCod
                         <div className='relative mb-5 rounded-2xl border border-slate-100 bg-white p-3 shadow-[0_4px_20px_-4px_rgba(0,0,0,0.05)]'>
                             {publicUrl ? (
                                 <div ref={qrContainerRef}>
-                                    <QRCode value={publicUrl} type='canvas' size={180} color='#0f172a' />
+                                    <BrandQr value={publicUrl} size={180} />
+                                    <div
+                                        ref={qrDownloadRef}
+                                        aria-hidden
+                                        className='pointer-events-none absolute top-0 -left-[9999px]'
+                                    >
+                                        <BrandQr value={publicUrl} size={1024} />
+                                    </div>
                                 </div>
                             ) : (
                                 <div className='flex h-[180px] w-[180px] items-center justify-center text-sm font-medium text-slate-400'>
