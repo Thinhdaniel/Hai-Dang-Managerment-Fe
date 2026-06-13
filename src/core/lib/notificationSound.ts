@@ -113,6 +113,29 @@ const playPreset = (ctx: AudioContext, preset: SoundPreset) => {
     });
 };
 
+// iOS chỉ cho resume AudioContext bên trong cử chỉ người dùng, và đình chỉ lại context
+// mỗi lần app xuống nền — nên phải gắn lại listener mở khoá mỗi khi context bị treo,
+// không phải chỉ một lần lúc khởi động.
+let unlockArmed = false;
+
+const armUnlock = () => {
+    if (unlockArmed || typeof window === 'undefined') return;
+    unlockArmed = true;
+
+    const unlock = () => {
+        unlockArmed = false;
+        window.removeEventListener('pointerdown', unlock);
+        window.removeEventListener('keydown', unlock);
+        const ctx = ensureContext();
+        if (ctx && ctx.state !== 'running') {
+            void ctx.resume().catch(() => undefined);
+        }
+    };
+
+    window.addEventListener('pointerdown', unlock);
+    window.addEventListener('keydown', unlock);
+};
+
 // Phát chuông; force=true để nghe thử (bỏ qua throttle). soundId để nghe thử một kiểu cụ thể.
 export const playNotificationSound = (options?: { force?: boolean; soundId?: string }) => {
     if (!isNotificationSoundEnabled()) return;
@@ -123,6 +146,7 @@ export const playNotificationSound = (options?: { force?: boolean; soundId?: str
 
     const ctx = ensureContext();
     if (!ctx) return;
+    if (ctx.state !== 'running') armUnlock();
     try {
         playPreset(ctx, findPreset(options?.soundId ?? getNotificationSoundId()));
     } catch {
@@ -130,14 +154,17 @@ export const playNotificationSound = (options?: { force?: boolean; soundId?: str
     }
 };
 
-// Mở khoá audio sau tương tác đầu tiên (autoplay policy) — gọi 1 lần lúc app khởi động.
+// Mở khoá audio theo autoplay policy — gọi 1 lần lúc app khởi động.
 export const primeNotificationSound = () => {
     if (typeof window === 'undefined') return;
-    const unlock = () => {
-        ensureContext();
-        window.removeEventListener('pointerdown', unlock);
-        window.removeEventListener('keydown', unlock);
-    };
-    window.addEventListener('pointerdown', unlock, { once: true });
-    window.addEventListener('keydown', unlock, { once: true });
+    armUnlock();
+
+    // Quay lại app từ nền: thử resume ngay; nếu trình duyệt không cho (iOS) thì chờ cú chạm kế tiếp
+    document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState !== 'visible' || !audioContext) return;
+        if (audioContext.state !== 'running') {
+            void audioContext.resume().catch(() => undefined);
+            armUnlock();
+        }
+    });
 };

@@ -5713,3 +5713,19 @@ textarea {
         padding-bottom: calc(10px + env(safe-area-inset-bottom));
     }
 }
+
+/* iOS tự zoom trang khi focus vào ô nhập có font-size < 16px.
+   Ép mọi control nhập liệu đủ 16px trên màn nhỏ — chỉ áp cho WebKit/iOS
+   (-webkit-touch-callout chỉ tồn tại trên iOS), Android giữ nguyên cỡ chữ. */
+@supports (-webkit-touch-callout: none) {
+    @media (max-width: 767px) {
+        .ant-input,
+        .ant-input-affix-wrapper > input.ant-input,
+        textarea.ant-input,
+        .ant-input-number-input,
+        .ant-select-selection-search-input,
+        .ant-picker-input > input {
+            font-size: 16px !important;
+        }
+    }
+}

@@ -192,7 +192,10 @@ self.addEventListener('push', (event) => {
         icon: payload.icon || '/icons/icon-192.png',
         badge: '/icons/icon-192.png',
         tag: payload.tag || payload.notificationId || 'hai-dang-notification',
-        renotify: Boolean(payload.tag),
+        // Thông báo cùng tag (cùng phiếu) thay thế nhau phải kêu/rung lại, không thay im lặng
+        renotify: true,
+        silent: false,
+        vibrate: [160, 80, 160],
         data: {
             url: payload.url || '/dashboard',
             notificationId: payload.notificationId,
