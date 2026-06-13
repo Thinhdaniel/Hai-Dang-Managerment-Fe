@@ -6,7 +6,8 @@ import { notification as antNotification } from 'antd';
 import { useAuth } from '../contexts/AuthContext';
 import { queryClient } from '../queryClient';
 import { syncAppBadge } from '../lib/app-badge';
-import { playNotificationSound, primeNotificationSound } from '../lib/notificationSound';
+import { playNotificationSound, primeNotificationSound, setSystemNotificationSound } from '../lib/notificationSound';
+import { systemSettingService } from '../services/systemSetting.service';
 import type { Asset } from '../types';
 
 // Socket event names
@@ -61,6 +62,15 @@ export const useNotifications = (socket: import('socket.io-client').Socket | nul
     useEffect(() => {
         primeNotificationSound();
     }, []);
+
+    // Đồng bộ chuông mp3 hệ thống (admin upload) — cache localStorage dùng ngay, fetch làm mới
+    useEffect(() => {
+        if (!isAuthenticated) return;
+        systemSettingService
+            .getNotificationSound()
+            .then((sound) => setSystemNotificationSound(sound))
+            .catch(() => undefined);
+    }, [isAuthenticated]);
 
     // Keep Home Screen app badge in sync with unread notifications.
     useEffect(() => {
