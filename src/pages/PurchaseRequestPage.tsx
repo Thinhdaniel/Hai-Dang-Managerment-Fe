@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import dayjs, { type Dayjs } from 'dayjs';
 import {
     Alert,
@@ -38,14 +38,16 @@ import {
     FilterOutlined,
     InboxOutlined,
     InfoCircleOutlined,
+    MessageOutlined,
     PlusOutlined,
     RightOutlined,
     ShoppingOutlined,
 } from '@ant-design/icons';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Navigate } from 'react-router-dom';
+import { Navigate, useSearchParams } from 'react-router-dom';
 import ConfirmAction from '../components/shared/ConfirmAction';
 import PageHeader from '../components/shared/PageHeader';
+import ContextChatDrawer from '../components/chat/ContextChatDrawer';
 import { useAuth } from '../core/contexts/AuthContext';
 import { plantService } from '../core/services';
 import {
@@ -2381,8 +2383,14 @@ const DetailDrawer: React.FC<DrawerProps> = ({
 }) => {
     const screens = useBreakpoint();
     const isMobile = !screens.sm;
+    const [chatOpen, setChatOpen] = useState(false);
     const isPending = record?.status === 'pending';
     const meta = record ? STATUS_META[record.status] : null;
+
+    // Đóng chat khi phiếu đang xem thay đổi hoặc drawer chi tiết đóng
+    useEffect(() => {
+        setChatOpen(false);
+    }, [record?.id]);
 
     const sumPrice = record?.items.reduce((s, i) => s + (i.totalPrice ?? 0), 0) ?? 0;
     const sumVat = record?.items.reduce((s, i) => s + (i.vatAmount ?? 0), 0) ?? 0;
@@ -2472,271 +2480,304 @@ const DetailDrawer: React.FC<DrawerProps> = ({
     ];
 
     return (
-        <Drawer
-            open={Boolean(record)}
-            onClose={onClose}
-            size={isMobile ? '100%' : 900}
-            placement={isMobile ? 'bottom' : 'right'}
-            destroyOnHidden
-            styles={{
-                body: { padding: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden' },
-                header: { padding: isMobile ? '12px 16px' : undefined },
-            }}
-            title={
-                record ? (
-                    <div className='flex items-center gap-2'>
-                        <Text strong className='text-sm sm:text-base'>
-                            {record.requestCode}
-                        </Text>
-                        {meta && (
-                            <Tag color={meta.color} icon={meta.icon} style={{ margin: 0 }}>
-                                {meta.label}
-                            </Tag>
-                        )}
-                    </div>
-                ) : (
-                    'Chi tiết phiếu'
-                )
-            }
-            footer={
-                record ? (
-                    <div className={`flex gap-2 ${isMobile ? 'flex-col' : 'flex-wrap'}`}>
-                        {isPending && (
-                            <Button icon={<EditOutlined />} onClick={onEdit} block={isMobile}>
-                                Chỉnh sửa
-                            </Button>
-                        )}
-                        {isPending && isCS1Director && (
-                            <ConfirmAction
-                                intent='primary'
-                                title='Duyệt phiếu?'
-                                description={`Xác nhận duyệt ${record.requestCode}?`}
-                                okLabel='Duyệt'
-                                onConfirm={() => onApprove(record)}
+        <>
+            <Drawer
+                open={Boolean(record)}
+                onClose={onClose}
+                size={isMobile ? '100%' : 900}
+                placement={isMobile ? 'bottom' : 'right'}
+                destroyOnHidden
+                styles={{
+                    body: { padding: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden' },
+                    header: { padding: isMobile ? '12px 16px' : undefined },
+                }}
+                title={
+                    record ? (
+                        <div className='flex items-center gap-2'>
+                            <Text strong className='text-sm sm:text-base'>
+                                {record.requestCode}
+                            </Text>
+                            {meta && (
+                                <Tag color={meta.color} icon={meta.icon} style={{ margin: 0 }}>
+                                    {meta.label}
+                                </Tag>
+                            )}
+                        </div>
+                    ) : (
+                        'Chi tiết phiếu'
+                    )
+                }
+                footer={
+                    record ? (
+                        <div className={`flex gap-2 ${isMobile ? 'flex-col' : 'flex-wrap'}`}>
+                            <Button
+                                icon={<MessageOutlined />}
+                                className='text-blue-600'
+                                block={isMobile}
+                                onClick={() => setChatOpen(true)}
                             >
+                                Trao đổi
+                            </Button>
+                            {isPending && (
+                                <Button icon={<EditOutlined />} onClick={onEdit} block={isMobile}>
+                                    Chỉnh sửa
+                                </Button>
+                            )}
+                            {isPending && isCS1Director && (
+                                <ConfirmAction
+                                    intent='primary'
+                                    title='Duyệt phiếu?'
+                                    description={`Xác nhận duyệt ${record.requestCode}?`}
+                                    okLabel='Duyệt'
+                                    onConfirm={() => onApprove(record)}
+                                >
+                                    <Button
+                                        type='primary'
+                                        icon={<CheckOutlined />}
+                                        loading={approvingId === record.id}
+                                        style={{ background: '#16a34a', borderColor: '#16a34a' }}
+                                        block={isMobile}
+                                    >
+                                        Duyệt phiếu
+                                    </Button>
+                                </ConfirmAction>
+                            )}
+                            {isPending && isCS1Director && (
                                 <Button
-                                    type='primary'
-                                    icon={<CheckOutlined />}
-                                    loading={approvingId === record.id}
-                                    style={{ background: '#16a34a', borderColor: '#16a34a' }}
+                                    danger
+                                    icon={<CloseOutlined />}
+                                    onClick={() => onReject(record)}
                                     block={isMobile}
                                 >
-                                    Duyệt phiếu
+                                    Từ chối
                                 </Button>
-                            </ConfirmAction>
-                        )}
-                        {isPending && isCS1Director && (
-                            <Button danger icon={<CloseOutlined />} onClick={() => onReject(record)} block={isMobile}>
-                                Từ chối
-                            </Button>
-                        )}
-                        <Button
-                            icon={<FileExcelOutlined />}
-                            style={{ color: '#16a34a', borderColor: '#16a34a' }}
-                            block={isMobile}
-                            onClick={() => onExport(record.id, record.requestCode ?? record.id)}
-                        >
-                            Xuất Excel
-                        </Button>
-                    </div>
-                ) : undefined
-            }
-        >
-            {loading && <div className='py-16 text-center text-slate-400'>Đang tải...</div>}
-            {!loading && record && (
-                <div className='flex-1 overflow-y-auto'>
-                    <div className='flex flex-col gap-4 p-4 sm:p-5'>
-                        {record.status === 'rejected' && record.rejectedReason && (
-                            <Alert type='error' showIcon title={`Lý do từ chối: ${record.rejectedReason}`} />
-                        )}
-
-                        {/* Info */}
-                        <div className='overflow-hidden rounded-2xl border border-slate-200 bg-white'>
-                            <div className='border-b border-slate-100 bg-slate-50 px-4 py-2.5 text-xs font-semibold tracking-wider text-slate-400 uppercase'>
-                                Thông tin phiếu
-                            </div>
-                            {isMobile ? (
-                                <div className='divide-y divide-slate-100'>
-                                    {[
-                                        {
-                                            label: 'Mã phiếu',
-                                            value: (
-                                                <span className='font-mono font-bold text-[#1A3A5C]'>
-                                                    {record.requestCode ?? '-'}
-                                                </span>
-                                            ),
-                                        },
-                                        {
-                                            label: 'Tháng/Năm',
-                                            value:
-                                                record.requestMonth && record.requestYear
-                                                    ? `${record.requestMonth}/${record.requestYear}`
-                                                    : '-',
-                                        },
-                                        { label: 'Ngày tạo', value: fmtDate(record.createdAt) },
-                                        { label: 'Người tạo', value: resolveUserLabel(record.requestedBy) },
-                                        {
-                                            label: 'Trạng thái',
-                                            value: meta ? (
-                                                <Tag color={meta.color} icon={meta.icon} style={{ margin: 0 }}>
-                                                    {meta.label}
-                                                </Tag>
-                                            ) : (
-                                                '-'
-                                            ),
-                                        },
-                                        {
-                                            label: 'Tổng tiền',
-                                            value: (
-                                                <span className='font-bold text-[#1A3A5C]'>
-                                                    {fmtVND(record.totalWithVat ?? sumTotal)}
-                                                </span>
-                                            ),
-                                        },
-                                    ].map(({ label, value }) => (
-                                        <div key={label} className='flex items-center justify-between gap-3 px-4 py-3'>
-                                            <span className='w-24 shrink-0 text-xs text-slate-400'>{label}</span>
-                                            <span className='text-right text-sm text-slate-800'>{value}</span>
-                                        </div>
-                                    ))}
-                                </div>
-                            ) : (
-                                <div className='p-4'>
-                                    <Descriptions column={2} size='small' bordered>
-                                        <Descriptions.Item label='Mã phiếu'>
-                                            {record.requestCode ?? '-'}
-                                        </Descriptions.Item>
-                                        <Descriptions.Item label='Tháng/Năm'>
-                                            {record.requestMonth && record.requestYear
-                                                ? `${record.requestMonth}/${record.requestYear}`
-                                                : '-'}
-                                        </Descriptions.Item>
-                                        <Descriptions.Item label='Ngày tạo'>
-                                            {fmtDate(record.createdAt)}
-                                        </Descriptions.Item>
-                                        <Descriptions.Item label='Người tạo'>
-                                            {resolveUserLabel(record.requestedBy)}
-                                        </Descriptions.Item>
-                                        <Descriptions.Item label='Trạng thái'>
-                                            {meta && (
-                                                <Tag color={meta.color} icon={meta.icon}>
-                                                    {meta.label}
-                                                </Tag>
-                                            )}
-                                        </Descriptions.Item>
-                                        <Descriptions.Item label='Tổng tiền (có VAT)'>
-                                            <Text strong style={{ color: '#1A3A5C' }}>
-                                                {fmtVND(record.totalWithVat ?? sumTotal)}
-                                            </Text>
-                                        </Descriptions.Item>
-                                    </Descriptions>
-                                </div>
                             )}
+                            <Button
+                                icon={<FileExcelOutlined />}
+                                style={{ color: '#16a34a', borderColor: '#16a34a' }}
+                                block={isMobile}
+                                onClick={() => onExport(record.id, record.requestCode ?? record.id)}
+                            >
+                                Xuất Excel
+                            </Button>
                         </div>
+                    ) : undefined
+                }
+            >
+                {loading && <div className='py-16 text-center text-slate-400'>Đang tải...</div>}
+                {!loading && record && (
+                    <div className='flex-1 overflow-y-auto'>
+                        <div className='flex flex-col gap-4 p-4 sm:p-5'>
+                            {record.status === 'rejected' && record.rejectedReason && (
+                                <Alert type='error' showIcon title={`Lý do từ chối: ${record.rejectedReason}`} />
+                            )}
 
-                        {/* Items */}
-                        <div className='overflow-hidden rounded-2xl border border-slate-200 bg-white'>
-                            <div className='border-b border-slate-100 bg-slate-50 px-4 py-2.5 text-xs font-semibold tracking-wider text-slate-400 uppercase'>
-                                Danh sách vật tư · {record.items.length} loại
-                            </div>
-                            {isMobile ? (
-                                <div className='divide-y divide-slate-100'>
-                                    {record.items.map((r, idx) => (
-                                        <div key={getPurchaseRequestItemKey(r, idx)} className='px-4 py-3'>
-                                            <div className='mb-1 flex items-start justify-between gap-2'>
-                                                <span className='flex-1 text-sm font-semibold text-slate-800'>
-                                                    {r.materialName || '—'}
-                                                </span>
-                                                <span className='shrink-0 text-xs text-slate-400'>{r.unit || '—'}</span>
-                                            </div>
-                                            <div className='mb-1'>
-                                                {r.catalogStatus === 'matched' && r.materialId ? (
-                                                    <Tag color='success' className='!m-0 !text-[10px]'>
-                                                        Đã khớp danh mục
-                                                    </Tag>
-                                                ) : r.catalogStatus === 'ignored' ? (
-                                                    <Tag color='default' className='!m-0 !text-[10px]'>
-                                                        Không quản tồn
+                            {/* Info */}
+                            <div className='overflow-hidden rounded-2xl border border-slate-200 bg-white'>
+                                <div className='border-b border-slate-100 bg-slate-50 px-4 py-2.5 text-xs font-semibold tracking-wider text-slate-400 uppercase'>
+                                    Thông tin phiếu
+                                </div>
+                                {isMobile ? (
+                                    <div className='divide-y divide-slate-100'>
+                                        {[
+                                            {
+                                                label: 'Mã phiếu',
+                                                value: (
+                                                    <span className='font-mono font-bold text-[#1A3A5C]'>
+                                                        {record.requestCode ?? '-'}
+                                                    </span>
+                                                ),
+                                            },
+                                            {
+                                                label: 'Tháng/Năm',
+                                                value:
+                                                    record.requestMonth && record.requestYear
+                                                        ? `${record.requestMonth}/${record.requestYear}`
+                                                        : '-',
+                                            },
+                                            { label: 'Ngày tạo', value: fmtDate(record.createdAt) },
+                                            { label: 'Người tạo', value: resolveUserLabel(record.requestedBy) },
+                                            {
+                                                label: 'Trạng thái',
+                                                value: meta ? (
+                                                    <Tag color={meta.color} icon={meta.icon} style={{ margin: 0 }}>
+                                                        {meta.label}
                                                     </Tag>
                                                 ) : (
-                                                    <Tag color='orange' className='!m-0 !text-[10px]'>
-                                                        Chưa có danh mục
+                                                    '-'
+                                                ),
+                                            },
+                                            {
+                                                label: 'Tổng tiền',
+                                                value: (
+                                                    <span className='font-bold text-[#1A3A5C]'>
+                                                        {fmtVND(record.totalWithVat ?? sumTotal)}
+                                                    </span>
+                                                ),
+                                            },
+                                        ].map(({ label, value }) => (
+                                            <div
+                                                key={label}
+                                                className='flex items-center justify-between gap-3 px-4 py-3'
+                                            >
+                                                <span className='w-24 shrink-0 text-xs text-slate-400'>{label}</span>
+                                                <span className='text-right text-sm text-slate-800'>{value}</span>
+                                            </div>
+                                        ))}
+                                    </div>
+                                ) : (
+                                    <div className='p-4'>
+                                        <Descriptions column={2} size='small' bordered>
+                                            <Descriptions.Item label='Mã phiếu'>
+                                                {record.requestCode ?? '-'}
+                                            </Descriptions.Item>
+                                            <Descriptions.Item label='Tháng/Năm'>
+                                                {record.requestMonth && record.requestYear
+                                                    ? `${record.requestMonth}/${record.requestYear}`
+                                                    : '-'}
+                                            </Descriptions.Item>
+                                            <Descriptions.Item label='Ngày tạo'>
+                                                {fmtDate(record.createdAt)}
+                                            </Descriptions.Item>
+                                            <Descriptions.Item label='Người tạo'>
+                                                {resolveUserLabel(record.requestedBy)}
+                                            </Descriptions.Item>
+                                            <Descriptions.Item label='Trạng thái'>
+                                                {meta && (
+                                                    <Tag color={meta.color} icon={meta.icon}>
+                                                        {meta.label}
                                                     </Tag>
                                                 )}
-                                            </div>
-                                            <div className='flex flex-wrap gap-x-4 gap-y-0.5 text-xs text-slate-500'>
-                                                <span>
-                                                    SL:{' '}
-                                                    <strong className='text-slate-700'>
-                                                        {fmtNum(r.quantityRequested)}
-                                                    </strong>
-                                                </span>
-                                                {r.quantityOrdered ? (
-                                                    <span>
-                                                        Mua: <strong>{fmtNum(r.quantityOrdered)}</strong>
-                                                    </span>
-                                                ) : null}
-                                                {r.unitPrice ? (
-                                                    <span>
-                                                        Đơn giá: <strong>{fmtVND(r.unitPrice)}</strong>
-                                                    </span>
-                                                ) : null}
-                                                {r.totalWithVat ? (
-                                                    <span className='font-bold text-[#1A3A5C]'>
-                                                        Tổng: {fmtVND(r.totalWithVat)}
-                                                    </span>
-                                                ) : null}
-                                            </div>
-                                            {r.supplierName && (
-                                                <div className='mt-0.5 text-xs text-slate-400'>
-                                                    NCC: {r.supplierName}
-                                                </div>
-                                            )}
-                                            {r.purpose && (
-                                                <div className='mt-0.5 text-xs text-slate-400 italic'>{r.purpose}</div>
-                                            )}
-                                        </div>
-                                    ))}
-                                    <div className='flex items-center justify-between bg-slate-50 px-4 py-3'>
-                                        <span className='text-xs font-semibold text-slate-500'>Tổng cộng</span>
-                                        <span className='font-bold text-[#1A3A5C]'>{fmtVND(sumTotal)}</span>
-                                    </div>
-                                </div>
-                            ) : (
-                                <Table
-                                    dataSource={record.items}
-                                    columns={itemCols}
-                                    rowKey={(item, index) => getPurchaseRequestItemKey(item, index ?? 0)}
-                                    pagination={false}
-                                    size='small'
-                                    scroll={{ x: 'max-content' }}
-                                    summary={() => (
-                                        <Table.Summary.Row>
-                                            <Table.Summary.Cell index={0} colSpan={7}>
-                                                <Text strong>Tổng cộng</Text>
-                                            </Table.Summary.Cell>
-                                            <Table.Summary.Cell index={7} align='right'>
-                                                <Text strong>{fmtVND(sumPrice)}</Text>
-                                            </Table.Summary.Cell>
-                                            <Table.Summary.Cell index={8} />
-                                            <Table.Summary.Cell index={9} align='right'>
-                                                <Text strong>{fmtVND(sumVat)}</Text>
-                                            </Table.Summary.Cell>
-                                            <Table.Summary.Cell index={10} align='right'>
+                                            </Descriptions.Item>
+                                            <Descriptions.Item label='Tổng tiền (có VAT)'>
                                                 <Text strong style={{ color: '#1A3A5C' }}>
-                                                    {fmtVND(sumTotal)}
+                                                    {fmtVND(record.totalWithVat ?? sumTotal)}
                                                 </Text>
-                                            </Table.Summary.Cell>
-                                            <Table.Summary.Cell index={11} colSpan={2} />
-                                        </Table.Summary.Row>
-                                    )}
-                                />
-                            )}
+                                            </Descriptions.Item>
+                                        </Descriptions>
+                                    </div>
+                                )}
+                            </div>
+
+                            {/* Items */}
+                            <div className='overflow-hidden rounded-2xl border border-slate-200 bg-white'>
+                                <div className='border-b border-slate-100 bg-slate-50 px-4 py-2.5 text-xs font-semibold tracking-wider text-slate-400 uppercase'>
+                                    Danh sách vật tư · {record.items.length} loại
+                                </div>
+                                {isMobile ? (
+                                    <div className='divide-y divide-slate-100'>
+                                        {record.items.map((r, idx) => (
+                                            <div key={getPurchaseRequestItemKey(r, idx)} className='px-4 py-3'>
+                                                <div className='mb-1 flex items-start justify-between gap-2'>
+                                                    <span className='flex-1 text-sm font-semibold text-slate-800'>
+                                                        {r.materialName || '—'}
+                                                    </span>
+                                                    <span className='shrink-0 text-xs text-slate-400'>
+                                                        {r.unit || '—'}
+                                                    </span>
+                                                </div>
+                                                <div className='mb-1'>
+                                                    {r.catalogStatus === 'matched' && r.materialId ? (
+                                                        <Tag color='success' className='!m-0 !text-[10px]'>
+                                                            Đã khớp danh mục
+                                                        </Tag>
+                                                    ) : r.catalogStatus === 'ignored' ? (
+                                                        <Tag color='default' className='!m-0 !text-[10px]'>
+                                                            Không quản tồn
+                                                        </Tag>
+                                                    ) : (
+                                                        <Tag color='orange' className='!m-0 !text-[10px]'>
+                                                            Chưa có danh mục
+                                                        </Tag>
+                                                    )}
+                                                </div>
+                                                <div className='flex flex-wrap gap-x-4 gap-y-0.5 text-xs text-slate-500'>
+                                                    <span>
+                                                        SL:{' '}
+                                                        <strong className='text-slate-700'>
+                                                            {fmtNum(r.quantityRequested)}
+                                                        </strong>
+                                                    </span>
+                                                    {r.quantityOrdered ? (
+                                                        <span>
+                                                            Mua: <strong>{fmtNum(r.quantityOrdered)}</strong>
+                                                        </span>
+                                                    ) : null}
+                                                    {r.unitPrice ? (
+                                                        <span>
+                                                            Đơn giá: <strong>{fmtVND(r.unitPrice)}</strong>
+                                                        </span>
+                                                    ) : null}
+                                                    {r.totalWithVat ? (
+                                                        <span className='font-bold text-[#1A3A5C]'>
+                                                            Tổng: {fmtVND(r.totalWithVat)}
+                                                        </span>
+                                                    ) : null}
+                                                </div>
+                                                {r.supplierName && (
+                                                    <div className='mt-0.5 text-xs text-slate-400'>
+                                                        NCC: {r.supplierName}
+                                                    </div>
+                                                )}
+                                                {r.purpose && (
+                                                    <div className='mt-0.5 text-xs text-slate-400 italic'>
+                                                        {r.purpose}
+                                                    </div>
+                                                )}
+                                            </div>
+                                        ))}
+                                        <div className='flex items-center justify-between bg-slate-50 px-4 py-3'>
+                                            <span className='text-xs font-semibold text-slate-500'>Tổng cộng</span>
+                                            <span className='font-bold text-[#1A3A5C]'>{fmtVND(sumTotal)}</span>
+                                        </div>
+                                    </div>
+                                ) : (
+                                    <Table
+                                        dataSource={record.items}
+                                        columns={itemCols}
+                                        rowKey={(item, index) => getPurchaseRequestItemKey(item, index ?? 0)}
+                                        pagination={false}
+                                        size='small'
+                                        scroll={{ x: 'max-content' }}
+                                        summary={() => (
+                                            <Table.Summary.Row>
+                                                <Table.Summary.Cell index={0} colSpan={7}>
+                                                    <Text strong>Tổng cộng</Text>
+                                                </Table.Summary.Cell>
+                                                <Table.Summary.Cell index={7} align='right'>
+                                                    <Text strong>{fmtVND(sumPrice)}</Text>
+                                                </Table.Summary.Cell>
+                                                <Table.Summary.Cell index={8} />
+                                                <Table.Summary.Cell index={9} align='right'>
+                                                    <Text strong>{fmtVND(sumVat)}</Text>
+                                                </Table.Summary.Cell>
+                                                <Table.Summary.Cell index={10} align='right'>
+                                                    <Text strong style={{ color: '#1A3A5C' }}>
+                                                        {fmtVND(sumTotal)}
+                                                    </Text>
+                                                </Table.Summary.Cell>
+                                                <Table.Summary.Cell index={11} colSpan={2} />
+                                            </Table.Summary.Row>
+                                        )}
+                                    />
+                                )}
+                            </div>
                         </div>
                     </div>
-                </div>
-            )}
-        </Drawer>
+                )}
+            </Drawer>
+
+            {record && chatOpen ? (
+                <ContextChatDrawer
+                    open={chatOpen}
+                    contextType='purchase_request'
+                    contextId={record.id}
+                    title={`Trao đổi ${record.requestCode || 'phiếu đề xuất'}`}
+                    subtitle='Đề xuất mua vật tư'
+                    onClose={() => setChatOpen(false)}
+                />
+            ) : null}
+        </>
     );
 };
 
@@ -2777,6 +2818,22 @@ const PurchaseRequestPage: React.FC = () => {
     const [rejectTarget, setRejectTarget] = useState<PurchaseRequest | null>(null);
     const [rejectReason, setRejectReason] = useState('');
     const [approvingId, setApprovingId] = useState<string | null>(null);
+    const [searchParams, setSearchParams] = useSearchParams();
+
+    // Deep-link từ chat "Mở phiếu": ?request=<id> → mở drawer chi tiết rồi gỡ param khỏi URL
+    const deepLinkId = searchParams.get('request');
+    useEffect(() => {
+        if (!deepLinkId) return;
+        setSelectedId(deepLinkId);
+        setSearchParams(
+            (prev) => {
+                const next = new URLSearchParams(prev);
+                next.delete('request');
+                return next;
+            },
+            { replace: true }
+        );
+    }, [deepLinkId, setSearchParams]);
 
     const listParams = useMemo<PurchaseRequestQueryParams>(
         () => ({

@@ -1,4 +1,4 @@
-import React, { lazy, useMemo, useState } from 'react';
+import React, { lazy, useEffect, useMemo, useState } from 'react';
 import {
     App,
     Button,
@@ -40,7 +40,7 @@ import {
 } from '@ant-design/icons';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import dayjs, { type Dayjs } from 'dayjs';
-import { useLocation } from 'react-router-dom';
+import { useLocation, useSearchParams } from 'react-router-dom';
 import PageHeader from '../components/shared/PageHeader';
 import ConfirmAction from '../components/shared/ConfirmAction';
 import LazyBoundary from '../components/shared/LazyBoundary';
@@ -162,6 +162,7 @@ const MaintenanceList: React.FC = () => {
     const { role } = useAuth();
     const { message } = App.useApp();
     const location = useLocation();
+    const [searchParams, setSearchParams] = useSearchParams();
     const canManage = hasManagerAccess(role);
     const screens = useBreakpoint();
     const isMobile = !screens.md;
@@ -190,6 +191,37 @@ const MaintenanceList: React.FC = () => {
 
     const completeEstimateCost = completeTarget?.externalRepair?.estimateCost ?? 0;
     const completeCostDiff = completeCostPreview - completeEstimateCost;
+
+    // Deep-link từ chat "Mở phiếu": ?maintenance=<id> → mở drawer chi tiết rồi gỡ param khỏi URL
+    const deepLinkId = searchParams.get('maintenance');
+    useEffect(() => {
+        if (!deepLinkId) return;
+
+        let cancelled = false;
+        maintenanceService
+            .getById(deepLinkId)
+            .then((record) => {
+                if (!cancelled) setDetailTarget(record);
+            })
+            .catch(() => {
+                if (!cancelled) message.error('Không tìm thấy phiếu bảo trì từ liên kết');
+            })
+            .finally(() => {
+                if (cancelled) return;
+                setSearchParams(
+                    (prev) => {
+                        const next = new URLSearchParams(prev);
+                        next.delete('maintenance');
+                        return next;
+                    },
+                    { replace: true }
+                );
+            });
+
+        return () => {
+            cancelled = true;
+        };
+    }, [deepLinkId, message, setSearchParams]);
 
     const requestParams = useMemo(
         () => ({

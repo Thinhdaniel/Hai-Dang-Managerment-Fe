@@ -28,6 +28,7 @@ import {
     EditOutlined,
     EyeOutlined,
     FilterOutlined,
+    MessageOutlined,
     PlusOutlined,
     ReloadOutlined,
     RightOutlined,
@@ -38,8 +39,9 @@ import {
 
 const { useBreakpoint } = Grid;
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useLocation } from 'react-router-dom';
+import { useLocation, useSearchParams } from 'react-router-dom';
 import ExpressDispatchModal from '../components/ExpressDispatchModal';
+import ContextChatDrawer from '../components/chat/ContextChatDrawer';
 import InternalDistributionModal from '../components/InternalDistributionModal';
 import SupplyCompensationModal from '../components/SupplyCompensationModal';
 import SupplyDistributionModal from '../components/SupplyDistributionModal';
@@ -218,6 +220,7 @@ const DistributionPage: React.FC = () => {
     const [exportingId, setExportingId] = useState<string | null>(null);
     const [exportingRange, setExportingRange] = useState(false);
     const [editPriceOpen, setEditPriceOpen] = useState(false);
+    const [chatOpen, setChatOpen] = useState(false);
     const [filterOpen, setFilterOpen] = useState(false);
     const screens = useBreakpoint();
     const isMobile = !screens.sm;
@@ -228,6 +231,22 @@ const DistributionPage: React.FC = () => {
     useEffect(() => {
         if (prefillSRId && isCS1Manager) setCreateOpen(true);
     }, []);
+
+    // Deep-link từ chat "Mở phiếu": ?record=<id> → mở drawer chi tiết rồi gỡ param khỏi URL
+    const [searchParams, setSearchParams] = useSearchParams();
+    const deepLinkId = searchParams.get('record');
+    useEffect(() => {
+        if (!deepLinkId) return;
+        setSelectedId(deepLinkId);
+        setSearchParams(
+            (prev) => {
+                const next = new URLSearchParams(prev);
+                next.delete('record');
+                return next;
+            },
+            { replace: true }
+        );
+    }, [deepLinkId, setSearchParams]);
 
     // Search debounce
     useEffect(() => {
@@ -1212,7 +1231,10 @@ const DistributionPage: React.FC = () => {
                 placement={isMobile ? 'bottom' : 'right'}
                 size={isMobile ? '92%' : 1020}
                 open={Boolean(selectedId)}
-                onClose={() => setSelectedId(null)}
+                onClose={() => {
+                    setSelectedId(null);
+                    setChatOpen(false);
+                }}
                 destroyOnHidden
                 styles={{
                     body: { padding: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden' },
@@ -1230,6 +1252,14 @@ const DistributionPage: React.FC = () => {
                                 </Text>
                             )}
                             <div className={`flex gap-2 ${isMobile ? 'flex-col' : 'flex-wrap'}`}>
+                                <Button
+                                    icon={<MessageOutlined />}
+                                    className='text-blue-600'
+                                    block={isMobile}
+                                    onClick={() => setChatOpen(true)}
+                                >
+                                    Trao đổi
+                                </Button>
                                 {isCS1Manager && (
                                     <Button
                                         icon={<EditOutlined />}
@@ -1582,6 +1612,17 @@ const DistributionPage: React.FC = () => {
                     <Empty description='Không có dữ liệu' className='py-20' />
                 )}
             </Drawer>
+
+            {detail && chatOpen ? (
+                <ContextChatDrawer
+                    open={chatOpen}
+                    contextType='distribution'
+                    contextId={detail.id}
+                    title={`Trao đổi ${detail.distributionCode || 'phiếu cấp phát'}`}
+                    subtitle='Cấp phát vật tư'
+                    onClose={() => setChatOpen(false)}
+                />
+            ) : null}
         </div>
     );
 };

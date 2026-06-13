@@ -33,6 +33,7 @@ import {
     FileTextOutlined,
     FilterOutlined,
     InboxOutlined,
+    MessageOutlined,
     PlusOutlined,
     ReloadOutlined,
     RightOutlined,
@@ -45,6 +46,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import PageHeader from '../components/shared/PageHeader';
 import SupplyCompensationModal from '../components/SupplyCompensationModal';
+import ContextChatDrawer from '../components/chat/ContextChatDrawer';
 import { useAuth } from '../core/contexts/AuthContext';
 import { api } from '../core/lib/api';
 import { normalizeSearchTerm } from '../core/lib/search';
@@ -529,7 +531,7 @@ const SupplyRequestPage: React.FC = () => {
     const { message } = App.useApp();
     const { user } = useAuth();
     const navigate = useNavigate();
-    const [searchParams] = useSearchParams();
+    const [searchParams, setSearchParams] = useSearchParams();
     const screens = useBreakpoint();
     const isMobile = !screens.sm;
 
@@ -559,6 +561,7 @@ const SupplyRequestPage: React.FC = () => {
     const [formOpen, setFormOpen] = useState(false);
     const [filterOpen, setFilterOpen] = useState(false);
     const [rejectTarget, setRejectTarget] = useState<PurchaseRequest | null>(null);
+    const [chatOpen, setChatOpen] = useState(false);
     const [rejectReason, setRejectReason] = useState('');
     const [approvingId, setApprovingId] = useState<string | null>(null);
     const [approvalQty, setApprovalQty] = useState<Record<number, number>>({});
@@ -572,6 +575,21 @@ const SupplyRequestPage: React.FC = () => {
         }, SEARCH_DEBOUNCE_MS);
         return () => window.clearTimeout(t);
     }, [draft.search]);
+
+    // Deep-link từ chat "Mở phiếu": ?request=<id> → mở drawer chi tiết rồi gỡ param khỏi URL
+    const deepLinkId = searchParams.get('request');
+    useEffect(() => {
+        if (!deepLinkId) return;
+        setSelectedId(deepLinkId);
+        setSearchParams(
+            (prev) => {
+                const next = new URLSearchParams(prev);
+                next.delete('request');
+                return next;
+            },
+            { replace: true }
+        );
+    }, [deepLinkId, setSearchParams]);
 
     const listParams = useMemo<PurchaseRequestQueryParams>(
         () => ({
@@ -614,7 +632,16 @@ const SupplyRequestPage: React.FC = () => {
 
     const requests = (listRes as PaginatedResponse<PurchaseRequest> | undefined)?.data ?? [];
     const totalRequests = (listRes as PaginatedResponse<PurchaseRequest> | undefined)?.total ?? 0;
-    const selectedRequest = requests.find((r) => r.id === selectedId) ?? null;
+    const selectedInList = requests.find((r) => r.id === selectedId) ?? null;
+
+    // Phiếu mở từ deep-link có thể không nằm trong trang danh sách hiện tại — fetch riêng theo id
+    const { data: fallbackRequest } = useQuery({
+        queryKey: ['supply-requests', 'detail', selectedId],
+        queryFn: () => supplyRequestService.getById(selectedId!),
+        enabled: Boolean(selectedId) && !selectedInList,
+    });
+    const selectedRequest =
+        selectedInList ?? (fallbackRequest && fallbackRequest.id === selectedId ? fallbackRequest : null);
 
     const stats = useMemo<Stats>(() => {
         const base: Stats = {
@@ -1231,6 +1258,7 @@ const SupplyRequestPage: React.FC = () => {
                 onClose={() => {
                     setSelectedId(null);
                     setApprovalQty({});
+                    setChatOpen(false);
                 }}
                 size={isMobile ? '92%' : 820}
                 placement={isMobile ? 'bottom' : 'right'}
@@ -1258,13 +1286,23 @@ const SupplyRequestPage: React.FC = () => {
                 footer={
                     selectedRequest && (
                         <div className={`flex gap-2 ${isMobile ? 'flex-col' : 'items-center justify-between'}`}>
-                            <Button
-                                icon={<DownloadOutlined />}
-                                onClick={() => exportXlsx(selectedRequest)}
-                                block={isMobile}
-                            >
-                                Xuất Excel
-                            </Button>
+                            <div className={`flex gap-2 ${isMobile ? 'flex-col' : ''}`}>
+                                <Button
+                                    icon={<MessageOutlined />}
+                                    className='text-blue-600'
+                                    block={isMobile}
+                                    onClick={() => setChatOpen(true)}
+                                >
+                                    Trao đổi
+                                </Button>
+                                <Button
+                                    icon={<DownloadOutlined />}
+                                    onClick={() => exportXlsx(selectedRequest)}
+                                    block={isMobile}
+                                >
+                                    Xuất Excel
+                                </Button>
+                            </div>
                             <div className={`flex gap-2 ${isMobile ? 'flex-col' : ''}`}>
                                 {selectedRequest.status === 'pending' && isCS1Manager && (
                                     <>
@@ -1726,6 +1764,17 @@ const SupplyRequestPage: React.FC = () => {
                     queryClient.invalidateQueries({ queryKey: ['materials', 'supply-shortages'] });
                 }}
             />
+
+            {selectedRequest && chatOpen ? (
+                <ContextChatDrawer
+                    open={chatOpen}
+                    contextType='supply_request'
+                    contextId={selectedRequest.id}
+                    title={`Trao đổi ${selectedRequest.requestCode || 'phiếu yêu cầu'}`}
+                    subtitle='Yêu cầu cấp vật tư'
+                    onClose={() => setChatOpen(false)}
+                />
+            ) : null}
         </>
     );
 };

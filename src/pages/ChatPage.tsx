@@ -10,6 +10,8 @@ import {
     Grid,
     Image,
     Input,
+    Popover,
+    Segmented,
     Select,
     Skeleton,
     Space,
@@ -19,21 +21,27 @@ import {
     Typography,
 } from 'antd';
 import {
+    ArrowDownOutlined,
     ArrowLeftOutlined,
     BellFilled,
     BellOutlined,
     CameraOutlined,
+    CarOutlined,
     DeleteOutlined,
+    ExportOutlined,
+    InboxOutlined,
     MessageOutlined,
     MoreOutlined,
     PlusOutlined,
     ReloadOutlined,
     SearchOutlined,
     SendOutlined,
+    ShoppingOutlined,
+    SwapOutlined,
     TeamOutlined,
-    UserOutlined,
+    ToolOutlined,
 } from '@ant-design/icons';
-import { useSearchParams } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../core/contexts/AuthContext';
 import {
     type ChatConversationUpdateEvent,
@@ -43,7 +51,8 @@ import {
 } from '../core/contexts/ChatContext';
 import { useSocket } from '../core/hooks/useSocket';
 import { chatService } from '../core/services/chat.service';
-import type { ChatConversation, ChatMessage, ChatUserSummary, UserRole } from '../core/types';
+import { buildChatStream, CONTEXT_TYPE_LABEL, formatFullTime, formatTimeShort } from '../components/chat/chatStream';
+import type { ChatConversation, ChatMessage, ChatUserSummary, ChatWorkflowContextType, UserRole } from '../core/types';
 
 const { Text, Title } = Typography;
 const { TextArea } = Input;
@@ -58,6 +67,17 @@ const roleLabel: Record<UserRole, string> = {
     manager: 'Quản lý',
     staff: 'Nhân viên',
 };
+
+// Avatar màu + icon theo loại phiếu để phân biệt hội thoại nghiệp vụ với chat thường
+const CONTEXT_TYPE_ICON: Partial<Record<ChatWorkflowContextType, React.ReactNode>> = {
+    maintenance: <ToolOutlined />,
+    transfer: <SwapOutlined />,
+    purchase_request: <ShoppingOutlined />,
+    supply_request: <InboxOutlined />,
+    distribution: <CarOutlined />,
+};
+
+type ConversationFilter = 'all' | 'unread' | 'workflow';
 
 const formatChatTime = (value?: string) => {
     if (!value) return '';
@@ -127,6 +147,7 @@ const ChatPage: React.FC = () => {
     const { socket } = useSocket();
     const { refreshUnread } = useChatContext();
     const [searchParams, setSearchParams] = useSearchParams();
+    const navigate = useNavigate();
     const messagesEndRef = useRef<HTMLDivElement | null>(null);
     const messagesContainerRef = useRef<HTMLDivElement | null>(null);
     const imageInputRef = useRef<HTMLInputElement | null>(null);
@@ -140,6 +161,8 @@ const ChatPage: React.FC = () => {
     const loadingOlderRef = useRef(false);
     // Khoảng cách scrollTop tới đáy trước khi prepend tin cũ, để giữ nguyên vị trí nhìn
     const pendingScrollRestoreRef = useRef<number | null>(null);
+    // Người dùng đang ở đáy khung chat hay đang cuộn đọc tin cũ
+    const atBottomRef = useRef(true);
 
     const [conversations, setConversations] = useState<ChatConversation[]>([]);
     const [selectedId, setSelectedId] = useState<string | undefined>(
@@ -152,8 +175,11 @@ const ChatPage: React.FC = () => {
     const [composer, setComposer] = useState('');
     const [selectedImages, setSelectedImages] = useState<SelectedImage[]>([]);
     const [conversationSearch, setConversationSearch] = useState('');
+    const [listFilter, setListFilter] = useState<ConversationFilter>('all');
     const [sending, setSending] = useState(false);
     const [loadingOlder, setLoadingOlder] = useState(false);
+    const [jumpVisible, setJumpVisible] = useState(false);
+    const [pendingNew, setPendingNew] = useState(0);
     const [newConversationOpen, setNewConversationOpen] = useState(false);
     const [availableUsers, setAvailableUsers] = useState<ChatUserSummary[]>([]);
     const [userSearch, setUserSearch] = useState('');
@@ -376,11 +402,24 @@ const ChatPage: React.FC = () => {
 
     const handleMessagesScroll = useCallback(
         (event: React.UIEvent<HTMLDivElement>) => {
-            if (event.currentTarget.scrollTop > 48) return;
-            void loadOlderMessages();
+            const container = event.currentTarget;
+            const distanceToBottom = container.scrollHeight - container.scrollTop - container.clientHeight;
+            const atBottom = distanceToBottom < 80;
+            atBottomRef.current = atBottom;
+            setJumpVisible(!atBottom);
+            if (atBottom) setPendingNew(0);
+
+            if (container.scrollTop <= 48) void loadOlderMessages();
         },
         [loadOlderMessages]
     );
+
+    const scrollToBottom = useCallback((smooth = true) => {
+        messagesEndRef.current?.scrollIntoView({ block: 'end', behavior: smooth ? 'smooth' : 'auto' });
+        atBottomRef.current = true;
+        setJumpVisible(false);
+        setPendingNew(0);
+    }, []);
 
     // Giữ nguyên vị trí đang đọc sau khi prepend tin cũ vào đầu danh sách
     useLayoutEffect(() => {
@@ -417,12 +456,27 @@ const ChatPage: React.FC = () => {
         void loadMessages(selectedId);
     }, [clearSelectedImages, loadMessages, selectedId]);
 
+    // Đổi hội thoại thì luôn quay về đáy
+    useEffect(() => {
+        atBottomRef.current = true;
+        setJumpVisible(false);
+        setPendingNew(0);
+    }, [selectedId]);
+
     // Chỉ kéo xuống đáy khi có tin mới ở cuối (đổi last id) hoặc đổi hội thoại,
     // không kéo khi prepend tin cũ hoặc một tin bị thu hồi.
-    const lastMessageId = messages.length ? messages[messages.length - 1].id : undefined;
+    // Nếu người dùng đang cuộn đọc tin cũ thì giữ nguyên vị trí và đếm tin mới chờ.
+    const lastMessage = messages.length ? messages[messages.length - 1] : undefined;
+    const lastMessageId = lastMessage?.id;
+    const lastMessageSenderId = lastMessage?.senderId;
     useEffect(() => {
-        messagesEndRef.current?.scrollIntoView({ block: 'end' });
-    }, [lastMessageId, selectedId]);
+        if (atBottomRef.current || lastMessageSenderId === user?.id) {
+            messagesEndRef.current?.scrollIntoView({ block: 'end' });
+            setPendingNew(0);
+        } else if (lastMessageId) {
+            setPendingNew((count) => count + 1);
+        }
+    }, [lastMessageId, lastMessageSenderId, selectedId, user?.id]);
 
     useEffect(() => {
         if (!newConversationOpen) return;
@@ -545,11 +599,18 @@ const ChatPage: React.FC = () => {
         }
     }, [message]);
 
+    const streamRows = useMemo(() => buildChatStream(messages), [messages]);
+
     const filteredConversations = useMemo(() => {
         const keyword = conversationSearch.trim().toLowerCase();
-        if (!keyword) return conversations;
+        const base = conversations.filter((conversation) => {
+            if (listFilter === 'unread') return Number(conversation.unreadCount ?? 0) > 0;
+            if (listFilter === 'workflow') return conversation.type === 'workflow_thread';
+            return true;
+        });
+        if (!keyword) return base;
 
-        return conversations.filter((conversation) => {
+        return base.filter((conversation) => {
             const haystack = [
                 conversation.title,
                 getConversationSubtitle(conversation, user?.id),
@@ -564,7 +625,7 @@ const ChatPage: React.FC = () => {
 
             return haystack.includes(keyword);
         });
-    }, [conversationSearch, conversations, user?.id]);
+    }, [conversationSearch, conversations, listFilter, user?.id]);
 
     const handleImageSelect = (files: FileList | null) => {
         if (!files?.length) return;
@@ -669,6 +730,18 @@ const ChatPage: React.FC = () => {
                 className='chat-page__search-input'
             />
 
+            <Segmented
+                block
+                value={listFilter}
+                onChange={(value) => setListFilter(value as ConversationFilter)}
+                options={[
+                    { label: 'Tất cả', value: 'all' },
+                    { label: 'Chưa đọc', value: 'unread' },
+                    { label: 'Phiếu', value: 'workflow' },
+                ]}
+                className='chat-page__filter'
+            />
+
             <Spin spinning={conversationLoading}>
                 <div className='chat-page__conversation-list'>
                     {!conversations.length && !conversationLoading ? (
@@ -687,10 +760,16 @@ const ChatPage: React.FC = () => {
                         const active = conversation.id === selectedId;
                         const unread = Number(conversation.unreadCount ?? 0) > 0;
                         const subtitle = getConversationSubtitle(conversation, user?.id);
+                        const contextType = conversation.context?.type;
+                        const typeIcon = contextType ? CONTEXT_TYPE_ICON[contextType] : undefined;
                         const avatarName =
                             conversation.type === 'direct'
                                 ? conversation.participants.find((participant) => participant.id !== user?.id)?.name
                                 : conversation.title;
+                        const previewPrefix =
+                            conversation.lastMessagePreview && conversation.lastMessageSenderId === user?.id
+                                ? 'Bạn: '
+                                : '';
 
                         return (
                             <button
@@ -708,26 +787,27 @@ const ChatPage: React.FC = () => {
                                     overflowCount={9}
                                 >
                                     <Avatar
-                                        size={46}
-                                        icon={conversation.type === 'direct' ? <UserOutlined /> : <TeamOutlined />}
-                                        className='chat-page__avatar'
+                                        size={44}
+                                        icon={
+                                            typeIcon ?? (conversation.type !== 'direct' ? <TeamOutlined /> : undefined)
+                                        }
+                                        className={`chat-page__avatar ${
+                                            typeIcon && contextType ? `chat-page__avatar--${contextType}` : ''
+                                        }`}
                                     >
                                         {getInitials(avatarName)}
                                     </Avatar>
                                 </Badge>
-                                <span className='min-w-0 flex-1 text-left'>
-                                    <span className='flex items-start justify-between gap-2'>
-                                        <span className='truncate text-sm font-black text-slate-900'>
-                                            {conversation.title}
-                                        </span>
-                                        <span className='shrink-0 text-[11px] font-bold text-slate-400'>
+                                <span className='chat-page__conversation-body'>
+                                    <span className='chat-page__conversation-top'>
+                                        <span className='chat-page__conversation-title'>{conversation.title}</span>
+                                        <span className='chat-page__conversation-time'>
                                             {formatChatTime(conversation.lastMessageAt)}
                                         </span>
                                     </span>
-                                    <span className='mt-0.5 block truncate text-xs font-semibold text-slate-500'>
-                                        {subtitle}
-                                    </span>
-                                    <span className='mt-1 block truncate text-xs text-slate-400'>
+                                    <span className='chat-page__conversation-sub'>{subtitle}</span>
+                                    <span className='chat-page__conversation-preview'>
+                                        {previewPrefix}
                                         {conversation.lastMessagePreview || 'Bắt đầu trao đổi'}
                                     </span>
                                 </span>
@@ -741,23 +821,6 @@ const ChatPage: React.FC = () => {
 
     return (
         <div className='chat-page'>
-            <div className='chat-page__hero'>
-                <div className='flex min-w-0 items-center gap-3'>
-                    <div className='chat-page__hero-icon'>
-                        <MessageOutlined />
-                    </div>
-                    <div className='min-w-0'>
-                        <Title level={3} className='!mb-0 !text-[24px] !font-black !text-slate-950'>
-                            Chat nội bộ
-                        </Title>
-                        <Text className='text-sm font-semibold text-slate-500'>
-                            Trao đổi nhanh giữa hiện trường, quản lý, kho và mua hàng
-                        </Text>
-                    </div>
-                </div>
-                <Tag className='chat-page__status-tag'>Realtime</Tag>
-            </div>
-
             <div
                 className={`chat-page__shell ${
                     selectedConversation && isMobile ? 'chat-page__shell--thread-open' : ''
@@ -779,20 +842,53 @@ const ChatPage: React.FC = () => {
                                         className='chat-page__icon-button'
                                     />
                                 ) : null}
-                                <Avatar size={42} className='chat-page__avatar'>
+                                <Avatar
+                                    size={40}
+                                    icon={
+                                        selectedConversation.context?.type
+                                            ? CONTEXT_TYPE_ICON[selectedConversation.context.type]
+                                            : undefined
+                                    }
+                                    className={`chat-page__avatar ${
+                                        selectedConversation.context?.type &&
+                                        CONTEXT_TYPE_ICON[selectedConversation.context.type]
+                                            ? `chat-page__avatar--${selectedConversation.context.type}`
+                                            : ''
+                                    }`}
+                                >
                                     {getInitials(selectedConversation.title)}
                                 </Avatar>
                                 <div className='min-w-0 flex-1'>
-                                    <Title
-                                        level={5}
-                                        className='!mb-0 truncate !text-[16px] !font-black !text-slate-950'
-                                    >
-                                        {selectedConversation.title}
-                                    </Title>
+                                    <div className='flex min-w-0 items-center gap-2'>
+                                        <Title
+                                            level={5}
+                                            className='!mb-0 truncate !text-[15px] !font-extrabold !text-slate-900'
+                                        >
+                                            {selectedConversation.title}
+                                        </Title>
+                                        {!isMobile &&
+                                        selectedConversation.context?.type &&
+                                        CONTEXT_TYPE_LABEL[selectedConversation.context.type] ? (
+                                            <Tag className='chat-page__context-chip'>
+                                                {CONTEXT_TYPE_LABEL[selectedConversation.context.type]}
+                                            </Tag>
+                                        ) : null}
+                                    </div>
                                     <Text className='block truncate text-xs font-semibold text-slate-500'>
                                         {getConversationSubtitle(selectedConversation, user?.id)}
                                     </Text>
                                 </div>
+                                {selectedConversation.context?.path ? (
+                                    <Tooltip title='Mở phiếu liên quan'>
+                                        <Button
+                                            icon={<ExportOutlined />}
+                                            onClick={() => navigate(selectedConversation.context!.path!)}
+                                            className='chat-page__icon-button chat-page__open-context'
+                                        >
+                                            {!isMobile ? 'Mở phiếu' : null}
+                                        </Button>
+                                    </Tooltip>
+                                ) : null}
                                 <Tooltip
                                     title={
                                         selectedConversation.muted
@@ -805,16 +901,46 @@ const ChatPage: React.FC = () => {
                                             selectedConversation.muted ? (
                                                 <BellOutlined className='text-slate-400' />
                                             ) : (
-                                                <BellFilled className='text-blue-600' />
+                                                <BellFilled className='text-[#0f6bdc]' />
                                             )
                                         }
                                         onClick={() => void handleToggleMute()}
                                         className='chat-page__icon-button'
                                     />
                                 </Tooltip>
-                                <Tag className='rounded-full border-blue-100 bg-blue-50 px-3 py-1 text-xs font-bold text-blue-700'>
-                                    {selectedConversation.participants.length} người
-                                </Tag>
+                                <Popover
+                                    trigger='click'
+                                    placement='bottomRight'
+                                    content={
+                                        <div className='chat-members'>
+                                            {selectedConversation.participants.map((participant) => (
+                                                <div key={participant.id} className='chat-members__row'>
+                                                    <Avatar size={28} className='chat-page__avatar'>
+                                                        {getInitials(participant.name)}
+                                                    </Avatar>
+                                                    <div className='min-w-0'>
+                                                        <div className='truncate text-[13px] font-bold text-slate-800'>
+                                                            {participant.name}
+                                                            {participant.id === user?.id ? ' (Bạn)' : ''}
+                                                        </div>
+                                                        <div className='truncate text-xs text-slate-500'>
+                                                            {roleLabel[participant.role]}
+                                                            {participant.plant?.name
+                                                                ? ` · ${participant.plant.name}`
+                                                                : ''}
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    }
+                                >
+                                    <Tooltip title='Thành viên hội thoại'>
+                                        <Button icon={<TeamOutlined />} className='chat-page__icon-button'>
+                                            {!isMobile ? selectedConversation.participants.length : null}
+                                        </Button>
+                                    </Tooltip>
+                                </Popover>
                             </div>
 
                             <div
@@ -842,29 +968,45 @@ const ChatPage: React.FC = () => {
                                                 <Spin size='small' />
                                             </div>
                                         ) : null}
-                                        {messages.map((item) => {
-                                            const mine = item.senderId === user?.id;
-
-                                            if (item.system) {
+                                        {streamRows.map((row) => {
+                                            if (row.kind === 'date') {
                                                 return (
-                                                    <div key={item.id} className='chat-page__system'>
-                                                        <span>{item.body}</span>
+                                                    <div key={row.key} className='chat-date-divider'>
+                                                        <span>{row.label}</span>
+                                                    </div>
+                                                );
+                                            }
+
+                                            if (row.kind === 'system') {
+                                                return (
+                                                    <div key={row.key} className='chat-page__system'>
+                                                        <span>{row.message.body}</span>
                                                         <Text className='block text-[10px] font-semibold text-slate-400'>
-                                                            {formatChatTime(item.createdAt)}
+                                                            {formatTimeShort(row.message.createdAt)}
                                                         </Text>
                                                     </div>
                                                 );
                                             }
 
+                                            const item = row.message;
+                                            const mine = item.senderId === user?.id;
+                                            const bubbleClass = `chat-page__bubble chat-page__bubble--${row.shape}`;
+
                                             return (
                                                 <div
-                                                    key={item.id}
-                                                    className={`group chat-page__message ${mine ? 'chat-page__message--mine' : ''}`}
+                                                    key={row.key}
+                                                    className={`group chat-page__message ${mine ? 'chat-page__message--mine' : ''} ${
+                                                        row.isGroupStart ? 'chat-page__message--group-start' : ''
+                                                    }`}
                                                 >
                                                     {!mine ? (
-                                                        <Avatar size={30} className='chat-page__message-avatar'>
-                                                            {getInitials(item.sender?.name)}
-                                                        </Avatar>
+                                                        row.isGroupStart ? (
+                                                            <Avatar size={30} className='chat-page__message-avatar'>
+                                                                {getInitials(item.sender?.name)}
+                                                            </Avatar>
+                                                        ) : (
+                                                            <span className='chat-page__avatar-spacer' />
+                                                        )
                                                     ) : null}
                                                     {mine && !item.isDeleted ? (
                                                         <Dropdown
@@ -890,17 +1032,25 @@ const ChatPage: React.FC = () => {
                                                         </Dropdown>
                                                     ) : null}
                                                     <div className='chat-page__bubble-wrap'>
-                                                        {!mine ? (
-                                                            <Text className='mb-1 block text-[11px] font-bold text-slate-500'>
+                                                        {!mine &&
+                                                        row.isGroupStart &&
+                                                        selectedConversation.type !== 'direct' ? (
+                                                            <Text className='chat-page__sender-name'>
                                                                 {item.sender?.name || 'Người dùng'}
                                                             </Text>
                                                         ) : null}
                                                         {item.isDeleted ? (
-                                                            <div className='chat-page__bubble !bg-slate-100 !text-slate-400 italic'>
+                                                            <div
+                                                                className={`${bubbleClass} chat-page__bubble--recalled`}
+                                                                title={formatFullTime(item.createdAt)}
+                                                            >
                                                                 <span>{item.body}</span>
                                                             </div>
                                                         ) : item.body ? (
-                                                            <div className='chat-page__bubble'>
+                                                            <div
+                                                                className={bubbleClass}
+                                                                title={formatFullTime(item.createdAt)}
+                                                            >
                                                                 <span>{item.body}</span>
                                                             </div>
                                                         ) : null}
@@ -929,9 +1079,11 @@ const ChatPage: React.FC = () => {
                                                                 </div>
                                                             </Image.PreviewGroup>
                                                         ) : null}
-                                                        <Text className='mt-1 block text-[10px] font-semibold text-slate-400'>
-                                                            {formatChatTime(item.createdAt)}
-                                                        </Text>
+                                                        {row.isGroupEnd ? (
+                                                            <Text className='chat-page__msg-time'>
+                                                                {formatTimeShort(item.createdAt)}
+                                                            </Text>
+                                                        ) : null}
                                                     </div>
                                                 </div>
                                             );
@@ -940,6 +1092,19 @@ const ChatPage: React.FC = () => {
                                     </div>
                                 )}
                             </div>
+
+                            {jumpVisible ? (
+                                <div className='chat-page__jump-wrap'>
+                                    <Badge count={pendingNew} size='small' overflowCount={9}>
+                                        <Button
+                                            shape='circle'
+                                            icon={<ArrowDownOutlined />}
+                                            onClick={() => scrollToBottom()}
+                                            className='chat-page__jump-button'
+                                        />
+                                    </Badge>
+                                </div>
+                            ) : null}
 
                             <div className='chat-page__composer'>
                                 <input

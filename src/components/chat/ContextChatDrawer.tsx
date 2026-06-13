@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { App, Avatar, Button, Drawer, Dropdown, Empty, Grid, Image, Input, Spin, Tag, Tooltip, Typography } from 'antd';
 import {
     BellFilled,
@@ -9,7 +9,6 @@ import {
     MessageOutlined,
     MoreOutlined,
     SendOutlined,
-    UserOutlined,
 } from '@ant-design/icons';
 import { useAuth } from '../../core/contexts/AuthContext';
 import {
@@ -20,6 +19,7 @@ import {
 } from '../../core/contexts/ChatContext';
 import { useSocket } from '../../core/hooks/useSocket';
 import { chatService } from '../../core/services/chat.service';
+import { buildChatStream, CONTEXT_TYPE_LABEL, formatFullTime, formatTimeShort } from './chatStream';
 import type { ChatConversation, ChatMessage, ChatWorkflowContextType } from '../../core/types';
 
 const { Text, Title } = Typography;
@@ -57,19 +57,6 @@ const getInitials = (name?: string) => {
     );
 };
 
-const formatTime = (value?: string) => {
-    if (!value) return '';
-    const date = new Date(value);
-    if (Number.isNaN(date.getTime())) return '';
-
-    return new Intl.DateTimeFormat('vi-VN', {
-        day: '2-digit',
-        month: '2-digit',
-        hour: '2-digit',
-        minute: '2-digit',
-    }).format(date);
-};
-
 const ContextChatDrawer: React.FC<ContextChatDrawerProps> = ({
     open,
     contextType,
@@ -93,6 +80,8 @@ const ContextChatDrawer: React.FC<ContextChatDrawerProps> = ({
     const [composer, setComposer] = useState('');
     const [selectedImages, setSelectedImages] = useState<SelectedImage[]>([]);
     const [sending, setSending] = useState(false);
+
+    const streamRows = useMemo(() => buildChatStream(messages), [messages]);
 
     const clearSelectedImages = useCallback(() => {
         setSelectedImages((prev) => {
@@ -326,7 +315,7 @@ const ContextChatDrawer: React.FC<ContextChatDrawerProps> = ({
                         </div>
                     </div>
                     <div className='flex items-center gap-2'>
-                        <Tag className='context-chat__tag'>Bảo trì</Tag>
+                        <Tag className='context-chat__tag'>{CONTEXT_TYPE_LABEL[contextType] || 'Nghiệp vụ'}</Tag>
                         {conversation ? (
                             <Tooltip
                                 title={
@@ -340,7 +329,7 @@ const ContextChatDrawer: React.FC<ContextChatDrawerProps> = ({
                                         conversation.muted ? (
                                             <BellOutlined className='text-slate-400' />
                                         ) : (
-                                            <BellFilled className='text-blue-600' />
+                                            <BellFilled className='text-[#0f6bdc]' />
                                         )
                                     }
                                     onClick={() => void handleToggleMute()}
@@ -356,33 +345,45 @@ const ContextChatDrawer: React.FC<ContextChatDrawerProps> = ({
                     <Spin spinning={loading}>
                         {messages.length ? (
                             <div className='context-chat__stack'>
-                                {messages.map((item) => {
-                                    const mine = item.senderId === user?.id;
-
-                                    if (item.system) {
+                                {streamRows.map((row) => {
+                                    if (row.kind === 'date') {
                                         return (
-                                            <div key={item.id} className='context-chat__system'>
-                                                <span>{item.body}</span>
+                                            <div key={row.key} className='chat-date-divider'>
+                                                <span>{row.label}</span>
+                                            </div>
+                                        );
+                                    }
+
+                                    if (row.kind === 'system') {
+                                        return (
+                                            <div key={row.key} className='context-chat__system'>
+                                                <span>{row.message.body}</span>
                                                 <Text className='block text-[10px] font-semibold text-slate-400'>
-                                                    {formatTime(item.createdAt)}
+                                                    {formatTimeShort(row.message.createdAt)}
                                                 </Text>
                                             </div>
                                         );
                                     }
 
+                                    const item = row.message;
+                                    const mine = item.senderId === user?.id;
+                                    const bubbleClass = `context-chat__bubble context-chat__bubble--${row.shape}`;
+
                                     return (
                                         <div
-                                            key={item.id}
-                                            className={`group context-chat__message ${mine ? 'context-chat__message--mine' : ''}`}
+                                            key={row.key}
+                                            className={`group context-chat__message ${mine ? 'context-chat__message--mine' : ''} ${
+                                                row.isGroupStart ? 'context-chat__message--group-start' : ''
+                                            }`}
                                         >
                                             {!mine ? (
-                                                <Avatar
-                                                    size={30}
-                                                    icon={<UserOutlined />}
-                                                    className='context-chat__avatar'
-                                                >
-                                                    {getInitials(item.sender?.name)}
-                                                </Avatar>
+                                                row.isGroupStart ? (
+                                                    <Avatar size={30} className='context-chat__avatar'>
+                                                        {getInitials(item.sender?.name)}
+                                                    </Avatar>
+                                                ) : (
+                                                    <span className='context-chat__avatar-spacer' />
+                                                )
                                             ) : null}
                                             {mine && !item.isDeleted ? (
                                                 <Dropdown
@@ -408,17 +409,22 @@ const ContextChatDrawer: React.FC<ContextChatDrawerProps> = ({
                                                 </Dropdown>
                                             ) : null}
                                             <div className='context-chat__bubble-wrap'>
-                                                {!mine ? (
-                                                    <Text className='mb-1 block text-[11px] font-bold text-slate-500'>
+                                                {!mine && row.isGroupStart ? (
+                                                    <Text className='context-chat__sender-name'>
                                                         {item.sender?.name || 'Người dùng'}
                                                     </Text>
                                                 ) : null}
                                                 {item.isDeleted ? (
-                                                    <div className='context-chat__bubble !bg-slate-100 !text-slate-400 italic'>
+                                                    <div
+                                                        className={`${bubbleClass} context-chat__bubble--recalled`}
+                                                        title={formatFullTime(item.createdAt)}
+                                                    >
                                                         {item.body}
                                                     </div>
                                                 ) : item.body ? (
-                                                    <div className='context-chat__bubble'>{item.body}</div>
+                                                    <div className={bubbleClass} title={formatFullTime(item.createdAt)}>
+                                                        {item.body}
+                                                    </div>
                                                 ) : null}
                                                 {item.attachments?.length ? (
                                                     <Image.PreviewGroup>
@@ -440,9 +446,11 @@ const ContextChatDrawer: React.FC<ContextChatDrawerProps> = ({
                                                         </div>
                                                     </Image.PreviewGroup>
                                                 ) : null}
-                                                <Text className='mt-1 block text-[10px] font-semibold text-slate-400'>
-                                                    {formatTime(item.createdAt)}
-                                                </Text>
+                                                {row.isGroupEnd ? (
+                                                    <Text className='context-chat__msg-time'>
+                                                        {formatTimeShort(item.createdAt)}
+                                                    </Text>
+                                                ) : null}
                                             </div>
                                         </div>
                                     );
@@ -494,7 +502,7 @@ const ContextChatDrawer: React.FC<ContextChatDrawerProps> = ({
                             value={composer}
                             autoSize={{ minRows: 1, maxRows: 4 }}
                             maxLength={4000}
-                            placeholder='Nhập trao đổi về phiếu bảo trì...'
+                            placeholder='Nhập trao đổi về phiếu này...'
                             onChange={(event) => setComposer(event.target.value)}
                             onPressEnter={(event) => {
                                 if (!event.shiftKey) {

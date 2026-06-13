@@ -20,6 +20,7 @@ import {
     DownloadOutlined,
     EyeOutlined,
     FilterOutlined,
+    MessageOutlined,
     ReloadOutlined,
     ScanOutlined,
     SearchOutlined,
@@ -34,6 +35,7 @@ import ConfirmAction from '../components/shared/ConfirmAction';
 import LazyBoundary from '../components/shared/LazyBoundary';
 import TransferStatusBadge from '../components/transfer/TransferStatusBadge';
 import HandoverModal from '../components/transfer/HandoverModal';
+import ContextChatDrawer from '../components/chat/ContextChatDrawer';
 import { transferStatusOptions } from '../core/constants/transfer';
 import { useAuth } from '../core/contexts/AuthContext';
 import { hasManagerAccess } from '../core/lib/permissions';
@@ -110,6 +112,7 @@ const TransferList: React.FC = () => {
         reason: '',
     });
     const [handoverTransfer, setHandoverTransfer] = useState<Transfer | null>(null);
+    const [chatTarget, setChatTarget] = useState<Transfer | null>(null);
     const [isScanOpen, setIsScanOpen] = useState(false);
     const [scannedAssets, setScannedAssets] = useState<Asset[]>([]);
     const [isTransferModalOpen, setIsTransferModalOpen] = useState(false);
@@ -317,6 +320,21 @@ const TransferList: React.FC = () => {
                     onClick={() => navigate(`/transfers/${record.id}`)}
                 >
                     {mode === 'mobile' ? 'Xem' : null}
+                </Button>
+            </Tooltip>
+            <Tooltip title='Trao đổi'>
+                <Button
+                    type={mode === 'table' ? 'text' : 'default'}
+                    size={mode === 'mobile' ? 'small' : 'middle'}
+                    icon={<MessageOutlined />}
+                    className={
+                        mode === 'table'
+                            ? 'flex h-8 w-8 items-center justify-center rounded-md bg-blue-50 text-blue-600 transition-colors hover:bg-blue-100 hover:text-blue-700'
+                            : undefined
+                    }
+                    onClick={() => setChatTarget(record)}
+                >
+                    {mode === 'mobile' ? 'Trao đổi' : null}
                 </Button>
             </Tooltip>
             {['approved', 'completed'].includes(record.status) ? (
@@ -948,6 +966,17 @@ const TransferList: React.FC = () => {
                         onSubmit={handleScanTransferSubmit}
                     />
                 </LazyBoundary>
+            ) : null}
+
+            {chatTarget ? (
+                <ContextChatDrawer
+                    open={Boolean(chatTarget)}
+                    contextType='transfer'
+                    contextId={chatTarget.id}
+                    title='Trao đổi điều chuyển'
+                    subtitle={`${getTransferAssetLabel(chatTarget)} · ${chatTarget.fromPlant?.name || '-'} → ${chatTarget.toPlant?.name || '-'}`}
+                    onClose={() => setChatTarget(null)}
+                />
             ) : null}
         </div>
     );
