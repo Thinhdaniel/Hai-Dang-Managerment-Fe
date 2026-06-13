@@ -3,8 +3,8 @@ import { Typography } from 'antd';
 
 const { Title, Text } = Typography;
 
-const COMPANY_LOGO_URL =
-    'https://res.cloudinary.com/dn0kgs7mi/image/upload/v1777213524/461879796_122098397930558026_2620600354798656289_n_rj6ylo.png';
+// Logo công ty bundle nội bộ (đồng bộ với favicon + icon PWA), không phụ thuộc URL ngoài
+const COMPANY_LOGO_URL = '/brand/company-logo.png';
 
 type AuthPageShellProps = {
     eyebrow: string;

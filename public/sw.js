@@ -1,11 +1,12 @@
-const CACHE_NAME = 'hai-dang-manager-pwa-v3';
+const CACHE_NAME = 'hai-dang-manager-pwa-v5';
 const APP_SHELL_URL = '/index.html';
 const OFFLINE_URL = '/offline.html';
 const PRECACHE_URLS = [
     APP_SHELL_URL,
     OFFLINE_URL,
     '/manifest.webmanifest',
-    '/favicon.svg',
+    '/favicon-32.png',
+    '/favicon-16.png',
     '/icons/apple-touch-icon.png',
     '/icons/icon-192.png',
     '/icons/icon-512.png',
@@ -31,7 +32,7 @@ const isNavigationRequest = (request) =>
 const isStaticRequest = (request, url) =>
     url.pathname.startsWith('/assets/') ||
     url.pathname.startsWith('/icons/') ||
-    url.pathname === '/favicon.svg' ||
+    url.pathname.startsWith('/favicon') ||
     url.pathname === '/manifest.webmanifest' ||
     ['font', 'image', 'script', 'style', 'worker'].includes(request.destination);
 

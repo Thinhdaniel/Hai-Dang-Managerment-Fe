@@ -36,14 +36,15 @@ import { hasManagerAccess } from '../../core/lib/permissions';
 import { useNotificationContext } from '../../core/contexts/NotificationContext';
 import PushNotificationToggle from '../notifications/PushNotificationToggle';
 import NotificationSoundToggle from '../notifications/NotificationSoundToggle';
+import NotificationHelpGuide from '../notifications/NotificationHelpGuide';
 import InstallPrompt from '../pwa/InstallPrompt';
 import { pushNotificationService } from '../../core/services/push-notification.service';
 
 const { Header } = Layout;
 const { Text, Title } = Typography;
 const { useBreakpoint } = Grid;
-const COMPANY_LOGO_URL =
-    'https://res.cloudinary.com/dn0kgs7mi/image/upload/v1777042068/461879796_122098397930558026_2620600354798656289_n_zi0tf9.jpg';
+// Logo công ty bundle nội bộ (đồng bộ với favicon + icon PWA), không phụ thuộc URL ngoài
+const COMPANY_LOGO_URL = '/brand/company-logo.png';
 
 interface AppHeaderProps {
     collapsed: boolean;
@@ -553,6 +554,9 @@ const AppHeader: React.FC<AppHeaderProps> = ({ collapsed, isDesktop, mobileOpen,
                         </div>
                         <div className='overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm'>
                             <PushNotificationToggle />
+                        </div>
+                        <div className='overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm'>
+                            <NotificationHelpGuide />
                         </div>
                     </div>
                 </div>
