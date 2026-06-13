@@ -2,6 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useState, t
 import { useAuth } from './AuthContext';
 import { useSocket } from '../hooks/useSocket';
 import { chatService } from '../services/chat.service';
+import { playNotificationSound } from '../lib/notificationSound';
 import type { ChatConversation, ChatMessage } from '../types';
 
 export type ChatMessageEvent = {
@@ -34,7 +35,7 @@ type ChatContextValue = {
 const ChatContext = createContext<ChatContextValue | null>(null);
 
 export const ChatProvider = ({ children }: { children: ReactNode }) => {
-    const { isAuthenticated } = useAuth();
+    const { isAuthenticated, user } = useAuth();
     const { socket } = useSocket();
     const [unreadCount, setUnreadCount] = useState(0);
 
@@ -61,6 +62,11 @@ export const ChatProvider = ({ children }: { children: ReactNode }) => {
 
         const onMessage = (payload: ChatMessageEvent) => {
             setUnreadCount(Number(payload.totalUnread ?? 0));
+
+            // Chuông cho tin nhắn mới của người khác (tin của chính mình thì không kêu)
+            if (payload.message.senderId !== user?.id) {
+                playNotificationSound();
+            }
         };
 
         const onConversationUpdate = (payload: ChatConversationUpdateEvent) => {
@@ -80,7 +86,7 @@ export const ChatProvider = ({ children }: { children: ReactNode }) => {
             socket.off('chat:conversation:update', onConversationUpdate);
             socket.off('chat:read', onRead);
         };
-    }, [isAuthenticated, socket]);
+    }, [isAuthenticated, socket, user?.id]);
 
     const value = useMemo(
         () => ({
