@@ -27,16 +27,21 @@ import {
     BellOutlined,
     CameraOutlined,
     CarOutlined,
+    CloseOutlined,
+    CopyOutlined,
     DeleteOutlined,
     ExportOutlined,
     InboxOutlined,
     MessageOutlined,
-    MoreOutlined,
     PlusOutlined,
+    PushpinFilled,
+    PushpinOutlined,
     ReloadOutlined,
+    RollbackOutlined,
     SearchOutlined,
     SendOutlined,
     ShoppingOutlined,
+    SmileOutlined,
     SwapOutlined,
     TeamOutlined,
     ToolOutlined,
@@ -47,11 +52,21 @@ import {
     type ChatConversationUpdateEvent,
     type ChatMessageEvent,
     type ChatMessageRecalledEvent,
+    type ChatMessageUpdatedEvent,
+    type ChatTypingEvent,
     useChatContext,
 } from '../core/contexts/ChatContext';
 import { useSocket } from '../core/hooks/useSocket';
 import { chatService } from '../core/services/chat.service';
-import { buildChatStream, CONTEXT_TYPE_LABEL, formatFullTime, formatTimeShort } from '../components/chat/chatStream';
+import {
+    buildChatStream,
+    COMPOSER_EMOJIS,
+    CONTEXT_TYPE_LABEL,
+    formatFullTime,
+    formatTimeShort,
+    groupReactions,
+    REACTION_EMOJIS,
+} from '../components/chat/chatStream';
 import type { ChatConversation, ChatMessage, ChatUserSummary, ChatWorkflowContextType, UserRole } from '../core/types';
 
 const { Text, Title } = Typography;
@@ -163,6 +178,10 @@ const ChatPage: React.FC = () => {
     const pendingScrollRestoreRef = useRef<number | null>(null);
     // Người dùng đang ở đáy khung chat hay đang cuộn đọc tin cũ
     const atBottomRef = useRef(true);
+    const composerRef = useRef<any>(null);
+    const typingSentAtRef = useRef(0); // throttle phát "đang gõ"
+    const typingTimersRef = useRef<Record<string, number>>({}); // hẹn giờ ẩn từng người đang gõ
+    const longPressTimerRef = useRef<number | undefined>(undefined);
 
     const [conversations, setConversations] = useState<ChatConversation[]>([]);
     const [selectedId, setSelectedId] = useState<string | undefined>(
@@ -180,6 +199,15 @@ const ChatPage: React.FC = () => {
     const [loadingOlder, setLoadingOlder] = useState(false);
     const [jumpVisible, setJumpVisible] = useState(false);
     const [pendingNew, setPendingNew] = useState(0);
+    const [replyTarget, setReplyTarget] = useState<ChatMessage | null>(null);
+    const [typingUsers, setTypingUsers] = useState<Record<string, string>>({}); // userId -> name
+    const [actionMenuId, setActionMenuId] = useState<string | null>(null);
+    const [pinnedMessages, setPinnedMessages] = useState<ChatMessage[]>([]);
+    const [searchOpen, setSearchOpen] = useState(false);
+    const [messageSearch, setMessageSearch] = useState('');
+    const [searchResults, setSearchResults] = useState<ChatMessage[]>([]);
+    const [searching, setSearching] = useState(false);
+    const [highlightId, setHighlightId] = useState<string | null>(null);
     const [newConversationOpen, setNewConversationOpen] = useState(false);
     const [availableUsers, setAvailableUsers] = useState<ChatUserSummary[]>([]);
     const [userSearch, setUserSearch] = useState('');
@@ -493,6 +521,36 @@ const ChatPage: React.FC = () => {
         return () => window.clearTimeout(timeout);
     }, [newConversationOpen, userSearch]);
 
+    // Tìm tin nhắn trong hội thoại (debounce)
+    useEffect(() => {
+        if (!searchOpen || !selectedId) return;
+        const keyword = messageSearch.trim();
+        if (keyword.length < 2) {
+            setSearchResults([]);
+            setSearching(false);
+            return;
+        }
+        setSearching(true);
+        const timeout = window.setTimeout(async () => {
+            try {
+                const results = await chatService.searchMessages(selectedId, keyword);
+                setSearchResults(results);
+            } catch {
+                setSearchResults([]);
+            } finally {
+                setSearching(false);
+            }
+        }, 320);
+        return () => window.clearTimeout(timeout);
+    }, [messageSearch, searchOpen, selectedId]);
+
+    // Khoá nav dưới + chuyển chat sang toàn màn hình khi mở hội thoại trên mobile (kiểu Messenger/Zalo)
+    useEffect(() => {
+        const immersive = isMobile && Boolean(selectedId);
+        document.body.classList.toggle('chat-immersive', immersive);
+        return () => document.body.classList.remove('chat-immersive');
+    }, [isMobile, selectedId]);
+
     useEffect(() => {
         if (!socket) return;
 
@@ -524,32 +582,100 @@ const ChatPage: React.FC = () => {
             updateCachedMessage(payload.conversationId, payload.message);
         };
 
+        // Reaction / ghim cập nhật tại chỗ
+        const onMessageUpdated = (payload: ChatMessageUpdatedEvent) => {
+            updateCachedMessage(payload.conversationId, payload.message);
+            if (payload.conversationId === selectedIdRef.current) {
+                setPinnedMessages((prev) => {
+                    const without = prev.filter((m) => m.id !== payload.message.id);
+                    return payload.message.pinned ? [payload.message, ...without] : without;
+                });
+            }
+        };
+
+        // "Đang soạn tin": hiện tên người gõ, tự ẩn sau 3.5s nếu không có ping mới
+        const onTyping = (payload: ChatTypingEvent) => {
+            if (payload.conversationId !== selectedIdRef.current || payload.userId === user?.id) return;
+            setTypingUsers((prev) => ({ ...prev, [payload.userId]: payload.name }));
+            window.clearTimeout(typingTimersRef.current[payload.userId]);
+            typingTimersRef.current[payload.userId] = window.setTimeout(() => {
+                setTypingUsers((prev) => {
+                    const next = { ...prev };
+                    delete next[payload.userId];
+                    return next;
+                });
+            }, 3500);
+        };
+
         socket.on('chat:message:new', onChatMessage);
         socket.on('chat:conversation:update', onConversationUpdate);
         socket.on('chat:message:recalled', onMessageRecalled);
+        socket.on('chat:message:updated', onMessageUpdated);
+        socket.on('chat:typing', onTyping);
 
         return () => {
             socket.off('chat:message:new', onChatMessage);
             socket.off('chat:conversation:update', onConversationUpdate);
             socket.off('chat:message:recalled', onMessageRecalled);
+            socket.off('chat:message:updated', onMessageUpdated);
+            socket.off('chat:typing', onTyping);
         };
     }, [appendCachedMessage, scheduleMarkConversationRead, socket, updateCachedMessage, user?.id]);
+
+    // Tin mới tới từ người khác thì xoá trạng thái "đang gõ" của họ
+    useEffect(() => {
+        if (lastMessageSenderId && lastMessageSenderId !== user?.id) {
+            setTypingUsers((prev) => {
+                if (!prev[lastMessageSenderId]) return prev;
+                const next = { ...prev };
+                delete next[lastMessageSenderId];
+                return next;
+            });
+        }
+    }, [lastMessageId, lastMessageSenderId, user?.id]);
+
+    // Đổi hội thoại: reset reply/typing/search/pinned + tải danh sách tin đã ghim
+    useEffect(() => {
+        setReplyTarget(null);
+        setTypingUsers({});
+        setActionMenuId(null);
+        setSearchOpen(false);
+        setMessageSearch('');
+        setSearchResults([]);
+        if (!selectedId) {
+            setPinnedMessages([]);
+            return;
+        }
+        let active = true;
+        chatService
+            .getPinned(selectedId)
+            .then((items) => {
+                if (active) setPinnedMessages(items);
+            })
+            .catch(() => undefined);
+        return () => {
+            active = false;
+        };
+    }, [selectedId]);
 
     const handleSend = async () => {
         const body = composer.trim();
         if (!selectedId || (!body && !selectedImages.length) || sending) return;
 
+        const replyToId = replyTarget?.id;
         setSending(true);
         try {
             const sent = selectedImages.length
                 ? await chatService.sendAttachmentMessage(
                       selectedId,
                       body,
-                      selectedImages.map((item) => item.file)
+                      selectedImages.map((item) => item.file),
+                      replyToId
                   )
-                : await chatService.sendMessage(selectedId, { body });
+                : await chatService.sendMessage(selectedId, { body, replyTo: replyToId });
             setComposer('');
             clearSelectedImages();
+            setReplyTarget(null);
             appendCachedMessage(selectedId, sent);
         } catch {
             message.error('Không gửi được tin nhắn');
@@ -557,6 +683,108 @@ const ChatPage: React.FC = () => {
             setSending(false);
         }
     };
+
+    // Phát tín hiệu "đang soạn tin" qua socket, throttle 1.5s
+    const emitTyping = useCallback(() => {
+        if (!selectedIdRef.current || !socket) return;
+        const now = Date.now();
+        if (now - typingSentAtRef.current < 1500) return;
+        typingSentAtRef.current = now;
+        socket.emit('chat:typing', { conversationId: selectedIdRef.current });
+    }, [socket]);
+
+    const handleReact = useCallback(
+        async (item: ChatMessage, emoji: string) => {
+            setActionMenuId(null);
+            try {
+                const updated = await chatService.toggleReaction(item.conversationId, item.id, emoji);
+                updateCachedMessage(item.conversationId, updated);
+            } catch (error: any) {
+                message.error(error?.message || 'Không thả được cảm xúc');
+            }
+        },
+        [message, updateCachedMessage]
+    );
+
+    const handleTogglePin = useCallback(
+        async (item: ChatMessage) => {
+            setActionMenuId(null);
+            try {
+                const updated = await chatService.togglePin(item.conversationId, item.id);
+                updateCachedMessage(item.conversationId, updated);
+                setPinnedMessages((prev) => {
+                    const without = prev.filter((m) => m.id !== updated.id);
+                    return updated.pinned ? [updated, ...without] : without;
+                });
+                message.success(updated.pinned ? 'Đã ghim tin nhắn' : 'Đã bỏ ghim');
+            } catch (error: any) {
+                message.error(error?.message || 'Không ghim được tin nhắn');
+            }
+        },
+        [message, updateCachedMessage]
+    );
+
+    const handleStartReply = useCallback((item: ChatMessage) => {
+        setActionMenuId(null);
+        setReplyTarget(item);
+        // Lấy nét ô soạn để gõ trả lời ngay
+        window.setTimeout(() => composerRef.current?.focus?.(), 50);
+    }, []);
+
+    const handleCopyMessage = useCallback(
+        async (item: ChatMessage) => {
+            setActionMenuId(null);
+            try {
+                await navigator.clipboard.writeText(item.body || '');
+                message.success('Đã sao chép nội dung');
+            } catch {
+                message.error('Không sao chép được');
+            }
+        },
+        [message]
+    );
+
+    // Cuộn tới một tin trong khung + nháy sáng; nếu chưa tải mà có thời điểm thì nạp ngữ cảnh quanh tin đó
+    const jumpToMessageId = useCallback(
+        async (id: string, createdAt?: string) => {
+            const conversationId = selectedIdRef.current;
+            if (!conversationId) return;
+
+            const scrollTo = (targetId: string) => {
+                const el = document.getElementById(`chat-msg-${targetId}`);
+                if (el) {
+                    el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    setHighlightId(targetId);
+                    window.setTimeout(() => setHighlightId((cur) => (cur === targetId ? null : cur)), 1800);
+                    return true;
+                }
+                return false;
+            };
+
+            if (scrollTo(id)) return;
+            if (!createdAt) {
+                message.info('Tin gốc đã cũ, hãy cuộn lên để xem');
+                return;
+            }
+
+            // Chưa có trong danh sách: nạp khối tin tính tới thời điểm tin đích
+            try {
+                const before = new Date(new Date(createdAt).getTime() + 1000).toISOString();
+                const batch = await chatService.getMessages(conversationId, { limit: MESSAGE_PAGE_SIZE, before });
+                if (selectedIdRef.current !== conversationId) return;
+                const current = messageCacheRef.current[conversationId] ?? [];
+                const known = new Set(current.map((m) => m.id));
+                const merged = [...batch.filter((m) => !known.has(m.id)), ...current];
+                merged.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+                replaceCachedMessages(conversationId, merged);
+                setMessages(merged);
+                window.setTimeout(() => scrollTo(id), 120);
+            } catch {
+                message.error('Không mở được tin nhắn');
+            }
+        },
+        [message, replaceCachedMessages]
+    );
 
     const handleRecallMessage = useCallback(
         (item: ChatMessage) => {
@@ -878,6 +1106,13 @@ const ChatPage: React.FC = () => {
                                         {getConversationSubtitle(selectedConversation, user?.id)}
                                     </Text>
                                 </div>
+                                <Tooltip title='Tìm trong hội thoại'>
+                                    <Button
+                                        icon={<SearchOutlined />}
+                                        onClick={() => setSearchOpen((open) => !open)}
+                                        className={`chat-page__icon-button ${searchOpen ? 'chat-page__icon-button--active' : ''}`}
+                                    />
+                                </Tooltip>
                                 {selectedConversation.context?.path ? (
                                     <Tooltip title='Mở phiếu liên quan'>
                                         <Button
@@ -943,6 +1178,87 @@ const ChatPage: React.FC = () => {
                                 </Popover>
                             </div>
 
+                            {searchOpen ? (
+                                <div className='chat-page__search-panel'>
+                                    <Input
+                                        autoFocus
+                                        allowClear
+                                        value={messageSearch}
+                                        onChange={(event) => setMessageSearch(event.target.value)}
+                                        prefix={<SearchOutlined className='text-slate-400' />}
+                                        placeholder='Tìm nội dung tin nhắn trong hội thoại...'
+                                        className='chat-page__search-input'
+                                    />
+                                    {messageSearch.trim().length >= 2 ? (
+                                        <div className='chat-page__search-results'>
+                                            {searching ? (
+                                                <div className='py-3 text-center text-xs text-slate-400'>
+                                                    Đang tìm...
+                                                </div>
+                                            ) : searchResults.length ? (
+                                                searchResults.map((result) => (
+                                                    <button
+                                                        key={result.id}
+                                                        type='button'
+                                                        className='chat-page__search-result'
+                                                        onClick={() => {
+                                                            setSearchOpen(false);
+                                                            void jumpToMessageId(result.id, result.createdAt);
+                                                        }}
+                                                    >
+                                                        <span className='chat-page__search-result-top'>
+                                                            <span className='truncate font-bold text-slate-700'>
+                                                                {result.sender?.name || 'Người dùng'}
+                                                            </span>
+                                                            <span className='shrink-0 text-[11px] text-slate-400'>
+                                                                {formatFullTime(result.createdAt)}
+                                                            </span>
+                                                        </span>
+                                                        <span className='chat-page__search-result-body'>
+                                                            {result.body}
+                                                        </span>
+                                                    </button>
+                                                ))
+                                            ) : (
+                                                <div className='py-3 text-center text-xs text-slate-400'>
+                                                    Không tìm thấy tin nhắn phù hợp
+                                                </div>
+                                            )}
+                                        </div>
+                                    ) : null}
+                                </div>
+                            ) : null}
+
+                            {pinnedMessages.length ? (
+                                <button
+                                    type='button'
+                                    className='chat-page__pinned-banner'
+                                    onClick={() =>
+                                        void jumpToMessageId(pinnedMessages[0].id, pinnedMessages[0].createdAt)
+                                    }
+                                >
+                                    <PushpinFilled className='text-[#0f6bdc]' />
+                                    <span className='min-w-0 flex-1 text-left'>
+                                        <span className='chat-page__pinned-label'>
+                                            Tin đã ghim
+                                            {pinnedMessages.length > 1 ? ` · ${pinnedMessages.length}` : ''}
+                                        </span>
+                                        <span className='chat-page__pinned-body'>
+                                            {pinnedMessages[0].body || '🖼️ Hình ảnh'}
+                                        </span>
+                                    </span>
+                                    <Tooltip title='Bỏ ghim'>
+                                        <DeleteOutlined
+                                            className='chat-page__pinned-unpin'
+                                            onClick={(event) => {
+                                                event.stopPropagation();
+                                                void handleTogglePin(pinnedMessages[0]);
+                                            }}
+                                        />
+                                    </Tooltip>
+                                </button>
+                            ) : null}
+
                             <div
                                 className='chat-page__messages'
                                 ref={messagesContainerRef}
@@ -991,13 +1307,66 @@ const ChatPage: React.FC = () => {
                                             const item = row.message;
                                             const mine = item.senderId === user?.id;
                                             const bubbleClass = `chat-page__bubble chat-page__bubble--${row.shape}`;
+                                            const reactions = groupReactions(item, user?.id);
+                                            const menuOpen = actionMenuId === item.id;
+
+                                            const actionContent = (
+                                                <div className='chat-action-menu'>
+                                                    <div className='chat-action-menu__emojis'>
+                                                        {REACTION_EMOJIS.map((emoji) => (
+                                                            <button
+                                                                key={emoji}
+                                                                type='button'
+                                                                className='chat-action-menu__emoji'
+                                                                onClick={() => void handleReact(item, emoji)}
+                                                            >
+                                                                {emoji}
+                                                            </button>
+                                                        ))}
+                                                    </div>
+                                                    <button
+                                                        type='button'
+                                                        className='chat-action-menu__item'
+                                                        onClick={() => handleStartReply(item)}
+                                                    >
+                                                        <RollbackOutlined /> Trả lời
+                                                    </button>
+                                                    <button
+                                                        type='button'
+                                                        className='chat-action-menu__item'
+                                                        onClick={() => void handleTogglePin(item)}
+                                                    >
+                                                        {item.pinned ? <PushpinFilled /> : <PushpinOutlined />}{' '}
+                                                        {item.pinned ? 'Bỏ ghim' : 'Ghim tin'}
+                                                    </button>
+                                                    {item.body ? (
+                                                        <button
+                                                            type='button'
+                                                            className='chat-action-menu__item'
+                                                            onClick={() => void handleCopyMessage(item)}
+                                                        >
+                                                            <CopyOutlined /> Sao chép
+                                                        </button>
+                                                    ) : null}
+                                                    {mine ? (
+                                                        <button
+                                                            type='button'
+                                                            className='chat-action-menu__item chat-action-menu__item--danger'
+                                                            onClick={() => handleRecallMessage(item)}
+                                                        >
+                                                            <DeleteOutlined /> Thu hồi
+                                                        </button>
+                                                    ) : null}
+                                                </div>
+                                            );
 
                                             return (
                                                 <div
                                                     key={row.key}
+                                                    id={`chat-msg-${item.id}`}
                                                     className={`group chat-page__message ${mine ? 'chat-page__message--mine' : ''} ${
                                                         row.isGroupStart ? 'chat-page__message--group-start' : ''
-                                                    }`}
+                                                    } ${highlightId === item.id ? 'chat-page__message--highlight' : ''}`}
                                                 >
                                                     {!mine ? (
                                                         row.isGroupStart ? (
@@ -1008,36 +1377,69 @@ const ChatPage: React.FC = () => {
                                                             <span className='chat-page__avatar-spacer' />
                                                         )
                                                     ) : null}
-                                                    {mine && !item.isDeleted ? (
+                                                    {!item.isDeleted ? (
                                                         <Dropdown
+                                                            open={menuOpen}
                                                             trigger={['click']}
-                                                            menu={{
-                                                                items: [
-                                                                    {
-                                                                        key: 'recall',
-                                                                        danger: true,
-                                                                        icon: <DeleteOutlined />,
-                                                                        label: 'Thu hồi tin nhắn',
-                                                                    },
-                                                                ],
-                                                                onClick: () => handleRecallMessage(item),
-                                                            }}
+                                                            placement={mine ? 'topRight' : 'topLeft'}
+                                                            onOpenChange={(open) =>
+                                                                setActionMenuId(open ? item.id : null)
+                                                            }
+                                                            dropdownRender={() => actionContent}
                                                         >
                                                             <Button
                                                                 type='text'
                                                                 size='small'
-                                                                icon={<MoreOutlined />}
-                                                                className='self-center text-slate-300 transition-opacity hover:text-slate-500 md:opacity-0 md:group-hover:opacity-100'
+                                                                icon={<SmileOutlined />}
+                                                                className='chat-page__msg-action self-center text-slate-300 transition-opacity hover:text-slate-500 md:opacity-0 md:group-hover:opacity-100'
                                                             />
                                                         </Dropdown>
                                                     ) : null}
-                                                    <div className='chat-page__bubble-wrap'>
+                                                    <div
+                                                        className='chat-page__bubble-wrap'
+                                                        onContextMenu={(event) => {
+                                                            if (item.isDeleted) return;
+                                                            event.preventDefault();
+                                                            setActionMenuId(item.id);
+                                                        }}
+                                                        onTouchStart={() => {
+                                                            if (item.isDeleted) return;
+                                                            longPressTimerRef.current = window.setTimeout(
+                                                                () => setActionMenuId(item.id),
+                                                                450
+                                                            );
+                                                        }}
+                                                        onTouchEnd={() =>
+                                                            window.clearTimeout(longPressTimerRef.current)
+                                                        }
+                                                        onTouchMove={() =>
+                                                            window.clearTimeout(longPressTimerRef.current)
+                                                        }
+                                                    >
                                                         {!mine &&
                                                         row.isGroupStart &&
                                                         selectedConversation.type !== 'direct' ? (
                                                             <Text className='chat-page__sender-name'>
                                                                 {item.sender?.name || 'Người dùng'}
                                                             </Text>
+                                                        ) : null}
+                                                        {item.replyTo ? (
+                                                            <button
+                                                                type='button'
+                                                                className='chat-page__reply-quote'
+                                                                onClick={() => void jumpToMessageId(item.replyTo!.id)}
+                                                            >
+                                                                <span className='chat-page__reply-quote-name'>
+                                                                    {item.replyTo.senderName || 'Tin nhắn'}
+                                                                </span>
+                                                                <span className='chat-page__reply-quote-body'>
+                                                                    {item.replyTo.isDeleted
+                                                                        ? 'Tin nhắn đã được thu hồi'
+                                                                        : item.replyTo.hasImage && !item.replyTo.body
+                                                                          ? '🖼️ Hình ảnh'
+                                                                          : item.replyTo.body}
+                                                                </span>
+                                                            </button>
                                                         ) : null}
                                                         {item.isDeleted ? (
                                                             <div
@@ -1079,6 +1481,29 @@ const ChatPage: React.FC = () => {
                                                                 </div>
                                                             </Image.PreviewGroup>
                                                         ) : null}
+                                                        {reactions.length ? (
+                                                            <div className='chat-page__reactions'>
+                                                                {reactions.map((reaction) => (
+                                                                    <button
+                                                                        key={reaction.emoji}
+                                                                        type='button'
+                                                                        className={`chat-page__reaction ${
+                                                                            reaction.mine
+                                                                                ? 'chat-page__reaction--mine'
+                                                                                : ''
+                                                                        }`}
+                                                                        onClick={() =>
+                                                                            void handleReact(item, reaction.emoji)
+                                                                        }
+                                                                    >
+                                                                        <span>{reaction.emoji}</span>
+                                                                        <span className='chat-page__reaction-count'>
+                                                                            {reaction.count}
+                                                                        </span>
+                                                                    </button>
+                                                                ))}
+                                                            </div>
+                                                        ) : null}
                                                         {row.isGroupEnd ? (
                                                             <Text className='chat-page__msg-time'>
                                                                 {formatTimeShort(item.createdAt)}
@@ -1106,6 +1531,46 @@ const ChatPage: React.FC = () => {
                                 </div>
                             ) : null}
 
+                            {Object.keys(typingUsers).length ? (
+                                <div className='chat-page__typing'>
+                                    <span className='chat-page__typing-dots'>
+                                        <i />
+                                        <i />
+                                        <i />
+                                    </span>
+                                    <span className='chat-page__typing-text'>
+                                        {Object.values(typingUsers).slice(0, 2).join(', ')}
+                                        {Object.keys(typingUsers).length > 2
+                                            ? ` +${Object.keys(typingUsers).length - 2}`
+                                            : ''}{' '}
+                                        đang soạn tin…
+                                    </span>
+                                </div>
+                            ) : null}
+
+                            {replyTarget ? (
+                                <div className='chat-page__reply-bar'>
+                                    <RollbackOutlined className='text-[#0f6bdc]' />
+                                    <div className='min-w-0 flex-1'>
+                                        <div className='chat-page__reply-bar-name'>
+                                            Trả lời{' '}
+                                            {replyTarget.senderId === user?.id
+                                                ? 'chính bạn'
+                                                : replyTarget.sender?.name || ''}
+                                        </div>
+                                        <div className='chat-page__reply-bar-body'>
+                                            {replyTarget.body || '🖼️ Hình ảnh'}
+                                        </div>
+                                    </div>
+                                    <Button
+                                        type='text'
+                                        size='small'
+                                        icon={<CloseOutlined />}
+                                        onClick={() => setReplyTarget(null)}
+                                    />
+                                </div>
+                            ) : null}
+
                             <div className='chat-page__composer'>
                                 <input
                                     ref={imageInputRef}
@@ -1124,6 +1589,26 @@ const ChatPage: React.FC = () => {
                                     disabled={sending || selectedImages.length >= MAX_CHAT_IMAGES}
                                     className='chat-page__attach-button'
                                 />
+                                <Popover
+                                    trigger='click'
+                                    placement='topLeft'
+                                    content={
+                                        <div className='chat-emoji-grid'>
+                                            {COMPOSER_EMOJIS.map((emoji) => (
+                                                <button
+                                                    key={emoji}
+                                                    type='button'
+                                                    className='chat-emoji-grid__item'
+                                                    onClick={() => setComposer((prev) => prev + emoji)}
+                                                >
+                                                    {emoji}
+                                                </button>
+                                            ))}
+                                        </div>
+                                    }
+                                >
+                                    <Button icon={<SmileOutlined />} className='chat-page__attach-button' />
+                                </Popover>
                                 <div className='min-w-0 flex-1'>
                                     {selectedImages.length ? (
                                         <div className='chat-page__selected-images'>
@@ -1138,11 +1623,15 @@ const ChatPage: React.FC = () => {
                                         </div>
                                     ) : null}
                                     <TextArea
+                                        ref={composerRef}
                                         value={composer}
                                         autoSize={{ minRows: 1, maxRows: 4 }}
                                         maxLength={4000}
                                         placeholder='Nhập tin nhắn nội bộ...'
-                                        onChange={(event) => setComposer(event.target.value)}
+                                        onChange={(event) => {
+                                            setComposer(event.target.value);
+                                            emitTyping();
+                                        }}
                                         onPressEnter={(event) => {
                                             if (!event.shiftKey) {
                                                 event.preventDefault();

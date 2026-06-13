@@ -191,6 +191,12 @@ export interface Maintenance {
     id: string;
     assetId: string;
     asset?: Asset;
+    assetIds?: string[];
+    assets?: Asset[];
+    plantId?: string;
+    plantName?: string;
+    areaAtCreation?: string;
+    plantIdBackfilled?: boolean;
     type: MaintenanceType;
     repairMode?: MaintenanceRepairMode;
     status?: 'pending' | 'in_progress' | 'completed' | 'overdue' | 'cancelled';
@@ -510,6 +516,20 @@ export interface ChatConversation {
     updatedAt: string;
 }
 
+export interface ChatReplyPreview {
+    id: string;
+    senderId?: string;
+    senderName?: string;
+    body: string;
+    hasImage?: boolean;
+    isDeleted?: boolean;
+}
+
+export interface ChatReaction {
+    userId: string;
+    emoji: string;
+}
+
 export interface ChatMessage {
     id: string;
     conversationId: string;
@@ -526,6 +546,9 @@ export interface ChatMessage {
         width?: number;
         height?: number;
     }>;
+    replyTo?: ChatReplyPreview;
+    reactions?: ChatReaction[];
+    pinned?: boolean;
     system: boolean;
     isDeleted: boolean;
     createdAt: string;

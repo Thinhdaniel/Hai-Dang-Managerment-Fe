@@ -30,6 +30,7 @@ import {
     DeleteOutlined,
     DollarOutlined,
     EyeOutlined,
+    FileExcelOutlined,
     FilterOutlined,
     MessageOutlined,
     PlusOutlined,
@@ -136,6 +137,13 @@ const sumCostItems = (items?: { amount?: number | null }[]) =>
 const buildMaintenanceCode = (item: Maintenance) =>
     `MNT-${new Date(item.createdAt || item.startDate).getFullYear()}-${item.id.slice(-5).toUpperCase()}`;
 const getRepairModeLabel = (value?: string) => (value === 'external' ? 'Sửa ngoài' : 'Nội bộ');
+const getMaintenanceAssets = (record: Maintenance) =>
+    record.assets?.length ? record.assets : record.asset ? [record.asset] : [];
+const getMaintenanceAssetLabel = (record: Maintenance) => {
+    const assets = getMaintenanceAssets(record);
+    if (assets.length > 1) return `${assets.length} máy`;
+    return assets[0]?.name || 'Máy chưa xác định';
+};
 const getStatusTag = (value?: string) => {
     const status = statusMeta[value || 'pending'] ?? { label: value || '-', color: 'default' };
     return <Tag color={status.color}>{status.label}</Tag>;
@@ -178,6 +186,7 @@ const MaintenanceList: React.FC = () => {
     const [completeTarget, setCompleteTarget] = useState<Maintenance | null>(null);
     const [rejectTarget, setRejectTarget] = useState<Maintenance | null>(null);
     const [rejectReason, setRejectReason] = useState('');
+    const [exportingId, setExportingId] = useState<string | null>(null);
     const [completeForm] = Form.useForm<CompleteFormValues>();
     const watchedCostItems = Form.useWatch(['externalRepair', 'costItems'], completeForm);
     const watchedInternalCost = Form.useWatch('cost', completeForm);
@@ -383,6 +392,17 @@ const MaintenanceList: React.FC = () => {
         message.success('Đã duyệt phiếu sửa ngoài');
     };
 
+    const handleExportXlsx = async (record: Maintenance) => {
+        setExportingId(record.id);
+        try {
+            await maintenanceService.exportXlsx(record.id, buildMaintenanceCode(record));
+        } catch {
+            message.error('Không xuất được phiếu Excel');
+        } finally {
+            setExportingId(null);
+        }
+    };
+
     const handleReject = async () => {
         if (!rejectTarget || !rejectReason.trim()) return;
         await rejectMutation.mutateAsync({ id: rejectTarget.id, reason: rejectReason.trim() });
@@ -523,6 +543,7 @@ const MaintenanceList: React.FC = () => {
 
     const renderMobileMaintenanceCard = (record: Maintenance, index = 0) => {
         const accent = getMaintenanceAccent(record);
+        const recordAssets = getMaintenanceAssets(record);
 
         return (
             <article
@@ -540,12 +561,15 @@ const MaintenanceList: React.FC = () => {
                             {buildMaintenanceCode(record)}
                         </Text>
                         <div className='mt-2 line-clamp-2 text-base leading-snug font-bold text-slate-950'>
-                            {record.asset?.name || 'Máy chưa xác định'}
+                            {getMaintenanceAssetLabel(record)}
                         </div>
                         <div className='mt-2 flex flex-wrap gap-1.5'>
-                            <Tag color='blue' className='!m-0 font-mono'>
-                                {record.asset?.machineCode || record.assetId}
-                            </Tag>
+                            {recordAssets.slice(0, 3).map((asset) => (
+                                <Tag key={asset.id} color='blue' className='!m-0 font-mono'>
+                                    {asset.machineCode || asset.id}
+                                </Tag>
+                            ))}
+                            {recordAssets.length > 3 ? <Tag className='!m-0'>+{recordAssets.length - 3}</Tag> : null}
                             <Tag color={record.repairMode === 'external' ? 'orange' : 'green'} className='!m-0'>
                                 {getRepairModeLabel(record.repairMode)}
                             </Tag>
@@ -564,7 +588,7 @@ const MaintenanceList: React.FC = () => {
                     <div className='rounded-xl bg-slate-50 p-2'>
                         <div className='text-xs font-semibold text-slate-400 uppercase'>Cơ sở</div>
                         <div className='mt-1 line-clamp-1 font-semibold text-slate-800'>
-                            {record.asset?.plant?.name || '-'}
+                            {record.plantName || recordAssets[0]?.plant?.name || '-'}
                         </div>
                     </div>
                     <div className='rounded-xl bg-slate-50 p-2'>
@@ -672,20 +696,30 @@ const MaintenanceList: React.FC = () => {
             title: 'Phiếu / Máy',
             key: 'asset',
             width: 310,
-            render: (_value, record) => (
-                <div className='flex min-w-[260px] flex-col gap-1'>
-                    <Text code className='w-fit'>
-                        {buildMaintenanceCode(record)}
-                    </Text>
-                    <Text strong className='line-clamp-1'>
-                        {record.asset?.name || '-'}
-                    </Text>
-                    <div className='flex flex-wrap gap-1'>
-                        <Tag color='blue'>{record.asset?.machineCode || record.assetId}</Tag>
-                        {record.asset?.plant?.name ? <Tag>{record.asset.plant.name}</Tag> : null}
+            render: (_value, record) => {
+                const recordAssets = getMaintenanceAssets(record);
+                return (
+                    <div className='flex min-w-[260px] flex-col gap-1'>
+                        <Text code className='w-fit'>
+                            {buildMaintenanceCode(record)}
+                        </Text>
+                        <Text strong className='line-clamp-1'>
+                            {getMaintenanceAssetLabel(record)}
+                        </Text>
+                        <div className='flex flex-wrap gap-1'>
+                            {recordAssets.slice(0, 3).map((asset) => (
+                                <Tag key={asset.id} color='blue' className='font-mono'>
+                                    {asset.machineCode || asset.id}
+                                </Tag>
+                            ))}
+                            {recordAssets.length > 3 ? <Tag>+{recordAssets.length - 3}</Tag> : null}
+                            {record.plantName || recordAssets[0]?.plant?.name ? (
+                                <Tag>{record.plantName || recordAssets[0]?.plant?.name}</Tag>
+                            ) : null}
+                        </div>
                     </div>
-                </div>
-            ),
+                );
+            },
         },
         {
             title: 'Nội dung',
@@ -1070,7 +1104,7 @@ const MaintenanceList: React.FC = () => {
                                 </Tag>
                                 {getStatusTag(detailTarget.status)}
                             </Space>
-                            <Text type='secondary'>{detailTarget.asset?.name || 'Máy chưa xác định'}</Text>
+                            <Text type='secondary'>{getMaintenanceAssetLabel(detailTarget)}</Text>
                         </div>
                     ) : (
                         'Chi tiết phiếu bảo trì'
@@ -1119,6 +1153,13 @@ const MaintenanceList: React.FC = () => {
                                     Hoàn tất
                                 </Button>
                             ) : null}
+                            <Button
+                                icon={<FileExcelOutlined />}
+                                loading={exportingId === detailTarget.id}
+                                onClick={() => void handleExportXlsx(detailTarget)}
+                            >
+                                Xuất phiếu
+                            </Button>
                             <Button icon={<MessageOutlined />} onClick={() => setChatTarget(detailTarget)}>
                                 Trao đổi
                             </Button>
@@ -1127,7 +1168,15 @@ const MaintenanceList: React.FC = () => {
                 }
                 footer={
                     isMobile && detailTarget ? (
-                        <div className='pb-[env(safe-area-inset-bottom)]'>
+                        <div className='flex flex-col gap-2 pb-[env(safe-area-inset-bottom)]'>
+                            <Button
+                                block
+                                icon={<FileExcelOutlined />}
+                                loading={exportingId === detailTarget.id}
+                                onClick={() => void handleExportXlsx(detailTarget)}
+                            >
+                                Xuất phiếu Excel
+                            </Button>
                             {renderRecordActions(detailTarget, 'mobile', { showDetail: false })}
                         </div>
                     ) : null
@@ -1140,10 +1189,49 @@ const MaintenanceList: React.FC = () => {
                             size='small'
                             column={{ xs: 1, sm: 2 }}
                             items={[
-                                { key: 'asset', label: 'Tên máy', children: detailTarget.asset?.name || '-' },
-                                { key: 'code', label: 'Mã máy', children: detailTarget.asset?.machineCode || '-' },
-                                { key: 'serial', label: 'Serial', children: detailTarget.asset?.serial || '-' },
-                                { key: 'plant', label: 'Cơ sở', children: detailTarget.asset?.plant?.name || '-' },
+                                ...((detailTarget.assets?.length ?? 0) > 1
+                                    ? [
+                                          {
+                                              key: 'machines',
+                                              label: `Danh sách máy (${detailTarget.assets!.length})`,
+                                              span: 2,
+                                              children: (
+                                                  <Space wrap size={[4, 4]}>
+                                                      {detailTarget.assets!.map((a) => (
+                                                          <Tag key={a.id} className='!m-0'>
+                                                              <span className='font-mono'>{a.machineCode}</span>
+                                                              {a.name ? ` · ${a.name}` : ''}
+                                                          </Tag>
+                                                      ))}
+                                                  </Space>
+                                              ),
+                                          },
+                                      ]
+                                    : [
+                                          {
+                                              key: 'asset',
+                                              label: 'Tên máy',
+                                              children: detailTarget.asset?.name || '-',
+                                          },
+                                          {
+                                              key: 'code',
+                                              label: 'Mã máy',
+                                              children: detailTarget.asset?.machineCode || '-',
+                                          },
+                                          {
+                                              key: 'serial',
+                                              label: 'Serial',
+                                              children: detailTarget.asset?.serial || '-',
+                                          },
+                                      ]),
+                                {
+                                    key: 'plant',
+                                    label: 'Cơ sở',
+                                    children:
+                                        detailTarget.plantName ||
+                                        getMaintenanceAssets(detailTarget)[0]?.plant?.name ||
+                                        '-',
+                                },
                                 {
                                     key: 'type',
                                     label: 'Loại bảo trì',

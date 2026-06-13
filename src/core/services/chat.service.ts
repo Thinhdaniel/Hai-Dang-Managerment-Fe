@@ -14,12 +14,16 @@ export type CreateChatConversationPayload = {
 
 export type SendChatMessagePayload = {
     body: string;
+    replyTo?: string;
 };
 
-const buildAttachmentFormData = (body: string, images: File[]) => {
+const buildAttachmentFormData = (body: string, images: File[], replyTo?: string) => {
     const formData = new FormData();
     if (body.trim()) {
         formData.append('body', body.trim());
+    }
+    if (replyTo) {
+        formData.append('replyTo', replyTo);
     }
     images.forEach((file) => formData.append('images', file));
     return formData;
@@ -46,10 +50,15 @@ export const chatService = {
     sendMessage: (conversationId: string, payload: SendChatMessagePayload): Promise<ChatMessage> =>
         api.post<ChatMessage, SendChatMessagePayload>(`/chat/conversations/${conversationId}/messages`, payload),
 
-    sendAttachmentMessage: (conversationId: string, body: string, images: File[]): Promise<ChatMessage> =>
+    sendAttachmentMessage: (
+        conversationId: string,
+        body: string,
+        images: File[],
+        replyTo?: string
+    ): Promise<ChatMessage> =>
         api.post<ChatMessage, FormData>(
             `/chat/conversations/${conversationId}/attachments`,
-            buildAttachmentFormData(body, images),
+            buildAttachmentFormData(body, images, replyTo),
             {
                 headers: {
                     'Content-Type': 'multipart/form-data',
@@ -73,4 +82,19 @@ export const chatService = {
 
     recallMessage: (conversationId: string, messageId: string): Promise<ChatMessage> =>
         api.delete<ChatMessage>(`/chat/conversations/${conversationId}/messages/${messageId}`),
+
+    toggleReaction: (conversationId: string, messageId: string, emoji: string): Promise<ChatMessage> =>
+        api.post<ChatMessage, { emoji: string }>(
+            `/chat/conversations/${conversationId}/messages/${messageId}/reactions`,
+            { emoji }
+        ),
+
+    togglePin: (conversationId: string, messageId: string): Promise<ChatMessage> =>
+        api.patch<ChatMessage>(`/chat/conversations/${conversationId}/messages/${messageId}/pin`),
+
+    getPinned: (conversationId: string): Promise<ChatMessage[]> =>
+        api.get<ChatMessage[]>(`/chat/conversations/${conversationId}/pinned`),
+
+    searchMessages: (conversationId: string, q: string): Promise<ChatMessage[]> =>
+        api.get<ChatMessage[]>(`/chat/conversations/${conversationId}/messages/search`, { params: { q } }),
 };

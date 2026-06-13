@@ -4,7 +4,7 @@ import type { Asset, MaintenanceRepairMode, MaintenanceType } from '../core/type
 import type { MaintenancePayload } from '../core/services/maintenance.service';
 
 type MaintenanceFormValues = {
-    assetId: string;
+    assetIds: string[];
     type: MaintenanceType;
     repairMode: MaintenanceRepairMode;
     description: string;
@@ -60,8 +60,10 @@ const MaintenanceFormModal = ({
 
     const handleFinish = async (values: MaintenanceFormValues) => {
         const isExternal = values.repairMode === 'external';
+        const assetIds = Array.from(new Set(values.assetIds ?? [])).filter(Boolean);
         const payload: MaintenancePayload = {
-            assetId: values.assetId,
+            assetId: assetIds[0],
+            assetIds,
             type: values.type,
             repairMode: values.repairMode,
             description: values.description.trim(),
@@ -100,7 +102,7 @@ const MaintenanceFormModal = ({
                 layout='vertical'
                 requiredMark='optional'
                 initialValues={{
-                    assetId: initialAssetId,
+                    assetIds: initialAssetId ? [initialAssetId] : undefined,
                     type: 'emergency',
                     repairMode: 'internal',
                     startDate: dayjs(),
@@ -111,15 +113,18 @@ const MaintenanceFormModal = ({
                 onFinish={handleFinish}
             >
                 <Form.Item
-                    name='assetId'
-                    label='Máy cần sửa'
-                    rules={[{ required: true, message: 'Chọn máy cần bảo trì' }]}
+                    name='assetIds'
+                    label='Máy cần sửa (có thể chọn nhiều)'
+                    rules={[{ required: true, message: 'Chọn ít nhất một máy cần bảo trì' }]}
                 >
                     <Select
-                        showSearch={{ optionFilterProp: 'label' }}
+                        mode='multiple'
+                        showSearch
+                        optionFilterProp='label'
                         options={assetOptions}
-                        placeholder='Tìm theo mã máy hoặc tên máy'
+                        placeholder='Tìm & chọn một hoặc nhiều máy theo mã máy hoặc tên máy'
                         disabled={Boolean(initialAssetId)}
+                        maxTagCount='responsive'
                     />
                 </Form.Item>
 

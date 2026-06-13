@@ -15,7 +15,7 @@ import {
     Typography,
 } from 'antd';
 import dayjs, { type Dayjs } from 'dayjs';
-import { CloseOutlined, EnvironmentOutlined, SaveOutlined, ScanOutlined, ToolOutlined } from '@ant-design/icons';
+import { CloseOutlined, EnvironmentOutlined, SaveOutlined, ScanOutlined } from '@ant-design/icons';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import QrCameraScanner from './QrCameraScanner';
 import { ASSET_STATUS_LABEL } from '../core/constants';
@@ -93,15 +93,19 @@ const QrQuickMaintenanceModal: React.FC<QrQuickMaintenanceModalProps> = ({ open,
     const [form] = Form.useForm<MaintenanceQuickFormValues>();
     const queryClient = useQueryClient();
     const { message } = App.useApp();
-    const [asset, setAsset] = useState<Asset | null>(null);
-    const [scanMeta, setScanMeta] = useState<ScanMeta | null>(null);
+    const [selectedAssets, setSelectedAssets] = useState<Asset[]>([]);
+    const [scanMetas, setScanMetas] = useState<Record<string, ScanMeta>>({});
+    const [addingAsset, setAddingAsset] = useState(false);
     const [resolving, setResolving] = useState(false);
     const repairMode = Form.useWatch('repairMode', form) ?? MaintenanceRepairMode.INTERNAL;
+    const asset = selectedAssets[0] ?? null;
+    const selectedAssetIds = useMemo(() => selectedAssets.map((item) => item.id), [selectedAssets]);
 
     useEffect(() => {
         if (!open) {
-            setAsset(null);
-            setScanMeta(null);
+            setSelectedAssets([]);
+            setScanMetas({});
+            setAddingAsset(false);
             form.resetFields();
             return;
         }
@@ -110,14 +114,29 @@ const QrQuickMaintenanceModal: React.FC<QrQuickMaintenanceModalProps> = ({ open,
     }, [form, open]);
 
     const { data: existingMaintenances = [] } = useQuery({
-        queryKey: ['maintenances', 'asset', asset?.id],
-        queryFn: () => maintenanceService.getByAsset(asset?.id ?? ''),
-        enabled: Boolean(asset?.id),
+        queryKey: ['maintenances', 'quick-scan-assets', selectedAssetIds],
+        queryFn: async () => {
+            const rows = await Promise.all(selectedAssetIds.map((id) => maintenanceService.getByAsset(id)));
+            return Array.from(new Map(rows.flat().map((item) => [item.id, item])).values());
+        },
+        enabled: selectedAssetIds.length > 0,
     });
 
     const openMaintenances = useMemo(
         () => existingMaintenances.filter((item) => openMaintenanceStatuses.has(item.status || '')),
         [existingMaintenances]
+    );
+    const openMaintenanceCountByAsset = useMemo(() => {
+        const map = new Map<string, number>();
+        openMaintenances.forEach((item) => {
+            const ids = item.assetIds?.length ? item.assetIds : [item.assetId];
+            ids.forEach((id) => map.set(id, (map.get(id) ?? 0) + 1));
+        });
+        return map;
+    }, [openMaintenances]);
+    const returnedAssets = useMemo(
+        () => selectedAssets.filter((item) => item.status === AssetStatus.RETURNED_TO_PARTNER),
+        [selectedAssets]
     );
 
     const createMutation = useMutation({
@@ -126,44 +145,49 @@ const QrQuickMaintenanceModal: React.FC<QrQuickMaintenanceModalProps> = ({ open,
             queryClient.invalidateQueries({ queryKey: ['maintenances'] });
             queryClient.invalidateQueries({ queryKey: ['assets'] });
             queryClient.invalidateQueries({ queryKey: ['dashboard'] });
-            if (asset?.id) {
-                queryClient.invalidateQueries({ queryKey: ['asset', asset.id] });
-                queryClient.invalidateQueries({ queryKey: ['maintenances', 'asset', asset.id] });
-            }
+            selectedAssets.forEach((item) => {
+                queryClient.invalidateQueries({ queryKey: ['asset', item.id] });
+                queryClient.invalidateQueries({ queryKey: ['maintenances', 'asset', item.id] });
 
-            if (asset) {
+                const scanMeta = scanMetas[item.id];
                 recordQrScan({
                     rawValue: scanMeta?.rawValue,
                     publicId: scanMeta?.publicId,
                     labelId: scanMeta?.labelId,
-                    assetId: asset.id,
+                    assetId: item.id,
                     action: 'maintenance_quick_create_success',
                     result: 'success',
                     source: scanMeta?.source ?? 'unknown',
-                    metadata: { maintenanceId: maintenance.id, machineCode: asset.machineCode },
+                    metadata: {
+                        maintenanceId: maintenance.id,
+                        machineCode: item.machineCode,
+                        assetCount: selectedAssets.length,
+                    },
                 });
-            }
+            });
 
-            message.success('Đã tạo phiếu bảo trì');
+            message.success(`Đã tạo phiếu bảo trì cho ${selectedAssets.length} máy`);
             onCreated?.();
-            setAsset(null);
-            setScanMeta(null);
+            setSelectedAssets([]);
+            setScanMetas({});
+            setAddingAsset(false);
             form.resetFields();
             form.setFieldsValue(createDefaultQuickValues());
         },
         onError: (error) => {
-            if (asset) {
+            selectedAssets.forEach((item) => {
+                const scanMeta = scanMetas[item.id];
                 recordQrScan({
                     rawValue: scanMeta?.rawValue,
                     publicId: scanMeta?.publicId,
                     labelId: scanMeta?.labelId,
-                    assetId: asset.id,
+                    assetId: item.id,
                     action: 'maintenance_quick_create_success',
                     result: 'failed',
                     source: scanMeta?.source ?? 'unknown',
                     metadata: { error: getErrorMessage(error, 'Tạo phiếu bảo trì chưa thành công') },
                 });
-            }
+            });
         },
     });
 
@@ -178,8 +202,6 @@ const QrQuickMaintenanceModal: React.FC<QrQuickMaintenanceModalProps> = ({ open,
                 labelId: result.labelId,
                 source: result.source,
             };
-            setScanMeta(nextMeta);
-
             if (!result.asset) {
                 recordQrScan({
                     rawValue,
@@ -197,6 +219,12 @@ const QrQuickMaintenanceModal: React.FC<QrQuickMaintenanceModalProps> = ({ open,
                 return;
             }
 
+            const alreadySelected = selectedAssets.some((item) => item.id === result.asset!.id);
+            if (alreadySelected) {
+                message.info(`Máy "${result.asset.name}" đã nằm trong phiếu`);
+                return;
+            }
+
             recordQrScan({
                 rawValue,
                 publicId: result.publicId,
@@ -206,21 +234,30 @@ const QrQuickMaintenanceModal: React.FC<QrQuickMaintenanceModalProps> = ({ open,
                 result: 'resolved',
                 source: result.source,
             });
-            setAsset(result.asset);
-            form.resetFields();
-            form.setFieldsValue(createDefaultQuickValues());
-            message.success(`Đã nhận diện "${result.asset.name}"`);
+            if (!selectedAssets.length) {
+                form.resetFields();
+                form.setFieldsValue(createDefaultQuickValues());
+            }
+            setSelectedAssets((prev) => [...prev, result.asset!]);
+            setScanMetas((prev) => ({ ...prev, [result.asset!.id]: nextMeta }));
+            setAddingAsset(selectedAssets.length === 0 ? false : true);
+            message.success(
+                selectedAssets.length
+                    ? `Đã thêm "${result.asset.name}" vào phiếu`
+                    : `Đã nhận diện "${result.asset.name}"`
+            );
         } finally {
             setResolving(false);
         }
     };
 
     const handleSubmit = async (values: MaintenanceQuickFormValues) => {
-        if (!asset) return;
+        if (!selectedAssets.length) return;
 
         const isExternal = values.repairMode === MaintenanceRepairMode.EXTERNAL;
         const payload: MaintenancePayload = {
-            assetId: asset.id,
+            assetId: selectedAssets[0].id,
+            assetIds: selectedAssets.map((item) => item.id),
             type: values.type,
             repairMode: values.repairMode,
             description: values.description.trim(),
@@ -246,10 +283,20 @@ const QrQuickMaintenanceModal: React.FC<QrQuickMaintenanceModalProps> = ({ open,
     };
 
     const handleScanNext = () => {
-        setAsset(null);
-        setScanMeta(null);
+        setSelectedAssets([]);
+        setScanMetas({});
+        setAddingAsset(false);
         form.resetFields();
         form.setFieldsValue(createDefaultQuickValues());
+    };
+
+    const handleRemoveAsset = (assetId: string) => {
+        setSelectedAssets((prev) => prev.filter((item) => item.id !== assetId));
+        setScanMetas((prev) => {
+            const next = { ...prev };
+            delete next[assetId];
+            return next;
+        });
     };
 
     const repairModeSegmentOptions = repairModeOptions.map((option) => ({
@@ -287,37 +334,90 @@ const QrQuickMaintenanceModal: React.FC<QrQuickMaintenanceModalProps> = ({ open,
     const formContent = asset ? (
         <div className={isMobile ? 'flex h-full flex-col bg-slate-50' : 'flex flex-col gap-4'}>
             <div className={isMobile ? 'flex-1 overflow-y-auto p-4' : 'flex flex-col gap-4'}>
-                <div className='rounded-2xl border border-slate-200 bg-white p-4 shadow-sm'>
+                <section className='rounded-2xl border border-slate-200 bg-white p-4 shadow-sm'>
                     <div className='flex items-start justify-between gap-3'>
                         <div className='min-w-0'>
-                            <div className='line-clamp-2 text-base leading-snug font-bold text-slate-950'>
-                                {asset.name}
+                            <div className='text-base font-black text-slate-950'>
+                                Máy trong phiếu ({selectedAssets.length})
                             </div>
-                            <div className='mt-2 flex flex-wrap items-center gap-1.5'>
-                                <Tag color='blue' className='!m-0 font-mono'>
-                                    {asset.machineCode}
-                                </Tag>
-                                <Tag className='!m-0'>{ASSET_STATUS_LABEL[asset.status]}</Tag>
+                            <div className='mt-1 text-sm font-medium text-slate-500'>
+                                Quét liên tiếp các máy cần đưa vào cùng một phiếu bảo trì.
                             </div>
                         </div>
-                        <div className='flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-amber-500 text-white'>
-                            <ToolOutlined />
-                        </div>
+                        <Button
+                            icon={<ScanOutlined />}
+                            onClick={() => setAddingAsset((prev) => !prev)}
+                            type={addingAsset ? 'primary' : 'default'}
+                        >
+                            {addingAsset ? 'Dừng quét' : 'Quét thêm'}
+                        </Button>
                     </div>
-                    <div className='mt-3 flex items-center gap-2 text-sm text-slate-600'>
-                        <EnvironmentOutlined className='shrink-0 text-slate-400' />
-                        <span className='min-w-0 truncate font-semibold'>{asset.plant?.name || 'Chưa rõ cơ sở'}</span>
-                        <span className='text-slate-300'>/</span>
-                        <span className='min-w-0 truncate'>{asset.area?.trim() || 'Chưa gắn khu vực'}</span>
-                    </div>
-                </div>
 
-                {asset.status === AssetStatus.RETURNED_TO_PARTNER ? (
+                    <div className='mt-3 flex flex-col gap-2'>
+                        {selectedAssets.map((item, index) => {
+                            const openCount = openMaintenanceCountByAsset.get(item.id) ?? 0;
+                            return (
+                                <div
+                                    key={item.id}
+                                    className='rounded-2xl border border-slate-100 bg-slate-50 p-3'
+                                >
+                                    <div className='flex items-start justify-between gap-3'>
+                                        <div className='min-w-0'>
+                                            <div className='flex flex-wrap items-center gap-1.5'>
+                                                <Tag color={index === 0 ? 'blue' : 'default'} className='!m-0'>
+                                                    {index === 0 ? 'Máy chính' : `Máy ${index + 1}`}
+                                                </Tag>
+                                                <Tag color='blue' className='!m-0 font-mono'>
+                                                    {item.machineCode}
+                                                </Tag>
+                                                <Tag className='!m-0'>{ASSET_STATUS_LABEL[item.status]}</Tag>
+                                                {openCount ? (
+                                                    <Tag color='warning' className='!m-0'>
+                                                        {openCount} phiếu mở
+                                                    </Tag>
+                                                ) : null}
+                                            </div>
+                                            <div className='mt-1 line-clamp-2 font-bold text-slate-950'>
+                                                {item.name}
+                                            </div>
+                                            <div className='mt-2 flex items-center gap-2 text-sm text-slate-600'>
+                                                <EnvironmentOutlined className='shrink-0 text-slate-400' />
+                                                <span className='min-w-0 truncate font-semibold'>
+                                                    {item.plant?.name || 'Chưa rõ cơ sở'}
+                                                </span>
+                                                <span className='text-slate-300'>/</span>
+                                                <span className='min-w-0 truncate'>
+                                                    {item.area?.trim() || 'Chưa gắn khu vực'}
+                                                </span>
+                                            </div>
+                                        </div>
+                                        <Button
+                                            danger
+                                            size='small'
+                                            disabled={selectedAssets.length === 1}
+                                            onClick={() => handleRemoveAsset(item.id)}
+                                        >
+                                            Xóa
+                                        </Button>
+                                    </div>
+                                </div>
+                            );
+                        })}
+                    </div>
+
+                    {addingAsset ? (
+                        <div className='mt-3 overflow-hidden rounded-2xl border border-blue-100 bg-blue-50 p-2'>
+                            <QrCameraScanner active={open && addingAsset} onDetected={handleDetected} />
+                        </div>
+                    ) : null}
+                </section>
+
+                {returnedAssets.length ? (
                     <Alert
                         showIcon
                         type='warning'
-                        message='Máy đã trả đối tác'
-                        description='Backend sẽ không cho tạo phiếu bảo trì mới cho máy đã trả đối tác.'
+                        message={`Có ${returnedAssets.length} máy đã trả đối tác`}
+                        description='Backend sẽ không cho tạo phiếu bảo trì mới nếu danh sách có máy đã trả đối tác.'
                     />
                 ) : null}
 
@@ -325,7 +425,7 @@ const QrQuickMaintenanceModal: React.FC<QrQuickMaintenanceModalProps> = ({ open,
                     <Alert
                         showIcon
                         type='warning'
-                        message={`Máy đang có ${openMaintenances.length} phiếu bảo trì chưa đóng`}
+                        message={`Danh sách đang có ${openMaintenances.length} phiếu bảo trì chưa đóng`}
                         description='Kiểm tra trước khi tạo thêm phiếu mới để tránh trùng việc.'
                     />
                 ) : null}
@@ -448,7 +548,7 @@ const QrQuickMaintenanceModal: React.FC<QrQuickMaintenanceModalProps> = ({ open,
                         Xong
                     </Button>
                     <Button block={isMobile} size={controlSize} icon={<ScanOutlined />} onClick={handleScanNext}>
-                        Quét lại
+                        Làm lại
                     </Button>
                     <Button
                         block={isMobile}
@@ -456,10 +556,11 @@ const QrQuickMaintenanceModal: React.FC<QrQuickMaintenanceModalProps> = ({ open,
                         size={controlSize}
                         icon={<SaveOutlined />}
                         loading={createMutation.isPending}
+                        disabled={Boolean(returnedAssets.length)}
                         onClick={() => form.submit()}
                         className={isMobile ? 'col-span-2' : 'min-w-[156px]'}
                     >
-                        Tạo phiếu
+                        Tạo phiếu ({selectedAssets.length})
                     </Button>
                 </div>
             </div>
@@ -476,7 +577,7 @@ const QrQuickMaintenanceModal: React.FC<QrQuickMaintenanceModalProps> = ({ open,
                 size='92vh'
                 onClose={onClose}
                 destroyOnHidden
-                title={asset ? 'Tạo phiếu bảo trì' : 'Quét QR máy'}
+                title={asset ? `Tạo phiếu bảo trì (${selectedAssets.length} máy)` : 'Quét QR máy'}
                 styles={{
                     body: { padding: 0, overflow: 'hidden' },
                     section: { borderRadius: '22px 22px 0 0' },
@@ -495,7 +596,7 @@ const QrQuickMaintenanceModal: React.FC<QrQuickMaintenanceModalProps> = ({ open,
             footer={null}
             destroyOnHidden
             onCancel={onClose}
-            title={asset ? 'Tạo phiếu bảo trì' : 'Quét QR máy'}
+            title={asset ? `Tạo phiếu bảo trì (${selectedAssets.length} máy)` : 'Quét QR máy'}
         >
             {content}
         </Modal>

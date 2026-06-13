@@ -1,4 +1,5 @@
 import api from '../lib/api';
+import axiosInstance from '../lib/axios';
 import type { Maintenance, MaintenanceFilter, MaintenanceReport, PaginatedResponse } from '../types';
 
 const BASE = '/maintenances';
@@ -7,7 +8,15 @@ export type MaintenancePayload = Pick<Maintenance, 'assetId' | 'type' | 'descrip
     Partial<
         Pick<
             Maintenance,
-            'repairMode' | 'endDate' | 'technician' | 'cost' | 'note' | 'externalRepair' | 'approvalStatus' | 'status'
+            | 'assetIds'
+            | 'repairMode'
+            | 'endDate'
+            | 'technician'
+            | 'cost'
+            | 'note'
+            | 'externalRepair'
+            | 'approvalStatus'
+            | 'status'
         >
     >;
 
@@ -22,15 +31,15 @@ export const maintenanceService = {
     getAll: (params: Partial<MaintenanceFilter>): Promise<PaginatedResponse<Maintenance>> =>
         api.get<PaginatedResponse<Maintenance>>(BASE, { params }),
 
-    getReport: (params: Partial<MaintenanceFilter & { groupBy: 'day' | 'month' | 'quarter' }>): Promise<MaintenanceReport> =>
-        api.get<MaintenanceReport>(`${BASE}/report`, { params }),
+    getReport: (
+        params: Partial<MaintenanceFilter & { groupBy: 'day' | 'month' | 'quarter' }>
+    ): Promise<MaintenanceReport> => api.get<MaintenanceReport>(`${BASE}/report`, { params }),
 
     getByAsset: (assetId: string): Promise<Maintenance[]> => api.get<Maintenance[]>(`${BASE}/asset/${assetId}`),
 
     getById: (id: string): Promise<Maintenance> => api.get<Maintenance>(`${BASE}/${id}`),
 
-    create: (data: MaintenancePayload): Promise<Maintenance> =>
-        api.post<Maintenance>(BASE, data),
+    create: (data: MaintenancePayload): Promise<Maintenance> => api.post<Maintenance>(BASE, data),
 
     update: (id: string, data: Partial<Maintenance>): Promise<Maintenance> =>
         api.patch<Maintenance>(`${BASE}/${id}`, data),
@@ -45,4 +54,17 @@ export const maintenanceService = {
 
     reject: (id: string, rejectReason: string): Promise<Maintenance> =>
         api.patch<Maintenance>(`${BASE}/${id}/reject`, { rejectReason }),
+
+    exportXlsx: async (id: string, code: string): Promise<void> => {
+        const data: any = await axiosInstance.get(`${BASE}/${id}/export-xlsx`, { responseType: 'blob' });
+        const blob = data instanceof Blob ? data : new Blob([data]);
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = `${code}.xlsx`;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
+    },
 };

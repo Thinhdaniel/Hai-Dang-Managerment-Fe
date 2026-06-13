@@ -1,25 +1,52 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { App, Avatar, Button, Drawer, Dropdown, Empty, Grid, Image, Input, Spin, Tag, Tooltip, Typography } from 'antd';
+import {
+    App,
+    Avatar,
+    Button,
+    Drawer,
+    Dropdown,
+    Empty,
+    Grid,
+    Image,
+    Input,
+    Popover,
+    Spin,
+    Tag,
+    Tooltip,
+    Typography,
+} from 'antd';
 import {
     BellFilled,
     BellOutlined,
     CameraOutlined,
     CloseOutlined,
+    CopyOutlined,
     DeleteOutlined,
     MessageOutlined,
-    MoreOutlined,
+    RollbackOutlined,
     SendOutlined,
+    SmileOutlined,
 } from '@ant-design/icons';
 import { useAuth } from '../../core/contexts/AuthContext';
 import {
     type ChatConversationUpdateEvent,
     type ChatMessageEvent,
     type ChatMessageRecalledEvent,
+    type ChatMessageUpdatedEvent,
+    type ChatTypingEvent,
     useChatContext,
 } from '../../core/contexts/ChatContext';
 import { useSocket } from '../../core/hooks/useSocket';
 import { chatService } from '../../core/services/chat.service';
-import { buildChatStream, CONTEXT_TYPE_LABEL, formatFullTime, formatTimeShort } from './chatStream';
+import {
+    buildChatStream,
+    COMPOSER_EMOJIS,
+    CONTEXT_TYPE_LABEL,
+    formatFullTime,
+    formatTimeShort,
+    groupReactions,
+    REACTION_EMOJIS,
+} from './chatStream';
 import type { ChatConversation, ChatMessage, ChatWorkflowContextType } from '../../core/types';
 
 const { Text, Title } = Typography;
@@ -74,12 +101,19 @@ const ContextChatDrawer: React.FC<ContextChatDrawerProps> = ({
     const endRef = useRef<HTMLDivElement | null>(null);
     const imageInputRef = useRef<HTMLInputElement | null>(null);
     const readInFlightRef = useRef<Set<string>>(new Set());
+    const composerRef = useRef<any>(null);
+    const typingSentAtRef = useRef(0);
+    const typingTimersRef = useRef<Record<string, number>>({});
+    const longPressTimerRef = useRef<number | undefined>(undefined);
     const [conversation, setConversation] = useState<ChatConversation | null>(null);
     const [messages, setMessages] = useState<ChatMessage[]>([]);
     const [loading, setLoading] = useState(false);
     const [composer, setComposer] = useState('');
     const [selectedImages, setSelectedImages] = useState<SelectedImage[]>([]);
     const [sending, setSending] = useState(false);
+    const [replyTarget, setReplyTarget] = useState<ChatMessage | null>(null);
+    const [typingUsers, setTypingUsers] = useState<Record<string, string>>({});
+    const [actionMenuId, setActionMenuId] = useState<string | null>(null);
 
     const streamRows = useMemo(() => buildChatStream(messages), [messages]);
 
@@ -141,6 +175,9 @@ const ContextChatDrawer: React.FC<ContextChatDrawerProps> = ({
         setConversation(null);
         setMessages([]);
         setComposer('');
+        setReplyTarget(null);
+        setTypingUsers({});
+        setActionMenuId(null);
         clearSelectedImages();
     }, [clearSelectedImages, loadConversation, open]);
 
@@ -174,14 +211,36 @@ const ContextChatDrawer: React.FC<ContextChatDrawerProps> = ({
             setMessages((prev) => prev.map((item) => (item.id === payload.message.id ? payload.message : item)));
         };
 
+        const onMessageUpdated = (payload: ChatMessageUpdatedEvent) => {
+            if (payload.conversationId !== conversation.id) return;
+            setMessages((prev) => prev.map((item) => (item.id === payload.message.id ? payload.message : item)));
+        };
+
+        const onTyping = (payload: ChatTypingEvent) => {
+            if (payload.conversationId !== conversation.id || payload.userId === user?.id) return;
+            setTypingUsers((prev) => ({ ...prev, [payload.userId]: payload.name }));
+            window.clearTimeout(typingTimersRef.current[payload.userId]);
+            typingTimersRef.current[payload.userId] = window.setTimeout(() => {
+                setTypingUsers((prev) => {
+                    const next = { ...prev };
+                    delete next[payload.userId];
+                    return next;
+                });
+            }, 3500);
+        };
+
         socket.on('chat:message:new', onMessage);
         socket.on('chat:conversation:update', onConversationUpdate);
         socket.on('chat:message:recalled', onMessageRecalled);
+        socket.on('chat:message:updated', onMessageUpdated);
+        socket.on('chat:typing', onTyping);
 
         return () => {
             socket.off('chat:message:new', onMessage);
             socket.off('chat:conversation:update', onConversationUpdate);
             socket.off('chat:message:recalled', onMessageRecalled);
+            socket.off('chat:message:updated', onMessageUpdated);
+            socket.off('chat:typing', onTyping);
         };
     }, [conversation, markConversationRead, socket, user?.id]);
 
@@ -222,21 +281,64 @@ const ContextChatDrawer: React.FC<ContextChatDrawerProps> = ({
         }
     }, [conversation, message]);
 
+    const emitTyping = useCallback(() => {
+        if (!conversation || !socket) return;
+        const now = Date.now();
+        if (now - typingSentAtRef.current < 1500) return;
+        typingSentAtRef.current = now;
+        socket.emit('chat:typing', { conversationId: conversation.id });
+    }, [conversation, socket]);
+
+    const handleReact = useCallback(
+        async (item: ChatMessage, emoji: string) => {
+            setActionMenuId(null);
+            try {
+                const updated = await chatService.toggleReaction(item.conversationId, item.id, emoji);
+                setMessages((prev) => prev.map((current) => (current.id === updated.id ? updated : current)));
+            } catch (error: any) {
+                message.error(error?.message || 'Không thả được cảm xúc');
+            }
+        },
+        [message]
+    );
+
+    const handleStartReply = useCallback((item: ChatMessage) => {
+        setActionMenuId(null);
+        setReplyTarget(item);
+        window.setTimeout(() => composerRef.current?.focus?.(), 50);
+    }, []);
+
+    const handleCopyMessage = useCallback(
+        async (item: ChatMessage) => {
+            setActionMenuId(null);
+            try {
+                await navigator.clipboard.writeText(item.body || '');
+                message.success('Đã sao chép nội dung');
+            } catch {
+                message.error('Không sao chép được');
+            }
+        },
+        [message]
+    );
+
     const handleSend = async () => {
         const body = composer.trim();
         if (!conversation || (!body && !selectedImages.length) || sending) return;
 
+        const replyToId = replyTarget?.id;
         setSending(true);
         try {
             const sent = selectedImages.length
                 ? await chatService.sendAttachmentMessage(
                       conversation.id,
                       body,
-                      selectedImages.map((item) => item.file)
+                      selectedImages.map((item) => item.file),
+                      replyToId
                   )
-                : await chatService.sendMessage(conversation.id, { body });
+                : await chatService.sendMessage(conversation.id, { body, replyTo: replyToId });
             setComposer('');
             clearSelectedImages();
+            setReplyTarget(null);
             setMessages((prev) => (prev.some((item) => item.id === sent.id) ? prev : [...prev, sent]));
         } catch {
             message.error('Không gửi được tin nhắn');
@@ -368,6 +470,50 @@ const ContextChatDrawer: React.FC<ContextChatDrawerProps> = ({
                                     const item = row.message;
                                     const mine = item.senderId === user?.id;
                                     const bubbleClass = `context-chat__bubble context-chat__bubble--${row.shape}`;
+                                    const reactions = groupReactions(item, user?.id);
+                                    const menuOpen = actionMenuId === item.id;
+
+                                    const actionContent = (
+                                        <div className='chat-action-menu'>
+                                            <div className='chat-action-menu__emojis'>
+                                                {REACTION_EMOJIS.map((emoji) => (
+                                                    <button
+                                                        key={emoji}
+                                                        type='button'
+                                                        className='chat-action-menu__emoji'
+                                                        onClick={() => void handleReact(item, emoji)}
+                                                    >
+                                                        {emoji}
+                                                    </button>
+                                                ))}
+                                            </div>
+                                            <button
+                                                type='button'
+                                                className='chat-action-menu__item'
+                                                onClick={() => handleStartReply(item)}
+                                            >
+                                                <RollbackOutlined /> Trả lời
+                                            </button>
+                                            {item.body ? (
+                                                <button
+                                                    type='button'
+                                                    className='chat-action-menu__item'
+                                                    onClick={() => void handleCopyMessage(item)}
+                                                >
+                                                    <CopyOutlined /> Sao chép
+                                                </button>
+                                            ) : null}
+                                            {mine ? (
+                                                <button
+                                                    type='button'
+                                                    className='chat-action-menu__item chat-action-menu__item--danger'
+                                                    onClick={() => handleRecallMessage(item)}
+                                                >
+                                                    <DeleteOutlined /> Thu hồi
+                                                </button>
+                                            ) : null}
+                                        </div>
+                                    );
 
                                     return (
                                         <div
@@ -385,47 +531,84 @@ const ContextChatDrawer: React.FC<ContextChatDrawerProps> = ({
                                                     <span className='context-chat__avatar-spacer' />
                                                 )
                                             ) : null}
-                                            {mine && !item.isDeleted ? (
+                                            {!item.isDeleted ? (
                                                 <Dropdown
+                                                    open={menuOpen}
                                                     trigger={['click']}
-                                                    menu={{
-                                                        items: [
-                                                            {
-                                                                key: 'recall',
-                                                                danger: true,
-                                                                icon: <DeleteOutlined />,
-                                                                label: 'Thu hồi tin nhắn',
-                                                            },
-                                                        ],
-                                                        onClick: () => handleRecallMessage(item),
-                                                    }}
+                                                    placement={mine ? 'topRight' : 'topLeft'}
+                                                    onOpenChange={(o) => setActionMenuId(o ? item.id : null)}
+                                                    dropdownRender={() => actionContent}
                                                 >
                                                     <Button
                                                         type='text'
                                                         size='small'
-                                                        icon={<MoreOutlined />}
+                                                        icon={<SmileOutlined />}
                                                         className='self-center text-slate-300 transition-opacity hover:text-slate-500 md:opacity-0 md:group-hover:opacity-100'
                                                     />
                                                 </Dropdown>
                                             ) : null}
-                                            <div className='context-chat__bubble-wrap'>
+                                            <div
+                                                className='context-chat__bubble-wrap'
+                                                onContextMenu={(event) => {
+                                                    if (item.isDeleted) return;
+                                                    event.preventDefault();
+                                                    setActionMenuId(item.id);
+                                                }}
+                                                onTouchStart={() => {
+                                                    if (item.isDeleted) return;
+                                                    longPressTimerRef.current = window.setTimeout(
+                                                        () => setActionMenuId(item.id),
+                                                        450
+                                                    );
+                                                }}
+                                                onTouchEnd={() => window.clearTimeout(longPressTimerRef.current)}
+                                                onTouchMove={() => window.clearTimeout(longPressTimerRef.current)}
+                                            >
                                                 {!mine && row.isGroupStart ? (
                                                     <Text className='context-chat__sender-name'>
                                                         {item.sender?.name || 'Người dùng'}
                                                     </Text>
                                                 ) : null}
-                                                {item.isDeleted ? (
-                                                    <div
-                                                        className={`${bubbleClass} context-chat__bubble--recalled`}
-                                                        title={formatFullTime(item.createdAt)}
+                                                {item.replyTo ? (
+                                                    <button
+                                                        type='button'
+                                                        className='chat-page__reply-quote'
+                                                        onClick={() => {
+                                                            const el = document.getElementById(
+                                                                `ctx-msg-${item.replyTo!.id}`
+                                                            );
+                                                            el?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                                                        }}
                                                     >
-                                                        {item.body}
-                                                    </div>
-                                                ) : item.body ? (
-                                                    <div className={bubbleClass} title={formatFullTime(item.createdAt)}>
-                                                        {item.body}
-                                                    </div>
+                                                        <span className='chat-page__reply-quote-name'>
+                                                            {item.replyTo.senderName || 'Tin nhắn'}
+                                                        </span>
+                                                        <span className='chat-page__reply-quote-body'>
+                                                            {item.replyTo.isDeleted
+                                                                ? 'Tin nhắn đã được thu hồi'
+                                                                : item.replyTo.hasImage && !item.replyTo.body
+                                                                  ? '🖼️ Hình ảnh'
+                                                                  : item.replyTo.body}
+                                                        </span>
+                                                    </button>
                                                 ) : null}
+                                                <div id={`ctx-msg-${item.id}`}>
+                                                    {item.isDeleted ? (
+                                                        <div
+                                                            className={`${bubbleClass} context-chat__bubble--recalled`}
+                                                            title={formatFullTime(item.createdAt)}
+                                                        >
+                                                            {item.body}
+                                                        </div>
+                                                    ) : item.body ? (
+                                                        <div
+                                                            className={bubbleClass}
+                                                            title={formatFullTime(item.createdAt)}
+                                                        >
+                                                            {item.body}
+                                                        </div>
+                                                    ) : null}
+                                                </div>
                                                 {item.attachments?.length ? (
                                                     <Image.PreviewGroup>
                                                         <div className='context-chat__attachments'>
@@ -445,6 +628,25 @@ const ContextChatDrawer: React.FC<ContextChatDrawerProps> = ({
                                                                 ))}
                                                         </div>
                                                     </Image.PreviewGroup>
+                                                ) : null}
+                                                {reactions.length ? (
+                                                    <div className='chat-page__reactions'>
+                                                        {reactions.map((reaction) => (
+                                                            <button
+                                                                key={reaction.emoji}
+                                                                type='button'
+                                                                className={`chat-page__reaction ${
+                                                                    reaction.mine ? 'chat-page__reaction--mine' : ''
+                                                                }`}
+                                                                onClick={() => void handleReact(item, reaction.emoji)}
+                                                            >
+                                                                <span>{reaction.emoji}</span>
+                                                                <span className='chat-page__reaction-count'>
+                                                                    {reaction.count}
+                                                                </span>
+                                                            </button>
+                                                        ))}
+                                                    </div>
                                                 ) : null}
                                                 {row.isGroupEnd ? (
                                                     <Text className='context-chat__msg-time'>
@@ -467,6 +669,38 @@ const ContextChatDrawer: React.FC<ContextChatDrawerProps> = ({
                     </Spin>
                 </div>
 
+                {Object.keys(typingUsers).length ? (
+                    <div className='chat-page__typing'>
+                        <span className='chat-page__typing-dots'>
+                            <i />
+                            <i />
+                            <i />
+                        </span>
+                        <span className='chat-page__typing-text'>
+                            {Object.values(typingUsers).slice(0, 2).join(', ')} đang soạn tin…
+                        </span>
+                    </div>
+                ) : null}
+
+                {replyTarget ? (
+                    <div className='chat-page__reply-bar'>
+                        <RollbackOutlined className='text-[#0f6bdc]' />
+                        <div className='min-w-0 flex-1'>
+                            <div className='chat-page__reply-bar-name'>
+                                Trả lời{' '}
+                                {replyTarget.senderId === user?.id ? 'chính bạn' : replyTarget.sender?.name || ''}
+                            </div>
+                            <div className='chat-page__reply-bar-body'>{replyTarget.body || '🖼️ Hình ảnh'}</div>
+                        </div>
+                        <Button
+                            type='text'
+                            size='small'
+                            icon={<CloseOutlined />}
+                            onClick={() => setReplyTarget(null)}
+                        />
+                    </div>
+                ) : null}
+
                 <div className='context-chat__composer'>
                     <input
                         ref={imageInputRef}
@@ -485,6 +719,26 @@ const ContextChatDrawer: React.FC<ContextChatDrawerProps> = ({
                         disabled={sending || selectedImages.length >= MAX_CHAT_IMAGES}
                         className='context-chat__attach-button'
                     />
+                    <Popover
+                        trigger='click'
+                        placement='topLeft'
+                        content={
+                            <div className='chat-emoji-grid'>
+                                {COMPOSER_EMOJIS.map((emoji) => (
+                                    <button
+                                        key={emoji}
+                                        type='button'
+                                        className='chat-emoji-grid__item'
+                                        onClick={() => setComposer((prev) => prev + emoji)}
+                                    >
+                                        {emoji}
+                                    </button>
+                                ))}
+                            </div>
+                        }
+                    >
+                        <Button icon={<SmileOutlined />} className='context-chat__attach-button' />
+                    </Popover>
                     <div className='min-w-0 flex-1'>
                         {selectedImages.length ? (
                             <div className='context-chat__selected-images'>
@@ -499,11 +753,15 @@ const ContextChatDrawer: React.FC<ContextChatDrawerProps> = ({
                             </div>
                         ) : null}
                         <TextArea
+                            ref={composerRef}
                             value={composer}
                             autoSize={{ minRows: 1, maxRows: 4 }}
                             maxLength={4000}
                             placeholder='Nhập trao đổi về phiếu này...'
-                            onChange={(event) => setComposer(event.target.value)}
+                            onChange={(event) => {
+                                setComposer(event.target.value);
+                                emitTyping();
+                            }}
                             onPressEnter={(event) => {
                                 if (!event.shiftKey) {
                                     event.preventDefault();

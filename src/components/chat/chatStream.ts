@@ -1,5 +1,62 @@
 import type { ChatMessage, ChatWorkflowContextType } from '../../core/types';
 
+// Bộ cảm xúc thả lên tin nhắn — PHẢI khớp ALLOWED_REACTIONS ở BE
+export const REACTION_EMOJIS = ['👍', '❤️', '😆', '😮', '😢', '🙏'] as const;
+
+// Bộ emoji cho bảng chèn vào ô soạn tin
+export const COMPOSER_EMOJIS = [
+    '😀',
+    '😁',
+    '😂',
+    '🤣',
+    '😊',
+    '😍',
+    '😘',
+    '😎',
+    '🤔',
+    '😉',
+    '😢',
+    '😭',
+    '😡',
+    '👍',
+    '👎',
+    '👏',
+    '🙏',
+    '🙌',
+    '💪',
+    '🔥',
+    '❤️',
+    '💯',
+    '✅',
+    '❌',
+    '⚠️',
+    '🎉',
+    '🚀',
+    '⭐',
+    '📌',
+    '🛠️',
+];
+
+export type GroupedReaction = { emoji: string; count: number; mine: boolean };
+
+// Gom reaction theo emoji + đánh dấu cái của mình, giữ thứ tự xuất hiện
+export const groupReactions = (message: ChatMessage, currentUserId?: string): GroupedReaction[] => {
+    const reactions = message.reactions ?? [];
+    if (!reactions.length) return [];
+
+    const map = new Map<string, GroupedReaction>();
+    for (const r of reactions) {
+        const existing = map.get(r.emoji);
+        if (existing) {
+            existing.count += 1;
+            if (r.userId === currentUserId) existing.mine = true;
+        } else {
+            map.set(r.emoji, { emoji: r.emoji, count: 1, mine: r.userId === currentUserId });
+        }
+    }
+    return Array.from(map.values());
+};
+
 export const CONTEXT_TYPE_LABEL: Partial<Record<ChatWorkflowContextType, string>> = {
     maintenance: 'Bảo trì',
     transfer: 'Điều chuyển',

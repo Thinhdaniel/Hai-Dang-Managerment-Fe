@@ -21,6 +21,17 @@ export type ChatMessageRecalledEvent = {
     message: ChatMessage;
 };
 
+export type ChatMessageUpdatedEvent = {
+    conversationId: string;
+    message: ChatMessage;
+};
+
+export type ChatTypingEvent = {
+    conversationId: string;
+    userId: string;
+    name: string;
+};
+
 export type ChatReadEvent = {
     conversationId: string;
     unreadCount?: number;
