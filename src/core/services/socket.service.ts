@@ -1,4 +1,5 @@
 import { io, type Socket } from 'socket.io-client';
+import { getStoredAccessToken } from '../lib/auth-session';
 
 const RAW_API_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000';
 const API_BASE_URL = RAW_API_URL.replace(/\/api\/?$/, '');
@@ -15,14 +16,21 @@ export const socketService = {
             return socket;
         }
 
+        // Don socket cu (vd socket tao bang token het han dang loay hoay reconnect) truoc khi tao moi
+        if (socket) {
+            socket.removeAllListeners();
+            socket.disconnect();
+            socket = null;
+        }
+
         socket = io(API_BASE_URL, {
-            auth: {
-                token: accessToken,
-            },
+            // auth la HAM -> socket.io goi lai moi lan (re)connect, luon lay access token MOI NHAT
+            // tu localStorage. Tranh reconnect bang token het han -> BE bao "Authentication failed".
+            auth: (cb) => cb({ token: getStoredAccessToken() || accessToken }),
             reconnection: true,
             reconnectionDelay: 1000,
             reconnectionDelayMax: 5000,
-            reconnectionAttempts: 5,
+            reconnectionAttempts: Infinity,
             transports: ['websocket', 'polling'],
         });
 
