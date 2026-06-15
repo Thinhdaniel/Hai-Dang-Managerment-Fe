@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useRef } from 'react';
 import { Button, Card, Result, Skeleton, Tag, Typography } from 'antd';
 import {
     EditOutlined,
@@ -11,6 +11,7 @@ import { useQuery } from '@tanstack/react-query';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useAuth } from '../core/contexts/AuthContext';
 import { hasManagerAccess } from '../core/lib/permissions';
+import { recordQrScan } from '../core/lib/qrScanAudit';
 import { qrLabelService } from '../core/services/qr-label.service';
 import { QrLabelStatus } from '../core/types';
 
@@ -48,6 +49,23 @@ const QrResolverPage: React.FC = () => {
         enabled: Boolean(publicId && isAuthenticated && canManage),
         retry: false,
     });
+
+    // Quet tem in: ghi log scan (kem GPS tu dong) de cap nhat "vi tri gan nhat" cua may.
+    // Chi cho nguoi da dang nhap (route ghi-log yeu cau auth) va chi 1 lan moi tem.
+    const loggedPublicIdRef = useRef<string | null>(null);
+    useEffect(() => {
+        if (!isAuthenticated || !publicData?.publicId) return;
+        if (loggedPublicIdRef.current === publicData.publicId) return;
+        loggedPublicIdRef.current = publicData.publicId;
+
+        recordQrScan({
+            publicId: publicData.publicId,
+            action: 'open_profile',
+            result: publicData.asset ? 'success' : 'not_found',
+            source: 'qr_label',
+            metadata: { context: 'qr_resolver' },
+        });
+    }, [isAuthenticated, publicData?.publicId, publicData?.asset]);
 
     if (isLoading) {
         return (
