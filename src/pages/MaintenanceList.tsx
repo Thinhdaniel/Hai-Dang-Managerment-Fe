@@ -1,4 +1,4 @@
-import React, { lazy, useEffect, useMemo, useState } from 'react';
+import React, { lazy, useEffect, useMemo, useRef, useState } from 'react';
 import {
     App,
     Button,
@@ -131,6 +131,31 @@ const fmtDate = (value?: string) => (value ? dayjs(value).format('DD/MM/YYYY') :
 const fmtMoney = (value = 0) =>
     new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND', maximumFractionDigits: 0 }).format(value);
 
+const prefersReducedMotion = () =>
+    typeof window !== 'undefined' && !!window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+
+// Số tiền "đếm lên" mượt (easeOutExpo) khi mở chi tiết — tôn trọng prefers-reduced-motion
+const easeOutExpo = (t: number) => (t >= 1 ? 1 : 1 - Math.pow(2, -10 * t));
+const CountUpMoney: React.FC<{ value: number; duration?: number }> = ({ value, duration = 1000 }) => {
+    const [display, setDisplay] = useState(0);
+    useEffect(() => {
+        if (value <= 0 || prefersReducedMotion()) {
+            setDisplay(value > 0 ? value : 0);
+            return;
+        }
+        let raf = 0;
+        const start = performance.now();
+        const tick = (now: number) => {
+            const p = Math.min(1, (now - start) / duration);
+            setDisplay(Math.round(value * easeOutExpo(p)));
+            if (p < 1) raf = requestAnimationFrame(tick);
+        };
+        raf = requestAnimationFrame(tick);
+        return () => cancelAnimationFrame(raf);
+    }, [value, duration]);
+    return <>{fmtMoney(display)}</>;
+};
+
 const toIso = (value?: Dayjs) => (value ? value.toISOString() : undefined);
 const sumCostItems = (items?: { amount?: number | null }[]) =>
     Number((items ?? []).reduce((sum, item) => sum + Number(item?.amount ?? 0), 0).toFixed(2));
@@ -163,6 +188,324 @@ const getMaintenanceAccent = (record: Maintenance) => {
     if (record.repairMode === 'external') return '#f97316';
     if (record.status === 'in_progress') return '#0ea5e9';
     return '#2563eb';
+};
+
+// Nhãn trạng thái dễ đọc — ưu tiên trạng thái duyệt với phiếu sửa ngoài
+const getStateLabel = (record: Maintenance) => {
+    if (record.repairMode === 'external' && record.approvalStatus === 'pending') return 'Chờ duyệt';
+    if (record.repairMode === 'external' && record.approvalStatus === 'rejected') return 'Bị từ chối';
+    return statusMeta[record.status || 'pending']?.label ?? '-';
+};
+
+// Drawer chi tiết bản mobile — bố cục thẻ, vào so le + parallax theo cuộn + thanh tiến trình
+const MaintenanceMobileDetail: React.FC<{ record: Maintenance }> = ({ record }) => {
+    const accent = getMaintenanceAccent(record);
+    const assets = getMaintenanceAssets(record);
+    const isExternal = record.repairMode === 'external';
+    const cost = record.cost ?? record.externalRepair?.actualCost ?? 0;
+    const estimate = record.externalRepair?.estimateCost ?? 0;
+    const diff = cost - estimate;
+    const isLive = record.status === 'in_progress' || record.status === 'overdue';
+    const plant = record.plantName || assets[0]?.plant?.name || '-';
+
+    const rootRef = useRef<HTMLDivElement>(null);
+    const heroRef = useRef<HTMLDivElement>(null);
+    const auroraRef = useRef<HTMLDivElement>(null);
+    const progressRef = useRef<HTMLDivElement>(null);
+    const tiltRef = useRef<HTMLDivElement>(null);
+    const tiltRaf = useRef(0);
+
+    // Đốm sáng bay lơ lửng trong hero — vị trí/độ trễ cố định theo phiếu
+    const sparks = useMemo(
+        () =>
+            Array.from({ length: 8 }).map((_, i) => ({
+                left: `${(i * 41 + 8) % 94}%`,
+                top: `${15 + ((i * 53) % 66)}%`,
+                size: 3 + (i % 3),
+                delay: `${(i * 360) % 2600}ms`,
+                dur: `${2600 + (i % 4) * 520}ms`,
+            })),
+        [record.id]
+    );
+
+    // Nghiêng 3D + vệt loá theo ngón tay/chuột trên hero
+    const handleHeroTilt = (e: React.PointerEvent<HTMLDivElement>) => {
+        const hero = heroRef.current;
+        const tilt = tiltRef.current;
+        if (!hero || !tilt || prefersReducedMotion()) return;
+        const rect = hero.getBoundingClientRect();
+        const px = (e.clientX - rect.left) / rect.width;
+        const py = (e.clientY - rect.top) / rect.height;
+        if (tiltRaf.current) return;
+        tiltRaf.current = requestAnimationFrame(() => {
+            tiltRaf.current = 0;
+            tilt.style.setProperty('--ry', `${(px - 0.5) * 18}deg`);
+            tilt.style.setProperty('--rx', `${(0.5 - py) * 15}deg`);
+            tilt.style.setProperty('--gx', `${px * 100}%`);
+            tilt.style.setProperty('--gy', `${py * 100}%`);
+            tilt.style.setProperty('--glare', '1');
+        });
+    };
+    const resetHeroTilt = () => {
+        const tilt = tiltRef.current;
+        if (!tilt) return;
+        if (tiltRaf.current) cancelAnimationFrame(tiltRaf.current);
+        tiltRaf.current = 0;
+        tilt.style.setProperty('--rx', '0deg');
+        tilt.style.setProperty('--ry', '0deg');
+        tilt.style.setProperty('--glare', '0');
+    };
+
+    const nameChars = [...getMaintenanceAssetLabel(record)];
+
+    // Parallax: hero/aurora trôi chậm hơn nội dung, kèm thanh tiến trình cuộn ở đỉnh
+    useEffect(() => {
+        const root = rootRef.current;
+        if (!root || prefersReducedMotion()) return;
+        const scroller = root.closest('.ant-drawer-body') as HTMLElement | null;
+        if (!scroller) return;
+
+        let raf = 0;
+        const apply = () => {
+            raf = 0;
+            const top = scroller.scrollTop;
+            const max = Math.max(1, scroller.scrollHeight - scroller.clientHeight);
+            const p = Math.min(1, top / 240);
+            if (heroRef.current) heroRef.current.style.setProperty('--p', String(p));
+            if (auroraRef.current)
+                auroraRef.current.style.transform = `translate3d(0, ${top * 0.22}px, 0) scale(${1.05 + p * 0.3}) rotate(${top * 0.04}deg)`;
+            if (progressRef.current) progressRef.current.style.transform = `scaleX(${Math.min(1, top / max)})`;
+        };
+        const onScroll = () => {
+            if (!raf) raf = requestAnimationFrame(apply);
+        };
+        scroller.addEventListener('scroll', onScroll, { passive: true });
+        apply();
+        return () => {
+            scroller.removeEventListener('scroll', onScroll);
+            if (raf) cancelAnimationFrame(raf);
+        };
+    }, [record.id]);
+
+    let order = 0;
+    const stepStyle = () => ({ animationDelay: `${order++ * 85}ms` });
+    const infoRow = (label: string, value: React.ReactNode) => (
+        <div className='mnt-row'>
+            <span className='mnt-row__label'>{label}</span>
+            <span className='mnt-row__value'>{value}</span>
+        </div>
+    );
+
+    return (
+        <div className='mnt-detail' ref={rootRef}>
+            <div className='mnt-progress'>
+                <div className='mnt-progress__bar' ref={progressRef} style={{ background: accent }} />
+            </div>
+
+            <div
+                ref={heroRef}
+                className='mnt-detail-section mnt-hero'
+                style={{
+                    ...stepStyle(),
+                    background: `linear-gradient(135deg, ${accent}22, #ffffff 82%)`,
+                    border: `1px solid ${accent}33`,
+                }}
+                onPointerMove={handleHeroTilt}
+                onPointerLeave={resetHeroTilt}
+                onPointerUp={resetHeroTilt}
+                onPointerCancel={resetHeroTilt}
+            >
+                <div ref={tiltRef} className='mnt-hero__tilt'>
+                    <div ref={auroraRef} className='mnt-hero__aurora-wrap'>
+                        <div
+                            className='mnt-hero__aurora'
+                            style={{
+                                background: `radial-gradient(60% 80% at 18% 12%, ${accent}66, transparent 60%), radial-gradient(50% 70% at 88% 0%, ${accent}44, transparent 55%)`,
+                            }}
+                        />
+                    </div>
+                    <div className='mnt-hero__sparks'>
+                        {sparks.map((s, i) => (
+                            <span
+                                key={i}
+                                className='mnt-spark'
+                                style={{
+                                    left: s.left,
+                                    top: s.top,
+                                    width: s.size,
+                                    height: s.size,
+                                    animationDelay: s.delay,
+                                    animationDuration: s.dur,
+                                }}
+                            />
+                        ))}
+                    </div>
+                    <div className='mnt-hero__shine' />
+                    <div className='mnt-hero__content'>
+                        <div className='flex items-center justify-between gap-2'>
+                            <span className='mnt-status-pill' style={{ color: accent }}>
+                                <span
+                                    className={`mnt-pulse-dot${isLive ? 'mnt-pulse-dot--live' : ''}`}
+                                    style={{ background: accent }}
+                                />
+                                {getStateLabel(record)}
+                            </span>
+                            <span className='mnt-hero__code'>{buildMaintenanceCode(record)}</span>
+                        </div>
+                        <div className='mnt-hero__name' aria-label={getMaintenanceAssetLabel(record)}>
+                            {nameChars.map((ch, i) => (
+                                <span
+                                    key={i}
+                                    aria-hidden='true'
+                                    className='mnt-char'
+                                    style={{ animationDelay: `${300 + i * 26}ms` }}
+                                >
+                                    {ch === ' ' ? ' ' : ch}
+                                </span>
+                            ))}
+                        </div>
+                        <span className='mnt-hero__accent' style={{ background: accent }} />
+                        <div className='mt-2 flex flex-wrap gap-1.5'>
+                            <Tag color={isExternal ? 'orange' : 'green'} className='!m-0'>
+                                {getRepairModeLabel(record.repairMode)}
+                            </Tag>
+                            <Tag className='!m-0'>{typeLabel[record.type] || record.type}</Tag>
+                            {isExternal ? getApprovalTag(record.approvalStatus) : null}
+                        </div>
+                    </div>
+                    <div className='mnt-hero__glare' />
+                </div>
+            </div>
+
+            <div className='mnt-detail-section mnt-cost' style={stepStyle()}>
+                <div className='mnt-cost__shine' />
+                <div className='mnt-cost__label'>Chi phí thực tế</div>
+                <div className='mnt-cost__value'>
+                    <CountUpMoney value={cost} />
+                </div>
+                {isExternal ? (
+                    <div className='mt-2 flex flex-wrap gap-x-5 gap-y-1 text-xs'>
+                        <span className='text-slate-500'>
+                            Dự kiến <b className='text-slate-700'>{fmtMoney(estimate)}</b>
+                        </span>
+                        <span className='text-slate-500'>
+                            Chênh lệch{' '}
+                            <b
+                                className={
+                                    diff > 0 ? 'text-rose-600' : diff < 0 ? 'text-emerald-700' : 'text-slate-700'
+                                }
+                            >
+                                {fmtMoney(diff)}
+                            </b>
+                        </span>
+                    </div>
+                ) : null}
+            </div>
+
+            <div className='mnt-detail-section mnt-card' style={stepStyle()}>
+                <div className='mnt-card__title'>Thông tin chung</div>
+                {infoRow('Cơ sở', plant)}
+                {infoRow('Loại bảo trì', typeLabel[record.type] || record.type)}
+                {infoRow('Ngày bắt đầu', fmtDate(record.startDate))}
+                {infoRow('Ngày hoàn tất', fmtDate(record.endDate))}
+                {isExternal
+                    ? infoRow('Đơn vị sửa', record.externalRepair?.vendorName || '-')
+                    : infoRow('Kỹ thuật viên', record.technician || '-')}
+            </div>
+
+            <div className='mnt-detail-section mnt-card' style={stepStyle()}>
+                <div className='mnt-card__title'>Máy trong phiếu ({assets.length})</div>
+                <div className='flex flex-col gap-2.5'>
+                    {assets.map((a) => (
+                        <div key={a.id} className='flex items-center justify-between gap-3'>
+                            <span className='shrink-0 font-mono text-xs font-bold text-blue-700'>
+                                {a.machineCode || a.id}
+                            </span>
+                            <span className='line-clamp-1 text-sm text-slate-700'>{a.name}</span>
+                        </div>
+                    ))}
+                </div>
+            </div>
+
+            <div className='mnt-detail-section mnt-card' style={stepStyle()}>
+                <div className='mnt-card__title'>Nội dung sửa chữa</div>
+                <p className='!mb-0 text-sm leading-6 text-slate-700'>{record.description || '-'}</p>
+                {record.note ? (
+                    <>
+                        <div className='mnt-card__title mt-3'>Ghi chú</div>
+                        <p className='!mb-0 text-sm leading-6 text-slate-600'>{record.note}</p>
+                    </>
+                ) : null}
+            </div>
+
+            {isExternal ? (
+                <div className='mnt-detail-section mnt-card' style={stepStyle()}>
+                    <div className='mnt-card__title'>Thông tin sửa ngoài</div>
+                    {infoRow('Ngày đem đi', fmtDate(record.externalRepair?.sentOutAt))}
+                    {infoRow('Dự kiến nhận', fmtDate(record.externalRepair?.expectedReturnAt))}
+                    {infoRow('Ngày nhận về', fmtDate(record.externalRepair?.returnedAt))}
+                    {infoRow('Số hóa đơn', record.externalRepair?.invoiceNo || '-')}
+                    {record.externalRepair?.rejectReason
+                        ? infoRow('Lý do từ chối', record.externalRepair.rejectReason)
+                        : null}
+                    {record.externalRepair?.costItems?.length ? (
+                        <div className='mt-3'>
+                            <div className='mnt-card__title'>Hạng mục chi phí</div>
+                            {record.externalRepair.costItems.map((it, i) => (
+                                <div key={i} className='mnt-row'>
+                                    <span className='mnt-row__label'>{it.name || '-'}</span>
+                                    <span className='mnt-row__value'>{fmtMoney(Number(it.amount ?? 0))}</span>
+                                </div>
+                            ))}
+                        </div>
+                    ) : null}
+                </div>
+            ) : null}
+
+            <div className='mnt-detail-section mnt-card' style={stepStyle()}>
+                <div className='mnt-card__title'>Tiến trình</div>
+                <Timeline
+                    items={[
+                        {
+                            color: 'blue',
+                            children: (
+                                <div>
+                                    <Text strong>Tạo phiếu</Text>
+                                    <div className='text-sm text-slate-500'>{fmtDate(record.createdAt)}</div>
+                                </div>
+                            ),
+                        },
+                        ...(isExternal
+                            ? [
+                                  {
+                                      color: record.approvalStatus === 'approved' ? 'green' : 'orange',
+                                      children: (
+                                          <div>
+                                              <Text strong>Duyệt sửa ngoài</Text>
+                                              <div className='text-sm text-slate-500'>
+                                                  {record.externalRepair?.approvedAt
+                                                      ? fmtDate(record.externalRepair.approvedAt)
+                                                      : approvalMeta[record.approvalStatus || 'pending']?.label}
+                                              </div>
+                                          </div>
+                                      ),
+                                  },
+                              ]
+                            : []),
+                        {
+                            color: record.status === 'completed' ? 'green' : 'gray',
+                            children: (
+                                <div>
+                                    <Text strong>Hoàn tất</Text>
+                                    <div className='text-sm text-slate-500'>{fmtDate(record.endDate)}</div>
+                                </div>
+                            ),
+                        },
+                    ]}
+                />
+            </div>
+        </div>
+    );
 };
 
 const MaintenanceList: React.FC = () => {
@@ -544,76 +887,77 @@ const MaintenanceList: React.FC = () => {
     const renderMobileMaintenanceCard = (record: Maintenance, index = 0) => {
         const accent = getMaintenanceAccent(record);
         const recordAssets = getMaintenanceAssets(record);
+        const cost = record.cost ?? record.externalRepair?.actualCost ?? 0;
+        const canApprove =
+            record.repairMode === 'external' &&
+            record.approvalStatus === 'pending' &&
+            record.status === 'pending' &&
+            canManage;
+        const canComplete = canCompleteMaintenance(record);
+        const statusLabel = getStateLabel(record);
+        const plant = record.plantName || recordAssets[0]?.plant?.name || 'Chưa rõ cơ sở';
 
         return (
             <article
                 key={record.id}
-                className='maintenance-mobile-card rounded-2xl border border-slate-200 bg-white p-4 shadow-sm'
+                className='maintenance-mobile-card rounded-2xl border border-slate-200 bg-white p-3.5 shadow-sm'
                 style={{
                     borderLeft: `4px solid ${accent}`,
-                    animationDelay: `${Math.min(index, 6) * 55}ms`,
+                    animationDelay: `${Math.min(index, 6) * 45}ms`,
                 }}
                 onClick={() => setDetailTarget(record)}
             >
-                <div className='flex items-start justify-between gap-3'>
-                    <div className='min-w-0'>
-                        <Text code className='!m-0 w-fit text-xs'>
-                            {buildMaintenanceCode(record)}
-                        </Text>
-                        <div className='mt-2 line-clamp-2 text-base leading-snug font-bold text-slate-950'>
-                            {getMaintenanceAssetLabel(record)}
-                        </div>
-                        <div className='mt-2 flex flex-wrap gap-1.5'>
-                            {recordAssets.slice(0, 3).map((asset) => (
-                                <Tag key={asset.id} color='blue' className='!m-0 font-mono'>
-                                    {asset.machineCode || asset.id}
-                                </Tag>
-                            ))}
-                            {recordAssets.length > 3 ? <Tag className='!m-0'>+{recordAssets.length - 3}</Tag> : null}
-                            <Tag color={record.repairMode === 'external' ? 'orange' : 'green'} className='!m-0'>
-                                {getRepairModeLabel(record.repairMode)}
-                            </Tag>
-                            <Tag className='!m-0'>{typeLabel[record.type] || record.type}</Tag>
-                        </div>
-                    </div>
-                    <div className='flex shrink-0 flex-col items-end gap-1'>
-                        {getStatusTag(record.status)}
-                        {record.repairMode === 'external' ? getApprovalTag(record.approvalStatus) : null}
-                    </div>
+                <div className='flex items-center justify-between gap-2'>
+                    <span className='inline-flex items-center gap-1.5 text-xs font-bold' style={{ color: accent }}>
+                        <span className='inline-block h-2 w-2 rounded-full' style={{ background: accent }} />
+                        {statusLabel}
+                    </span>
+                    <span className='font-mono text-[11px] text-slate-400'>{buildMaintenanceCode(record)}</span>
                 </div>
 
-                <p className='mt-3 line-clamp-3 text-sm leading-6 text-slate-700'>{record.description || '-'}</p>
-
-                <div className='mt-3 grid grid-cols-2 gap-2 text-sm'>
-                    <div className='rounded-xl bg-slate-50 p-2'>
-                        <div className='text-xs font-semibold text-slate-400 uppercase'>Cơ sở</div>
-                        <div className='mt-1 line-clamp-1 font-semibold text-slate-800'>
-                            {record.plantName || recordAssets[0]?.plant?.name || '-'}
-                        </div>
+                <div className='mt-1.5 flex items-start justify-between gap-3'>
+                    <div className='line-clamp-1 min-w-0 text-[15px] leading-snug font-bold text-slate-900'>
+                        {getMaintenanceAssetLabel(record)}
                     </div>
-                    <div className='rounded-xl bg-slate-50 p-2'>
-                        <div className='text-xs font-semibold text-slate-400 uppercase'>Bắt đầu</div>
-                        <div className='mt-1 font-semibold text-slate-800'>{fmtDate(record.startDate)}</div>
-                    </div>
-                    <div className='rounded-xl bg-slate-50 p-2'>
-                        <div className='text-xs font-semibold text-slate-400 uppercase'>
-                            {record.repairMode === 'external' ? 'Đơn vị sửa' : 'Kỹ thuật'}
-                        </div>
-                        <div className='mt-1 line-clamp-1 font-semibold text-slate-800'>
-                            {record.repairMode === 'external'
-                                ? record.externalRepair?.vendorName || '-'
-                                : record.technician || '-'}
-                        </div>
-                    </div>
-                    <div className='rounded-xl bg-slate-50 p-2'>
-                        <div className='text-xs font-semibold text-slate-400 uppercase'>Chi phí</div>
-                        <div className='mt-1 font-bold text-emerald-700'>
-                            {fmtMoney(record.cost ?? record.externalRepair?.actualCost ?? 0)}
-                        </div>
-                    </div>
+                    <div className='shrink-0 text-sm font-bold text-emerald-700'>{fmtMoney(cost)}</div>
                 </div>
 
-                <div className='mt-4 border-t border-slate-100 pt-3'>{renderRecordActions(record, 'mobile')}</div>
+                <div className='mt-1 line-clamp-1 text-xs text-slate-500'>
+                    {getRepairModeLabel(record.repairMode)} · {plant} · {fmtDate(record.startDate)}
+                </div>
+
+                {canApprove || canComplete ? (
+                    <div className='mt-3' onClick={(event) => event.stopPropagation()}>
+                        {canApprove ? (
+                            <ConfirmAction
+                                title='Duyệt sửa ngoài'
+                                description={`Duyệt phiếu sửa ngoài cho ${getMaintenanceAssetLabel(record)}?`}
+                                okLabel='Duyệt'
+                                intent='primary'
+                                onConfirm={() => handleApprove(record)}
+                            >
+                                <Button
+                                    block
+                                    type='primary'
+                                    icon={<CheckOutlined />}
+                                    loading={approveMutation.isPending}
+                                >
+                                    Duyệt sửa ngoài
+                                </Button>
+                            </ConfirmAction>
+                        ) : (
+                            <Button
+                                block
+                                type='primary'
+                                ghost
+                                icon={<CheckCircleOutlined />}
+                                onClick={() => openCompleteModal(record)}
+                            >
+                                Hoàn tất
+                            </Button>
+                        )}
+                    </div>
+                ) : null}
             </article>
         );
     };
@@ -819,46 +1163,25 @@ const MaintenanceList: React.FC = () => {
             />
 
             {isMobile ? (
-                <section className='maintenance-mobile-command'>
-                    <div className='relative z-10'>
-                        <div className='flex items-start justify-between gap-3'>
-                            <div className='min-w-0'>
-                                <div className='text-xs font-bold tracking-[0.14em] text-amber-200 uppercase'>
-                                    HAIDANG MS
-                                </div>
-                                <div className='mt-1 text-2xl leading-tight font-black text-white'>
-                                    Bảo trì hiện trường
-                                </div>
-                                <div className='mt-2 text-sm font-medium text-blue-50'>
-                                    {report?.summary.pendingApprovalCount ?? 0} chờ duyệt ·{' '}
-                                    {report?.summary.inProgressCount ?? 0} sửa ngoài
-                                </div>
-                            </div>
-                            <div className='maintenance-mobile-command__icon'>
-                                <ToolOutlined />
-                            </div>
-                        </div>
-                        <div className='mt-5 grid grid-cols-2 gap-2'>
-                            <Button
-                                size='large'
-                                icon={<ScanOutlined />}
-                                onClick={() => setQuickMaintenanceOpen(true)}
-                                className='maintenance-mobile-command__button maintenance-mobile-command__button--scan'
-                            >
-                                Quét QR
-                            </Button>
-                            <Button
-                                type='primary'
-                                size='large'
-                                icon={<PlusOutlined />}
-                                onClick={() => setCreateOpen(true)}
-                                className='maintenance-mobile-command__button maintenance-mobile-command__button--create'
-                            >
-                                Tạo phiếu
-                            </Button>
-                        </div>
-                    </div>
-                </section>
+                <div className='grid grid-cols-2 gap-2'>
+                    <Button
+                        size='large'
+                        icon={<ScanOutlined />}
+                        onClick={() => setQuickMaintenanceOpen(true)}
+                        className='!h-11 !rounded-xl !border-blue-200 !font-semibold !text-blue-600'
+                    >
+                        Quét QR
+                    </Button>
+                    <Button
+                        type='primary'
+                        size='large'
+                        icon={<PlusOutlined />}
+                        onClick={() => setCreateOpen(true)}
+                        className='!h-11 !rounded-xl !font-semibold'
+                    >
+                        Tạo phiếu
+                    </Button>
+                </div>
             ) : null}
 
             {isMobile ? (
@@ -1095,7 +1418,11 @@ const MaintenanceList: React.FC = () => {
             <Drawer
                 open={Boolean(detailTarget)}
                 title={
-                    detailTarget ? (
+                    !detailTarget ? (
+                        'Chi tiết phiếu bảo trì'
+                    ) : isMobile ? (
+                        'Chi tiết phiếu'
+                    ) : (
                         <div className='flex flex-col gap-1'>
                             <Space wrap>
                                 <Text strong>{buildMaintenanceCode(detailTarget)}</Text>
@@ -1106,12 +1433,10 @@ const MaintenanceList: React.FC = () => {
                             </Space>
                             <Text type='secondary'>{getMaintenanceAssetLabel(detailTarget)}</Text>
                         </div>
-                    ) : (
-                        'Chi tiết phiếu bảo trì'
                     )
                 }
                 placement={isMobile ? 'bottom' : 'right'}
-                size={isMobile ? 'default' : 'large'}
+                size={isMobile ? undefined : 'large'}
                 height={isMobile ? '92vh' : undefined}
                 destroyOnHidden
                 onClose={() => setDetailTarget(null)}
@@ -1182,7 +1507,9 @@ const MaintenanceList: React.FC = () => {
                     ) : null
                 }
             >
-                {detailTarget ? (
+                {detailTarget && isMobile ? <MaintenanceMobileDetail record={detailTarget} /> : null}
+
+                {detailTarget && !isMobile ? (
                     <div className='flex flex-col gap-4'>
                         <Descriptions
                             bordered
@@ -1479,31 +1806,42 @@ const MaintenanceList: React.FC = () => {
                                         {fields.map((field) => (
                                             <div
                                                 key={field.key}
-                                                className='grid grid-cols-1 gap-2 md:grid-cols-[1fr_220px_48px]'
+                                                className='rounded-xl border border-slate-200 bg-slate-50/60 p-3'
                                             >
-                                                <Form.Item {...field} name={[field.name, 'name']} className='!mb-0'>
-                                                    <Input size='large' placeholder='Tên hạng mục' />
+                                                <Form.Item {...field} name={[field.name, 'name']} className='!mb-2'>
+                                                    <Input size='large' placeholder='Tên hạng mục (vd: Thay motor)' />
                                                 </Form.Item>
-                                                <Form.Item {...field} name={[field.name, 'amount']} className='!mb-0'>
-                                                    <InputNumber<number>
+                                                <div className='flex items-center gap-2'>
+                                                    <Form.Item
+                                                        {...field}
+                                                        name={[field.name, 'amount']}
+                                                        className='maintenance-money-form-item !mb-0 flex-1'
+                                                    >
+                                                        <InputNumber<number>
+                                                            size='large'
+                                                            min={0}
+                                                            step={10000}
+                                                            controls={false}
+                                                            placeholder='0'
+                                                            className='maintenance-money-input'
+                                                            style={{ width: '100%' }}
+                                                            formatter={(value) =>
+                                                                `${value ?? ''}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')
+                                                            }
+                                                            parser={(value) =>
+                                                                Number(String(value ?? '').replace(/\D/g, ''))
+                                                            }
+                                                            suffix='VND'
+                                                        />
+                                                    </Form.Item>
+                                                    <Button
+                                                        danger
                                                         size='large'
-                                                        min={0}
-                                                        step={10000}
-                                                        controls={false}
-                                                        placeholder='0'
-                                                        className='maintenance-money-input w-full'
-                                                        formatter={(value) =>
-                                                            `${value ?? ''}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')
-                                                        }
-                                                        parser={(value) =>
-                                                            Number(String(value ?? '').replace(/\D/g, ''))
-                                                        }
-                                                        suffix='VND'
+                                                        icon={<DeleteOutlined />}
+                                                        onClick={() => remove(field.name)}
+                                                        aria-label='Xóa hạng mục'
                                                     />
-                                                </Form.Item>
-                                                <Button danger size='large' onClick={() => remove(field.name)}>
-                                                    Xóa
-                                                </Button>
+                                                </div>
                                             </div>
                                         ))}
                                     </div>
@@ -1527,7 +1865,8 @@ const MaintenanceList: React.FC = () => {
                                     step={10000}
                                     controls={false}
                                     placeholder='0'
-                                    className='maintenance-money-input w-full'
+                                    className='maintenance-money-input'
+                                    style={{ width: '100%' }}
                                     formatter={(value) => `${value ?? ''}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')}
                                     parser={(value) => Number(String(value ?? '').replace(/\D/g, ''))}
                                     suffix='VND'

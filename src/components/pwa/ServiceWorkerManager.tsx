@@ -7,6 +7,8 @@ const UPDATE_NOTIFICATION_KEY = 'pwa-update-available';
 const canRegisterServiceWorker = () =>
     typeof window !== 'undefined' &&
     'serviceWorker' in navigator &&
+    // Không đăng ký SW khi chạy vite dev: SW cacheFirst sẽ giữ bản module cũ → mọi thay đổi không hiện ra
+    !import.meta.env.DEV &&
     (window.isSecureContext || window.location.hostname === 'localhost');
 
 const sendSkipWaiting = (worker: ServiceWorker) => {
