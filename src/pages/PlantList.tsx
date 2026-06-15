@@ -56,7 +56,8 @@ const PlantList: React.FC = () => {
     });
 
     const updateMutation = useMutation({
-        mutationFn: ({ id, data }: { id: string; data: Partial<Plant> }) => plantService.update(id, data),
+        mutationFn: ({ id, data }: { id: string; data: Parameters<typeof plantService.update>[1] }) =>
+            plantService.update(id, data),
         onSuccess: invalidateRelatedQueries,
     });
 
