@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import dayjs, { type Dayjs } from 'dayjs';
 import {
     App,
+    AutoComplete,
     Badge,
     Button,
     DatePicker,
@@ -155,6 +156,35 @@ const getWorkflowStep = (status: string) => {
 };
 const emptyItem = (): FormItemValue => ({ materialName: '', unit: '', quantityRequested: 1, note: '' });
 
+// Đơn vị tính thông dụng -> gợi ý trong ô ĐVT để khỏi gõ tay (vẫn cho nhập tự do)
+const COMMON_UNITS = [
+    'Cái',
+    'Chiếc',
+    'Bộ',
+    'Đôi',
+    'Kg',
+    'Gram',
+    'Tấn',
+    'Mét',
+    'Cuộn',
+    'Tấm',
+    'Hộp',
+    'Thùng',
+    'Bao',
+    'Bó',
+    'Gói',
+    'Túi',
+    'Lít',
+    'Can',
+    'Bình',
+    'Lọ',
+    'Chai',
+    'Ống',
+    'Viên',
+    'Cây',
+];
+const UNIT_OPTIONS = COMMON_UNITS.map((u) => ({ value: u }));
+
 // ── StatusTag ─────────────────────────────────────────────────────────────────
 const StatusTag: React.FC<{ status: string }> = ({ status }) => {
     const m = STATUS_META[status] ?? { color: 'default', label: status, icon: null };
@@ -251,15 +281,17 @@ const FormDrawer: React.FC<{
         <Drawer
             open={open}
             onClose={onClose}
-            size={isMobile ? '100%' : 860}
+            width={isMobile ? '100%' : 760}
             destroyOnHidden
             maskClosable={false}
             styles={{
+                header: { borderBottom: '1px solid #f1f5f9' },
                 body: {
-                    padding: isMobile ? '0' : '20px',
+                    padding: 0,
                     display: 'flex',
                     flexDirection: 'column',
                     overflow: 'hidden',
+                    background: '#f8fafc',
                 },
             }}
             title={
@@ -276,13 +308,13 @@ const FormDrawer: React.FC<{
                 </div>
             }
             footer={
-                <div className={`flex gap-2 ${isMobile ? 'flex-col' : 'items-center justify-between'}`}>
+                <div className={isMobile ? 'flex flex-col gap-2' : 'flex items-center justify-between gap-3'}>
                     {!isMobile && (
                         <Text type='secondary' className='text-sm'>
-                            {watchedItems.length} loại vật tư
+                            Tổng <strong className='text-slate-700'>{watchedItems.length}</strong> loại vật tư
                         </Text>
                     )}
-                    <div className={`flex gap-2 ${isMobile ? 'flex-col-reverse' : ''}`}>
+                    <div className={isMobile ? 'flex flex-col-reverse gap-2' : 'flex gap-2'}>
                         <Button onClick={onClose} block={isMobile}>
                             Huỷ
                         </Button>
@@ -300,27 +332,19 @@ const FormDrawer: React.FC<{
                 </div>
             }
         >
-            <Form form={form} layout='vertical' className='flex h-full flex-col'>
+            <Form form={form} layout='vertical' className='flex h-full min-h-0 flex-col'>
                 {/* Thông tin chung */}
-                <div
-                    className={`shrink-0 border-b border-slate-100 bg-slate-50 ${isMobile ? 'px-4 py-4' : 'mb-5 rounded-2xl border border-slate-200 p-5'}`}
-                >
-                    {isMobile && (
-                        <div className='mb-3 text-xs font-semibold tracking-wider text-slate-400 uppercase'>
-                            Thông tin chung
-                        </div>
-                    )}
-                    {!isMobile && (
-                        <div className='mb-4 flex items-center gap-2 text-sm font-semibold text-slate-700'>
-                            <FileTextOutlined /> Thông tin chung
-                        </div>
-                    )}
-                    <div className={`grid gap-3 ${isMobile ? 'grid-cols-2' : 'grid-cols-2 gap-4'}`}>
+                <div className='shrink-0 border-b border-slate-200 bg-white px-4 py-4 sm:px-6 sm:py-5'>
+                    <div className='mb-3 flex items-center gap-2 text-sm font-semibold text-slate-700'>
+                        <FileTextOutlined className='text-blue-500' /> Thông tin chung
+                    </div>
+                    <div className='grid grid-cols-2 gap-3 sm:gap-4'>
                         <Form.Item label='Cơ sở gửi' className='col-span-2 mb-0 sm:col-span-1'>
                             <Input
                                 value={defaultPlantName || '—'}
                                 readOnly
-                                className='cursor-default bg-white font-medium text-slate-700'
+                                size='large'
+                                className='cursor-default bg-slate-50 font-medium text-slate-700'
                             />
                         </Form.Item>
                         <Form.Item name='fromPlantId' hidden>
@@ -332,7 +356,7 @@ const FormDrawer: React.FC<{
                             className='col-span-2 mb-0 sm:col-span-1'
                             rules={[{ required: true, message: 'Chọn ngày' }]}
                         >
-                            <DatePicker format='DD/MM/YYYY' className='w-full' inputReadOnly={isMobile} />
+                            <DatePicker format='DD/MM/YYYY' className='w-full' size='large' inputReadOnly={isMobile} />
                         </Form.Item>
                         <Form.Item
                             name='note'
@@ -344,7 +368,7 @@ const FormDrawer: React.FC<{
                             ]}
                         >
                             <Input.TextArea
-                                rows={isMobile ? 2 : 3}
+                                rows={2}
                                 maxLength={500}
                                 showCount
                                 placeholder='Ghi rõ lý do cần cấp và mục đích sử dụng...'
@@ -356,44 +380,51 @@ const FormDrawer: React.FC<{
                 {/* Danh sách vật tư */}
                 <Form.List name='items'>
                     {(fields, { add, remove }) => (
-                        <div
-                            className={`flex min-h-0 flex-1 flex-col overflow-hidden ${!isMobile ? 'mt-0 rounded-2xl border border-slate-200 bg-white' : ''}`}
-                        >
-                            <div
-                                className={`flex shrink-0 items-center justify-between border-b border-slate-100 bg-slate-50 ${isMobile ? 'px-4 py-3' : 'px-5 py-3'}`}
-                            >
-                                <div>
-                                    <div className='text-sm font-semibold text-slate-800'>Danh sách vật tư</div>
-                                    <div className='text-xs text-slate-400'>Tối thiểu 1 vật tư</div>
+                        <div className='flex min-h-0 flex-1 flex-col'>
+                            <div className='flex shrink-0 items-center justify-between px-4 pt-4 pb-2 sm:px-6'>
+                                <div className='flex items-center gap-2 text-sm font-semibold text-slate-700'>
+                                    <InboxOutlined className='text-blue-500' /> Danh sách vật tư
+                                    <Tag color='blue' className='m-0'>
+                                        {fields.length}
+                                    </Tag>
                                 </div>
-                                <Tag color='blue'>{fields.length} loại</Tag>
+                                <Button
+                                    type='link'
+                                    size='small'
+                                    icon={<PlusOutlined />}
+                                    onClick={() => add(emptyItem())}
+                                    className='px-0'
+                                >
+                                    Thêm
+                                </Button>
                             </div>
-                            {!isMobile && (
-                                <div className='grid shrink-0 grid-cols-[minmax(0,2.5fr)_90px_130px_minmax(0,1.5fr)_40px] gap-3 border-b border-slate-100 bg-slate-50/50 px-5 py-2 text-[11px] font-semibold tracking-wider text-slate-400 uppercase'>
-                                    <span>Tên vật tư *</span>
-                                    <span>ĐVT *</span>
-                                    <span>Số lượng *</span>
-                                    <span>Ghi chú</span>
-                                    <span />
-                                </div>
-                            )}
-                            <div className='flex-1 overflow-y-auto'>
+
+                            <div className='min-h-0 flex-1 space-y-3 overflow-y-auto px-4 pb-4 sm:px-6'>
                                 {fields.length === 0 && (
-                                    <div className='flex flex-col items-center justify-center gap-2 py-12 text-slate-400'>
+                                    <div className='flex flex-col items-center justify-center gap-3 rounded-2xl border border-dashed border-slate-300 bg-white py-12 text-slate-400'>
                                         <InboxOutlined style={{ fontSize: 32 }} />
                                         <span className='text-sm'>Chưa có vật tư nào</span>
+                                        <Button
+                                            type='primary'
+                                            ghost
+                                            icon={<PlusOutlined />}
+                                            onClick={() => add(emptyItem())}
+                                        >
+                                            Thêm vật tư đầu tiên
+                                        </Button>
                                     </div>
                                 )}
-                                {fields.map((field, index) =>
-                                    isMobile ? (
-                                        <div
-                                            key={field.key}
-                                            className='border-b border-slate-100 px-4 py-3 last:border-b-0'
-                                        >
-                                            <div className='mb-2 flex items-center justify-between'>
-                                                <span className='text-xs font-semibold text-slate-500'>
-                                                    Vật tư #{index + 1}
-                                                </span>
+
+                                {fields.map((field, index) => (
+                                    <div
+                                        key={field.key}
+                                        className='rounded-2xl border border-slate-200 bg-white p-3.5 transition-all hover:border-blue-300 hover:shadow-sm sm:p-4'
+                                    >
+                                        <div className='mb-2.5 flex items-center justify-between'>
+                                            <span className='inline-flex h-6 min-w-[30px] items-center justify-center rounded-lg bg-blue-50 px-2 text-xs font-bold text-blue-600'>
+                                                #{index + 1}
+                                            </span>
+                                            <Tooltip title='Xoá vật tư này'>
                                                 <Button
                                                     type='text'
                                                     danger
@@ -402,119 +433,82 @@ const FormDrawer: React.FC<{
                                                     icon={<DeleteOutlined />}
                                                     onClick={() => remove(field.name)}
                                                 />
-                                            </div>
-                                            <div className='grid grid-cols-2 gap-2'>
-                                                <Form.Item
-                                                    name={[field.name, 'materialName']}
-                                                    label='Tên vật tư'
-                                                    className='col-span-2 mb-0'
-                                                    rules={[{ required: true, message: 'Nhập tên' }]}
-                                                >
-                                                    <Input
-                                                        placeholder={`Vật tư ${index + 1}`}
-                                                        maxLength={200}
-                                                        size='large'
-                                                    />
-                                                </Form.Item>
-                                                <Form.Item
-                                                    name={[field.name, 'unit']}
-                                                    label='ĐVT'
-                                                    className='mb-0'
-                                                    rules={[{ required: true, message: 'Nhập ĐVT' }]}
-                                                >
-                                                    <Input placeholder='Cái, Kg...' maxLength={50} size='large' />
-                                                </Form.Item>
-                                                <Form.Item
-                                                    name={[field.name, 'quantityRequested']}
-                                                    label='Số lượng'
-                                                    className='mb-0'
-                                                    rules={[{ required: true, message: 'Nhập SL' }]}
-                                                >
-                                                    <InputNumber<number>
-                                                        min={1}
-                                                        className='w-full'
-                                                        size='large'
-                                                        formatter={(v) =>
-                                                            `${v ?? ''}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')
-                                                        }
-                                                        parser={parseNum}
-                                                    />
-                                                </Form.Item>
-                                                <Form.Item
-                                                    name={[field.name, 'note']}
-                                                    label='Ghi chú'
-                                                    className='col-span-2 mb-0'
-                                                >
-                                                    <Input placeholder='Ghi chú...' maxLength={250} />
-                                                </Form.Item>
-                                            </div>
+                                            </Tooltip>
                                         </div>
-                                    ) : (
-                                        <div
-                                            key={field.key}
-                                            className='grid grid-cols-[minmax(0,2.5fr)_90px_130px_minmax(0,1.5fr)_40px] gap-3 border-b border-slate-100 px-5 py-3 transition-colors last:border-b-0 hover:bg-blue-50/20'
+                                        <Form.Item
+                                            name={[field.name, 'materialName']}
+                                            label='Tên vật tư'
+                                            className='mb-3'
+                                            rules={[{ required: true, message: 'Nhập tên vật tư' }]}
                                         >
-                                            <Form.Item
-                                                name={[field.name, 'materialName']}
-                                                className='mb-0'
-                                                rules={[{ required: true, message: 'Nhập tên' }]}
-                                            >
-                                                <Input placeholder={`Vật tư ${index + 1}`} maxLength={200} />
-                                            </Form.Item>
+                                            <Input
+                                                placeholder='VD: Vải cotton, Chỉ may, Kim máy...'
+                                                maxLength={200}
+                                                size='large'
+                                                allowClear
+                                            />
+                                        </Form.Item>
+                                        <div className='grid grid-cols-2 gap-3 sm:grid-cols-[150px_150px_minmax(0,1fr)]'>
                                             <Form.Item
                                                 name={[field.name, 'unit']}
+                                                label='Đơn vị tính'
                                                 className='mb-0'
                                                 rules={[{ required: true, message: 'Nhập ĐVT' }]}
                                             >
-                                                <Input placeholder='Cái, Kg...' maxLength={50} />
+                                                <AutoComplete
+                                                    options={UNIT_OPTIONS}
+                                                    placeholder='Cái, Kg, Mét...'
+                                                    size='large'
+                                                    allowClear
+                                                    filterOption={(input, option) =>
+                                                        normalizeSearchTerm(String(option?.value ?? '')).includes(
+                                                            normalizeSearchTerm(input)
+                                                        )
+                                                    }
+                                                />
                                             </Form.Item>
                                             <Form.Item
                                                 name={[field.name, 'quantityRequested']}
+                                                label='Số lượng'
                                                 className='mb-0'
                                                 rules={[{ required: true, message: 'Nhập SL' }]}
                                             >
                                                 <InputNumber<number>
                                                     min={1}
                                                     className='w-full'
+                                                    size='large'
                                                     formatter={(v) =>
                                                         `${v ?? ''}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')
                                                     }
                                                     parser={parseNum}
                                                 />
                                             </Form.Item>
-                                            <Form.Item name={[field.name, 'note']} className='mb-0'>
-                                                <Input placeholder='Ghi chú...' maxLength={250} />
+                                            <Form.Item
+                                                name={[field.name, 'note']}
+                                                label='Ghi chú'
+                                                className='col-span-2 mb-0 sm:col-span-1'
+                                            >
+                                                <Input
+                                                    placeholder='Quy cách, màu sắc... (nếu có)'
+                                                    maxLength={250}
+                                                    size='large'
+                                                />
                                             </Form.Item>
-                                            <div className='flex items-center justify-center'>
-                                                <Tooltip title='Xoá dòng'>
-                                                    <Button
-                                                        type='text'
-                                                        danger
-                                                        size='small'
-                                                        disabled={fields.length === 1}
-                                                        icon={<DeleteOutlined />}
-                                                        onClick={() => remove(field.name)}
-                                                    />
-                                                </Tooltip>
-                                            </div>
                                         </div>
-                                    )
+                                    </div>
+                                ))}
+
+                                {fields.length > 0 && (
+                                    <Button
+                                        type='dashed'
+                                        block
+                                        icon={<PlusOutlined />}
+                                        onClick={() => add(emptyItem())}
+                                        className='h-11'
+                                    >
+                                        Thêm vật tư
+                                    </Button>
                                 )}
-                            </div>
-                            <div
-                                className={`flex shrink-0 items-center justify-between border-t border-slate-200 bg-slate-50 ${isMobile ? 'px-4 py-3' : 'px-5 py-3'}`}
-                            >
-                                <Text type='secondary' className='text-xs'>
-                                    Tổng: <strong>{fields.length}</strong> loại
-                                </Text>
-                                <Button
-                                    icon={<PlusOutlined />}
-                                    onClick={() => add(emptyItem())}
-                                    block={isMobile}
-                                    type={isMobile ? 'dashed' : 'default'}
-                                >
-                                    Thêm vật tư
-                                </Button>
                             </div>
                         </div>
                     )}
