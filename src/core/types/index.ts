@@ -98,10 +98,25 @@ export interface Plant {
     address: string;
     phone?: string;
     managerId?: string;
+    coordinates?: { lat: number; lng: number };
     assetCount?: number;
     machineCount?: number;
     createdAt: string;
     updatedAt: string;
+}
+
+// Vị trí thực tế gần nhất của máy, suy ra từ GPS lúc quét QR
+export interface AssetLastSeen {
+    plantId?: string;
+    plantName?: string;
+    plantCode?: string;
+    lat?: number;
+    lng?: number;
+    accuracy?: number;
+    distanceM?: number;
+    scannedById?: string;
+    scannedByName?: string;
+    scannedAt?: string;
 }
 
 export interface PlantMachineStatsResponse {
@@ -136,6 +151,7 @@ export interface Asset {
     imageUrl?: string;
     lastMaintenanceDate?: string;
     nextMaintenanceDate?: string;
+    lastSeen?: AssetLastSeen;
     createdAt: string;
     updatedAt: string;
     hasOpenTransfer?: boolean;

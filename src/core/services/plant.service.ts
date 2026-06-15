@@ -10,6 +10,7 @@ type PlantPayload = {
     address?: string;
     phone?: string;
     managerId?: string;
+    coordinates?: { lat: number; lng: number } | null;
 };
 
 export const plantService = {

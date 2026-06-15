@@ -17,6 +17,7 @@ import {
     ArrowLeftOutlined,
     CalendarOutlined,
     EditOutlined,
+    AimOutlined,
     EnvironmentOutlined,
     HistoryOutlined,
     RollbackOutlined,
@@ -91,6 +92,18 @@ const formatDate = (value?: string) => (value ? dayjs(value).format('DD/MM/YYYY'
 const formatDateTime = (value?: string) => (value ? dayjs(value).format('DD/MM/YYYY HH:mm') : '-');
 const formatMoney = (value?: number) => (value ? `${value.toLocaleString('vi-VN')} đ` : '-');
 const renderArea = (value?: string) => value || 'Chưa chỉ định khu vực';
+const formatRelativeVi = (value?: string) => {
+    if (!value) return '';
+    const diffMs = Date.now() - new Date(value).getTime();
+    const min = Math.floor(diffMs / 60000);
+    if (min < 1) return 'vừa xong';
+    if (min < 60) return `${min} phút trước`;
+    const hours = Math.floor(min / 60);
+    if (hours < 24) return `${hours} giờ trước`;
+    const days = Math.floor(hours / 24);
+    if (days < 30) return `${days} ngày trước`;
+    return dayjs(value).format('DD/MM/YYYY');
+};
 
 const getTransferAssets = (transfer: Transfer) => {
     if (transfer.assets?.length) return transfer.assets;
@@ -381,7 +394,7 @@ const AssetDetail: React.FC = () => {
 
             <div className='flex flex-col gap-4'>
                 <MetricCard
-                    title='Vị trí hiện tại'
+                    title='Cơ sở quản lý'
                     value={
                         <div>
                             <div>{asset.plant?.name || '-'}</div>
@@ -391,6 +404,43 @@ const AssetDetail: React.FC = () => {
                         </div>
                     }
                     icon={<EnvironmentOutlined />}
+                />
+                <MetricCard
+                    title='Vị trí gần nhất (theo lần quét QR)'
+                    value={
+                        asset.lastSeen?.plantName || asset.lastSeen?.scannedAt ? (
+                            <div className='space-y-0.5'>
+                                <div>{asset.lastSeen.plantName || '—'}</div>
+                                <Text type='secondary' className='block text-sm'>
+                                    {formatRelativeVi(asset.lastSeen.scannedAt)}
+                                    {asset.lastSeen.scannedByName ? ` · ${asset.lastSeen.scannedByName}` : ''}
+                                </Text>
+                                <Text type='secondary' className='block text-xs'>
+                                    {typeof asset.lastSeen.distanceM === 'number'
+                                        ? `Cách cơ sở ~${asset.lastSeen.distanceM}m`
+                                        : ''}
+                                    {typeof asset.lastSeen.accuracy === 'number'
+                                        ? ` · sai số GPS ±${asset.lastSeen.accuracy}m`
+                                        : ''}
+                                </Text>
+                                {typeof asset.lastSeen.lat === 'number' && typeof asset.lastSeen.lng === 'number' ? (
+                                    <a
+                                        href={`https://www.google.com/maps?q=${asset.lastSeen.lat},${asset.lastSeen.lng}`}
+                                        target='_blank'
+                                        rel='noreferrer'
+                                        className='text-xs text-blue-600'
+                                    >
+                                        Xem trên bản đồ
+                                    </a>
+                                ) : null}
+                            </div>
+                        ) : (
+                            <Text type='secondary' className='text-sm'>
+                                Chưa có dữ liệu — sẽ tự cập nhật khi quét QR có bật định vị
+                            </Text>
+                        )
+                    }
+                    icon={<AimOutlined />}
                 />
                 <MetricCard
                     title='Bảo trì'

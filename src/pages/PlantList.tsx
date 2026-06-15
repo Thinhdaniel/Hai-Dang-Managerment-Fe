@@ -99,7 +99,13 @@ const PlantList: React.FC = () => {
         message.success('Đã xóa cơ sở');
     };
 
-    const handleSubmit = async (values: { name: string; code: string; address?: string; phone?: string }) => {
+    const handleSubmit = async (values: {
+        name: string;
+        code: string;
+        address?: string;
+        phone?: string;
+        coordinates?: { lat: number; lng: number } | null;
+    }) => {
         if (editingPlant) {
             await updateMutation.mutateAsync({ id: editingPlant.id, data: values });
             return;
@@ -216,7 +222,12 @@ const PlantList: React.FC = () => {
             <div className='grid grid-cols-1 gap-4 sm:grid-cols-3'>
                 <StatsCard title='Tổng cơ sở' value={stats.total} icon={<ClusterOutlined />} accent='#1f7ae0' />
                 <StatsCard title='Tổng máy' value={stats.totalMachines} icon={<ClusterOutlined />} accent='#22a06b' />
-                <StatsCard title='Chưa gán cơ sở' value={stats.unassignedMachines} icon={<EnvironmentOutlined />} accent='#7c3aed' />
+                <StatsCard
+                    title='Chưa gán cơ sở'
+                    value={stats.unassignedMachines}
+                    icon={<EnvironmentOutlined />}
+                    accent='#7c3aed'
+                />
             </div>
 
             <div className='rounded-xl border border-slate-200 bg-white p-4 shadow-sm'>
