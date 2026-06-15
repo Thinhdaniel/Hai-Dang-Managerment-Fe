@@ -5659,7 +5659,7 @@ textarea {
 }
 
 .qr-print-label--qr_only.qr-print-label--cut-border .qr-print-label__content {
-    outline: 0.2mm dashed #d0d7de;
+    outline: 0.25mm dashed #334155;
     outline-offset: -0.2mm;
 }
 
@@ -5674,29 +5674,29 @@ textarea {
 .qr-print-crop--tl {
     top: var(--qr-template-crop-outset);
     left: var(--qr-template-crop-outset);
-    border-right: 0.15mm solid #cbd5e1;
-    border-bottom: 0.15mm solid #cbd5e1;
+    border-right: 0.25mm solid #334155;
+    border-bottom: 0.25mm solid #334155;
 }
 
 .qr-print-crop--tr {
     top: var(--qr-template-crop-outset);
     right: var(--qr-template-crop-outset);
-    border-bottom: 0.15mm solid #cbd5e1;
-    border-left: 0.15mm solid #cbd5e1;
+    border-bottom: 0.25mm solid #334155;
+    border-left: 0.25mm solid #334155;
 }
 
 .qr-print-crop--bl {
     bottom: var(--qr-template-crop-outset);
     left: var(--qr-template-crop-outset);
-    border-top: 0.15mm solid #cbd5e1;
-    border-right: 0.15mm solid #cbd5e1;
+    border-top: 0.25mm solid #334155;
+    border-right: 0.25mm solid #334155;
 }
 
 .qr-print-crop--br {
     right: var(--qr-template-crop-outset);
     bottom: var(--qr-template-crop-outset);
-    border-top: 0.15mm solid #cbd5e1;
-    border-left: 0.15mm solid #cbd5e1;
+    border-top: 0.25mm solid #334155;
+    border-left: 0.25mm solid #334155;
 }
 
 .qr-print-label__brand {

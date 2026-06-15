@@ -29,7 +29,7 @@ const CARD_BORDER_WIDTH_MM = 0.3;
 const CARD_BORDER_RADIUS_MM = 1.6;
 const CROP_MARK_LENGTH_MM = 3.2;
 const CROP_MARK_OFFSET_MM = 0.35;
-const CUT_BORDER_WIDTH_MM = 0.18;
+const CUT_BORDER_WIDTH_MM = 0.25;
 
 type PrintStyle = 'qr_only' | 'branded_compact' | 'branded_full';
 type CutMode = 'none' | 'border' | 'crop_marks';
@@ -329,8 +329,8 @@ const QrBatchPrintPage: React.FC = () => {
         const mark = Math.min(cropMarkLength, width / 5, height / 5);
         const offset = CROP_MARK_OFFSET_MM;
 
-        doc.setDrawColor(203, 213, 225);
-        doc.setLineWidth(0.15);
+        doc.setDrawColor(51, 65, 85);
+        doc.setLineWidth(0.25);
         doc.line(x - mark - offset, y - offset, x - offset, y - offset);
         doc.line(x - offset, y - mark - offset, x - offset, y - offset);
         doc.line(x + width + offset, y - offset, x + width + mark + offset, y - offset);
@@ -347,7 +347,7 @@ const QrBatchPrintPage: React.FC = () => {
         if (template.cutMode === 'border') {
             // Tem branded đã có viền card bo góc làm đường cắt, không vẽ thêm dashed
             if (hasBrand) return;
-            doc.setDrawColor(208, 215, 222);
+            doc.setDrawColor(51, 65, 85);
             doc.setLineWidth(CUT_BORDER_WIDTH_MM);
             doc.setLineDashPattern?.([1.2, 0.8], 0);
             doc.rect(x, y, template.labelWidth, template.labelHeight);
@@ -557,7 +557,7 @@ const QrBatchPrintPage: React.FC = () => {
                                     value={template.cutMode}
                                     options={[
                                         { value: 'crop_marks', label: 'Dấu cắt ngoài' },
-                                        { value: 'border', label: 'Viền dashed nhạt' },
+                                        { value: 'border', label: 'Viền nét đứt' },
                                         { value: 'none', label: 'Không in' },
                                     ]}
                                     onChange={(cutMode: CutMode) => updateTemplate({ cutMode })}
