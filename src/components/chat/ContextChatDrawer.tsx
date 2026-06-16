@@ -29,6 +29,7 @@ import {
 } from '@ant-design/icons';
 import { useAuth } from '../../core/contexts/AuthContext';
 import {
+    type ChatConversationReadEvent,
     type ChatConversationUpdateEvent,
     type ChatMessageEvent,
     type ChatMessageRecalledEvent,
@@ -47,6 +48,14 @@ import {
     groupReactions,
     REACTION_EMOJIS,
 } from './chatStream';
+import {
+    extractMentionTokens,
+    filterMentionCandidates,
+    focusTextAreaCaret,
+    MentionText,
+    mentionHighlightNames,
+    useMentionInput,
+} from './mentions';
 import type { ChatConversation, ChatMessage, ChatWorkflowContextType } from '../../core/types';
 
 const { Text, Title } = Typography;
@@ -114,8 +123,34 @@ const ContextChatDrawer: React.FC<ContextChatDrawerProps> = ({
     const [replyTarget, setReplyTarget] = useState<ChatMessage | null>(null);
     const [typingUsers, setTypingUsers] = useState<Record<string, string>>({});
     const [actionMenuId, setActionMenuId] = useState<string | null>(null);
+    const mention = useMentionInput();
 
     const streamRows = useMemo(() => buildChatStream(messages), [messages]);
+
+    // "Đã xem": thành viên khác đã đọc tới tin cuối cùng
+    const seenByLast = useMemo(() => {
+        if (!conversation || !messages.length) return [];
+        const lastMsg = messages[messages.length - 1];
+        if (!lastMsg || lastMsg.system) return [];
+        const receiptMap = new Map((conversation.readReceipts ?? []).map((r) => [r.userId, r.lastReadAt]));
+        const lastTime = new Date(lastMsg.createdAt).getTime();
+        return conversation.participants.filter((participant) => {
+            if (participant.id === user?.id) return false;
+            const readAt = receiptMap.get(participant.id);
+            return Boolean(readAt) && new Date(readAt as string).getTime() >= lastTime;
+        });
+    }, [conversation, messages, user?.id]);
+
+    const mentionCandidates =
+        mention.isOpen && conversation
+            ? filterMentionCandidates(conversation.participants, mention.query, user?.id)
+            : [];
+
+    const applyMention = (candidate: { id: string; name: string }) => {
+        const { value, caret } = mention.apply(composer, candidate);
+        setComposer(value);
+        focusTextAreaCaret(composerRef, caret);
+    };
 
     const clearSelectedImages = useCallback(() => {
         setSelectedImages((prev) => {
@@ -229,11 +264,24 @@ const ContextChatDrawer: React.FC<ContextChatDrawerProps> = ({
             }, 3500);
         };
 
+        const onConversationRead = (payload: ChatConversationReadEvent) => {
+            if (payload.conversationId !== conversation.id) return;
+            setConversation((prev) => {
+                if (!prev || prev.id !== payload.conversationId) return prev;
+                const receipts = (prev.readReceipts ?? []).filter((r) => r.userId !== payload.userId);
+                return {
+                    ...prev,
+                    readReceipts: [...receipts, { userId: payload.userId, lastReadAt: payload.lastReadAt }],
+                };
+            });
+        };
+
         socket.on('chat:message:new', onMessage);
         socket.on('chat:conversation:update', onConversationUpdate);
         socket.on('chat:message:recalled', onMessageRecalled);
         socket.on('chat:message:updated', onMessageUpdated);
         socket.on('chat:typing', onTyping);
+        socket.on('chat:conversation:read', onConversationRead);
 
         return () => {
             socket.off('chat:message:new', onMessage);
@@ -241,6 +289,7 @@ const ContextChatDrawer: React.FC<ContextChatDrawerProps> = ({
             socket.off('chat:message:recalled', onMessageRecalled);
             socket.off('chat:message:updated', onMessageUpdated);
             socket.off('chat:typing', onTyping);
+            socket.off('chat:conversation:read', onConversationRead);
         };
     }, [conversation, markConversationRead, socket, user?.id]);
 
@@ -326,6 +375,10 @@ const ContextChatDrawer: React.FC<ContextChatDrawerProps> = ({
         if (!conversation || (!body && !selectedImages.length) || sending) return;
 
         const replyToId = replyTarget?.id;
+        const mentions = extractMentionTokens(
+            body,
+            conversation.participants.map((participant) => ({ id: participant.id, name: participant.name }))
+        );
         setSending(true);
         try {
             const sent = selectedImages.length
@@ -333,9 +386,10 @@ const ContextChatDrawer: React.FC<ContextChatDrawerProps> = ({
                       conversation.id,
                       body,
                       selectedImages.map((item) => item.file),
-                      replyToId
+                      replyToId,
+                      mentions
                   )
-                : await chatService.sendMessage(conversation.id, { body, replyTo: replyToId });
+                : await chatService.sendMessage(conversation.id, { body, replyTo: replyToId, mentions });
             setComposer('');
             clearSelectedImages();
             setReplyTarget(null);
@@ -469,6 +523,10 @@ const ContextChatDrawer: React.FC<ContextChatDrawerProps> = ({
 
                                     const item = row.message;
                                     const mine = item.senderId === user?.id;
+                                    const iMentioned = Boolean(user?.id && item.mentions?.includes(user.id));
+                                    const mentionNames = conversation
+                                        ? mentionHighlightNames(item, conversation.participants)
+                                        : [];
                                     const bubbleClass = `context-chat__bubble context-chat__bubble--${row.shape}`;
                                     const reactions = groupReactions(item, user?.id);
                                     const menuOpen = actionMenuId === item.id;
@@ -602,10 +660,14 @@ const ContextChatDrawer: React.FC<ContextChatDrawerProps> = ({
                                                         </div>
                                                     ) : item.body ? (
                                                         <div
-                                                            className={bubbleClass}
+                                                            className={`${bubbleClass}${
+                                                                iMentioned && !mine
+                                                                    ? ' !bg-blue-50 ring-1 ring-blue-200'
+                                                                    : ''
+                                                            }`}
                                                             title={formatFullTime(item.createdAt)}
                                                         >
-                                                            {item.body}
+                                                            <MentionText text={item.body} names={mentionNames} />
                                                         </div>
                                                     ) : null}
                                                 </div>
@@ -657,6 +719,28 @@ const ContextChatDrawer: React.FC<ContextChatDrawerProps> = ({
                                         </div>
                                     );
                                 })}
+                                {seenByLast.length ? (
+                                    <div className='flex items-center justify-end gap-1 px-1 pt-0.5'>
+                                        <Text className='text-[11px] font-medium text-slate-400'>Đã xem</Text>
+                                        <div className='flex -space-x-1.5'>
+                                            {seenByLast.slice(0, 3).map((participant) => (
+                                                <Tooltip key={participant.id} title={participant.name}>
+                                                    <Avatar
+                                                        size={16}
+                                                        className='context-chat__avatar !border !border-white !text-[8px]'
+                                                    >
+                                                        {getInitials(participant.name)}
+                                                    </Avatar>
+                                                </Tooltip>
+                                            ))}
+                                        </div>
+                                        {seenByLast.length > 3 ? (
+                                            <Text className='text-[11px] text-slate-400'>
+                                                +{seenByLast.length - 3}
+                                            </Text>
+                                        ) : null}
+                                    </div>
+                                ) : null}
                                 <div ref={endRef} />
                             </div>
                         ) : !loading ? (
@@ -739,7 +823,39 @@ const ContextChatDrawer: React.FC<ContextChatDrawerProps> = ({
                     >
                         <Button icon={<SmileOutlined />} className='context-chat__attach-button' />
                     </Popover>
-                    <div className='min-w-0 flex-1'>
+                    <div className='relative min-w-0 flex-1'>
+                        {mention.isOpen && mentionCandidates.length ? (
+                            <div className='absolute bottom-full left-0 z-20 mb-2 max-h-60 w-72 max-w-full overflow-y-auto rounded-2xl border border-slate-200 bg-white py-1 shadow-xl'>
+                                <div className='px-3 py-1 text-[10px] font-bold tracking-wide text-slate-400 uppercase'>
+                                    Nhắc tới
+                                </div>
+                                {mentionCandidates.map((candidate) => (
+                                    <button
+                                        key={candidate.id}
+                                        type='button'
+                                        className='flex w-full items-center gap-2 px-3 py-2 text-left hover:bg-blue-50'
+                                        onMouseDown={(event) => {
+                                            event.preventDefault();
+                                            applyMention(candidate);
+                                        }}
+                                    >
+                                        <Avatar size={26} className='context-chat__avatar shrink-0'>
+                                            {candidate.id === '@all' ? '@' : getInitials(candidate.name)}
+                                        </Avatar>
+                                        <span className='min-w-0'>
+                                            <span className='block truncate text-[13px] font-semibold text-slate-800'>
+                                                {candidate.name}
+                                            </span>
+                                            {candidate.subtitle ? (
+                                                <span className='block truncate text-[11px] text-slate-400'>
+                                                    {candidate.subtitle}
+                                                </span>
+                                            ) : null}
+                                        </span>
+                                    </button>
+                                ))}
+                            </div>
+                        ) : null}
                         {selectedImages.length ? (
                             <div className='context-chat__selected-images'>
                                 {selectedImages.map((item) => (
@@ -757,12 +873,28 @@ const ContextChatDrawer: React.FC<ContextChatDrawerProps> = ({
                             value={composer}
                             autoSize={{ minRows: 1, maxRows: 4 }}
                             maxLength={4000}
-                            placeholder='Nhập trao đổi về phiếu này...'
+                            placeholder='Nhập trao đổi về phiếu này... (gõ @ để nhắc ai đó)'
                             onChange={(event) => {
                                 setComposer(event.target.value);
                                 emitTyping();
+                                mention.analyze(
+                                    event.target.value,
+                                    event.target.selectionStart ?? event.target.value.length
+                                );
+                            }}
+                            onKeyDown={(event) => {
+                                if (mention.isOpen && mentionCandidates.length && event.key === 'Enter') {
+                                    event.preventDefault();
+                                    applyMention(mentionCandidates[0]);
+                                } else if (mention.isOpen && event.key === 'Escape') {
+                                    mention.close();
+                                }
                             }}
                             onPressEnter={(event) => {
+                                if (mention.isOpen && mentionCandidates.length) {
+                                    event.preventDefault();
+                                    return;
+                                }
                                 if (!event.shiftKey) {
                                     event.preventDefault();
                                     void handleSend();

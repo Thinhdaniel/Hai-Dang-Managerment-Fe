@@ -62,6 +62,7 @@ export const CONTEXT_TYPE_LABEL: Partial<Record<ChatWorkflowContextType, string>
     transfer: 'Điều chuyển',
     purchase_request: 'Đề xuất mua',
     supply_request: 'Yêu cầu vật tư',
+    technical_purchase: 'Đề nghị mua (KT)',
     distribution: 'Cấp phát',
 };
 

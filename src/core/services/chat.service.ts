@@ -15,15 +15,19 @@ export type CreateChatConversationPayload = {
 export type SendChatMessagePayload = {
     body: string;
     replyTo?: string;
+    mentions?: string[];
 };
 
-const buildAttachmentFormData = (body: string, images: File[], replyTo?: string) => {
+const buildAttachmentFormData = (body: string, images: File[], replyTo?: string, mentions?: string[]) => {
     const formData = new FormData();
     if (body.trim()) {
         formData.append('body', body.trim());
     }
     if (replyTo) {
         formData.append('replyTo', replyTo);
+    }
+    if (mentions && mentions.length) {
+        formData.append('mentions', JSON.stringify(mentions));
     }
     images.forEach((file) => formData.append('images', file));
     return formData;
@@ -54,11 +58,12 @@ export const chatService = {
         conversationId: string,
         body: string,
         images: File[],
-        replyTo?: string
+        replyTo?: string,
+        mentions?: string[]
     ): Promise<ChatMessage> =>
         api.post<ChatMessage, FormData>(
             `/chat/conversations/${conversationId}/attachments`,
-            buildAttachmentFormData(body, images, replyTo),
+            buildAttachmentFormData(body, images, replyTo, mentions),
             {
                 headers: {
                     'Content-Type': 'multipart/form-data',
@@ -97,4 +102,6 @@ export const chatService = {
 
     searchMessages: (conversationId: string, q: string): Promise<ChatMessage[]> =>
         api.get<ChatMessage[]>(`/chat/conversations/${conversationId}/messages/search`, { params: { q } }),
+
+    getMyMentions: (): Promise<ChatMessage[]> => api.get<ChatMessage[]>('/chat/mentions'),
 };

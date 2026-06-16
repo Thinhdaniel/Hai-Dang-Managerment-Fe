@@ -494,6 +494,7 @@ export type ChatWorkflowContextType =
     | 'borrowing'
     | 'purchase_request'
     | 'supply_request'
+    | 'technical_purchase'
     | 'purchase_order'
     | 'distribution'
     | 'system';
@@ -507,6 +508,11 @@ export interface ChatUserSummary {
     plant?: Pick<Plant, 'id' | 'name' | 'code'>;
     avatarUrl?: string;
     isActive: boolean;
+}
+
+export interface ChatReadReceipt {
+    userId: string;
+    lastReadAt?: string;
 }
 
 export interface ChatConversation {
@@ -528,6 +534,7 @@ export interface ChatConversation {
     unreadCount: number;
     muted: boolean;
     archivedAt?: string;
+    readReceipts?: ChatReadReceipt[];
     createdAt: string;
     updatedAt: string;
 }
@@ -564,6 +571,7 @@ export interface ChatMessage {
     }>;
     replyTo?: ChatReplyPreview;
     reactions?: ChatReaction[];
+    mentions?: string[];
     pinned?: boolean;
     system: boolean;
     isDeleted: boolean;

@@ -30,6 +30,7 @@ import {
     EyeOutlined,
     FileTextOutlined,
     InboxOutlined,
+    MessageOutlined,
     PlusOutlined,
     ReloadOutlined,
     RightOutlined,
@@ -38,7 +39,9 @@ import {
     ToolOutlined,
 } from '@ant-design/icons';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useSearchParams } from 'react-router-dom';
 import PageHeader from '../components/shared/PageHeader';
+import ContextChatDrawer from '../components/chat/ContextChatDrawer';
 import { useAuth } from '../core/contexts/AuthContext';
 import { hasManagerAccess } from '../core/lib/permissions';
 import { normalizeSearchTerm } from '../core/lib/search';
@@ -409,6 +412,8 @@ const TechnicalPurchaseRequestPage: React.FC = () => {
     const [rejectTarget, setRejectTarget] = useState<PurchaseRequest | null>(null);
     const [rejectReason, setRejectReason] = useState('');
     const [approvingId, setApprovingId] = useState<string | null>(null);
+    const [chatOpen, setChatOpen] = useState(false);
+    const [searchParams, setSearchParams] = useSearchParams();
 
     // Debounce search
     useEffect(() => {
@@ -418,6 +423,21 @@ const TechnicalPurchaseRequestPage: React.FC = () => {
         }, SEARCH_DEBOUNCE_MS);
         return () => window.clearTimeout(t);
     }, [draftSearch]);
+
+    // Deep-link từ thông báo/chat "Mở phiếu": ?request=<id> → mở drawer chi tiết rồi gỡ param
+    const deepLinkId = searchParams.get('request');
+    useEffect(() => {
+        if (!deepLinkId) return;
+        setSelectedId(deepLinkId);
+        setSearchParams(
+            (prev) => {
+                const next = new URLSearchParams(prev);
+                next.delete('request');
+                return next;
+            },
+            { replace: true }
+        );
+    }, [deepLinkId, setSearchParams]);
 
     const listParams = useMemo<PurchaseRequestQueryParams>(
         () => ({
@@ -841,6 +861,14 @@ const TechnicalPurchaseRequestPage: React.FC = () => {
                     selectedRequest && (
                         <div className={`flex gap-2 ${isMobile ? 'flex-col' : 'items-center justify-between'}`}>
                             <div className={`flex gap-2 ${isMobile ? 'flex-col' : ''}`}>
+                                <Button
+                                    icon={<MessageOutlined />}
+                                    className='text-blue-600'
+                                    onClick={() => setChatOpen(true)}
+                                    block={isMobile}
+                                >
+                                    Trao đổi
+                                </Button>
                                 <Button icon={<DownloadOutlined />} onClick={() => exportXlsx(selectedRequest)} block={isMobile}>
                                     Xuất Excel
                                 </Button>
@@ -1040,6 +1068,17 @@ const TechnicalPurchaseRequestPage: React.FC = () => {
                     />
                 </div>
             </Modal>
+
+            {selectedRequest && chatOpen ? (
+                <ContextChatDrawer
+                    open={chatOpen}
+                    contextType='technical_purchase'
+                    contextId={selectedRequest.id}
+                    title={`Trao đổi ${selectedRequest.requestCode || 'phiếu đề nghị'}`}
+                    subtitle='Giấy đề nghị mua vật tư (Kỹ thuật)'
+                    onClose={() => setChatOpen(false)}
+                />
+            ) : null}
         </>
     );
 };
