@@ -38,6 +38,7 @@ export const ROUTE_ACCESS: Record<string, AccessCheck> = {
     '/materials/suppliers': requireCap('material.view'),
     '/materials/inventory': requireCap('inventory.view'),
     '/materials/supply-requests': requireCap('supplyRequest.manage'),
+    '/materials/technical-purchase-requests': requireCap('technicalPurchase.manage'),
     '/materials/purchase-requests': requireProcurement,
     '/materials/purchase-orders': requireProcurement,
     '/materials/distributions': requireCap('distribution.view'),

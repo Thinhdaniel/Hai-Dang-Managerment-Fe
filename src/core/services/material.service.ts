@@ -6,6 +6,7 @@ const MATERIALS_BASE = '/materials';
 const MATERIAL_SUPPLIERS_BASE = '/material-suppliers';
 const PURCHASE_REQUESTS_BASE = '/purchase-requests';
 const SUPPLY_REQUESTS_BASE = '/supply-requests';
+const TECHNICAL_PURCHASE_BASE = '/technical-purchase-requests';
 const PURCHASE_ORDERS_BASE = '/purchase-orders';
 const INVENTORY_BASE = '/inventory';
 const DISTRIBUTIONS_BASE = '/distributions';
@@ -159,6 +160,9 @@ export interface PurchaseRequestItemPayload {
 export interface PurchaseRequest {
     id: string;
     requestCode?: string;
+    requestType?: 'purchase' | 'supply_request' | 'technical_purchase';
+    requesterName?: string;
+    department?: string;
     plantId: string;
     plant?: Plant;
     fromPlantId?: string;
@@ -771,6 +775,56 @@ export const supplyRequestService = {
 
     reject: (id: string, reason: string): Promise<PurchaseRequest> =>
         api.patch<PurchaseRequest, { reason: string }>(`${SUPPLY_REQUESTS_BASE}/${id}/reject`, { reason }),
+};
+
+// ─── Giấy đề nghị mua vật tư (bộ phận kỹ thuật) ─────────────────────────────────
+export interface TechnicalPurchaseItemPayload {
+    materialName: string;
+    unit: string;
+    quantityRequested: number;
+    note?: string;
+}
+
+export interface TechnicalPurchasePayload {
+    items: TechnicalPurchaseItemPayload[];
+    requesterName?: string;
+    department?: string;
+    note?: string;
+    requestDate?: string;
+}
+
+export const technicalPurchaseService = {
+    getAll: (params?: PurchaseRequestQueryParams): Promise<PurchaseRequestListApiResponse> =>
+        api.get<PurchaseRequestListApiResponse>(TECHNICAL_PURCHASE_BASE, { params }),
+
+    getById: (id: string): Promise<PurchaseRequest> => api.get<PurchaseRequest>(`${TECHNICAL_PURCHASE_BASE}/${id}`),
+
+    create: (data: TechnicalPurchasePayload): Promise<PurchaseRequest> =>
+        api.post<PurchaseRequest, TechnicalPurchasePayload>(TECHNICAL_PURCHASE_BASE, data),
+
+    update: (id: string, data: Partial<TechnicalPurchasePayload>): Promise<PurchaseRequest> =>
+        api.put<PurchaseRequest, Partial<TechnicalPurchasePayload>>(`${TECHNICAL_PURCHASE_BASE}/${id}`, data),
+
+    approve: (id: string, payload: { items?: Array<{ quantityApproved: number }> } = {}): Promise<PurchaseRequest> =>
+        api.patch<PurchaseRequest, any>(`${TECHNICAL_PURCHASE_BASE}/${id}/approve`, payload),
+
+    reject: (id: string, reason: string): Promise<PurchaseRequest> =>
+        api.patch<PurchaseRequest, { reason: string }>(`${TECHNICAL_PURCHASE_BASE}/${id}/reject`, { reason }),
+
+    exportXlsx: async (id: string, code: string): Promise<void> => {
+        const data: any = await axiosInstance.get(`${TECHNICAL_PURCHASE_BASE}/${id}/export-xlsx`, {
+            responseType: 'blob',
+        });
+        const blob = data instanceof Blob ? data : new Blob([data]);
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = `${code}.xlsx`;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
+    },
 };
 
 export const purchaseOrderService = {

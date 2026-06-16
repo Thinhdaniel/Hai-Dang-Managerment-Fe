@@ -131,6 +131,7 @@ export const useNotifications = (socket: import('socket.io-client').Socket | nul
                     purchase_request: [['purchase-requests']],
                     purchase_order: [['purchase-orders']],
                     supply_request: [['supply-requests']],
+                    technical_purchase: [['technical-purchase-requests']],
                     distribution: [['distributions']],
                 };
                 const keys = invalidateMap[notification.actionType] ?? [];

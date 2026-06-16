@@ -27,6 +27,7 @@ const MaterialSupplierPage = lazy(() => import('../pages/MaterialSupplierPage'))
 const MaterialInventoryPage = lazy(() => import('../pages/MaterialInventoryPage'));
 const PurchaseRequestPage = lazy(() => import('../pages/PurchaseRequestPage'));
 const SupplyRequestPage = lazy(() => import('../pages/SupplyRequestPage'));
+const TechnicalPurchaseRequestPage = lazy(() => import('../pages/TechnicalPurchaseRequestPage'));
 const PurchaseOrderPage = lazy(() => import('../pages/PurchaseOrderPage'));
 const DistributionPage = lazy(() => import('../pages/DistributionPage'));
 const MaterialReportPage = lazy(() => import('../pages/MaterialReportPage'));
@@ -119,6 +120,10 @@ export const router = createBrowserRouter([
             {
                 path: 'materials/supply-requests',
                 element: guarded('/materials/supply-requests', <SupplyRequestPage />),
+            },
+            {
+                path: 'materials/technical-purchase-requests',
+                element: guarded('/materials/technical-purchase-requests', <TechnicalPurchaseRequestPage />),
             },
             {
                 path: 'materials/purchase-orders',

@@ -24,6 +24,7 @@ import {
     SwapOutlined,
     TagsOutlined,
     TeamOutlined,
+    ToolOutlined,
 } from '@ant-design/icons';
 import type { ReactNode } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
@@ -115,6 +116,14 @@ const navigationSections: NavigationSection[] = [
                 icon: <FormOutlined />,
                 matchMode: 'exact',
                 capability: 'supplyRequest.manage',
+            },
+            {
+                path: '/materials/technical-purchase-requests',
+                label: 'Đề nghị mua (Kỹ thuật)',
+                description: 'Bộ phận kỹ thuật đề nghị mua',
+                icon: <ToolOutlined />,
+                matchMode: 'exact',
+                capability: 'technicalPurchase.manage',
             },
         ],
     },

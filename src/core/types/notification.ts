@@ -8,6 +8,7 @@ export type NotificationActionType =
     | 'borrowing'
     | 'purchase_request'
     | 'supply_request'
+    | 'technical_purchase'
     | 'purchase_order'
     | 'distribution'
     | 'chat'
