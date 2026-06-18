@@ -1,10 +1,13 @@
 import api from '../lib/api';
 import type {
     Asset,
+    AssetCodeSuggestion,
     AssetFilter,
     AssetImportPreview,
     AssetImportResult,
     AssetPublicIdResponse,
+    NormalizeCodePreview,
+    NormalizeCodeResult,
     PaginatedResponse,
 } from '../types';
 
@@ -28,7 +31,21 @@ export const assetService = {
 
     ensurePublicId: (id: string): Promise<AssetPublicIdResponse> => api.post<AssetPublicIdResponse>(`${BASE}/${id}/public-id`),
 
-    create: (data: Omit<Asset, 'id' | 'createdAt' | 'updatedAt'>): Promise<Asset> => api.post<Asset>(BASE, data),
+    create: (data: Omit<Asset, 'id' | 'createdAt' | 'updatedAt'> & { typeCode?: string }): Promise<Asset> =>
+        api.post<Asset>(BASE, data),
+
+    suggestCode: (data: {
+        type: string;
+        brandId: string;
+        ownershipType?: string;
+        typeCode?: string;
+    }): Promise<AssetCodeSuggestion> => api.post<AssetCodeSuggestion>(`${BASE}/code/suggest`, data),
+
+    previewNormalizeCodes: (): Promise<NormalizeCodePreview> =>
+        api.post<NormalizeCodePreview>(`${BASE}/code/normalize/preview`),
+
+    confirmNormalizeCodes: (): Promise<NormalizeCodeResult> =>
+        api.post<NormalizeCodeResult>(`${BASE}/code/normalize/confirm`),
 
     update: (id: string, data: Partial<Asset>): Promise<Asset> => api.patch<Asset>(`${BASE}/${id}`, data),
 

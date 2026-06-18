@@ -29,6 +29,7 @@ import {
     ScanOutlined,
     SearchOutlined,
     SwapOutlined,
+    ThunderboltOutlined,
     ToolOutlined,
     WarningOutlined,
 } from '@ant-design/icons';
@@ -41,7 +42,7 @@ import AssetQrModal from '../components/AssetQrModal';
 import AssetAiSearchBar from '../components/AssetAiSearchBar';
 import type { AiAssetSearchFilters } from '../core/services/ai-help.service';
 import { useAuth } from '../core/contexts/AuthContext';
-import { can } from '../core/lib/permissions';
+import { can, isAdmin, isDirector } from '../core/lib/permissions';
 import { normalizeSearchTerm } from '../core/lib/search';
 import { brandService, plantService } from '../core/services';
 import { assetService } from '../core/services/asset.service';
@@ -51,6 +52,7 @@ import { AssetOwnershipType, AssetStatus, type Asset, type CreateTransferPayload
 
 const AssetFormModal = lazy(() => import('../components/AssetFormModal'));
 const AssetImportModal = lazy(() => import('../components/AssetImportModal'));
+const MachineCodeNormalizeModal = lazy(() => import('../components/MachineCodeNormalizeModal'));
 const TransferModal = lazy(() => import('../components/transfer/TransferModal'));
 const QrScanLookupModal = lazy(() => import('../components/QrScanLookupModal'));
 const QrQuickUpdateModal = lazy(() => import('../components/QrQuickUpdateModal'));
@@ -174,10 +176,12 @@ const AssetList: React.FC = () => {
     const canExportImport = can(role, 'asset.write');
     const canQuickUpdate = can(role, 'asset.status');
     const canCreateTransfer = can(role, 'transfer.write');
+    const canNormalizeCodes = Boolean(role) && (isAdmin(role!) || isDirector(role!));
     const [selectedRowKeys, setSelectedRowKeys] = useState<React.Key[]>([]);
     const [selectedAssetMap, setSelectedAssetMap] = useState<Record<string, Asset>>({});
     const [isFormModalOpen, setIsFormModalOpen] = useState(false);
     const [isImportModalOpen, setIsImportModalOpen] = useState(false);
+    const [isNormalizeModalOpen, setIsNormalizeModalOpen] = useState(false);
     const [isMobileFilterOpen, setIsMobileFilterOpen] = useState(false);
     const [isTransferModalOpen, setIsTransferModalOpen] = useState(false);
     const [isScanLookupOpen, setIsScanLookupOpen] = useState(false);
@@ -576,9 +580,14 @@ const AssetList: React.FC = () => {
         window.URL.revokeObjectURL(url);
     };
 
-    const handleFormSubmit = async (values: Omit<Asset, 'id' | 'createdAt' | 'updatedAt'>) => {
+    const handleFormSubmit = async (
+        values: Omit<Asset, 'id' | 'createdAt' | 'updatedAt'> & { typeCode?: string }
+    ) => {
         if (editingAsset) {
-            await updateMutation.mutateAsync({ id: editingAsset.id, data: values });
+            // Sửa máy không sinh mã -> bỏ typeCode khỏi payload cập nhật.
+            const data = { ...values };
+            delete (data as { typeCode?: string }).typeCode;
+            await updateMutation.mutateAsync({ id: editingAsset.id, data });
             return;
         }
         await createMutation.mutateAsync(values);
@@ -811,6 +820,15 @@ const AssetList: React.FC = () => {
                                         Import Excel
                                     </Button>
                                 </>
+                            ) : null}
+                            {canNormalizeCodes ? (
+                                <Button
+                                    icon={<ThunderboltOutlined />}
+                                    onClick={() => setIsNormalizeModalOpen(true)}
+                                    className='rounded-lg border-slate-200 text-slate-600'
+                                >
+                                    Chuẩn hoá mã
+                                </Button>
                             ) : null}
                             {canWriteAssets ? (
                                 <Button
@@ -1230,6 +1248,15 @@ const AssetList: React.FC = () => {
                         onSubmit={handleFormSubmit}
                         plants={plants}
                         brands={brands}
+                    />
+                </LazyBoundary>
+            ) : null}
+
+            {isNormalizeModalOpen ? (
+                <LazyBoundary mode='overlay'>
+                    <MachineCodeNormalizeModal
+                        open={isNormalizeModalOpen}
+                        onClose={() => setIsNormalizeModalOpen(false)}
                     />
                 </LazyBoundary>
             ) : null}

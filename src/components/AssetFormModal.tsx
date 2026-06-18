@@ -1,14 +1,16 @@
 import React, { useEffect, useMemo } from 'react';
-import { App, Card, DatePicker, Form, Input, InputNumber, Modal, Select, Typography } from 'antd';
+import { App, Button, Card, DatePicker, Form, Input, InputNumber, Modal, Select, Tooltip, Typography } from 'antd';
 import {
     AppstoreOutlined,
     EnvironmentOutlined,
     FileTextOutlined,
     NumberOutlined,
+    ThunderboltOutlined,
     ToolOutlined,
 } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import { ASSET_OWNERSHIP_OPTIONS } from '../core/constants';
+import { assetService } from '../core/services/asset.service';
 import { AssetOwnershipType, AssetStatus } from '../core/types';
 import type { Asset, Brand, Plant } from '../core/types';
 
@@ -16,7 +18,8 @@ const { Text } = Typography;
 
 type AssetFormValues = {
     name: string;
-    machineCode: string;
+    machineCode?: string;
+    typeCode?: string;
     serial?: string;
     type: string;
     model: string;
@@ -35,7 +38,7 @@ interface AssetFormModalProps {
     open: boolean;
     onClose: () => void;
     initialValues?: Asset | null;
-    onSubmit: (values: Omit<Asset, 'id' | 'createdAt' | 'updatedAt'>) => Promise<void>;
+    onSubmit: (values: Omit<Asset, 'id' | 'createdAt' | 'updatedAt'> & { typeCode?: string }) => Promise<void>;
     plants: Plant[];
     brands: Brand[];
 }
@@ -65,10 +68,15 @@ const AssetFormModal: React.FC<AssetFormModalProps> = ({ open, onClose, initialV
     const [form] = Form.useForm<AssetFormValues>();
     const { message } = App.useApp();
     const [submitting, setSubmitting] = React.useState(false);
+    const [suggesting, setSuggesting] = React.useState(false);
+    const [typeCodeIsNew, setTypeCodeIsNew] = React.useState(false);
+    const [showTypeCode, setShowTypeCode] = React.useState(false);
     const isEditing = Boolean(initialValues);
 
     useEffect(() => {
         if (!open) return;
+        setTypeCodeIsNew(false);
+        setShowTypeCode(false);
 
         if (!initialValues) {
             form.resetFields();
@@ -108,6 +116,29 @@ const AssetFormModal: React.FC<AssetFormModalProps> = ({ open, onClose, initialV
         [plants]
     );
 
+    const handleSuggestCode = async () => {
+        const type = form.getFieldValue('type')?.trim();
+        const brandId = form.getFieldValue('brandId');
+        const ownershipType = form.getFieldValue('ownershipType');
+        const typeCode = form.getFieldValue('typeCode')?.trim();
+
+        if (!type || !brandId) {
+            message.warning('Nhập "Loại máy" và chọn "Nhãn hiệu" trước khi đề xuất mã');
+            return;
+        }
+
+        try {
+            setSuggesting(true);
+            const result = await assetService.suggestCode({ type, brandId, ownershipType, typeCode });
+            form.setFieldsValue({ machineCode: result.code, typeCode: result.typeCode });
+            setTypeCodeIsNew(result.typeCodeIsNew);
+            setShowTypeCode(true);
+            message.success(`Đã đề xuất mã: ${result.code}`);
+        } finally {
+            setSuggesting(false);
+        }
+    };
+
     const handleSubmit = async () => {
         try {
             const values = await form.validateFields();
@@ -130,7 +161,8 @@ const AssetFormModal: React.FC<AssetFormModalProps> = ({ open, onClose, initialV
 
             await onSubmit({
                 name: values.name.trim(),
-                machineCode: values.machineCode.trim(),
+                machineCode: values.machineCode?.trim() || '',
+                typeCode: values.typeCode?.trim() || undefined,
                 serial: values.serial?.trim(),
                 type: values.type.trim(),
                 model: values.model.trim(),
@@ -143,7 +175,7 @@ const AssetFormModal: React.FC<AssetFormModalProps> = ({ open, onClose, initialV
                 purchasePrice: values.purchasePrice,
                 specifications,
                 note: values.note?.trim(),
-            } as Omit<Asset, 'id' | 'createdAt' | 'updatedAt'>);
+            } as Omit<Asset, 'id' | 'createdAt' | 'updatedAt'> & { typeCode?: string });
 
             message.success(isEditing ? 'Đã cập nhật thông tin máy' : 'Đã thêm máy mới');
             onClose();
@@ -206,13 +238,52 @@ const AssetFormModal: React.FC<AssetFormModalProps> = ({ open, onClose, initialV
                             >
                                 <Input allowClear placeholder='Ví dụ: Máy may 1 kim điện tử Juki' />
                             </Form.Item>
-                            <Form.Item
-                                name='machineCode'
-                                label='Mã máy'
-                                rules={[{ required: true, whitespace: true, message: 'Vui lòng nhập mã máy' }]}
-                            >
-                                <Input allowClear placeholder='Ví dụ: MM-001' />
-                            </Form.Item>
+                            <div>
+                                <Form.Item
+                                    name='machineCode'
+                                    label='Mã máy'
+                                    rules={
+                                        isEditing
+                                            ? [{ required: true, whitespace: true, message: 'Vui lòng nhập mã máy' }]
+                                            : []
+                                    }
+                                    extra={isEditing ? undefined : 'Để trống để hệ thống tự sinh, hoặc bấm Đề xuất mã'}
+                                    className='!mb-2'
+                                >
+                                    <Input
+                                        allowClear
+                                        placeholder='VD: 1K-HIKARI-HD-001 (hoặc để trống)'
+                                        addonAfter={
+                                            <Tooltip title='Đề xuất mã theo Loại - Nhãn - Nguồn - STT'>
+                                                <Button
+                                                    type='text'
+                                                    size='small'
+                                                    icon={<ThunderboltOutlined />}
+                                                    loading={suggesting}
+                                                    onClick={handleSuggestCode}
+                                                    className='!px-1'
+                                                >
+                                                    Đề xuất
+                                                </Button>
+                                            </Tooltip>
+                                        }
+                                    />
+                                </Form.Item>
+                                {showTypeCode ? (
+                                    <Form.Item
+                                        name='typeCode'
+                                        label='Mã viết tắt loại máy'
+                                        extra={
+                                            typeCodeIsNew
+                                                ? 'Loại máy này chưa có mã — sửa nếu cần rồi bấm "Đề xuất" lại; mã sẽ được ghi nhớ.'
+                                                : 'Đang dùng mã đã lưu cho loại này. Sửa rồi bấm "Đề xuất" lại để cập nhật mã.'
+                                        }
+                                        className='!mb-0'
+                                    >
+                                        <Input allowClear placeholder='VD: VS4C' />
+                                    </Form.Item>
+                                ) : null}
+                            </div>
                             <Form.Item name='serial' label='Số serial'>
                                 <Input allowClear placeholder='Ví dụ: DDL-8000A-2024' />
                             </Form.Item>

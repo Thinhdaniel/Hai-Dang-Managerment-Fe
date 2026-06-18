@@ -793,6 +793,38 @@ export interface AssetLocationsResponse {
     withoutGps: number;
 }
 
+// ===== MÃ MÁY THÔNG MINH =====
+export interface AssetCodeSuggestion {
+    code: string;
+    typeCode: string;
+    brandCode: string;
+    originCode: string;
+    seq: number;
+    prefix: string;
+    typeCodeIsNew: boolean;
+}
+
+export interface NormalizeCodeRow {
+    id: string;
+    name?: string;
+    plantName?: string;
+    oldCode?: string;
+    newCode: string;
+    changed: boolean;
+}
+
+export interface NormalizeCodePreview {
+    summary: { total: number; willChange: number; unchanged: number };
+    rows: NormalizeCodeRow[];
+}
+
+export interface NormalizeCodeResult {
+    total: number;
+    willChange: number;
+    updated: number;
+    failed: number;
+}
+
 export type DataQualitySeverity = 'critical' | 'warning' | 'info';
 export type DataQualityCategoryKey = 'assets' | 'materials' | 'qr' | 'plants' | 'users' | 'maintenance';
 
