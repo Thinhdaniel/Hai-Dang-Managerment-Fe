@@ -3,6 +3,7 @@ import { Button, Space, Tag } from 'antd';
 import {
     AppstoreOutlined,
     CheckCircleOutlined,
+    ClockCircleOutlined,
     ClusterOutlined,
     DatabaseOutlined,
     DollarOutlined,
@@ -11,15 +12,27 @@ import {
     SendOutlined,
     SwapOutlined,
     ToolOutlined,
+    WarningOutlined,
 } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import { useNavigate } from 'react-router-dom';
+import DashboardChartsRow from '../components/dashboard/DashboardChartsRow';
+import DashboardCostTrendCard from '../components/dashboard/DashboardCostTrendCard';
 import DashboardFacilityDistributionCard from '../components/dashboard/DashboardFacilityDistributionCard';
 import DashboardOperationsCard from '../components/dashboard/DashboardOperationsCard';
+import DashboardMislocatedCard from '../components/dashboard/DashboardMislocatedCard';
+import DashboardOverdueCard from '../components/dashboard/DashboardOverdueCard';
 import DashboardRecentActivityCard from '../components/dashboard/DashboardRecentActivityCard';
+import DashboardTopBrokenCard from '../components/dashboard/DashboardTopBrokenCard';
 import PageHeader from '../components/shared/PageHeader';
 import StatsCard from '../components/shared/StatsCard';
-import { useDashboardOverview } from '../core/hooks/useDashboardOverview';
+import { useAuth } from '../core/contexts/AuthContext';
+import { isAdmin, isDirector } from '../core/lib/permissions';
+import {
+    useDashboardCharts,
+    useDashboardInsights,
+    useDashboardOverview,
+} from '../core/hooks/useDashboardOverview';
 import type { DashboardOverviewResponse } from '../core/types';
 
 const emptyOverview: DashboardOverviewResponse = {
@@ -47,8 +60,20 @@ const formatMoney = (value = 0) =>
 
 const Dashboard: React.FC = () => {
     const navigate = useNavigate();
+    const { user } = useAuth();
+    // Chi phí chỉ dành cho ADMIN + Giám đốc (kỹ thuật & quản lý không thấy trên dashboard).
+    const canViewCost = isAdmin(user?.role) || isDirector(user?.role);
     const { data = emptyOverview, isLoading, isFetching, refetch, dataUpdatedAt } = useDashboardOverview();
+    const { data: chartData, isLoading: chartsLoading, isFetching: chartsFetching, refetch: refetchCharts } =
+        useDashboardCharts();
+    const {
+        data: insights,
+        isLoading: insightsLoading,
+        isFetching: insightsFetching,
+        refetch: refetchInsights,
+    } = useDashboardInsights();
     const { summary, maintenanceCost = emptyOverview.maintenanceCost, facilityStats, recentActivities } = data;
+    const resolution = insights?.resolution;
     const attentionCount =
         summary.unassignedMachines +
         summary.maintenanceMachines +
@@ -78,15 +103,46 @@ const Dashboard: React.FC = () => {
                 accent: '#d97706',
                 caption: `${maintenanceCost?.externalRepairInProgress ?? 0} máy sửa ngoài đang xử lý`,
             },
+            ...(canViewCost
+                ? [
+                      {
+                          title: 'Chi phí sửa ngoài',
+                          value: formatMoney(maintenanceCost?.externalRepairCostThisMonth ?? 0),
+                          icon: <DollarOutlined />,
+                          accent: '#16a34a',
+                          caption: `${maintenanceCost?.externalRepairPendingApproval ?? 0} phiếu chờ duyệt`,
+                      },
+                  ]
+                : []),
+        ],
+        [summary, maintenanceCost, canViewCost]
+    );
+
+    const performanceCards = useMemo(
+        () => [
             {
-                title: 'Chi phí sửa ngoài',
-                value: formatMoney(maintenanceCost?.externalRepairCostThisMonth ?? 0),
-                icon: <DollarOutlined />,
+                title: 'Thời gian xử lý TB (tháng)',
+                value: resolution ? `${resolution.avgDaysThisMonth} ngày` : '--',
+                icon: <ClockCircleOutlined />,
+                accent: '#2563eb',
+                caption: `Toàn thời gian: ${resolution?.avgDaysAll ?? 0} ngày`,
+            },
+            {
+                title: 'Phiếu xử lý xong (tháng)',
+                value: resolution?.completedThisMonth ?? 0,
+                icon: <CheckCircleOutlined />,
                 accent: '#16a34a',
-                caption: `${maintenanceCost?.externalRepairPendingApproval ?? 0} phiếu chờ duyệt`,
+                caption: `Tổng đã hoàn thành: ${resolution?.completedAll ?? 0}`,
+            },
+            {
+                title: 'Phiếu bảo trì tồn đọng',
+                value: insights?.overdue.count ?? 0,
+                icon: <WarningOutlined />,
+                accent: (insights?.overdue.count ?? 0) > 0 ? '#dc2626' : '#16a34a',
+                caption: `Quá ${insights?.overdue.thresholdDays ?? 7} ngày chưa hoàn thành`,
             },
         ],
-        [summary, maintenanceCost]
+        [resolution, insights?.overdue.count, insights?.overdue.thresholdDays]
     );
 
     const quickActions = useMemo(
@@ -161,8 +217,12 @@ const Dashboard: React.FC = () => {
                     <Space wrap size={12}>
                         <Button
                             icon={<ReloadOutlined />}
-                            loading={isFetching}
-                            onClick={() => refetch()}
+                            loading={isFetching || chartsFetching || insightsFetching}
+                            onClick={() => {
+                                refetch();
+                                refetchCharts();
+                                refetchInsights();
+                            }}
                             className='rounded-lg border-slate-300 font-medium text-slate-700 hover:border-slate-400 hover:text-slate-900'
                         >
                             Làm mới
@@ -237,9 +297,38 @@ const Dashboard: React.FC = () => {
                 ))}
             </div>
 
+            <div className='grid grid-cols-1 gap-4 md:grid-cols-3'>
+                {performanceCards.map((card) => (
+                    <StatsCard
+                        key={card.title}
+                        title={card.title}
+                        value={card.value}
+                        icon={card.icon}
+                        accent={card.accent}
+                        caption={card.caption}
+                    />
+                ))}
+            </div>
+
+            <DashboardChartsRow data={chartData} loading={chartsLoading} />
+
+            {canViewCost ? (
+                <div className='grid grid-cols-1 gap-6 xl:grid-cols-[minmax(0,1.5fr)_minmax(320px,0.85fr)]'>
+                    <DashboardCostTrendCard data={insights?.costTrend} loading={insightsLoading} />
+                    <DashboardTopBrokenCard data={insights?.topBrokenAssets} loading={insightsLoading} />
+                </div>
+            ) : (
+                <DashboardTopBrokenCard data={insights?.topBrokenAssets} loading={insightsLoading} />
+            )}
+
             <div className='grid grid-cols-1 gap-6 xl:grid-cols-[minmax(0,1.5fr)_minmax(320px,0.85fr)]'>
                 <DashboardFacilityDistributionCard facilityStats={facilityStats} loading={isLoading} />
                 <DashboardOperationsCard summary={summary} loading={isLoading} />
+            </div>
+
+            <div className='grid grid-cols-1 gap-6 xl:grid-cols-2'>
+                <DashboardOverdueCard data={insights?.overdue} loading={insightsLoading} />
+                <DashboardMislocatedCard data={insights?.mislocatedAssets} loading={insightsLoading} />
             </div>
 
             <DashboardRecentActivityCard activities={recentActivities} loading={isLoading} />

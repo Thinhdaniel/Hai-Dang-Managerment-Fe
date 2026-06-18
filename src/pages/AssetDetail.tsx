@@ -1,5 +1,6 @@
 import React, { lazy, useMemo, useState } from 'react';
 import {
+    Alert,
     App,
     Button,
     Card,
@@ -405,6 +406,39 @@ const AssetDetail: React.FC = () => {
                     }
                     icon={<EnvironmentOutlined />}
                 />
+                {asset.locationMismatch ? (
+                    <Alert
+                        type='warning'
+                        showIcon
+                        className='rounded-2xl'
+                        message='Máy đang lệch vị trí so với hệ thống'
+                        description={
+                            <div className='space-y-1 text-sm'>
+                                <div>
+                                    GPS lần quét gần nhất cho thấy máy đang ở{' '}
+                                    <b>{asset.locationMismatch.actualPlantName || 'cơ sở khác'}</b>, nhưng hệ thống ghi{' '}
+                                    <b>{asset.locationMismatch.officialPlantName || asset.plant?.name || '—'}</b>.
+                                </div>
+                                {typeof asset.locationMismatch.distanceM === 'number' ? (
+                                    <div className='text-xs text-slate-500'>
+                                        Cách cơ sở thực tế ~{asset.locationMismatch.distanceM}m · {formatRelativeVi(asset.locationMismatch.scannedAt)}
+                                    </div>
+                                ) : null}
+                                {canManage ? (
+                                    <Button
+                                        size='small'
+                                        type='primary'
+                                        icon={<SwapOutlined />}
+                                        className='mt-1'
+                                        onClick={() => setIsTransferOpen(true)}
+                                    >
+                                        Tạo lệnh điều chuyển
+                                    </Button>
+                                ) : null}
+                            </div>
+                        }
+                    />
+                ) : null}
                 <MetricCard
                     title='Vị trí gần nhất (theo lần quét QR)'
                     value={

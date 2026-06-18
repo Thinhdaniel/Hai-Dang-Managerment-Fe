@@ -12,15 +12,13 @@ export const socketService = {
      * Must be called after user is authenticated
      */
     connect: (accessToken: string): Socket => {
-        if (socket?.connected) {
-            return socket;
-        }
-
-        // Don socket cu (vd socket tao bang token het han dang loay hoay reconnect) truoc khi tao moi
+        // Tai su dung DUY NHAT mot socket dung chung cho ca app (Notification + Chat...).
+        // Da co socket (dang ket noi HOAC dang connecting) -> tra ve luon, KHONG huy tao lai.
+        // Truoc day huy+tao lai khi chua connected gay race: provider mount cung luc
+        // se vo tinh giet socket cua provider kia -> listener (vd presence) treo tren socket chet.
+        // auth la HAM nen moi lan (re)connect socket.io tu lay access token moi nhat, khong can tao lai.
         if (socket) {
-            socket.removeAllListeners();
-            socket.disconnect();
-            socket = null;
+            return socket;
         }
 
         socket = io(API_BASE_URL, {

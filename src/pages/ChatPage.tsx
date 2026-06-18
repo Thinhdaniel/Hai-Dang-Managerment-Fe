@@ -8,7 +8,6 @@ import {
     Dropdown,
     Empty,
     Grid,
-    Image,
     Input,
     Popover,
     Segmented,
@@ -30,6 +29,7 @@ import {
     CloseOutlined,
     CopyOutlined,
     DeleteOutlined,
+    EditOutlined,
     ExportOutlined,
     InboxOutlined,
     MessageOutlined,
@@ -76,6 +76,11 @@ import {
     mentionHighlightNames,
     useMentionInput,
 } from '../components/chat/mentions';
+import ChatAudioPlayer from '../components/chat/ChatAudioPlayer';
+import ImageAnnotationModal from '../components/chat/ImageAnnotationModal';
+import ChatMessageAttachments from '../components/chat/ChatMessageAttachments';
+import VoiceRecorderButton, { type ChatVoiceNoteDraft } from '../components/chat/VoiceRecorderButton';
+import { compressChatImage } from '../core/lib/chatMedia';
 import type { ChatConversation, ChatMessage, ChatUserSummary, ChatWorkflowContextType, UserRole } from '../core/types';
 
 const { Text, Title } = Typography;
@@ -83,6 +88,7 @@ const { TextArea } = Input;
 const { useBreakpoint } = Grid;
 const MAX_CHAT_IMAGES = 4;
 const MAX_CHAT_IMAGE_SIZE = 8 * 1024 * 1024;
+const MAX_CHAT_IMAGE_SOURCE_SIZE = 16 * 1024 * 1024;
 const MESSAGE_PAGE_SIZE = 80;
 
 const roleLabel: Record<UserRole, string> = {
@@ -203,6 +209,8 @@ const ChatPage: React.FC = () => {
     const [messageLoading, setMessageLoading] = useState(false);
     const [composer, setComposer] = useState('');
     const [selectedImages, setSelectedImages] = useState<SelectedImage[]>([]);
+    const [selectedVoiceNote, setSelectedVoiceNote] = useState<ChatVoiceNoteDraft | null>(null);
+    const [annotatingImage, setAnnotatingImage] = useState<SelectedImage | null>(null);
     const [conversationSearch, setConversationSearch] = useState('');
     const [listFilter, setListFilter] = useState<ConversationFilter>('all');
     const [sending, setSending] = useState(false);
@@ -265,6 +273,19 @@ const ChatPage: React.FC = () => {
             return [];
         });
     }, []);
+
+    const clearSelectedVoiceNote = useCallback(() => {
+        setSelectedVoiceNote((prev) => {
+            if (prev) URL.revokeObjectURL(prev.previewUrl);
+            return null;
+        });
+    }, []);
+
+    const clearSelectedMedia = useCallback(() => {
+        clearSelectedImages();
+        clearSelectedVoiceNote();
+        setAnnotatingImage(null);
+    }, [clearSelectedImages, clearSelectedVoiceNote]);
 
     const replaceCachedMessages = useCallback((conversationId: string, nextMessages: ChatMessage[]) => {
         setMessageCache((prev) => {
@@ -505,7 +526,7 @@ const ChatPage: React.FC = () => {
     useEffect(() => {
         if (!selectedId) {
             setMessages([]);
-            clearSelectedImages();
+            clearSelectedMedia();
             return;
         }
 
@@ -513,9 +534,9 @@ const ChatPage: React.FC = () => {
             window.clearTimeout(readDelayTimerRef.current);
         }
 
-        clearSelectedImages();
+        clearSelectedMedia();
         void loadMessages(selectedId);
-    }, [clearSelectedImages, loadMessages, selectedId]);
+    }, [clearSelectedMedia, loadMessages, selectedId]);
 
     // Đổi hội thoại thì luôn quay về đáy
     useEffect(() => {
@@ -709,7 +730,8 @@ const ChatPage: React.FC = () => {
 
     const handleSend = async () => {
         const body = composer.trim();
-        if (!selectedId || (!body && !selectedImages.length) || sending) return;
+        const hasMedia = Boolean(selectedImages.length || selectedVoiceNote);
+        if (!selectedId || (!body && !hasMedia) || sending) return;
 
         const replyToId = replyTarget?.id;
         const mentions = selectedConversation
@@ -723,17 +745,21 @@ const ChatPage: React.FC = () => {
             : [];
         setSending(true);
         try {
-            const sent = selectedImages.length
+            const sent = hasMedia
                 ? await chatService.sendAttachmentMessage(
                       selectedId,
                       body,
-                      selectedImages.map((item) => item.file),
+                      {
+                          images: selectedImages.map((item) => item.file),
+                          audio: selectedVoiceNote?.file,
+                          audioDurationMs: selectedVoiceNote?.durationMs,
+                      },
                       replyToId,
                       mentions
                   )
                 : await chatService.sendMessage(selectedId, { body, replyTo: replyToId, mentions });
             setComposer('');
-            clearSelectedImages();
+            clearSelectedMedia();
             setReplyTarget(null);
             appendCachedMessage(selectedId, sent);
         } catch {
@@ -940,7 +966,7 @@ const ChatPage: React.FC = () => {
         });
     }, [conversationSearch, conversations, listFilter, mentionConversationIds, user?.id]);
 
-    const handleImageSelect = (files: FileList | null) => {
+    const handleImageSelect = async (files: FileList | null) => {
         if (!files?.length) return;
 
         const slotsLeft = MAX_CHAT_IMAGES - selectedImages.length;
@@ -956,16 +982,26 @@ const ChatPage: React.FC = () => {
                 continue;
             }
 
-            if (file.size > MAX_CHAT_IMAGE_SIZE) {
-                message.warning('Ảnh vượt quá 8MB');
+            if (file.size > MAX_CHAT_IMAGE_SOURCE_SIZE) {
+                message.warning('Ảnh gốc vượt quá 16MB');
                 continue;
             }
 
-            accepted.push({
-                uid: `${Date.now()}-${Math.random()}`,
-                file,
-                previewUrl: URL.createObjectURL(file),
-            });
+            try {
+                const optimizedFile = await compressChatImage(file);
+                if (optimizedFile.size > MAX_CHAT_IMAGE_SIZE) {
+                    message.warning('Ảnh sau khi nén vẫn vượt quá 8MB');
+                    continue;
+                }
+
+                accepted.push({
+                    uid: `${Date.now()}-${Math.random()}`,
+                    file: optimizedFile,
+                    previewUrl: URL.createObjectURL(optimizedFile),
+                });
+            } catch {
+                message.warning('Không xử lý được ảnh vừa chọn');
+            }
         }
 
         if (accepted.length) {
@@ -973,7 +1009,51 @@ const ChatPage: React.FC = () => {
         }
     };
 
+    const handleVoiceRecorded = useCallback(
+        (draft: ChatVoiceNoteDraft) => {
+            setSelectedVoiceNote((prev) => {
+                if (prev) URL.revokeObjectURL(prev.previewUrl);
+                return draft;
+            });
+        },
+        []
+    );
+
+    const removeSelectedVoiceNote = () => {
+        clearSelectedVoiceNote();
+    };
+
+    const handleApplyAnnotatedImage = useCallback(
+        (nextFile: File) => {
+            if (!annotatingImage) return;
+
+            if (nextFile.size > MAX_CHAT_IMAGE_SIZE) {
+                message.warning('Ảnh sau khi đánh dấu vượt quá 8MB');
+                return;
+            }
+
+            setSelectedImages((prev) =>
+                prev.map((item) => {
+                    if (item.uid !== annotatingImage.uid) return item;
+
+                    URL.revokeObjectURL(item.previewUrl);
+                    return {
+                        ...item,
+                        file: nextFile,
+                        previewUrl: URL.createObjectURL(nextFile),
+                    };
+                })
+            );
+            setAnnotatingImage(null);
+        },
+        [annotatingImage, message]
+    );
+
     const removeSelectedImage = (uid: string) => {
+        if (annotatingImage?.uid === uid) {
+            setAnnotatingImage(null);
+        }
+
         setSelectedImages((prev) => {
             const item = prev.find((image) => image.uid === uid);
             if (item) URL.revokeObjectURL(item.previewUrl);
@@ -1562,6 +1642,8 @@ const ChatPage: React.FC = () => {
                                                                         ? 'Tin nhắn đã được thu hồi'
                                                                         : item.replyTo.hasImage && !item.replyTo.body
                                                                           ? '🖼️ Hình ảnh'
+                                                                          : item.replyTo.hasAudio && !item.replyTo.body
+                                                                            ? 'Ghi âm'
                                                                           : item.replyTo.body}
                                                                 </span>
                                                             </button>
@@ -1587,31 +1669,10 @@ const ChatPage: React.FC = () => {
                                                                 </span>
                                                             </div>
                                                         ) : null}
-                                                        {item.attachments?.length ? (
-                                                            <Image.PreviewGroup>
-                                                                <div className='chat-page__attachments'>
-                                                                    {item.attachments
-                                                                        .filter(
-                                                                            (attachment) => attachment.type === 'image'
-                                                                        )
-                                                                        .map((attachment) => (
-                                                                            <div
-                                                                                key={attachment.url}
-                                                                                className='chat-page__attachment'
-                                                                            >
-                                                                                <Image
-                                                                                    src={attachment.url}
-                                                                                    alt={
-                                                                                        attachment.name ||
-                                                                                        'Ảnh trao đổi'
-                                                                                    }
-                                                                                    className='chat-page__attachment-image'
-                                                                                />
-                                                                            </div>
-                                                                        ))}
-                                                                </div>
-                                                            </Image.PreviewGroup>
-                                                        ) : null}
+                                                        <ChatMessageAttachments
+                                                            attachments={item.attachments}
+                                                            variant='chat-page'
+                                                        />
                                                         {reactions.length ? (
                                                             <div className='chat-page__reactions'>
                                                                 {reactions.map((reaction) => (
@@ -1732,7 +1793,7 @@ const ChatPage: React.FC = () => {
                                     multiple
                                     className='hidden'
                                     onChange={(event) => {
-                                        handleImageSelect(event.target.files);
+                                        void handleImageSelect(event.target.files);
                                         event.target.value = '';
                                     }}
                                 />
@@ -1762,6 +1823,11 @@ const ChatPage: React.FC = () => {
                                 >
                                     <Button icon={<SmileOutlined />} className='chat-page__attach-button' />
                                 </Popover>
+                                <VoiceRecorderButton
+                                    disabled={sending || Boolean(selectedVoiceNote)}
+                                    onRecorded={handleVoiceRecorded}
+                                    className='chat-page__voice-button'
+                                />
                                 <div className='relative min-w-0 flex-1'>
                                     {mention.isOpen && mentionCandidates.length ? (
                                         <div className='absolute bottom-full left-0 z-20 mb-2 max-h-64 w-72 max-w-full overflow-y-auto rounded-2xl border border-slate-200 bg-white py-1 shadow-xl'>
@@ -1800,11 +1866,36 @@ const ChatPage: React.FC = () => {
                                             {selectedImages.map((item) => (
                                                 <div key={item.uid} className='chat-page__selected-image'>
                                                     <img src={item.previewUrl} alt='Ảnh đã chọn' />
-                                                    <button type='button' onClick={() => removeSelectedImage(item.uid)}>
+                                                    <button
+                                                        type='button'
+                                                        className='chat-selected-image__edit'
+                                                        onClick={() => setAnnotatingImage(item)}
+                                                        aria-label='Đánh dấu ảnh'
+                                                    >
+                                                        <EditOutlined />
+                                                    </button>
+                                                    <button
+                                                        type='button'
+                                                        className='chat-selected-image__remove'
+                                                        onClick={() => removeSelectedImage(item.uid)}
+                                                        aria-label='Xóa ảnh'
+                                                    >
                                                         <DeleteOutlined />
                                                     </button>
                                                 </div>
                                             ))}
+                                        </div>
+                                    ) : null}
+                                    {selectedVoiceNote ? (
+                                        <div className='chat-page__voice-draft'>
+                                            <ChatAudioPlayer
+                                                url={selectedVoiceNote.previewUrl}
+                                                durationMs={selectedVoiceNote.durationMs}
+                                                name='Nghe lại trước khi gửi'
+                                            />
+                                            <button type='button' onClick={removeSelectedVoiceNote}>
+                                                <DeleteOutlined />
+                                            </button>
                                         </div>
                                     ) : null}
                                     <TextArea
@@ -1846,7 +1937,7 @@ const ChatPage: React.FC = () => {
                                     type='primary'
                                     icon={<SendOutlined />}
                                     loading={sending}
-                                    disabled={!composer.trim() && !selectedImages.length}
+                                    disabled={!composer.trim() && !selectedImages.length && !selectedVoiceNote}
                                     onClick={() => void handleSend()}
                                     className='chat-page__send-button'
                                 />
@@ -1952,6 +2043,13 @@ const ChatPage: React.FC = () => {
                     </Button>
                 </Space>
             </Drawer>
+            <ImageAnnotationModal
+                open={Boolean(annotatingImage)}
+                file={annotatingImage?.file}
+                previewUrl={annotatingImage?.previewUrl}
+                onApply={handleApplyAnnotatedImage}
+                onClose={() => setAnnotatingImage(null)}
+            />
         </div>
     );
 };

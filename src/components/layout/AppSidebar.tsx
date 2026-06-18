@@ -11,6 +11,7 @@ import {
     DashboardOutlined,
     DatabaseOutlined,
     DeploymentUnitOutlined,
+    EnvironmentOutlined,
     FileAddOutlined,
     FormOutlined,
     InboxOutlined,
@@ -31,7 +32,7 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../core/contexts/AuthContext';
 import { useChatContext } from '../../core/contexts/ChatContext';
 import { useNotificationContext } from '../../core/contexts/NotificationContext';
-import { can, type Capability } from '../../core/lib/permissions';
+import { can, isAdmin, isDirector, type Capability } from '../../core/lib/permissions';
 import { isProcurementPlant } from '../../core/constants/navAccess';
 
 const { Sider } = Layout;
@@ -45,6 +46,7 @@ type NavigationItem = {
     matchMode?: 'exact' | 'prefix';
     capability?: Capability;
     procurementOnly?: boolean;
+    directorUp?: boolean;
 };
 
 type NavigationSection = {
@@ -185,6 +187,14 @@ const navigationSections: NavigationSection[] = [
                 capability: 'stocktake',
             },
             {
+                path: '/assets/map',
+                label: 'Bản đồ máy',
+                description: 'Vị trí GPS lần quét cuối',
+                icon: <EnvironmentOutlined />,
+                matchMode: 'exact',
+                directorUp: true,
+            },
+            {
                 path: '/qr-labels',
                 label: 'Tem QR',
                 description: 'Tạo, in và kích hoạt tem',
@@ -238,6 +248,14 @@ const navigationSections: NavigationSection[] = [
                 description: 'Tài khoản và phân quyền',
                 icon: <TeamOutlined />,
                 capability: 'user.view',
+            },
+            {
+                path: '/admin/data-quality',
+                label: 'Chất lượng dữ liệu',
+                description: 'Audit dữ liệu nền',
+                icon: <AuditOutlined />,
+                matchMode: 'exact',
+                capability: 'dataQuality.view',
             },
             {
                 path: '/storage',
@@ -367,6 +385,9 @@ const AppSidebar: React.FC<AppSidebarProps> = ({
             items: section.items.filter((item) => {
                 if (item.procurementOnly) {
                     return isProcurementManager;
+                }
+                if (item.directorUp) {
+                    return Boolean(role) && (isAdmin(role!) || isDirector(role!));
                 }
                 if (item.capability) {
                     return can(role, item.capability);

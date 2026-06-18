@@ -34,7 +34,8 @@ export type Capability =
     | 'plant.manage'
     | 'user.view'
     | 'user.manage'
-    | 'storage.view';
+    | 'storage.view'
+    | 'dataQuality.view';
 
 const ALL_VIEW: Capability[] = ['asset.view', 'transfer.view', 'borrowing.view', 'maintenance.view'];
 

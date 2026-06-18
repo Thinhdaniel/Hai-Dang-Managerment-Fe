@@ -127,6 +127,13 @@ export const PAGE_META: PageMeta[] = [
         searchPlaceholder: 'Tìm theo tên, email, số điện thoại...',
     },
     {
+        path: '/admin/data-quality',
+        title: 'Chất Lượng Dữ Liệu',
+        subtitle: 'Kiểm tra dữ liệu thiếu, trùng và sai liên kết trước khi rollout vận hành thực tế.',
+        breadcrumbs: ['Dashboard', 'Thiết lập', 'Chất lượng dữ liệu'],
+        searchPlaceholder: 'Tìm theo mã máy, mã vật tư, QR...',
+    },
+    {
         path: '/materials',
         title: 'Danh Mục Vật Tư',
         subtitle: 'Quản lý danh mục vật tư dùng chung cho mua sắm, tồn kho và cấp phát trong hệ thống.',

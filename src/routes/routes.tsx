@@ -12,6 +12,7 @@ const GlobalQrScannerPage = lazy(() => import('../pages/GlobalQrScannerPage'));
 const AssetList = lazy(() => import('../pages/AssetList'));
 const AssetDetail = lazy(() => import('../pages/AssetDetail'));
 const StocktakePage = lazy(() => import('../pages/StocktakePage'));
+const MapPage = lazy(() => import('../pages/MapPage'));
 const BrandList = lazy(() => import('../pages/BrandList'));
 const MaintenanceList = lazy(() => import('../pages/MaintenanceList'));
 const TransferList = lazy(() => import('../pages/TransferList'));
@@ -32,6 +33,7 @@ const PurchaseOrderPage = lazy(() => import('../pages/PurchaseOrderPage'));
 const DistributionPage = lazy(() => import('../pages/DistributionPage'));
 const MaterialReportPage = lazy(() => import('../pages/MaterialReportPage'));
 const FacilityCostReportPage = lazy(() => import('../pages/FacilityCostReportPage'));
+const DataQualityDashboard = lazy(() => import('../pages/DataQualityDashboard'));
 const LoginPage = lazy(() => import('../pages/LoginPage'));
 const ForgotPasswordPage = lazy(() => import('../pages/ForgotPasswordPage'));
 const ResetPasswordPage = lazy(() => import('../pages/ResetPasswordPage'));
@@ -89,6 +91,7 @@ export const router = createBrowserRouter([
             { path: 'scan', element: withSuspense(<GlobalQrScannerPage />) },
             { path: 'assets', element: withSuspense(<AssetList />) },
             { path: 'assets/stocktake', element: withSuspense(<StocktakePage />) },
+            { path: 'assets/map', element: guarded('/assets/map', <MapPage />) },
             { path: 'assets/:id', element: withSuspense(<AssetDetail />) },
             { path: 'qr-labels', element: guarded('/qr-labels', <QrLabelListPage />) },
             {
@@ -132,6 +135,7 @@ export const router = createBrowserRouter([
             { path: 'materials/distributions', element: guarded('/materials/distributions', <DistributionPage />) },
             { path: 'materials/reports', element: guarded('/materials/reports', <MaterialReportPage />) },
             { path: 'reports/facility-costs', element: guarded('/reports/facility-costs', <FacilityCostReportPage />) },
+            { path: 'admin/data-quality', element: guarded('/admin/data-quality', <DataQualityDashboard />) },
         ],
     },
     {

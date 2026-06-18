@@ -7,7 +7,6 @@ import {
     Dropdown,
     Empty,
     Grid,
-    Image,
     Input,
     Popover,
     Spin,
@@ -22,6 +21,7 @@ import {
     CloseOutlined,
     CopyOutlined,
     DeleteOutlined,
+    EditOutlined,
     MessageOutlined,
     RollbackOutlined,
     SendOutlined,
@@ -56,6 +56,11 @@ import {
     mentionHighlightNames,
     useMentionInput,
 } from './mentions';
+import ChatAudioPlayer from './ChatAudioPlayer';
+import ImageAnnotationModal from './ImageAnnotationModal';
+import ChatMessageAttachments from './ChatMessageAttachments';
+import VoiceRecorderButton, { type ChatVoiceNoteDraft } from './VoiceRecorderButton';
+import { compressChatImage } from '../../core/lib/chatMedia';
 import type { ChatConversation, ChatMessage, ChatWorkflowContextType } from '../../core/types';
 
 const { Text, Title } = Typography;
@@ -63,6 +68,7 @@ const { TextArea } = Input;
 const { useBreakpoint } = Grid;
 const MAX_CHAT_IMAGES = 4;
 const MAX_CHAT_IMAGE_SIZE = 8 * 1024 * 1024;
+const MAX_CHAT_IMAGE_SOURCE_SIZE = 16 * 1024 * 1024;
 
 type ContextChatDrawerProps = {
     open: boolean;
@@ -119,6 +125,8 @@ const ContextChatDrawer: React.FC<ContextChatDrawerProps> = ({
     const [loading, setLoading] = useState(false);
     const [composer, setComposer] = useState('');
     const [selectedImages, setSelectedImages] = useState<SelectedImage[]>([]);
+    const [selectedVoiceNote, setSelectedVoiceNote] = useState<ChatVoiceNoteDraft | null>(null);
+    const [annotatingImage, setAnnotatingImage] = useState<SelectedImage | null>(null);
     const [sending, setSending] = useState(false);
     const [replyTarget, setReplyTarget] = useState<ChatMessage | null>(null);
     const [typingUsers, setTypingUsers] = useState<Record<string, string>>({});
@@ -158,6 +166,19 @@ const ContextChatDrawer: React.FC<ContextChatDrawerProps> = ({
             return [];
         });
     }, []);
+
+    const clearSelectedVoiceNote = useCallback(() => {
+        setSelectedVoiceNote((prev) => {
+            if (prev) URL.revokeObjectURL(prev.previewUrl);
+            return null;
+        });
+    }, []);
+
+    const clearSelectedMedia = useCallback(() => {
+        clearSelectedImages();
+        clearSelectedVoiceNote();
+        setAnnotatingImage(null);
+    }, [clearSelectedImages, clearSelectedVoiceNote]);
 
     const markConversationRead = useCallback(
         async (conversationId: string) => {
@@ -213,8 +234,8 @@ const ContextChatDrawer: React.FC<ContextChatDrawerProps> = ({
         setReplyTarget(null);
         setTypingUsers({});
         setActionMenuId(null);
-        clearSelectedImages();
-    }, [clearSelectedImages, loadConversation, open]);
+        clearSelectedMedia();
+    }, [clearSelectedMedia, loadConversation, open]);
 
     useEffect(() => {
         endRef.current?.scrollIntoView({ block: 'end' });
@@ -372,7 +393,8 @@ const ContextChatDrawer: React.FC<ContextChatDrawerProps> = ({
 
     const handleSend = async () => {
         const body = composer.trim();
-        if (!conversation || (!body && !selectedImages.length) || sending) return;
+        const hasMedia = Boolean(selectedImages.length || selectedVoiceNote);
+        if (!conversation || (!body && !hasMedia) || sending) return;
 
         const replyToId = replyTarget?.id;
         const mentions = extractMentionTokens(
@@ -381,17 +403,21 @@ const ContextChatDrawer: React.FC<ContextChatDrawerProps> = ({
         );
         setSending(true);
         try {
-            const sent = selectedImages.length
+            const sent = hasMedia
                 ? await chatService.sendAttachmentMessage(
                       conversation.id,
                       body,
-                      selectedImages.map((item) => item.file),
+                      {
+                          images: selectedImages.map((item) => item.file),
+                          audio: selectedVoiceNote?.file,
+                          audioDurationMs: selectedVoiceNote?.durationMs,
+                      },
                       replyToId,
                       mentions
                   )
                 : await chatService.sendMessage(conversation.id, { body, replyTo: replyToId, mentions });
             setComposer('');
-            clearSelectedImages();
+            clearSelectedMedia();
             setReplyTarget(null);
             setMessages((prev) => (prev.some((item) => item.id === sent.id) ? prev : [...prev, sent]));
         } catch {
@@ -401,7 +427,7 @@ const ContextChatDrawer: React.FC<ContextChatDrawerProps> = ({
         }
     };
 
-    const handleImageSelect = (files: FileList | null) => {
+    const handleImageSelect = async (files: FileList | null) => {
         if (!files?.length) return;
 
         const nextFiles = Array.from(files);
@@ -418,16 +444,26 @@ const ContextChatDrawer: React.FC<ContextChatDrawerProps> = ({
                 continue;
             }
 
-            if (file.size > MAX_CHAT_IMAGE_SIZE) {
-                message.warning('Ảnh vượt quá 8MB');
+            if (file.size > MAX_CHAT_IMAGE_SOURCE_SIZE) {
+                message.warning('Ảnh gốc vượt quá 16MB');
                 continue;
             }
 
-            accepted.push({
-                uid: `${Date.now()}-${Math.random()}`,
-                file,
-                previewUrl: URL.createObjectURL(file),
-            });
+            try {
+                const optimizedFile = await compressChatImage(file);
+                if (optimizedFile.size > MAX_CHAT_IMAGE_SIZE) {
+                    message.warning('Ảnh sau khi nén vẫn vượt quá 8MB');
+                    continue;
+                }
+
+                accepted.push({
+                    uid: `${Date.now()}-${Math.random()}`,
+                    file: optimizedFile,
+                    previewUrl: URL.createObjectURL(optimizedFile),
+                });
+            } catch {
+                message.warning('Không xử lý được ảnh vừa chọn');
+            }
         }
 
         if (accepted.length) {
@@ -435,7 +471,48 @@ const ContextChatDrawer: React.FC<ContextChatDrawerProps> = ({
         }
     };
 
+    const handleVoiceRecorded = useCallback((draft: ChatVoiceNoteDraft) => {
+        setSelectedVoiceNote((prev) => {
+            if (prev) URL.revokeObjectURL(prev.previewUrl);
+            return draft;
+        });
+    }, []);
+
+    const removeSelectedVoiceNote = () => {
+        clearSelectedVoiceNote();
+    };
+
+    const handleApplyAnnotatedImage = useCallback(
+        (nextFile: File) => {
+            if (!annotatingImage) return;
+
+            if (nextFile.size > MAX_CHAT_IMAGE_SIZE) {
+                message.warning('Ảnh sau khi đánh dấu vượt quá 8MB');
+                return;
+            }
+
+            setSelectedImages((prev) =>
+                prev.map((item) => {
+                    if (item.uid !== annotatingImage.uid) return item;
+
+                    URL.revokeObjectURL(item.previewUrl);
+                    return {
+                        ...item,
+                        file: nextFile,
+                        previewUrl: URL.createObjectURL(nextFile),
+                    };
+                })
+            );
+            setAnnotatingImage(null);
+        },
+        [annotatingImage, message]
+    );
+
     const removeSelectedImage = (uid: string) => {
+        if (annotatingImage?.uid === uid) {
+            setAnnotatingImage(null);
+        }
+
         setSelectedImages((prev) => {
             const item = prev.find((image) => image.uid === uid);
             if (item) URL.revokeObjectURL(item.previewUrl);
@@ -646,6 +723,8 @@ const ContextChatDrawer: React.FC<ContextChatDrawerProps> = ({
                                                                 ? 'Tin nhắn đã được thu hồi'
                                                                 : item.replyTo.hasImage && !item.replyTo.body
                                                                   ? '🖼️ Hình ảnh'
+                                                                  : item.replyTo.hasAudio && !item.replyTo.body
+                                                                    ? 'Ghi âm'
                                                                   : item.replyTo.body}
                                                         </span>
                                                     </button>
@@ -671,26 +750,10 @@ const ContextChatDrawer: React.FC<ContextChatDrawerProps> = ({
                                                         </div>
                                                     ) : null}
                                                 </div>
-                                                {item.attachments?.length ? (
-                                                    <Image.PreviewGroup>
-                                                        <div className='context-chat__attachments'>
-                                                            {item.attachments
-                                                                .filter((attachment) => attachment.type === 'image')
-                                                                .map((attachment) => (
-                                                                    <div
-                                                                        key={attachment.url}
-                                                                        className='context-chat__attachment'
-                                                                    >
-                                                                        <Image
-                                                                            src={attachment.url}
-                                                                            alt={attachment.name || 'Ảnh trao đổi'}
-                                                                            className='context-chat__attachment-image'
-                                                                        />
-                                                                    </div>
-                                                                ))}
-                                                        </div>
-                                                    </Image.PreviewGroup>
-                                                ) : null}
+                                                <ChatMessageAttachments
+                                                    attachments={item.attachments}
+                                                    variant='context-chat'
+                                                />
                                                 {reactions.length ? (
                                                     <div className='chat-page__reactions'>
                                                         {reactions.map((reaction) => (
@@ -793,7 +856,7 @@ const ContextChatDrawer: React.FC<ContextChatDrawerProps> = ({
                         multiple
                         className='hidden'
                         onChange={(event) => {
-                            handleImageSelect(event.target.files);
+                            void handleImageSelect(event.target.files);
                             event.target.value = '';
                         }}
                     />
@@ -823,6 +886,11 @@ const ContextChatDrawer: React.FC<ContextChatDrawerProps> = ({
                     >
                         <Button icon={<SmileOutlined />} className='context-chat__attach-button' />
                     </Popover>
+                    <VoiceRecorderButton
+                        disabled={sending || Boolean(selectedVoiceNote)}
+                        onRecorded={handleVoiceRecorded}
+                        className='context-chat__voice-button'
+                    />
                     <div className='relative min-w-0 flex-1'>
                         {mention.isOpen && mentionCandidates.length ? (
                             <div className='absolute bottom-full left-0 z-20 mb-2 max-h-60 w-72 max-w-full overflow-y-auto rounded-2xl border border-slate-200 bg-white py-1 shadow-xl'>
@@ -861,11 +929,36 @@ const ContextChatDrawer: React.FC<ContextChatDrawerProps> = ({
                                 {selectedImages.map((item) => (
                                     <div key={item.uid} className='context-chat__selected-image'>
                                         <img src={item.previewUrl} alt='Ảnh đã chọn' />
-                                        <button type='button' onClick={() => removeSelectedImage(item.uid)}>
+                                        <button
+                                            type='button'
+                                            className='chat-selected-image__edit'
+                                            onClick={() => setAnnotatingImage(item)}
+                                            aria-label='Đánh dấu ảnh'
+                                        >
+                                            <EditOutlined />
+                                        </button>
+                                        <button
+                                            type='button'
+                                            className='chat-selected-image__remove'
+                                            onClick={() => removeSelectedImage(item.uid)}
+                                            aria-label='Xóa ảnh'
+                                        >
                                             <DeleteOutlined />
                                         </button>
                                     </div>
                                 ))}
+                            </div>
+                        ) : null}
+                        {selectedVoiceNote ? (
+                            <div className='context-chat__voice-draft'>
+                                <ChatAudioPlayer
+                                    url={selectedVoiceNote.previewUrl}
+                                    durationMs={selectedVoiceNote.durationMs}
+                                    name='Nghe lại trước khi gửi'
+                                />
+                                <button type='button' onClick={removeSelectedVoiceNote}>
+                                    <DeleteOutlined />
+                                </button>
                             </div>
                         ) : null}
                         <TextArea
@@ -907,12 +1000,19 @@ const ContextChatDrawer: React.FC<ContextChatDrawerProps> = ({
                         type='primary'
                         icon={<SendOutlined />}
                         loading={sending}
-                        disabled={(!composer.trim() && !selectedImages.length) || !conversation}
+                        disabled={(!composer.trim() && !selectedImages.length && !selectedVoiceNote) || !conversation}
                         onClick={() => void handleSend()}
                         className='context-chat__send'
                     />
                 </div>
             </div>
+            <ImageAnnotationModal
+                open={Boolean(annotatingImage)}
+                file={annotatingImage?.file}
+                previewUrl={annotatingImage?.previewUrl}
+                onApply={handleApplyAnnotatedImage}
+                onClose={() => setAnnotatingImage(null)}
+            />
         </Drawer>
     );
 };

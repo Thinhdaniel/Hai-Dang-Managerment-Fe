@@ -1,4 +1,4 @@
-import { DatePicker, Form, Input, InputNumber, Modal, Radio, Select } from 'antd';
+import { App, DatePicker, Form, Input, InputNumber, Modal, Radio, Select } from 'antd';
 import dayjs, { type Dayjs } from 'dayjs';
 import type { Asset, MaintenanceRepairMode, MaintenanceType } from '../core/types';
 import type { MaintenancePayload } from '../core/services/maintenance.service';
@@ -51,6 +51,7 @@ const MaintenanceFormModal = ({
     onSubmit,
 }: MaintenanceFormModalProps) => {
     const [form] = Form.useForm<MaintenanceFormValues>();
+    const { message } = App.useApp();
     const repairMode = Form.useWatch('repairMode', form) ?? 'internal';
 
     const assetOptions = assets.map((asset) => ({
@@ -61,6 +62,14 @@ const MaintenanceFormModal = ({
     const handleFinish = async (values: MaintenanceFormValues) => {
         const isExternal = values.repairMode === 'external';
         const assetIds = Array.from(new Set(values.assetIds ?? [])).filter(Boolean);
+
+        // Một phiếu chỉ gộp máy cùng cơ sở (giống lệnh điều chuyển) để cơ sở của phiếu đúng cho mọi máy.
+        const selected = assets.filter((asset) => assetIds.includes(asset.id));
+        const distinctPlantIds = new Set(selected.map((asset) => String(asset.plantId ?? '')));
+        if (distinctPlantIds.size > 1) {
+            message.warning('Các máy trong cùng một phiếu bảo trì phải thuộc cùng một cơ sở.');
+            return;
+        }
         const payload: MaintenancePayload = {
             assetId: assetIds[0],
             assetIds,

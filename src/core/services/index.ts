@@ -9,6 +9,7 @@ import type {
     UserListParams,
 } from '../types';
 export { dashboardService } from './dashboard.service';
+export { dataQualityService } from './data-quality.service';
 export { plantService } from './plant.service';
 export { facilityCostReportService } from './report.service';
 

@@ -18,7 +18,18 @@ export type SendChatMessagePayload = {
     mentions?: string[];
 };
 
-const buildAttachmentFormData = (body: string, images: File[], replyTo?: string, mentions?: string[]) => {
+export type SendChatAttachmentPayload = {
+    images?: File[];
+    audio?: File;
+    audioDurationMs?: number;
+};
+
+const buildAttachmentFormData = (
+    body: string,
+    attachments: SendChatAttachmentPayload,
+    replyTo?: string,
+    mentions?: string[]
+) => {
     const formData = new FormData();
     if (body.trim()) {
         formData.append('body', body.trim());
@@ -29,7 +40,13 @@ const buildAttachmentFormData = (body: string, images: File[], replyTo?: string,
     if (mentions && mentions.length) {
         formData.append('mentions', JSON.stringify(mentions));
     }
-    images.forEach((file) => formData.append('images', file));
+    (attachments.images ?? []).forEach((file) => formData.append('images', file));
+    if (attachments.audio) {
+        formData.append('audio', attachments.audio);
+    }
+    if (attachments.audioDurationMs) {
+        formData.append('audioDurationMs', String(Math.round(attachments.audioDurationMs)));
+    }
     return formData;
 };
 
@@ -57,13 +74,13 @@ export const chatService = {
     sendAttachmentMessage: (
         conversationId: string,
         body: string,
-        images: File[],
+        attachments: SendChatAttachmentPayload,
         replyTo?: string,
         mentions?: string[]
     ): Promise<ChatMessage> =>
         api.post<ChatMessage, FormData>(
             `/chat/conversations/${conversationId}/attachments`,
-            buildAttachmentFormData(body, images, replyTo, mentions),
+            buildAttachmentFormData(body, attachments, replyTo, mentions),
             {
                 headers: {
                     'Content-Type': 'multipart/form-data',

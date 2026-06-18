@@ -36,6 +36,8 @@ import { useAuth } from '../core/contexts/AuthContext';
 import { can } from '../core/lib/permissions';
 import { resolveAssetByScan } from '../core/lib/qrScan';
 import { recordQrScan } from '../core/lib/qrScanAudit';
+import { getCurrentCoords } from '../core/lib/geolocation';
+import { evaluateScanLocation } from '../core/lib/locationMismatch';
 import { ASSET_STATUS_LABEL, isReturnedToPartner } from '../core/constants';
 import { assetService } from '../core/services/asset.service';
 import { plantService } from '../core/services';
@@ -60,6 +62,7 @@ type ScanRecord = {
     rawValue: string;
     asset?: Asset;
     message: string;
+    gpsNote?: string;
     scannedAt: string;
 };
 
@@ -264,14 +267,32 @@ const StocktakePage: React.FC = () => {
                 return;
             }
 
+            // Đối chiếu GPS: cơ sở gần nhất theo định vị vs cơ sở hệ thống của máy.
+            const coords = await getCurrentCoords();
+            const loc = evaluateScanLocation({
+                coords,
+                plants,
+                officialPlantId: asset.plant?.id ?? asset.plantId,
+            });
+            const gpsNote = loc.mismatch
+                ? `GPS: máy đang ở ${loc.nearestPlant?.name || 'cơ sở khác'}${
+                      typeof loc.distanceM === 'number' ? ` (~${loc.distanceM}m)` : ''
+                  }`
+                : undefined;
+
             if (expectedMap.has(asset.id)) {
                 recordQrScan({
                     ...logBase,
                     assetId: asset.id,
                     result: 'present',
                 });
-                appendRecord({ type: 'present', rawValue, asset, message: 'Có mặt trong phạm vi kiểm kê' });
-                message.success(`Có mặt: ${asset.machineCode}`);
+                appendRecord({ type: 'present', rawValue, asset, message: 'Có mặt trong phạm vi kiểm kê', gpsNote });
+                if (gpsNote) {
+                    setActiveTab('anomalies');
+                    message.warning(`Có mặt nhưng GPS lệch: ${asset.machineCode}`);
+                } else {
+                    message.success(`Có mặt: ${asset.machineCode}`);
+                }
                 return;
             }
 
@@ -290,6 +311,7 @@ const StocktakePage: React.FC = () => {
                         selectedArea === ALL_AREAS
                             ? 'Không thuộc danh sách kỳ vọng'
                             : `Sai khu vực, đang ở ${asset.area || 'chưa gắn khu vực'}`,
+                    gpsNote,
                 });
                 setActiveTab('anomalies');
                 message.warning(`Sai khu vực: ${asset.machineCode}`);
@@ -307,6 +329,7 @@ const StocktakePage: React.FC = () => {
                 rawValue,
                 asset,
                 message: `Sai cơ sở, đang thuộc ${asset.plant?.name || 'cơ sở khác'}`,
+                gpsNote,
             });
             setActiveTab('anomalies');
             message.error(`Sai vị trí: ${asset.machineCode}`);
@@ -482,6 +505,9 @@ const StocktakePage: React.FC = () => {
                     <div>
                         {renderAssetSummary(record.asset)}
                         <div className='mt-1 text-xs font-semibold text-amber-700'>{record.message}</div>
+                        {record.gpsNote ? (
+                            <div className='text-xs font-semibold text-rose-600'>📍 {record.gpsNote}</div>
+                        ) : null}
                     </div>
                 ) : (
                     <div>
@@ -522,7 +548,15 @@ const StocktakePage: React.FC = () => {
     const presentColumns: TableColumnsType<ScanRecord> = [
         {
             title: 'Có mặt',
-            render: (_value, record) => (record.asset ? renderAssetSummary(record.asset) : null),
+            render: (_value, record) =>
+                record.asset ? (
+                    <div>
+                        {renderAssetSummary(record.asset)}
+                        {record.gpsNote ? (
+                            <div className='mt-1 text-xs font-semibold text-rose-600'>📍 {record.gpsNote}</div>
+                        ) : null}
+                    </div>
+                ) : null,
         },
         {
             title: 'Thời gian quét',
@@ -560,6 +594,9 @@ const StocktakePage: React.FC = () => {
                             <Card key={record.key} size='small' className='rounded-2xl'>
                                 {record.asset ? renderAssetSummary(record.asset) : <Text code>{record.rawValue}</Text>}
                                 <div className='mt-2 text-sm font-semibold text-amber-700'>{record.message}</div>
+                                {record.gpsNote ? (
+                                    <div className='mt-1 text-xs font-semibold text-rose-600'>📍 {record.gpsNote}</div>
+                                ) : null}
                                 {record.asset ? (
                                     <div className='mt-3 grid grid-cols-1 gap-2'>
                                         {record.type === 'wrong_area' && selectedArea !== ALL_AREAS ? (
@@ -586,6 +623,9 @@ const StocktakePage: React.FC = () => {
                       : presentRecords.map((record) => (
                             <Card key={record.key} size='small' className='rounded-2xl'>
                                 {record.asset ? renderAssetSummary(record.asset) : null}
+                                {record.gpsNote ? (
+                                    <div className='mt-1 text-xs font-semibold text-rose-600'>📍 {record.gpsNote}</div>
+                                ) : null}
                                 <div className='mt-2 text-xs text-slate-500'>{formatTime(record.scannedAt)}</div>
                             </Card>
                         ))}

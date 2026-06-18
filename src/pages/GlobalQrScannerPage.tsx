@@ -29,6 +29,8 @@ import { ASSET_STATUS_LABEL } from '../core/constants';
 import { useAuth } from '../core/contexts/AuthContext';
 import { extractPublicId, resolveAssetByScan } from '../core/lib/qrScan';
 import { recordQrScan } from '../core/lib/qrScanAudit';
+import { getCurrentCoords } from '../core/lib/geolocation';
+import { evaluateScanLocation, type ScanLocationResult } from '../core/lib/locationMismatch';
 import { hasManagerAccess } from '../core/lib/permissions';
 import { maintenanceService, type MaintenancePayload } from '../core/services/maintenance.service';
 import { plantService } from '../core/services/plant.service';
@@ -241,6 +243,7 @@ const GlobalQrScannerPage: React.FC = () => {
     const [quickUpdateOpen, setQuickUpdateOpen] = useState(false);
     const [maintenanceOpen, setMaintenanceOpen] = useState(false);
     const [transferOpen, setTransferOpen] = useState(false);
+    const [locationCheck, setLocationCheck] = useState<ScanLocationResult | null>(null);
 
     const asset = scanResult?.asset ?? null;
     const errorText = getScanErrorText(scanResult);
@@ -485,12 +488,30 @@ const GlobalQrScannerPage: React.FC = () => {
     const resetScan = () => {
         setScanResult(null);
         setResolving(false);
+        setLocationCheck(null);
+    };
+
+    // Đối chiếu GPS real-time: cơ sở gần nhất theo GPS vs cơ sở hệ thống của máy.
+    const runLocationCheck = async (resolvedAsset: Asset) => {
+        try {
+            const coords = await getCurrentCoords();
+            setLocationCheck(
+                evaluateScanLocation({
+                    coords,
+                    plants,
+                    officialPlantId: resolvedAsset.plant?.id ?? resolvedAsset.plantId,
+                })
+            );
+        } catch {
+            setLocationCheck(null);
+        }
     };
 
     const handleDetected = async (rawValue: string) => {
         if (resolving) return;
 
         setResolving(true);
+        setLocationCheck(null);
         const publicId = extractPublicId(rawValue);
 
         try {
@@ -507,6 +528,7 @@ const GlobalQrScannerPage: React.FC = () => {
 
                 if (internal.asset?.id) {
                     setScanResult({ asset: internal.asset, ambiguous: false, meta, resolvedAt: Date.now() });
+                    void runLocationCheck(internal.asset);
                     message.success(`Đã nhận diện "${internal.asset.name}"`);
                     return;
                 }
@@ -536,6 +558,7 @@ const GlobalQrScannerPage: React.FC = () => {
             });
 
             if (result.asset) {
+                void runLocationCheck(result.asset);
                 message.success(`Đã nhận diện "${result.asset.name}"`);
                 return;
             }
@@ -668,6 +691,39 @@ const GlobalQrScannerPage: React.FC = () => {
                                         />
                                     ) : null}
                                 </div>
+
+                                {locationCheck?.mismatch ? (
+                                    <Alert
+                                        showIcon
+                                        type='warning'
+                                        className='rounded-2xl'
+                                        message='Lệch vị trí so với hệ thống'
+                                        description={
+                                            <div className='space-y-1 text-sm'>
+                                                <div>
+                                                    GPS cho thấy máy đang ở{' '}
+                                                    <b>{locationCheck.nearestPlant?.name || 'cơ sở khác'}</b>
+                                                    {typeof locationCheck.distanceM === 'number'
+                                                        ? ` (cách ~${locationCheck.distanceM}m)`
+                                                        : ''}
+                                                    , nhưng hệ thống ghi{' '}
+                                                    <b>{asset.plant?.name || 'cơ sở khác'}</b>.
+                                                </div>
+                                                {canManage && canTransferAsset(asset) ? (
+                                                    <Button
+                                                        size='small'
+                                                        type='primary'
+                                                        icon={<SwapOutlined />}
+                                                        className='mt-1'
+                                                        onClick={() => setTransferOpen(true)}
+                                                    >
+                                                        Tạo lệnh điều chuyển
+                                                    </Button>
+                                                ) : null}
+                                            </div>
+                                        }
+                                    />
+                                ) : null}
 
                                 {smartInsight && primaryAction ? (
                                     <div

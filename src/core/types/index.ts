@@ -119,6 +119,18 @@ export interface AssetLastSeen {
     scannedAt?: string;
 }
 
+// Cảnh báo máy lệch vị trí: cơ sở GPS gần nhất khác cơ sở hệ thống (đã qua guard độ tin cậy)
+export interface AssetLocationMismatch {
+    mismatch: true;
+    officialPlantId?: string;
+    officialPlantName?: string;
+    actualPlantId?: string;
+    actualPlantName?: string;
+    distanceM?: number;
+    accuracy?: number;
+    scannedAt?: string;
+}
+
 export interface PlantMachineStatsResponse {
     facilities: Plant[];
     summary: {
@@ -152,6 +164,7 @@ export interface Asset {
     lastMaintenanceDate?: string;
     nextMaintenanceDate?: string;
     lastSeen?: AssetLastSeen;
+    locationMismatch?: AssetLocationMismatch;
     createdAt: string;
     updatedAt: string;
     hasOpenTransfer?: boolean;
@@ -545,6 +558,7 @@ export interface ChatReplyPreview {
     senderName?: string;
     body: string;
     hasImage?: boolean;
+    hasAudio?: boolean;
     isDeleted?: boolean;
 }
 
@@ -560,14 +574,16 @@ export interface ChatMessage {
     sender?: ChatUserSummary;
     body: string;
     attachments?: Array<{
-        type: 'image' | 'file';
+        type: 'image' | 'audio' | 'file';
         url: string;
+        thumbnailUrl?: string;
         publicId?: string;
         name?: string;
         mimeType?: string;
         size?: number;
         width?: number;
         height?: number;
+        durationMs?: number;
     }>;
     replyTo?: ChatReplyPreview;
     reactions?: ChatReaction[];
@@ -688,6 +704,142 @@ export interface DashboardOverviewResponse {
     maintenanceCost?: DashboardMaintenanceCost;
     facilityStats: DashboardFacilityStat[];
     recentActivities: DashboardRecentActivity[];
+}
+
+export interface DashboardTopBrokenAsset {
+    assetId: string;
+    assetName?: string;
+    machineCode?: string;
+    plantName?: string;
+    count: number;
+    lastDate?: string;
+}
+
+export interface DashboardResolutionStats {
+    avgDaysAll: number;
+    completedAll: number;
+    avgDaysThisMonth: number;
+    completedThisMonth: number;
+}
+
+export interface DashboardOverdueTicket {
+    id: string;
+    assetName?: string;
+    machineCode?: string;
+    plantName?: string;
+    status: string;
+    repairMode: string;
+    description?: string;
+    createdAt?: string;
+    daysOpen: number;
+}
+
+export interface DashboardCostTrendPoint {
+    month: string;
+    repairCost: number;
+    distributionCost: number;
+    totalCost: number;
+}
+
+export interface DashboardMislocatedAsset {
+    assetId: string;
+    assetName?: string;
+    machineCode?: string;
+    officialPlantName?: string;
+    actualPlantName?: string;
+    distanceM?: number;
+    accuracy?: number;
+    scannedAt?: string;
+}
+
+export interface DashboardInsights {
+    topBrokenAssets: DashboardTopBrokenAsset[];
+    resolution: DashboardResolutionStats;
+    overdue: { count: number; thresholdDays: number; items: DashboardOverdueTicket[] };
+    costTrend: DashboardCostTrendPoint[];
+    mislocatedAssets: DashboardMislocatedAsset[];
+}
+
+// ===== MINI-MAP (vị trí GPS lần quét cuối) =====
+export interface AssetLocationPoint {
+    id: string;
+    machineCode?: string;
+    name?: string;
+    status: AssetStatus;
+    plantId?: string;
+    plantName?: string;
+    lat: number;
+    lng: number;
+    accuracy?: number;
+    distanceM?: number;
+    scannedAt?: string;
+    scannedByName?: string;
+    mismatch: boolean;
+    officialPlantName?: string;
+    actualPlantName?: string;
+}
+
+export interface MapFacilityPoint {
+    id: string;
+    name: string;
+    code?: string;
+    lat: number;
+    lng: number;
+}
+
+export interface AssetLocationsResponse {
+    assets: AssetLocationPoint[];
+    facilities: MapFacilityPoint[];
+    withoutGps: number;
+}
+
+export type DataQualitySeverity = 'critical' | 'warning' | 'info';
+export type DataQualityCategoryKey = 'assets' | 'materials' | 'qr' | 'plants' | 'users' | 'maintenance';
+
+export interface DataQualityRecord {
+    id: string;
+    label: string;
+    code?: string;
+    meta?: string;
+    path?: string;
+}
+
+export interface DataQualityCheck {
+    key: string;
+    title: string;
+    severity: DataQualitySeverity;
+    count: number;
+    total: number;
+    ratio: number;
+    description: string;
+    action: string;
+    records: DataQualityRecord[];
+}
+
+export interface DataQualityCategory {
+    key: DataQualityCategoryKey;
+    title: string;
+    totalRecords: number;
+    issueCount: number;
+    criticalCount: number;
+    warningCount: number;
+    infoCount: number;
+    score: number;
+    checks: DataQualityCheck[];
+}
+
+export interface DataQualityOverviewResponse {
+    generatedAt: string;
+    overallScore: number;
+    summary: {
+        totalRecords: number;
+        totalIssues: number;
+        criticalIssues: number;
+        warningIssues: number;
+        infoIssues: number;
+        affectedCategories: number;
+    };
+    categories: DataQualityCategory[];
 }
 
 // ===== NOTIFICATION =====

@@ -225,6 +225,31 @@ const QrQuickMaintenanceModal: React.FC<QrQuickMaintenanceModalProps> = ({ open,
                 return;
             }
 
+            // Một phiếu chỉ gộp máy cùng cơ sở (giống lệnh điều chuyển) để cơ sở của phiếu đúng.
+            const firstAsset = selectedAssets[0];
+            if (firstAsset && String(result.asset.plantId) !== String(firstAsset.plantId)) {
+                recordQrScan({
+                    rawValue,
+                    publicId: result.publicId,
+                    labelId: result.labelId,
+                    assetId: result.asset.id,
+                    action: 'maintenance_quick_create',
+                    result: 'failed',
+                    source: result.source,
+                    metadata: {
+                        reason: 'different_plant',
+                        firstPlantId: firstAsset.plantId,
+                        currentPlantId: result.asset.plantId,
+                    },
+                });
+                message.warning(
+                    `"${result.asset.name}" khác cơ sở với máy đầu tiên (${
+                        firstAsset.plant?.name || 'chưa rõ'
+                    }) — không thể chung một phiếu bảo trì.`
+                );
+                return;
+            }
+
             recordQrScan({
                 rawValue,
                 publicId: result.publicId,

@@ -1,5 +1,5 @@
 import type { Capability } from '../lib/permissions';
-import { can } from '../lib/permissions';
+import { can, isAdmin, isDirector } from '../lib/permissions';
 import type { User } from '../types';
 
 const mainPlantId = import.meta.env.VITE_MAIN_PLANT_ID as string | undefined;
@@ -24,11 +24,16 @@ export const requireCap =
 export const requireProcurement: AccessCheck = (user) =>
     can(user?.role, 'procurement.operate') && isProcurementPlant(user);
 
+/** Giám đốc trở lên (Super Admin + Giám đốc). */
+export const requireDirectorUp: AccessCheck = (user) =>
+    Boolean(user?.role) && (isAdmin(user!.role) || isDirector(user!.role));
+
 /**
  * Bản đồ quyền truy cập theo route (dùng cho RequireAccess trong router).
  * Route không có trong map = mọi người dùng đã đăng nhập đều xem được.
  */
 export const ROUTE_ACCESS: Record<string, AccessCheck> = {
+    '/assets/map': requireDirectorUp,
     '/qr-labels': requireCap('qrlabel.manage'),
     '/qr-labels/batches/:id/print': requireCap('qrlabel.manage'),
     '/qr/:publicId/activate': requireCap('qrlabel.manage'),
@@ -47,4 +52,5 @@ export const ROUTE_ACCESS: Record<string, AccessCheck> = {
     '/plants': requireCap('plant.view'),
     '/users': requireCap('user.view'),
     '/storage': requireCap('storage.view'),
+    '/admin/data-quality': requireCap('dataQuality.view'),
 };
