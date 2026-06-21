@@ -8,54 +8,88 @@ import 'leaflet.markercluster/dist/MarkerCluster.css';
 import 'leaflet.markercluster/dist/MarkerCluster.Default.css';
 import { useQuery } from '@tanstack/react-query';
 import { Button, Empty, Select, Spin, Switch, Tag } from 'antd';
-import { EnvironmentOutlined, ReloadOutlined, WarningFilled } from '@ant-design/icons';
+import {
+    AimOutlined,
+    ApartmentOutlined,
+    EnvironmentOutlined,
+    FilterOutlined,
+    ReloadOutlined,
+    WarningFilled,
+} from '@ant-design/icons';
 import { useAssetLocations } from '../core/hooks/useDashboardOverview';
 import { plantService } from '../core/services/plant.service';
 import { useAuth } from '../core/contexts/AuthContext';
 import { ASSET_STATUS_COLOR, getAssetStatusColor } from '../core/constants/assetStatusColor';
 import { AssetStatus, type AssetLocationPoint } from '../core/types';
 
-// Toạ độ mặc định khi chưa có điểm nào (trung tâm Việt Nam).
 const DEFAULT_CENTER: [number, number] = [16.0, 107.8];
 const DEFAULT_ZOOM = 6;
 
 const STATUS_KEYS = Object.values(AssetStatus);
 
-// Marker máy: chấm tròn tô theo trạng thái, viền đỏ nếu lệch vị trí.
+type MachineMarker = L.Marker & {
+    options: L.MarkerOptions & {
+        assetColor?: string;
+        assetMismatch?: boolean;
+    };
+};
+
+type MachineCluster = {
+    getChildCount: () => number;
+    getAllChildMarkers: () => MachineMarker[];
+};
+
+const mapSafeStatusClass = (status: AssetStatus) =>
+    String(status)
+        .replace(/[^a-z0-9_-]/gi, '-')
+        .toLowerCase();
+
 const machineIcon = (status: AssetStatus, mismatch: boolean) => {
-    const color = getAssetStatusColor(status).color;
-    const ring = mismatch ? ',0 0 0 3px rgba(239,68,68,.4)' : '';
-    const border = mismatch ? '#ef4444' : '#ffffff';
+    const meta = getAssetStatusColor(status);
+
     return L.divIcon({
-        className: 'hd-machine-marker',
-        html: `<span style="display:block;width:20px;height:20px;border-radius:9999px;background:${color};border:2px solid ${border};box-shadow:0 1px 4px rgba(0,0,0,.35)${ring}"></span>`,
-        iconSize: [20, 20],
-        iconAnchor: [10, 10],
-        popupAnchor: [0, -12],
+        className: `hd-machine-marker hd-machine-marker--${mapSafeStatusClass(status)}${
+            mismatch ? ' hd-machine-marker--mismatch' : ''
+        }`,
+        html: `<span class="hd-machine-marker__halo" style="--marker-color:${meta.color}"></span>
+               <span class="hd-machine-marker__core" style="--marker-color:${meta.color}">
+                   <span class="hd-machine-marker__spark"></span>
+               </span>`,
+        iconSize: [34, 34],
+        iconAnchor: [17, 17],
+        popupAnchor: [0, -18],
     });
 };
 
 const facilityIcon = L.divIcon({
     className: 'hd-facility-marker',
-    html: `<div style="display:flex;align-items:center;justify-content:center;width:30px;height:30px;border-radius:8px;background:#1e293b;color:#fff;font-size:15px;box-shadow:0 2px 6px rgba(0,0,0,.4)">🏭</div>`,
-    iconSize: [30, 30],
-    iconAnchor: [15, 15],
-    popupAnchor: [0, -16],
+    html: `<span class="hd-facility-marker__pulse"></span>
+           <span class="hd-facility-marker__body">
+               <span class="hd-facility-marker__roof"></span>
+               <span class="hd-facility-marker__blocks"><i></i><i></i><i></i></span>
+           </span>`,
+    iconSize: [46, 46],
+    iconAnchor: [23, 23],
+    popupAnchor: [0, -24],
 });
 
-// Tự khớp khung nhìn theo các điểm hiện có.
-const FitBounds = ({ points }: { points: [number, number][] }) => {
+const fitMapToPoints = (map: L.Map, points: [number, number][]) => {
+    if (points.length === 0) return;
+    if (points.length === 1) {
+        map.setView(points[0], 16, { animate: true });
+        return;
+    }
+    map.fitBounds(L.latLngBounds(points), { animate: true, duration: 0.8, padding: [64, 64], maxZoom: 17 });
+};
+
+const FitBounds = ({ points, signal }: { points: [number, number][]; signal: number }) => {
     const map = useMap();
     const signature = points.map((p) => p.join(',')).join('|');
+
     useEffect(() => {
-        if (points.length === 0) return;
-        if (points.length === 1) {
-            map.setView(points[0], 16);
-            return;
-        }
-        map.fitBounds(L.latLngBounds(points), { padding: [48, 48], maxZoom: 17 });
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [signature, map]);
+        fitMapToPoints(map, points);
+    }, [signature, signal, map]);
+
     return null;
 };
 
@@ -67,44 +101,107 @@ const escapeHtml = (value?: string) =>
         (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c] as string
     );
 
-// Popup dạng HTML (marker tạo theo kiểu imperative để gom cụm) — nút "Xem chi tiết" điều hướng qua delegated click.
 const buildPopupHtml = (a: AssetLocationPoint) => {
     const meta = getAssetStatusColor(a.status);
     const title = escapeHtml(a.machineCode || a.name || 'Máy');
-    const subtitle = a.name && a.machineCode ? `<div style="color:#475569">${escapeHtml(a.name)}</div>` : '';
-    const scanned = `<div style="font-size:12px;color:#64748b">Quét lúc: ${escapeHtml(formatDateTime(a.scannedAt))}</div>`;
-    const by = a.scannedByName
-        ? `<div style="font-size:12px;color:#64748b">Người quét: ${escapeHtml(a.scannedByName)}</div>`
-        : '';
-    const loc = a.mismatch
-        ? `<div style="background:#fff1f2;color:#be123c;padding:6px 8px;border-radius:6px;font-size:12px;margin-top:4px">⚠ Lệch vị trí: gần <b>${escapeHtml(
-              a.actualPlantName || 'cơ sở khác'
-          )}</b>, hệ thống ghi <b>${escapeHtml(a.officialPlantName || a.plantName)}</b>${
-              typeof a.distanceM === 'number' ? ` (~${Math.round(a.distanceM)}m)` : ''
-          }</div>`
-        : `<div style="font-size:12px;color:#64748b">Cơ sở: ${escapeHtml(a.plantName || '—')}</div>`;
-    const badge = `<span style="display:inline-flex;align-items:center;gap:4px;background:${meta.color}1a;color:${meta.color};border-radius:4px;padding:2px 6px;font-size:11px;font-weight:600"><span style="width:6px;height:6px;border-radius:9999px;background:${meta.color}"></span>${escapeHtml(
-        meta.label
-    )}</span>`;
-    return `<div style="min-width:200px">
-        <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px"><span style="font-weight:600;color:#0f172a">${title}</span>${badge}</div>
-        ${subtitle}${scanned}${by}${loc}
-        <button type="button" data-asset-id="${a.id}" class="hd-popup-detail" style="margin-top:6px;background:none;border:none;color:#2563eb;font-weight:600;cursor:pointer;padding:0">Xem chi tiết →</button>
+    const subtitle = a.name && a.machineCode ? `<span>${escapeHtml(a.name)}</span>` : '<span>Chưa có tên máy</span>';
+    const accuracy =
+        typeof a.accuracy === 'number'
+            ? `<span class="hd-map-popup__pill">Sai số ${Math.round(a.accuracy)}m</span>`
+            : '';
+    const distance =
+        typeof a.distanceM === 'number' ? `<strong>${Math.round(a.distanceM).toLocaleString('vi-VN')}m</strong>` : '';
+
+    const mismatch = a.mismatch
+        ? `<div class="hd-map-popup__alert">
+                <b>Lệch vị trí</b>
+                <span>Đang gần ${escapeHtml(a.actualPlantName || 'cơ sở khác')}, hệ thống ghi ${escapeHtml(
+                    a.officialPlantName || a.plantName
+                )} ${distance ? `(${distance})` : ''}</span>
+           </div>`
+        : `<div class="hd-map-popup__field">
+                <span>Cơ sở</span>
+                <strong>${escapeHtml(a.plantName || '—')}</strong>
+           </div>`;
+
+    return `<div class="hd-map-popup">
+        <div class="hd-map-popup__top" style="--popup-color:${meta.color}">
+            <span class="hd-map-popup__beacon"></span>
+            <div>
+                <strong>${title}</strong>
+                ${subtitle}
+            </div>
+        </div>
+        <div class="hd-map-popup__status" style="--popup-color:${meta.color}">
+            <i></i>${escapeHtml(meta.label)}
+        </div>
+        <div class="hd-map-popup__grid">
+            <div class="hd-map-popup__field">
+                <span>Quét lúc</span>
+                <strong>${escapeHtml(formatDateTime(a.scannedAt))}</strong>
+            </div>
+            <div class="hd-map-popup__field">
+                <span>Người quét</span>
+                <strong>${escapeHtml(a.scannedByName || '—')}</strong>
+            </div>
+        </div>
+        ${mismatch}
+        <div class="hd-map-popup__footer">
+            ${accuracy}
+            <button type="button" data-asset-id="${a.id}" class="hd-popup-detail">Xem chi tiết</button>
+        </div>
     </div>`;
 };
 
-// Lớp marker máy gom cụm (leaflet.markercluster) — nhiều máy gần nhau gộp thành cụm có số đếm, bung ra khi zoom.
+const createClusterIcon = (cluster: MachineCluster) => {
+    const count = cluster.getChildCount();
+    const children = cluster.getAllChildMarkers();
+    const hasMismatch = children.some((marker) => marker.options.assetMismatch);
+    const colors = children.map((marker) => marker.options.assetColor).filter(Boolean) as string[];
+    const primary = colors[0] || '#2563eb';
+    const secondary = colors.find((color) => color !== primary) || '#06b6d4';
+    const size = count >= 100 ? 74 : count >= 20 ? 66 : 58;
+    const clusterStyle = `style="--cluster-primary:${primary};--cluster-secondary:${secondary}"`;
+
+    return L.divIcon({
+        className: `hd-map-cluster${hasMismatch ? ' hd-map-cluster--mismatch' : ''}`,
+        html: `<span class="hd-map-cluster__pulse" ${clusterStyle}></span>
+               <span class="hd-map-cluster__body" ${clusterStyle}>
+                    <b>${count > 999 ? '999+' : count}</b>
+                    <small>máy</small>
+               </span>`,
+        iconSize: [size, size],
+        iconAnchor: [size / 2, size / 2],
+    });
+};
+
 const ClusterMarkers = ({ assets, onSelect }: { assets: AssetLocationPoint[]; onSelect: (id: string) => void }) => {
     const map = useMap();
+
     useEffect(() => {
-        const group = (L as unknown as { markerClusterGroup: (opts?: unknown) => L.LayerGroup }).markerClusterGroup({
-            maxClusterRadius: 50,
+        const group = (
+            L as unknown as {
+                markerClusterGroup: (opts?: unknown) => L.LayerGroup & { addLayer: (layer: L.Layer) => void };
+            }
+        ).markerClusterGroup({
+            maxClusterRadius: 54,
             showCoverageOnHover: false,
             chunkedLoading: true,
+            spiderfyOnMaxZoom: true,
+            iconCreateFunction: (cluster: unknown) => createClusterIcon(cluster as MachineCluster),
         });
+
         assets.forEach((a) => {
-            const marker = L.marker([a.lat, a.lng], { icon: machineIcon(a.status, a.mismatch) });
-            marker.bindPopup(buildPopupHtml(a));
+            const meta = getAssetStatusColor(a.status);
+            const marker = L.marker([a.lat, a.lng], { icon: machineIcon(a.status, a.mismatch) }) as MachineMarker;
+            marker.options.assetColor = meta.color;
+            marker.options.assetMismatch = a.mismatch;
+            marker.bindPopup(buildPopupHtml(a), {
+                className: 'hd-map-popup-shell',
+                closeButton: true,
+                maxWidth: 320,
+                minWidth: 260,
+            });
             marker.on('popupopen', (e) => {
                 const node = (e.popup.getElement() as HTMLElement | undefined)?.querySelector('.hd-popup-detail');
                 node?.addEventListener(
@@ -118,11 +215,13 @@ const ClusterMarkers = ({ assets, onSelect }: { assets: AssetLocationPoint[]; on
             });
             group.addLayer(marker);
         });
+
         map.addLayer(group);
         return () => {
             map.removeLayer(group);
         };
     }, [assets, map, onSelect]);
+
     return null;
 };
 
@@ -136,9 +235,15 @@ const MapPage: React.FC = () => {
     const [selectedPlant, setSelectedPlant] = useState<string>(user?.plantId ?? '');
     const [statusFilter, setStatusFilter] = useState<AssetStatus[]>([]);
     const [mismatchOnly, setMismatchOnly] = useState(false);
+    const [fitSignal, setFitSignal] = useState(0);
 
     const assets = data?.assets ?? [];
     const facilities = data?.facilities ?? [];
+
+    const statusCountBase = useMemo(
+        () => assets.filter((a) => (!selectedPlant || a.plantId === selectedPlant) && (!mismatchOnly || a.mismatch)),
+        [assets, selectedPlant, mismatchOnly]
+    );
 
     const filtered = useMemo(
         () =>
@@ -151,6 +256,12 @@ const MapPage: React.FC = () => {
         [assets, selectedPlant, statusFilter, mismatchOnly]
     );
 
+    const statusCounts = useMemo(() => {
+        const counts = new Map<AssetStatus, number>();
+        statusCountBase.forEach((asset) => counts.set(asset.status, (counts.get(asset.status) ?? 0) + 1));
+        return counts;
+    }, [statusCountBase]);
+
     const mismatchCount = useMemo(() => filtered.filter((a) => a.mismatch).length, [filtered]);
 
     const points = useMemo<[number, number][]>(() => {
@@ -159,139 +270,242 @@ const MapPage: React.FC = () => {
         return pts;
     }, [filtered, facilities]);
 
+    const selectedPlantName = selectedPlant ? plants.find((p) => p.id === selectedPlant)?.name : 'Tất cả cơ sở';
+    const hasActiveFilter = Boolean(selectedPlant || statusFilter.length || mismatchOnly);
+
     return (
-        <div className='flex flex-col gap-4'>
-            <div className='flex flex-wrap items-center justify-between gap-3'>
-                <div>
-                    <h1 className='mb-0 flex items-center gap-2 text-xl font-bold text-slate-900'>
-                        <EnvironmentOutlined className='text-blue-600' /> Bản đồ vị trí máy
-                    </h1>
-                    <p className='mb-0 text-sm text-slate-500'>Vị trí GPS lần quét QR gần nhất của từng máy</p>
+        <div className='machine-map-page'>
+            <section className='machine-map-hero'>
+                <div className='machine-map-hero__copy'>
+                    <span className='machine-map-hero__eyebrow'>
+                        <EnvironmentOutlined /> Lead map vận hành
+                    </span>
+                    <h1>Bản đồ vị trí máy</h1>
+                    <p>Theo dõi vị trí GPS lần quét QR gần nhất, phát hiện máy lệch cơ sở và kiểm soát vùng rủi ro.</p>
                 </div>
-                <Button icon={<ReloadOutlined />} onClick={() => refetch()} loading={isFetching}>
-                    Làm mới
-                </Button>
+                <div className='machine-map-hero__actions'>
+                    <Button
+                        className='machine-map-action-button'
+                        icon={<AimOutlined />}
+                        onClick={() => setFitSignal((value) => value + 1)}
+                    >
+                        Căn lại bản đồ
+                    </Button>
+                    <Button
+                        type='primary'
+                        className='machine-map-action-button machine-map-action-button--primary'
+                        icon={<ReloadOutlined />}
+                        onClick={() => refetch()}
+                        loading={isFetching}
+                    >
+                        Làm mới
+                    </Button>
+                </div>
+            </section>
+
+            <div className='machine-map-summary'>
+                <div className='machine-map-stat machine-map-stat--blue'>
+                    <span>Đang hiển thị</span>
+                    <strong>{filtered.length.toLocaleString('vi-VN')}</strong>
+                    <small>máy có GPS</small>
+                </div>
+                <button
+                    type='button'
+                    className={`machine-map-stat machine-map-stat--rose${mismatchOnly ? 'machine-map-stat--active' : ''}`}
+                    onClick={() => {
+                        setMismatchOnly((value) => !value);
+                        setFitSignal((value) => value + 1);
+                    }}
+                >
+                    <span>Lệch vị trí</span>
+                    <strong>{mismatchCount.toLocaleString('vi-VN')}</strong>
+                    <small>bấm để lọc nhanh</small>
+                </button>
+                <div className='machine-map-stat machine-map-stat--slate'>
+                    <span>Chưa có GPS</span>
+                    <strong>{(data?.withoutGps ?? 0).toLocaleString('vi-VN')}</strong>
+                    <small>chưa quét QR</small>
+                </div>
+                <div className='machine-map-stat machine-map-stat--cyan'>
+                    <span>Phạm vi</span>
+                    <strong>{selectedPlantName || 'Tất cả'}</strong>
+                    <small>{statusFilter.length ? `${statusFilter.length} trạng thái` : 'toàn bộ trạng thái'}</small>
+                </div>
             </div>
 
-            <div className='grid gap-4 lg:grid-cols-[300px_1fr]'>
-                <aside className='flex flex-col gap-4'>
-                    <div className='rounded-2xl border border-slate-200 bg-white p-4 shadow-sm'>
-                        <div className='space-y-3'>
-                            <div>
-                                <div className='mb-1 text-xs font-semibold text-slate-500'>Cơ sở</div>
-                                <Select
-                                    className='w-full'
-                                    value={selectedPlant || undefined}
-                                    placeholder='Tất cả cơ sở'
-                                    allowClear
-                                    onChange={(v) => setSelectedPlant(v ?? '')}
-                                    options={plants.map((p) => ({ value: p.id, label: p.name }))}
-                                />
-                            </div>
-                            <div>
-                                <div className='mb-1 text-xs font-semibold text-slate-500'>Trạng thái</div>
-                                <Select
-                                    mode='multiple'
-                                    className='w-full'
-                                    value={statusFilter}
-                                    placeholder='Tất cả trạng thái'
-                                    allowClear
-                                    maxTagCount='responsive'
-                                    onChange={(v) => setStatusFilter(v as AssetStatus[])}
-                                    options={STATUS_KEYS.map((s) => ({
-                                        value: s,
-                                        label: ASSET_STATUS_COLOR[s].label,
-                                    }))}
-                                />
-                            </div>
-                            <div className='flex items-center justify-between'>
-                                <span className='text-sm text-slate-700'>Chỉ máy lệch vị trí</span>
-                                <Switch checked={mismatchOnly} onChange={setMismatchOnly} />
-                            </div>
-                        </div>
-                    </div>
-
-                    <div className='rounded-2xl border border-slate-200 bg-white p-4 shadow-sm'>
-                        <div className='mb-2 text-xs font-semibold tracking-wide text-slate-400 uppercase'>
-                            Đang hiển thị
-                        </div>
-                        <div className='flex items-baseline gap-2'>
-                            <span className='text-2xl font-bold text-slate-900'>{filtered.length}</span>
-                            <span className='text-sm text-slate-500'>máy có vị trí</span>
-                        </div>
-                        {mismatchCount > 0 ? (
-                            <div className='mt-1 flex items-center gap-1 text-sm font-medium text-rose-600'>
-                                <WarningFilled /> {mismatchCount} máy lệch vị trí
-                            </div>
-                        ) : null}
-                        {data?.withoutGps ? (
-                            <div className='mt-1 text-[12px] text-slate-400'>
-                                {data.withoutGps} máy chưa có dữ liệu GPS (chưa quét QR)
-                            </div>
+            <div className='machine-map-layout'>
+                <aside className='machine-map-panel'>
+                    <div className='machine-map-panel__header'>
+                        <span>
+                            <FilterOutlined /> Bộ lọc vận hành
+                        </span>
+                        {hasActiveFilter ? (
+                            <button
+                                type='button'
+                                onClick={() => {
+                                    setSelectedPlant('');
+                                    setStatusFilter([]);
+                                    setMismatchOnly(false);
+                                }}
+                            >
+                                Xóa lọc
+                            </button>
                         ) : null}
                     </div>
 
-                    <div className='rounded-2xl border border-slate-200 bg-white p-4 shadow-sm'>
-                        <div className='mb-2 text-xs font-semibold tracking-wide text-slate-400 uppercase'>Chú giải</div>
-                        <div className='space-y-1.5'>
-                            {STATUS_KEYS.map((s) => (
-                                <div key={s} className='flex items-center gap-2 text-sm text-slate-600'>
-                                    <span
-                                        className='h-3 w-3 rounded-full'
-                                        style={{ background: ASSET_STATUS_COLOR[s].color }}
-                                    />
-                                    {ASSET_STATUS_COLOR[s].label}
-                                </div>
-                            ))}
-                            <div className='flex items-center gap-2 pt-1 text-sm text-slate-600'>
-                                <span className='h-3 w-3 rounded-full bg-slate-400 ring-2 ring-rose-500' />
-                                Viền đỏ = lệch vị trí
-                            </div>
-                            <div className='flex items-center gap-2 text-sm text-slate-600'>
-                                <span>🏭</span> Cơ sở
-                            </div>
+                    <div className='machine-map-field'>
+                        <label>Cơ sở</label>
+                        <Select
+                            className='machine-map-select'
+                            value={selectedPlant || undefined}
+                            placeholder='Tất cả cơ sở'
+                            allowClear
+                            onChange={(value) => setSelectedPlant(value ?? '')}
+                            options={plants.map((plant) => ({ value: plant.id, label: plant.name }))}
+                        />
+                    </div>
+
+                    <div className='machine-map-field'>
+                        <label>Trạng thái</label>
+                        <Select
+                            mode='multiple'
+                            className='machine-map-select'
+                            value={statusFilter}
+                            placeholder='Tất cả trạng thái'
+                            allowClear
+                            maxTagCount='responsive'
+                            onChange={(value) => setStatusFilter(value as AssetStatus[])}
+                            options={STATUS_KEYS.map((status) => ({
+                                value: status,
+                                label: ASSET_STATUS_COLOR[status].label,
+                            }))}
+                        />
+                    </div>
+
+                    <div className='machine-map-switch-row'>
+                        <div>
+                            <strong>Chỉ máy lệch vị trí</strong>
+                            <span>Ưu tiên xử lý máy có GPS khác cơ sở hệ thống</span>
+                        </div>
+                        <Switch checked={mismatchOnly} onChange={setMismatchOnly} />
+                    </div>
+
+                    <div className='machine-map-status-cloud'>
+                        {STATUS_KEYS.map((status) => {
+                            const meta = ASSET_STATUS_COLOR[status];
+                            const selected = statusFilter.includes(status);
+                            return (
+                                <button
+                                    key={status}
+                                    type='button'
+                                    className={
+                                        selected ? 'machine-map-status-chip is-active' : 'machine-map-status-chip'
+                                    }
+                                    style={{ '--chip-color': meta.color } as React.CSSProperties}
+                                    onClick={() =>
+                                        setStatusFilter((current) =>
+                                            current.includes(status)
+                                                ? current.filter((item) => item !== status)
+                                                : [...current, status]
+                                        )
+                                    }
+                                >
+                                    <i />
+                                    <span>{meta.label}</span>
+                                    <b>{statusCounts.get(status) ?? 0}</b>
+                                </button>
+                            );
+                        })}
+                    </div>
+
+                    <div className='machine-map-legend'>
+                        <div className='machine-map-legend__title'>
+                            <ApartmentOutlined /> Chú giải
+                        </div>
+                        <div className='machine-map-legend__row'>
+                            <span className='machine-map-legend__sample machine-map-legend__sample--pulse' />
+                            Marker có vòng sáng = máy đã có GPS
+                        </div>
+                        <div className='machine-map-legend__row'>
+                            <span className='machine-map-legend__sample machine-map-legend__sample--danger' />
+                            Vòng đỏ = lệch vị trí
+                        </div>
+                        <div className='machine-map-legend__row'>
+                            <span className='machine-map-legend__sample machine-map-legend__sample--plant' />
+                            Beacon xanh = cơ sở
                         </div>
                     </div>
                 </aside>
 
-                <div className='relative overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm'>
+                <section className='machine-map-stage'>
                     {isLoading ? (
-                        <div className='flex h-[70vh] items-center justify-center'>
+                        <div className='machine-map-loading'>
                             <Spin />
+                            <span>Đang dựng bản đồ vận hành...</span>
                         </div>
                     ) : assets.length === 0 ? (
-                        <div className='flex h-[70vh] items-center justify-center'>
+                        <div className='machine-map-empty'>
                             <Empty description='Chưa có máy nào được định vị qua quét QR' />
                         </div>
                     ) : (
-                        <MapContainer
-                            center={DEFAULT_CENTER}
-                            zoom={DEFAULT_ZOOM}
-                            scrollWheelZoom
-                            style={{ height: '70vh', width: '100%' }}
-                        >
-                            <TileLayer
-                                attribution='&copy; OpenStreetMap'
-                                url='https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png'
-                            />
-                            <FitBounds points={points} />
-                            {facilities.map((f) => (
-                                <Marker key={`plant-${f.id}`} position={[f.lat, f.lng]} icon={facilityIcon}>
-                                    <Popup>
-                                        <div className='font-semibold text-slate-900'>{f.name}</div>
-                                        {f.code ? <div className='text-[12px] text-slate-500'>{f.code}</div> : null}
-                                    </Popup>
-                                </Marker>
-                            ))}
-                            <ClusterMarkers assets={filtered} onSelect={handleSelect} />
-                        </MapContainer>
+                        <>
+                            <div className='machine-map-toolbar'>
+                                <button type='button' onClick={() => setFitSignal((value) => value + 1)}>
+                                    <AimOutlined /> Căn lại
+                                </button>
+                                <button
+                                    type='button'
+                                    className={mismatchOnly ? 'is-active' : ''}
+                                    onClick={() => {
+                                        setMismatchOnly((value) => !value);
+                                        setFitSignal((value) => value + 1);
+                                    }}
+                                >
+                                    <WarningFilled /> Lệch vị trí
+                                </button>
+                                <button type='button' onClick={() => refetch()}>
+                                    <ReloadOutlined /> Tải lại
+                                </button>
+                            </div>
+
+                            {isFetching ? <div className='machine-map-fetching-bar' /> : null}
+
+                            <MapContainer
+                                className='machine-map-canvas'
+                                center={DEFAULT_CENTER}
+                                zoom={DEFAULT_ZOOM}
+                                scrollWheelZoom
+                            >
+                                <TileLayer
+                                    attribution='&copy; OpenStreetMap'
+                                    url='https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png'
+                                />
+                                <FitBounds points={points} signal={fitSignal} />
+                                {facilities.map((facility) => (
+                                    <Marker
+                                        key={`plant-${facility.id}`}
+                                        position={[facility.lat, facility.lng]}
+                                        icon={facilityIcon}
+                                    >
+                                        <Popup className='hd-map-popup-shell'>
+                                            <div className='hd-map-plant-popup'>
+                                                <strong>{facility.name}</strong>
+                                                {facility.code ? <span>{facility.code}</span> : null}
+                                            </div>
+                                        </Popup>
+                                    </Marker>
+                                ))}
+                                <ClusterMarkers assets={filtered} onSelect={handleSelect} />
+                            </MapContainer>
+                        </>
                     )}
+
                     {filtered.length === 0 && assets.length > 0 ? (
-                        <div className='pointer-events-none absolute inset-x-0 top-3 flex justify-center'>
+                        <div className='machine-map-no-result'>
                             <Tag color='default'>Không có máy khớp bộ lọc</Tag>
                         </div>
                     ) : null}
-                </div>
+                </section>
             </div>
         </div>
     );
