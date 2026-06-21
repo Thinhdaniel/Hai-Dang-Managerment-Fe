@@ -1,5 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import {
+    Alert,
     App,
     Button,
     Card,
@@ -108,6 +109,12 @@ type ItemFormValues = AssetDisposalItemPayload & { mode?: 'asset' | 'external' }
 
 const formatDateTime = (value?: string) => (value ? dayjs(value).format('DD/MM/YYYY HH:mm') : '-');
 const formatMoney = (value?: number) => (value != null ? value.toLocaleString('vi-VN') : '-');
+const formatMoneyInput = (value?: string | number) =>
+    value == null || value === '' ? '' : `${value}`.replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+const parseMoneyInput = (value?: string) => {
+    const raw = String(value || '').replace(/[^\d]/g, '');
+    return raw ? Number(raw) : '';
+};
 
 const downloadBlob = (blob: Blob, filename: string) => {
     const url = URL.createObjectURL(blob);
@@ -210,6 +217,7 @@ const AssetDisposalPage: React.FC = () => {
         queryFn: () =>
             assetService.getAll({
                 plantId: batch?.plantId,
+                lifecycle: 'operating',
                 search: assetSearch.trim() || undefined,
                 page: 1,
                 limit: 30,
@@ -371,34 +379,40 @@ const AssetDisposalPage: React.FC = () => {
     const handleSaveItem = async () => {
         const values = await itemForm.validateFields();
         const mode = values.mode ?? 'asset';
-        const payload: AssetDisposalItemPayload =
-            mode === 'asset'
-                ? {
-                      assetId: values.assetId,
-                      condition: values.condition,
-                      reason: values.reason,
-                      suggestedAction: values.suggestedAction,
-                      estimatedValue: values.estimatedValue,
-                      note: values.note,
-                  }
-                : {
-                      sourceType: values.sourceType ?? AssetDisposalSourceType.EXTERNAL,
-                      publicId: values.publicId?.trim() || undefined,
-                      machineCode: values.machineCode?.trim() || undefined,
-                      name: values.name?.trim() || undefined,
-                      type: values.type?.trim() || undefined,
-                      model: values.model?.trim() || undefined,
-                      serial: values.serial?.trim() || undefined,
-                      plantId: values.plantId || batch?.plantId,
-                      area: values.area?.trim() || undefined,
-                      condition: values.condition,
-                      reason: values.reason?.trim() || undefined,
-                      suggestedAction: values.suggestedAction,
-                      estimatedValue: values.estimatedValue,
-                      finalValue: values.finalValue,
-                      note: values.note?.trim() || undefined,
-                      status: values.status,
-                  };
+        const commonPayload = {
+            condition: values.condition,
+            reason: values.reason?.trim() || undefined,
+            suggestedAction: values.suggestedAction,
+            estimatedValue: values.estimatedValue,
+            finalValue: values.finalValue,
+            note: values.note?.trim() || undefined,
+            status: values.status,
+        };
+        const externalPayload = {
+            sourceType: values.sourceType ?? AssetDisposalSourceType.EXTERNAL,
+            publicId: values.publicId?.trim() || undefined,
+            machineCode: values.machineCode?.trim() || undefined,
+            name: values.name?.trim() || undefined,
+            type: values.type?.trim() || undefined,
+            model: values.model?.trim() || undefined,
+            serial: values.serial?.trim() || undefined,
+            plantId: batch?.plantId,
+            area: values.area?.trim() || batch?.area || undefined,
+        };
+        const payload: AssetDisposalItemPayload = editingItem
+            ? {
+                  ...commonPayload,
+                  ...(editingItem.sourceType === AssetDisposalSourceType.ASSET ? {} : externalPayload),
+              }
+            : mode === 'asset'
+              ? {
+                    assetId: values.assetId,
+                    ...commonPayload,
+                }
+              : {
+                    ...externalPayload,
+                    ...commonPayload,
+                };
 
         if (editingItem) {
             await updateItemMutation.mutateAsync({ itemId: editingItem.id, payload });
@@ -987,8 +1001,16 @@ const AssetDisposalPage: React.FC = () => {
 
             <Modal
                 open={itemModalOpen}
-                title={editingItem ? 'Cập nhật thông tin máy thanh lý' : 'Thêm máy vào đợt thanh lý'}
-                width={isDesktop ? 780 : 'calc(100vw - 24px)'}
+                title={
+                    <div className='asset-disposal-item-modal-title'>
+                        <span>{editingItem ? 'Cập nhật máy thanh lý' : 'Thêm máy vào đợt thanh lý'}</span>
+                        <small>
+                            {batch?.code || 'Lô thanh lý'} · {batch?.plant?.name || 'Cơ sở của lô'}
+                            {batch?.area ? ` · ${batch.area}` : ''}
+                        </small>
+                    </div>
+                }
+                width={isDesktop ? 900 : 'calc(100vw - 24px)'}
                 style={!isDesktop ? { top: 12 } : undefined}
                 styles={{
                     body: {
@@ -1011,8 +1033,16 @@ const AssetDisposalPage: React.FC = () => {
                     className='asset-disposal-modal-form'
                     initialValues={{ mode: 'asset' }}
                 >
+                    <Alert
+                        showIcon
+                        type='info'
+                        className='asset-disposal-modal-hint'
+                        message='Dữ liệu máy thanh lý được khóa theo cơ sở của lô'
+                        description='Nếu nhập mã máy/QR/serial trùng máy trong hệ thống, hệ thống sẽ tự kiểm tra và chặn máy sai cơ sở, máy đã thanh lý hoặc máy đang nằm trong lô khác.'
+                    />
+
                     {!editingItem ? (
-                        <Form.Item name='mode' label='Nguồn máy'>
+                        <Form.Item name='mode' label='Nguồn máy' className='asset-disposal-source-select'>
                             <Select
                                 size='large'
                                 options={[
@@ -1034,92 +1064,157 @@ const AssetDisposalPage: React.FC = () => {
                     <Form.Item shouldUpdate noStyle>
                         {({ getFieldValue }) =>
                             getFieldValue('mode') === 'asset' && !editingItem ? (
-                                <Form.Item
-                                    name='assetId'
-                                    label='Máy trong hệ thống'
-                                    rules={[{ required: true, message: 'Chọn máy' }]}
-                                >
-                                    <Select
-                                        size='large'
-                                        showSearch
-                                        filterOption={false}
-                                        onSearch={setAssetSearch}
-                                        options={assetOptions}
-                                        loading={assetOptionsQuery.isFetching}
-                                        placeholder='Tìm theo mã máy, tên máy, serial...'
-                                    />
-                                </Form.Item>
-                            ) : (
-                                <div className='grid grid-cols-1 gap-3 md:grid-cols-2'>
-                                    <Form.Item name='publicId' label='Mã QR'>
-                                        <Input size='large' placeholder='QR-XXXXXX' />
-                                    </Form.Item>
-                                    <Form.Item name='machineCode' label='Mã máy'>
-                                        <Input size='large' />
-                                    </Form.Item>
+                                <div className='asset-disposal-form-section'>
+                                    <div className='asset-disposal-form-section__head'>
+                                        <strong>Máy trong hệ thống</strong>
+                                        <span>
+                                            Chỉ hiển thị máy còn vận hành thuộc {batch?.plant?.name || 'cơ sở lô'}
+                                        </span>
+                                    </div>
                                     <Form.Item
-                                        name='name'
-                                        label='Tên máy'
-                                        rules={[{ required: !editingItem, message: 'Nhập tên máy' }]}
+                                        name='assetId'
+                                        label='Chọn máy'
+                                        rules={[{ required: true, message: 'Chọn máy' }]}
                                     >
-                                        <Input size='large' />
-                                    </Form.Item>
-                                    <Form.Item name='serial' label='Serial'>
-                                        <Input size='large' />
-                                    </Form.Item>
-                                    <Form.Item name='type' label='Loại máy'>
-                                        <Input size='large' />
-                                    </Form.Item>
-                                    <Form.Item name='model' label='Model'>
-                                        <Input size='large' />
-                                    </Form.Item>
-                                    <Form.Item name='plantId' label='Cơ sở'>
                                         <Select
                                             size='large'
-                                            showSearch={{ optionFilterProp: 'label' }}
-                                            options={plantOptions}
+                                            showSearch
+                                            filterOption={false}
+                                            onSearch={setAssetSearch}
+                                            options={assetOptions}
+                                            loading={assetOptionsQuery.isFetching}
+                                            placeholder='Tìm theo mã máy, tên máy, serial...'
                                         />
                                     </Form.Item>
-                                    <Form.Item name='area' label='Khu vực'>
-                                        <Input size='large' />
-                                    </Form.Item>
+                                </div>
+                            ) : (
+                                <div className='asset-disposal-form-section'>
+                                    <div className='asset-disposal-form-section__head'>
+                                        <strong>Máy ngoài hệ thống / QR tạm</strong>
+                                        <span>
+                                            Thông tin này dùng để rà soát thực tế, không được giả danh mã máy đã có
+                                        </span>
+                                    </div>
+                                    <div className='asset-disposal-locked-plant'>
+                                        <span>Cơ sở khóa theo lô</span>
+                                        <strong>{batch?.plant?.name || '-'}</strong>
+                                        <small>
+                                            {batch?.area ? `Khu vực mặc định: ${batch.area}` : 'Chưa khóa khu vực'}
+                                        </small>
+                                    </div>
+                                    <div className='grid grid-cols-1 gap-3 md:grid-cols-2'>
+                                        <Form.Item name='publicId' label='Mã QR'>
+                                            <Input size='large' placeholder='QR-XXXXXX' />
+                                        </Form.Item>
+                                        <Form.Item name='machineCode' label='Mã máy'>
+                                            <Input size='large' placeholder='VD: HD-MAY-001' />
+                                        </Form.Item>
+                                        <Form.Item
+                                            name='name'
+                                            label='Tên máy'
+                                            rules={[{ required: !editingItem, message: 'Nhập tên máy' }]}
+                                        >
+                                            <Input size='large' placeholder='Tên máy theo tem/khảo sát' />
+                                        </Form.Item>
+                                        <Form.Item name='serial' label='Serial'>
+                                            <Input size='large' />
+                                        </Form.Item>
+                                        <Form.Item name='type' label='Loại máy'>
+                                            <Input size='large' />
+                                        </Form.Item>
+                                        <Form.Item name='model' label='Model'>
+                                            <Input size='large' />
+                                        </Form.Item>
+                                        <Form.Item name='area' label='Khu vực thực tế' className='md:col-span-2'>
+                                            <Input
+                                                size='large'
+                                                placeholder={batch?.area || 'Nhập khu vực trong cơ sở'}
+                                            />
+                                        </Form.Item>
+                                    </div>
                                 </div>
                             )
                         }
                     </Form.Item>
 
-                    <div className='grid grid-cols-1 gap-3 md:grid-cols-2'>
-                        <Form.Item name='condition' label='Tình trạng'>
-                            <Select size='large' options={conditionOptions} />
-                        </Form.Item>
-                        <Form.Item name='suggestedAction' label='Đề xuất xử lý'>
-                            <Select size='large' options={actionOptions} />
-                        </Form.Item>
-                        <Form.Item name='estimatedValue' label='Giá trị ước tính'>
-                            <InputNumber size='large' min={0} className='w-full' addonAfter='đ' />
-                        </Form.Item>
-                        {editingItem ? (
-                            <Form.Item name='finalValue' label='Giá trị chốt'>
-                                <InputNumber size='large' min={0} className='w-full' addonAfter='đ' />
+                    <div className='asset-disposal-form-section'>
+                        <div className='asset-disposal-form-section__head'>
+                            <strong>Tình trạng & hướng xử lý</strong>
+                            <span>Thông tin bắt buộc trước khi gửi duyệt lô thanh lý</span>
+                        </div>
+                        <div className='grid grid-cols-1 gap-3 md:grid-cols-2'>
+                            <Form.Item
+                                name='condition'
+                                label='Tình trạng'
+                                rules={[{ required: true, message: 'Chọn tình trạng' }]}
+                            >
+                                <Select size='large' options={conditionOptions} />
                             </Form.Item>
-                        ) : null}
-                        {editingItem ? (
-                            <Form.Item name='status' label='Trạng thái dòng'>
-                                <Select
+                            <Form.Item
+                                name='suggestedAction'
+                                label='Đề xuất xử lý'
+                                rules={[{ required: true, message: 'Chọn đề xuất xử lý' }]}
+                            >
+                                <Select size='large' options={actionOptions} />
+                            </Form.Item>
+                        </div>
+                    </div>
+
+                    <div className='asset-disposal-money-panel'>
+                        <div className='asset-disposal-money-panel__head'>
+                            <strong>Định giá thanh lý</strong>
+                            <span>Nhập theo VNĐ, hệ thống tự format hàng nghìn</span>
+                        </div>
+                        <div className='grid grid-cols-1 gap-3 md:grid-cols-2'>
+                            <Form.Item name='estimatedValue' label='Giá trị ước tính'>
+                                <InputNumber
                                     size='large'
-                                    options={Object.entries(itemStatusMeta).map(([value, meta]) => ({
-                                        value,
-                                        label: meta.label,
-                                    }))}
+                                    min={0}
+                                    controls={false}
+                                    className='asset-disposal-money-input'
+                                    addonAfter='đ'
+                                    formatter={formatMoneyInput}
+                                    parser={parseMoneyInput}
+                                    placeholder='0'
                                 />
                             </Form.Item>
-                        ) : null}
-                        <Form.Item name='reason' label='Lý do / ghi nhận' className='md:col-span-2'>
-                            <Input.TextArea rows={3} />
-                        </Form.Item>
-                        <Form.Item name='note' label='Ghi chú' className='md:col-span-2'>
-                            <Input.TextArea rows={3} />
-                        </Form.Item>
+                            {editingItem ? (
+                                <Form.Item name='finalValue' label='Giá trị chốt'>
+                                    <InputNumber
+                                        size='large'
+                                        min={0}
+                                        controls={false}
+                                        className='asset-disposal-money-input'
+                                        addonAfter='đ'
+                                        formatter={formatMoneyInput}
+                                        parser={parseMoneyInput}
+                                        placeholder='0'
+                                    />
+                                </Form.Item>
+                            ) : null}
+                        </div>
+                    </div>
+
+                    <div className='asset-disposal-form-section'>
+                        <div className='grid grid-cols-1 gap-3 md:grid-cols-2'>
+                            {editingItem ? (
+                                <Form.Item name='status' label='Trạng thái dòng'>
+                                    <Select
+                                        size='large'
+                                        options={Object.entries(itemStatusMeta).map(([value, meta]) => ({
+                                            value,
+                                            label: meta.label,
+                                        }))}
+                                    />
+                                </Form.Item>
+                            ) : null}
+                            <Form.Item name='reason' label='Lý do / ghi nhận' className='md:col-span-2'>
+                                <Input.TextArea rows={3} placeholder='VD: hỏng nặng, không còn linh kiện thay thế...' />
+                            </Form.Item>
+                            <Form.Item name='note' label='Ghi chú' className='md:col-span-2'>
+                                <Input.TextArea rows={3} placeholder='Ghi chú nội bộ, tình trạng phụ kiện, ảnh...' />
+                            </Form.Item>
+                        </div>
                     </div>
                 </Form>
             </Modal>

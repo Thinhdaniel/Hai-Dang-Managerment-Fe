@@ -7399,6 +7399,111 @@ body.chat-immersive .mobile-bottom-nav {
     border-radius: 12px !important;
 }
 
+.asset-disposal-item-modal-title {
+    display: grid;
+    gap: 2px;
+}
+
+.asset-disposal-item-modal-title span {
+    color: #0f172a;
+    font-size: 16px;
+    font-weight: 900;
+}
+
+.asset-disposal-item-modal-title small {
+    color: #64748b;
+    font-size: 12px;
+    font-weight: 700;
+}
+
+.asset-disposal-modal-hint.ant-alert {
+    margin-bottom: 14px;
+    border-radius: 14px;
+}
+
+.asset-disposal-source-select {
+    margin-bottom: 14px !important;
+}
+
+.asset-disposal-form-section,
+.asset-disposal-money-panel {
+    margin-top: 14px;
+    border: 1px solid rgba(226, 232, 240, 0.95);
+    border-radius: 18px;
+    background: #ffffff;
+    padding: 14px;
+}
+
+.asset-disposal-form-section__head,
+.asset-disposal-money-panel__head {
+    display: grid;
+    gap: 2px;
+    margin-bottom: 12px;
+}
+
+.asset-disposal-form-section__head strong,
+.asset-disposal-money-panel__head strong {
+    color: #0f172a;
+    font-size: 14px;
+    font-weight: 900;
+}
+
+.asset-disposal-form-section__head span,
+.asset-disposal-money-panel__head span {
+    color: #64748b;
+    font-size: 12px;
+    font-weight: 600;
+}
+
+.asset-disposal-locked-plant {
+    display: grid;
+    gap: 2px;
+    margin-bottom: 12px;
+    border: 1px solid #bfdbfe;
+    border-radius: 14px;
+    background: linear-gradient(135deg, #eff6ff, #ffffff);
+    padding: 10px 12px;
+}
+
+.asset-disposal-locked-plant span,
+.asset-disposal-locked-plant small {
+    color: #64748b;
+    font-size: 12px;
+    font-weight: 700;
+}
+
+.asset-disposal-locked-plant strong {
+    color: #1d4ed8;
+    font-size: 15px;
+    font-weight: 900;
+}
+
+.asset-disposal-money-panel {
+    border-color: rgba(14, 165, 233, 0.28);
+    background: linear-gradient(135deg, #f0f9ff, #ffffff);
+}
+
+.asset-disposal-money-input.ant-input-number {
+    width: 100%;
+}
+
+.asset-disposal-money-input .ant-input-number-input {
+    height: 42px;
+    color: #0f172a;
+    font-size: 18px;
+    font-weight: 900;
+    letter-spacing: 0;
+}
+
+.asset-disposal-money-input .ant-input-number-group-addon {
+    min-width: 44px;
+    border-color: #bae6fd;
+    background: #e0f2fe;
+    color: #0369a1;
+    font-size: 13px;
+    font-weight: 900;
+}
+
 .asset-disposal-status-tag.ant-tag {
     margin: 0;
     max-width: 100%;
