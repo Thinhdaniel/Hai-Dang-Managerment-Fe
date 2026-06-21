@@ -29,6 +29,20 @@ export const PAGE_META: PageMeta[] = [
         searchPlaceholder: 'Quét hoặc nhập mã máy...',
     },
     {
+        path: '/assets/disposals',
+        title: 'Thanh Lý Máy',
+        subtitle: 'Rà soát, quét QR, duyệt và hoàn tất các đợt thanh lý máy.',
+        breadcrumbs: ['Dashboard', 'Quản lý máy', 'Thanh lý máy'],
+        searchPlaceholder: 'Tìm theo mã đợt, lý do, khu vực...',
+    },
+    {
+        path: '/assets/disposals/:id',
+        title: 'Chi Tiết Thanh Lý',
+        subtitle: 'Quét và cập nhật tình trạng từng máy trong đợt thanh lý.',
+        breadcrumbs: ['Dashboard', 'Quản lý máy', 'Thanh lý máy', 'Chi tiết'],
+        searchPlaceholder: 'Quét QR hoặc tìm máy...',
+    },
+    {
         path: '/assets/:id',
         title: 'Chi Tiết Thiết Bị',
         subtitle: 'Theo dõi hồ sơ, trạng thái và lịch sử hoạt động của thiết bị.',

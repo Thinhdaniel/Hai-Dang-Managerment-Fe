@@ -17,10 +17,13 @@ import {
 import {
     ArrowLeftOutlined,
     CalendarOutlined,
+    DeleteOutlined,
     EditOutlined,
     AimOutlined,
     EnvironmentOutlined,
+    FileDoneOutlined,
     HistoryOutlined,
+    QrcodeOutlined,
     RollbackOutlined,
     SwapOutlined,
     ToolOutlined,
@@ -42,8 +45,16 @@ import { borrowingService } from '../core/services/borrowing.service';
 import { maintenanceService } from '../core/services/maintenance.service';
 import { qrScanLogService } from '../core/services/qr-scan-log.service';
 import { transferService } from '../core/services/transfer.service';
-import { ASSET_OWNERSHIP_LABEL, isReturnedToPartner } from '../core/constants';
-import type { Asset, AssetStatus, Borrowing, CreateTransferPayload, Maintenance, Transfer } from '../core/types';
+import { ASSET_OWNERSHIP_LABEL, isAssetInDisposalFlow, isReturnedToPartner } from '../core/constants';
+import {
+    AssetStatus,
+    type Asset,
+    type AssetDisposalItem,
+    type Borrowing,
+    type CreateTransferPayload,
+    type Maintenance,
+    type Transfer,
+} from '../core/types';
 
 const AssetFormModal = lazy(() => import('../components/AssetFormModal'));
 const MaintenanceFormModal = lazy(() => import('../components/MaintenanceFormModal'));
@@ -53,6 +64,8 @@ const HandoverModal = lazy(() => import('../components/transfer/HandoverModal'))
 const { Text, Title } = Typography;
 
 const STATUS_CFG: Record<AssetStatus, { label: string; color: string; badge: string }> = {
+    pending_disposal: { label: 'Chuẩn bị thanh lý', color: 'orange', badge: 'warning' },
+    disposed: { label: 'Đã thanh lý', color: 'default', badge: 'default' },
     active: { label: 'Đang hoạt động', color: 'green', badge: 'success' },
     maintenance: { label: 'Đang bảo trì', color: 'gold', badge: 'warning' },
     broken: { label: 'Lỗi / hỏng', color: 'red', badge: 'error' },
@@ -89,6 +102,48 @@ const QR_SCAN_RESULT_LABEL: Record<string, { label: string; color: string }> = {
     failed: { label: 'Không hợp lệ', color: 'red' },
 };
 
+const DISPOSAL_BATCH_STATUS_LABEL: Record<string, { label: string; color: string }> = {
+    draft: { label: 'Nháp', color: 'default' },
+    scanning: { label: 'Đang rà soát', color: 'blue' },
+    reviewing: { label: 'Chờ duyệt', color: 'gold' },
+    approved: { label: 'Đã duyệt', color: 'green' },
+    completed: { label: 'Hoàn tất', color: 'default' },
+    cancelled: { label: 'Đã hủy', color: 'red' },
+};
+
+const DISPOSAL_ITEM_STATUS_LABEL: Record<string, { label: string; color: string }> = {
+    pending: { label: 'Chờ rà soát', color: 'default' },
+    checked: { label: 'Đã rà soát', color: 'blue' },
+    approved: { label: 'Đã duyệt', color: 'green' },
+    disposed: { label: 'Đã thanh lý', color: 'default' },
+    kept: { label: 'Giữ lại', color: 'purple' },
+    cancelled: { label: 'Đã hủy', color: 'red' },
+};
+
+const DISPOSAL_SOURCE_LABEL: Record<string, string> = {
+    asset: 'Máy trong hệ thống',
+    external: 'Máy ngoài hệ thống',
+    qr_only: 'Tem QR tạm',
+};
+
+const DISPOSAL_CONDITION_LABEL: Record<string, string> = {
+    usable: 'Còn dùng được',
+    minor_fault: 'Lỗi nhẹ',
+    major_fault: 'Hỏng nặng',
+    missing_parts: 'Thiếu linh kiện',
+    scrap: 'Phế liệu',
+    unknown: 'Chưa rõ',
+};
+
+const DISPOSAL_ACTION_LABEL: Record<string, string> = {
+    sell: 'Bán thanh lý',
+    part_out: 'Tháo linh kiện',
+    scrap: 'Bán phế liệu',
+    keep: 'Giữ lại',
+    repair: 'Sửa lại',
+    unknown: 'Chưa đề xuất',
+};
+
 const formatDate = (value?: string) => (value ? dayjs(value).format('DD/MM/YYYY') : '-');
 const formatDateTime = (value?: string) => (value ? dayjs(value).format('DD/MM/YYYY HH:mm') : '-');
 const formatMoney = (value?: number) => (value ? `${value.toLocaleString('vi-VN')} đ` : '-');
@@ -117,6 +172,9 @@ const getTransferAssetLabel = (transfer: Transfer) => {
     if (assets.length > 1) return `${assets.length} máy`;
     return 'Máy';
 };
+
+const getDisposalRecordDate = (record: AssetDisposalItem) =>
+    record.disposedAt || record.checkedAt || record.updatedAt || record.createdAt;
 
 const MetricCard = ({ title, value, icon }: { title: string; value: React.ReactNode; icon: React.ReactNode }) => (
     <Card variant='outlined' className='asset-detail-metric-card h-full'>
@@ -243,6 +301,7 @@ const AssetDetail: React.FC = () => {
     });
 
     const historyItems = useMemo(() => {
+        const disposalRecords = asset?.disposalRecords ?? [];
         const maintenanceItems = maintenances.map((item: Maintenance) => ({
             key: `m-${item.id}`,
             date: item.endDate || item.startDate,
@@ -267,11 +326,53 @@ const AssetDetail: React.FC = () => {
             description: item.purpose || item.partnerName || '',
             meta: item.borrowerName ? `Người mượn: ${item.borrowerName}` : undefined,
         }));
+        const disposalItems = disposalRecords.flatMap((item: AssetDisposalItem) => {
+            const batchCode = item.batch?.code ? `Đợt ${item.batch.code}` : 'Đợt thanh lý';
+            const itemStatus = DISPOSAL_ITEM_STATUS_LABEL[item.status] ?? { label: item.status, color: 'gray' };
+            const entries = [
+                {
+                    key: `d-${item.id}`,
+                    date: getDisposalRecordDate(item),
+                    color: item.status === 'disposed' ? 'gray' : 'orange',
+                    title: `${batchCode}: ${itemStatus.label}`,
+                    description:
+                        item.reason ||
+                        item.batch?.reason ||
+                        DISPOSAL_ACTION_LABEL[item.suggestedAction || 'unknown'] ||
+                        undefined,
+                    meta: item.checkedByName ? `Người rà soát: ${item.checkedByName}` : undefined,
+                },
+            ];
 
-        return [...maintenanceItems, ...transferItems, ...borrowingItems].sort(
+            if (item.batch?.approvedAt) {
+                entries.push({
+                    key: `d-approved-${item.id}`,
+                    date: item.batch.approvedAt,
+                    color: 'green',
+                    title: `${batchCode}: Đã duyệt thanh lý`,
+                    description: item.batch.approvalNote || item.batch.reason,
+                    meta: item.batch.approvedByName ? `Người duyệt: ${item.batch.approvedByName}` : undefined,
+                });
+            }
+
+            if (item.disposedAt || item.batch?.completedAt) {
+                entries.push({
+                    key: `d-completed-${item.id}`,
+                    date: item.disposedAt || item.batch?.completedAt || item.updatedAt,
+                    color: 'gray',
+                    title: `${batchCode}: Hoàn tất thanh lý`,
+                    description: item.finalValue ? `Giá chốt: ${formatMoney(item.finalValue)}` : item.note,
+                    meta: item.batch?.completedByName ? `Người hoàn tất: ${item.batch.completedByName}` : undefined,
+                });
+            }
+
+            return entries;
+        });
+
+        return [...maintenanceItems, ...transferItems, ...borrowingItems, ...disposalItems].sort(
             (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()
         );
-    }, [borrowings, maintenances, transfers]);
+    }, [asset?.disposalRecords, borrowings, maintenances, transfers]);
 
     const handleUpdate = async (values: Omit<Asset, 'id' | 'createdAt' | 'updatedAt'>) => {
         await updateMutation.mutateAsync({ id, data: values });
@@ -336,12 +437,34 @@ const AssetDetail: React.FC = () => {
     const openTransfer = transfers.find((transfer: Transfer) => ['pending', 'approved'].includes(transfer.status));
     const hasOpenTransfer = asset.hasOpenTransfer || Boolean(openTransfer);
     const returnedToPartner = isReturnedToPartner(asset.status);
+    const inDisposalFlow = isAssetInDisposalFlow(asset.status);
+    const disposalRecords = asset.disposalRecords ?? [];
+    const latestDisposalRecord = disposalRecords[0];
+    const operationDisabledReason = returnedToPartner
+        ? 'Máy đã trả đối tác, không thể tạo nghiệp vụ mới'
+        : inDisposalFlow
+          ? 'Máy đang/đã nằm trong hồ sơ thanh lý, chỉ nên xử lý trong module thanh lý'
+          : '';
     const transferDisabledReason = returnedToPartner
         ? 'Máy đã trả đối tác, không thể điều chuyển'
-        : hasOpenTransfer
-          ? 'Máy đang có lệnh điều chuyển chưa hoàn tất'
-          : '';
+        : inDisposalFlow
+          ? 'Máy đang/đã nằm trong hồ sơ thanh lý, không thể điều chuyển'
+          : hasOpenTransfer
+            ? 'Máy đang có lệnh điều chuyển chưa hoàn tất'
+            : '';
     const ownershipLabel = ASSET_OWNERSHIP_LABEL[asset.ownershipType] || ASSET_OWNERSHIP_LABEL.owned;
+    const latestDisposalItemStatus = latestDisposalRecord
+        ? (DISPOSAL_ITEM_STATUS_LABEL[latestDisposalRecord.status] ?? {
+              label: latestDisposalRecord.status,
+              color: 'default',
+          })
+        : undefined;
+    const latestDisposalBatchStatus = latestDisposalRecord?.batch
+        ? (DISPOSAL_BATCH_STATUS_LABEL[latestDisposalRecord.batch.status] ?? {
+              label: latestDisposalRecord.batch.status,
+              color: 'default',
+          })
+        : undefined;
 
     const overviewContent = (
         <div className='grid grid-cols-1 gap-6 xl:grid-cols-3'>
@@ -374,6 +497,112 @@ const AssetDetail: React.FC = () => {
                         ]}
                     />
                 </Card>
+
+                {latestDisposalRecord ? (
+                    <Card
+                        variant='outlined'
+                        className='asset-detail-disposal-card'
+                        title={
+                            <span className='inline-flex items-center gap-2'>
+                                <FileDoneOutlined />
+                                Hồ sơ thanh lý
+                            </span>
+                        }
+                        extra={
+                            <div className='flex flex-wrap justify-end gap-2'>
+                                {latestDisposalBatchStatus ? (
+                                    <Tag color={latestDisposalBatchStatus.color}>{latestDisposalBatchStatus.label}</Tag>
+                                ) : null}
+                                {latestDisposalItemStatus ? (
+                                    <Tag color={latestDisposalItemStatus.color}>{latestDisposalItemStatus.label}</Tag>
+                                ) : null}
+                            </div>
+                        }
+                    >
+                        <Descriptions
+                            layout='vertical'
+                            bordered
+                            size='small'
+                            column={{ xs: 1, sm: 2, md: 3 }}
+                            items={[
+                                {
+                                    key: 'batch',
+                                    label: 'Đợt thanh lý',
+                                    children: latestDisposalRecord.batch?.code || latestDisposalRecord.batchId,
+                                },
+                                {
+                                    key: 'source',
+                                    label: 'Nguồn ghi nhận',
+                                    children:
+                                        DISPOSAL_SOURCE_LABEL[latestDisposalRecord.sourceType] ||
+                                        latestDisposalRecord.sourceType,
+                                },
+                                {
+                                    key: 'condition',
+                                    label: 'Tình trạng rà soát',
+                                    children:
+                                        DISPOSAL_CONDITION_LABEL[latestDisposalRecord.condition || 'unknown'] || '-',
+                                },
+                                {
+                                    key: 'action',
+                                    label: 'Đề xuất xử lý',
+                                    children:
+                                        DISPOSAL_ACTION_LABEL[latestDisposalRecord.suggestedAction || 'unknown'] || '-',
+                                },
+                                {
+                                    key: 'estimatedValue',
+                                    label: 'Giá ước tính',
+                                    children: formatMoney(latestDisposalRecord.estimatedValue),
+                                },
+                                {
+                                    key: 'finalValue',
+                                    label: 'Giá chốt',
+                                    children: formatMoney(latestDisposalRecord.finalValue),
+                                },
+                                {
+                                    key: 'checkedAt',
+                                    label: 'Ngày rà soát',
+                                    children: formatDateTime(latestDisposalRecord.checkedAt),
+                                },
+                                {
+                                    key: 'disposedAt',
+                                    label: 'Ngày thanh lý',
+                                    children: formatDateTime(
+                                        latestDisposalRecord.disposedAt || latestDisposalRecord.batch?.completedAt
+                                    ),
+                                },
+                                {
+                                    key: 'checkedBy',
+                                    label: 'Người rà soát',
+                                    children: latestDisposalRecord.checkedByName || '-',
+                                },
+                                {
+                                    key: 'qr',
+                                    label: 'Tem QR',
+                                    children: latestDisposalRecord.publicId ? (
+                                        <Tag icon={<QrcodeOutlined />} className='!m-0 font-mono'>
+                                            {latestDisposalRecord.publicId}
+                                        </Tag>
+                                    ) : (
+                                        '-'
+                                    ),
+                                },
+                                {
+                                    key: 'reason',
+                                    label: 'Lý do / ghi nhận',
+                                    span: 2,
+                                    children: latestDisposalRecord.reason || latestDisposalRecord.batch?.reason || '-',
+                                },
+                                {
+                                    key: 'note',
+                                    label: 'Ghi chú',
+                                    span: 3,
+                                    children: latestDisposalRecord.note || latestDisposalRecord.batch?.note || '-',
+                                },
+                            ]}
+                        />
+                    </Card>
+                ) : null}
 
                 <Card variant='outlined' title='Thông số kỹ thuật'>
                     {asset.specifications && Object.keys(asset.specifications).length > 0 ? (
@@ -421,7 +650,8 @@ const AssetDetail: React.FC = () => {
                                 </div>
                                 {typeof asset.locationMismatch.distanceM === 'number' ? (
                                     <div className='text-xs text-slate-500'>
-                                        Cách cơ sở thực tế ~{asset.locationMismatch.distanceM}m · {formatRelativeVi(asset.locationMismatch.scannedAt)}
+                                        Cách cơ sở thực tế ~{asset.locationMismatch.distanceM}m ·{' '}
+                                        {formatRelativeVi(asset.locationMismatch.scannedAt)}
                                     </div>
                                 ) : null}
                                 {canManage ? (
@@ -502,23 +732,27 @@ const AssetDetail: React.FC = () => {
                             </Button>
                         </Tooltip>
                         {canManage ? (
+                            <Tooltip title={operationDisabledReason}>
+                                <Button
+                                    block
+                                    icon={<RollbackOutlined />}
+                                    disabled={Boolean(operationDisabledReason)}
+                                    onClick={() => navigate(`/borrowings/new?assetId=${asset.id}`)}
+                                >
+                                    Tạo giao dịch mượn / thuê
+                                </Button>
+                            </Tooltip>
+                        ) : null}
+                        <Tooltip title={operationDisabledReason}>
                             <Button
                                 block
-                                icon={<RollbackOutlined />}
-                                disabled={returnedToPartner}
-                                onClick={() => navigate(`/borrowings/new?assetId=${asset.id}`)}
+                                icon={<ToolOutlined />}
+                                disabled={Boolean(operationDisabledReason)}
+                                onClick={() => setIsMaintenanceOpen(true)}
                             >
-                                Tạo giao dịch mượn / thuê
+                                Tạo phiếu bảo trì
                             </Button>
-                        ) : null}
-                        <Button
-                            block
-                            icon={<ToolOutlined />}
-                            disabled={returnedToPartner}
-                            onClick={() => setIsMaintenanceOpen(true)}
-                        >
-                            Tạo phiếu bảo trì
-                        </Button>
+                        </Tooltip>
                         {canManage ? (
                             <Button block type='primary' icon={<EditOutlined />} onClick={() => setIsFormOpen(true)}>
                                 Chỉnh sửa thông tin
@@ -586,6 +820,7 @@ const AssetDetail: React.FC = () => {
                     <Button
                         size='small'
                         icon={<RollbackOutlined />}
+                        disabled={Boolean(operationDisabledReason)}
                         onClick={() => navigate(`/borrowings/new?assetId=${asset.id}`)}
                     >
                         Tạo giao dịch
@@ -662,6 +897,95 @@ const AssetDetail: React.FC = () => {
                 </div>
             ) : (
                 <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description='Chưa có lịch sử quét QR' />
+            )}
+        </Card>
+    );
+
+    const disposalContent = (
+        <Card variant='outlined' title='Hồ sơ thanh lý' extra={<Tag>{disposalRecords.length} bản ghi</Tag>}>
+            {disposalRecords.length ? (
+                <div className='divide-y divide-slate-100'>
+                    {disposalRecords.map((item) => {
+                        const itemStatus = DISPOSAL_ITEM_STATUS_LABEL[item.status] ?? {
+                            label: item.status,
+                            color: 'default',
+                        };
+                        const batchStatus = item.batch
+                            ? (DISPOSAL_BATCH_STATUS_LABEL[item.batch.status] ?? {
+                                  label: item.batch.status,
+                                  color: 'default',
+                              })
+                            : undefined;
+
+                        return (
+                            <div key={item.id} className='asset-detail-disposal-record py-4'>
+                                <div className='flex flex-col gap-3 md:flex-row md:items-start md:justify-between'>
+                                    <div className='min-w-0 space-y-2'>
+                                        <div className='flex flex-wrap items-center gap-2'>
+                                            <Text strong>{item.batch?.code || item.batchId}</Text>
+                                            <Tag color={itemStatus.color} className='!m-0'>
+                                                {itemStatus.label}
+                                            </Tag>
+                                            {batchStatus ? (
+                                                <Tag color={batchStatus.color} className='!m-0'>
+                                                    {batchStatus.label}
+                                                </Tag>
+                                            ) : null}
+                                            <Tag className='!m-0'>
+                                                {DISPOSAL_SOURCE_LABEL[item.sourceType] || item.sourceType}
+                                            </Tag>
+                                        </div>
+                                        <div className='grid gap-2 text-sm text-slate-600 sm:grid-cols-2'>
+                                            <span>
+                                                Tình trạng:{' '}
+                                                <strong>
+                                                    {DISPOSAL_CONDITION_LABEL[item.condition || 'unknown'] || '-'}
+                                                </strong>
+                                            </span>
+                                            <span>
+                                                Đề xuất:{' '}
+                                                <strong>
+                                                    {DISPOSAL_ACTION_LABEL[item.suggestedAction || 'unknown'] || '-'}
+                                                </strong>
+                                            </span>
+                                            <span>Giá ước tính: {formatMoney(item.estimatedValue)}</span>
+                                            <span>Giá chốt: {formatMoney(item.finalValue)}</span>
+                                            <span>Người rà soát: {item.checkedByName || '-'}</span>
+                                            <span>Ngày rà soát: {formatDateTime(item.checkedAt)}</span>
+                                        </div>
+                                        {item.reason || item.batch?.reason ? (
+                                            <div className='text-sm text-slate-600'>
+                                                <strong>Lý do:</strong> {item.reason || item.batch?.reason}
+                                            </div>
+                                        ) : null}
+                                        {item.note ? <div className='text-sm text-slate-500'>{item.note}</div> : null}
+                                    </div>
+                                    <div className='flex shrink-0 flex-col gap-2 md:items-end'>
+                                        {item.publicId ? (
+                                            <Tag icon={<QrcodeOutlined />} className='!m-0 w-fit font-mono'>
+                                                {item.publicId}
+                                            </Tag>
+                                        ) : null}
+                                        <Text type='secondary' className='text-xs'>
+                                            {formatDateTime(getDisposalRecordDate(item))}
+                                        </Text>
+                                        {item.batchId ? (
+                                            <Button
+                                                size='small'
+                                                icon={<FileDoneOutlined />}
+                                                onClick={() => navigate(`/assets/disposals/${item.batchId}`)}
+                                            >
+                                                Mở hồ sơ
+                                            </Button>
+                                        ) : null}
+                                    </div>
+                                </div>
+                            </div>
+                        );
+                    })}
+                </div>
+            ) : (
+                <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description='Chưa có hồ sơ thanh lý' />
             )}
         </Card>
     );
@@ -743,23 +1067,27 @@ const AssetDetail: React.FC = () => {
                                 </Button>
                             </Tooltip>
                             {canManage ? (
+                                <Tooltip title={operationDisabledReason}>
+                                    <Button
+                                        className='asset-detail-action-button'
+                                        icon={<RollbackOutlined />}
+                                        disabled={Boolean(operationDisabledReason)}
+                                        onClick={() => navigate(`/borrowings/new?assetId=${asset.id}`)}
+                                    >
+                                        Tạo giao dịch
+                                    </Button>
+                                </Tooltip>
+                            ) : null}
+                            <Tooltip title={operationDisabledReason}>
                                 <Button
                                     className='asset-detail-action-button'
-                                    icon={<RollbackOutlined />}
-                                    disabled={returnedToPartner}
-                                    onClick={() => navigate(`/borrowings/new?assetId=${asset.id}`)}
+                                    icon={<ToolOutlined />}
+                                    disabled={Boolean(operationDisabledReason)}
+                                    onClick={() => setIsMaintenanceOpen(true)}
                                 >
-                                    Tạo giao dịch
+                                    Bảo trì
                                 </Button>
-                            ) : null}
-                            <Button
-                                className='asset-detail-action-button'
-                                icon={<ToolOutlined />}
-                                disabled={returnedToPartner}
-                                onClick={() => setIsMaintenanceOpen(true)}
-                            >
-                                Bảo trì
-                            </Button>
+                            </Tooltip>
                             {canManage ? (
                                 <Button
                                     type='primary'
@@ -773,7 +1101,7 @@ const AssetDetail: React.FC = () => {
                         </div>
                     </div>
 
-                    {canUpdateStatus ? (
+                    {canUpdateStatus && !inDisposalFlow ? (
                         <div className='asset-detail-status-panel rounded-2xl border border-slate-200 bg-slate-50 p-4'>
                             <div className='mb-3 flex items-center gap-2'>
                                 <ToolOutlined className='text-slate-500' />
@@ -794,9 +1122,62 @@ const AssetDetail: React.FC = () => {
                                 onChange={handleStatusChange}
                             />
                         </div>
+                    ) : canUpdateStatus && inDisposalFlow ? (
+                        <div className='asset-detail-status-panel asset-detail-status-panel--locked rounded-2xl border border-orange-200 bg-orange-50 p-4'>
+                            <div className='mb-1 flex items-center gap-2 font-bold text-orange-800'>
+                                <DeleteOutlined />
+                                Máy đang được quản lý theo hồ sơ thanh lý
+                            </div>
+                            <Text className='text-sm !text-orange-700'>
+                                Không cập nhật trạng thái nhanh tại đây. Nếu cần giữ lại hoặc hoàn tất thanh lý, xử lý
+                                trong module Thanh lý máy để lịch sử và file xuất không lệch dữ liệu.
+                            </Text>
+                        </div>
                     ) : null}
                 </div>
             </Card>
+
+            {inDisposalFlow ? (
+                <Alert
+                    className='asset-detail-lifecycle-alert'
+                    type={asset.status === AssetStatus.DISPOSED ? 'info' : 'warning'}
+                    showIcon
+                    message={
+                        asset.status === AssetStatus.DISPOSED
+                            ? 'Máy đã thanh lý - giữ lại hồ sơ để tra cứu'
+                            : 'Máy đang chuẩn bị thanh lý'
+                    }
+                    description={
+                        latestDisposalRecord ? (
+                            <div className='flex flex-col gap-1 text-sm'>
+                                <span>
+                                    Đợt:{' '}
+                                    <strong>{latestDisposalRecord.batch?.code || latestDisposalRecord.batchId}</strong>
+                                    {latestDisposalRecord.batch?.plant?.name
+                                        ? ` · ${latestDisposalRecord.batch.plant.name}`
+                                        : ''}
+                                </span>
+                                <span>
+                                    Lý do:{' '}
+                                    {latestDisposalRecord.reason || latestDisposalRecord.batch?.reason || 'Chưa ghi rõ'}
+                                </span>
+                            </div>
+                        ) : (
+                            'Máy đang ở trạng thái thanh lý nhưng chưa có hồ sơ thanh lý trả về từ API.'
+                        )
+                    }
+                    action={
+                        latestDisposalRecord?.batchId ? (
+                            <Button
+                                size='small'
+                                onClick={() => navigate(`/assets/disposals/${latestDisposalRecord.batchId}`)}
+                            >
+                                Mở hồ sơ
+                            </Button>
+                        ) : null
+                    }
+                />
+            ) : null}
 
             <Tabs
                 className='asset-detail-tabs'
@@ -819,13 +1200,18 @@ const AssetDetail: React.FC = () => {
                                 }
                                 approvingTransferId={approvingId}
                                 completingTransferId={completingId}
-                                onCreate={returnedToPartner ? undefined : () => setIsTransferOpen(true)}
+                                onCreate={transferDisabledReason ? undefined : () => setIsTransferOpen(true)}
                                 onApprove={canManage ? handleApprove : undefined}
                                 onComplete={canManage ? setHandoverTransfer : undefined}
                             />
                         ),
                     },
                     { key: 'borrowing', label: `Giao dịch (${borrowings.length})`, children: borrowingContent },
+                    {
+                        key: 'disposal',
+                        label: `Thanh lý (${disposalRecords.length})`,
+                        children: disposalContent,
+                    },
                     ...(canManage
                         ? [
                               {

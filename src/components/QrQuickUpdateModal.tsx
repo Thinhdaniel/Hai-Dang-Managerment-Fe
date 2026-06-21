@@ -29,6 +29,7 @@ const baseStatusOptions = [
     AssetStatus.MAINTENANCE,
     AssetStatus.BROKEN,
     AssetStatus.STORAGE,
+    AssetStatus.PENDING_DISPOSAL,
 ] satisfies AssetStatus[];
 
 const statusTone: Record<AssetStatus, string> = {
@@ -37,6 +38,8 @@ const statusTone: Record<AssetStatus, string> = {
     [AssetStatus.BROKEN]: 'border-rose-200 bg-rose-50 text-rose-700 hover:!border-rose-300',
     [AssetStatus.BORROWING]: 'border-indigo-200 bg-indigo-50 text-indigo-700 hover:!border-indigo-300',
     [AssetStatus.STORAGE]: 'border-slate-300 bg-slate-50 text-slate-700 hover:!border-slate-400',
+    [AssetStatus.PENDING_DISPOSAL]: 'border-orange-200 bg-orange-50 text-orange-700 hover:!border-orange-300',
+    [AssetStatus.DISPOSED]: 'border-slate-300 bg-slate-100 text-slate-600 hover:!border-slate-400',
     [AssetStatus.RETURNED_TO_PARTNER]: 'border-violet-200 bg-violet-50 text-violet-700 hover:!border-violet-300',
 };
 

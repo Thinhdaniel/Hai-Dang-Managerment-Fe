@@ -97,7 +97,11 @@ const OWNERSHIP_LABEL: Record<AssetOwnershipType, string> = {
 };
 
 const canTransferAsset = (asset: Asset | null) =>
-    Boolean(asset && asset.status !== AssetStatus.RETURNED_TO_PARTNER && !asset.hasOpenTransfer);
+    Boolean(
+        asset &&
+        ![AssetStatus.RETURNED_TO_PARTNER, AssetStatus.PENDING_DISPOSAL, AssetStatus.DISPOSED].includes(asset.status) &&
+        !asset.hasOpenTransfer
+    );
 
 const getScanErrorText = (result: ScanResult | null) => {
     if (!result || result.asset) return '';
@@ -706,8 +710,7 @@ const GlobalQrScannerPage: React.FC = () => {
                                                     {typeof locationCheck.distanceM === 'number'
                                                         ? ` (cách ~${locationCheck.distanceM}m)`
                                                         : ''}
-                                                    , nhưng hệ thống ghi{' '}
-                                                    <b>{asset.plant?.name || 'cơ sở khác'}</b>.
+                                                    , nhưng hệ thống ghi <b>{asset.plant?.name || 'cơ sở khác'}</b>.
                                                 </div>
                                                 {canManage && canTransferAsset(asset) ? (
                                                     <Button

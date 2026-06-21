@@ -38,7 +38,7 @@ import { resolveAssetByScan } from '../core/lib/qrScan';
 import { recordQrScan } from '../core/lib/qrScanAudit';
 import { getCurrentCoords } from '../core/lib/geolocation';
 import { evaluateScanLocation } from '../core/lib/locationMismatch';
-import { ASSET_STATUS_LABEL, isReturnedToPartner } from '../core/constants';
+import { ASSET_STATUS_LABEL, isAssetClosedLifecycle } from '../core/constants';
 import { assetService } from '../core/services/asset.service';
 import { plantService } from '../core/services';
 import { transferService } from '../core/services/transfer.service';
@@ -156,7 +156,7 @@ const StocktakePage: React.FC = () => {
     const areaOptions = useMemo(() => {
         const values = new Map<string, string>();
         plantAssets.forEach((asset) => {
-            if (isReturnedToPartner(asset.status)) return;
+            if (isAssetClosedLifecycle(asset.status)) return;
             const value = areaValue(asset.area);
             values.set(value.toLowerCase(), value);
         });
@@ -212,7 +212,7 @@ const StocktakePage: React.FC = () => {
 
         const response = plantAssetsQuery.data ?? (await plantAssetsQuery.refetch()).data;
         const scopedAssets = (response?.data ?? []).filter(
-            (asset) => !isReturnedToPartner(asset.status) && scopeMatches(asset, selectedArea)
+            (asset) => !isAssetClosedLifecycle(asset.status) && scopeMatches(asset, selectedArea)
         );
 
         setExpectedAssets(scopedAssets);

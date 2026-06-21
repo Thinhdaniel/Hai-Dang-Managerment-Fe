@@ -12,6 +12,7 @@ const GlobalQrScannerPage = lazy(() => import('../pages/GlobalQrScannerPage'));
 const AssetList = lazy(() => import('../pages/AssetList'));
 const AssetDetail = lazy(() => import('../pages/AssetDetail'));
 const StocktakePage = lazy(() => import('../pages/StocktakePage'));
+const AssetDisposalPage = lazy(() => import('../pages/AssetDisposalPage'));
 const MapPage = lazy(() => import('../pages/MapPage'));
 const BrandList = lazy(() => import('../pages/BrandList'));
 const MaintenanceList = lazy(() => import('../pages/MaintenanceList'));
@@ -91,6 +92,8 @@ export const router = createBrowserRouter([
             { path: 'scan', element: withSuspense(<GlobalQrScannerPage />) },
             { path: 'assets', element: withSuspense(<AssetList />) },
             { path: 'assets/stocktake', element: withSuspense(<StocktakePage />) },
+            { path: 'assets/disposals', element: guarded('/assets/disposals', <AssetDisposalPage />) },
+            { path: 'assets/disposals/:id', element: guarded('/assets/disposals/:id', <AssetDisposalPage />) },
             { path: 'assets/map', element: guarded('/assets/map', <MapPage />) },
             { path: 'assets/:id', element: withSuspense(<AssetDetail />) },
             { path: 'qr-labels', element: guarded('/qr-labels', <QrLabelListPage />) },

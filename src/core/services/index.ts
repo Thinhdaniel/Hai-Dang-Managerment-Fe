@@ -10,6 +10,7 @@ import type {
 } from '../types';
 export { dashboardService } from './dashboard.service';
 export { dataQualityService } from './data-quality.service';
+export { assetDisposalService } from './asset-disposal.service';
 export { plantService } from './plant.service';
 export { facilityCostReportService } from './report.service';
 

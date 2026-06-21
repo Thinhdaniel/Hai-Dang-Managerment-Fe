@@ -10,6 +10,8 @@ import {
 
 // ===== ASSET STATUS =====
 export const ASSET_STATUS_LABEL: Record<AssetStatus, string> = {
+    [AssetStatus.PENDING_DISPOSAL]: 'Chuẩn bị thanh lý',
+    [AssetStatus.DISPOSED]: 'Đã thanh lý',
     [AssetStatus.ACTIVE]: 'Hoạt động',
     [AssetStatus.MAINTENANCE]: 'Bảo trì',
     [AssetStatus.BROKEN]: 'Máy lỗi',
@@ -19,6 +21,8 @@ export const ASSET_STATUS_LABEL: Record<AssetStatus, string> = {
 };
 
 export const ASSET_STATUS_COLOR: Record<AssetStatus, string> = {
+    [AssetStatus.PENDING_DISPOSAL]: 'orange',
+    [AssetStatus.DISPOSED]: 'default',
     [AssetStatus.ACTIVE]: 'success',
     [AssetStatus.MAINTENANCE]: 'warning',
     [AssetStatus.BROKEN]: 'error',
@@ -28,6 +32,8 @@ export const ASSET_STATUS_COLOR: Record<AssetStatus, string> = {
 };
 
 export const ASSET_STATUS_HEX: Record<AssetStatus, string> = {
+    [AssetStatus.PENDING_DISPOSAL]: '#f97316',
+    [AssetStatus.DISPOSED]: '#475569',
     [AssetStatus.ACTIVE]: '#52c41a',
     [AssetStatus.MAINTENANCE]: '#fa8c16',
     [AssetStatus.BROKEN]: '#f5222d',
@@ -38,6 +44,8 @@ export const ASSET_STATUS_HEX: Record<AssetStatus, string> = {
 
 // Status flow transitions
 export const ASSET_STATUS_TRANSITIONS: Record<AssetStatus, AssetStatus[]> = {
+    [AssetStatus.PENDING_DISPOSAL]: [AssetStatus.ACTIVE, AssetStatus.DISPOSED],
+    [AssetStatus.DISPOSED]: [],
     [AssetStatus.ACTIVE]: [AssetStatus.MAINTENANCE, AssetStatus.BROKEN, AssetStatus.BORROWING, AssetStatus.STORAGE],
     [AssetStatus.MAINTENANCE]: [AssetStatus.ACTIVE, AssetStatus.BROKEN],
     [AssetStatus.BROKEN]: [AssetStatus.MAINTENANCE],
@@ -58,6 +66,12 @@ export const ASSET_OWNERSHIP_OPTIONS = Object.entries(ASSET_OWNERSHIP_LABEL).map
 }));
 
 export const isReturnedToPartner = (status?: AssetStatus) => status === AssetStatus.RETURNED_TO_PARTNER;
+
+export const isAssetClosedLifecycle = (status?: AssetStatus) =>
+    status === AssetStatus.RETURNED_TO_PARTNER || status === AssetStatus.DISPOSED;
+
+export const isAssetInDisposalFlow = (status?: AssetStatus) =>
+    status === AssetStatus.PENDING_DISPOSAL || status === AssetStatus.DISPOSED;
 
 export const isOwnedAsset = (ownershipType?: AssetOwnershipType) =>
     !ownershipType || ownershipType === AssetOwnershipType.OWNED;

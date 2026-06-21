@@ -12,6 +12,8 @@ import { usePublicMachine } from '../core/hooks/usePublicMachine';
 import type { AssetStatus } from '../core/types';
 
 const statusMeta: Record<AssetStatus, { label: string; className: string }> = {
+    pending_disposal: { label: 'Chuẩn bị thanh lý', className: 'border-orange-200 bg-orange-50 text-orange-700' },
+    disposed: { label: 'Đã thanh lý', className: 'border-slate-200 bg-slate-100 text-slate-600' },
     active: { label: 'Hoạt động', className: 'border-emerald-200 bg-emerald-50 text-emerald-700' },
     maintenance: { label: 'Bảo trì', className: 'border-amber-200 bg-amber-50 text-amber-700' },
     broken: { label: 'Hỏng', className: 'border-rose-200 bg-rose-50 text-rose-700' },

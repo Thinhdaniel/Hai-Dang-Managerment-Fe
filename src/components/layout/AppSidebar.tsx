@@ -10,6 +10,7 @@ import {
     ClusterOutlined,
     DashboardOutlined,
     DatabaseOutlined,
+    DeleteOutlined,
     DeploymentUnitOutlined,
     EnvironmentOutlined,
     FileAddOutlined,
@@ -185,6 +186,13 @@ const navigationSections: NavigationSection[] = [
                 icon: <AuditOutlined />,
                 matchMode: 'exact',
                 capability: 'stocktake',
+            },
+            {
+                path: '/assets/disposals',
+                label: 'Thanh lý máy',
+                description: 'Rà soát QR và duyệt thanh lý',
+                icon: <DeleteOutlined />,
+                capability: 'assetDisposal.manage',
             },
             {
                 path: '/assets/map',

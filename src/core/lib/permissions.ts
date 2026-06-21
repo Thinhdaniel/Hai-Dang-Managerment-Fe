@@ -9,6 +9,7 @@ export type Capability =
     | 'asset.write'
     | 'asset.status'
     | 'asset.delete'
+    | 'assetDisposal.manage'
     | 'stocktake'
     | 'qrscanlog.view'
     | 'qrlabel.manage'
@@ -45,6 +46,7 @@ const ROLE_CAPS: Record<Exclude<UserRole, UserRole.ADMIN>, Capability[]> = {
         ...ALL_VIEW,
         'asset.write',
         'asset.status',
+        'assetDisposal.manage',
         'stocktake',
         'qrscanlog.view',
         'transfer.write',
@@ -69,6 +71,7 @@ const ROLE_CAPS: Record<Exclude<UserRole, UserRole.ADMIN>, Capability[]> = {
         ...ALL_VIEW,
         'asset.write',
         'asset.status',
+        'assetDisposal.manage',
         'stocktake',
         'qrscanlog.view',
         'transfer.write',

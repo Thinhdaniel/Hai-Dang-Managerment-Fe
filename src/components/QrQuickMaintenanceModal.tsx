@@ -135,7 +135,12 @@ const QrQuickMaintenanceModal: React.FC<QrQuickMaintenanceModalProps> = ({ open,
         return map;
     }, [openMaintenances]);
     const returnedAssets = useMemo(
-        () => selectedAssets.filter((item) => item.status === AssetStatus.RETURNED_TO_PARTNER),
+        () =>
+            selectedAssets.filter((item) =>
+                [AssetStatus.RETURNED_TO_PARTNER, AssetStatus.PENDING_DISPOSAL, AssetStatus.DISPOSED].includes(
+                    item.status
+                )
+            ),
         [selectedAssets]
     );
 
@@ -382,10 +387,7 @@ const QrQuickMaintenanceModal: React.FC<QrQuickMaintenanceModalProps> = ({ open,
                         {selectedAssets.map((item, index) => {
                             const openCount = openMaintenanceCountByAsset.get(item.id) ?? 0;
                             return (
-                                <div
-                                    key={item.id}
-                                    className='rounded-2xl border border-slate-100 bg-slate-50 p-3'
-                                >
+                                <div key={item.id} className='rounded-2xl border border-slate-100 bg-slate-50 p-3'>
                                     <div className='flex items-start justify-between gap-3'>
                                         <div className='min-w-0'>
                                             <div className='flex flex-wrap items-center gap-1.5'>

@@ -4438,6 +4438,28 @@ textarea {
     max-width: 100%;
 }
 
+.asset-detail-status-panel--locked {
+    box-shadow: inset 4px 0 0 #f97316;
+}
+
+.asset-detail-lifecycle-alert.ant-alert {
+    border-radius: 16px;
+}
+
+.asset-detail-disposal-card.ant-card {
+    border-color: rgba(251, 146, 60, 0.35) !important;
+    background: linear-gradient(180deg, #fffaf5, #ffffff);
+}
+
+.asset-detail-disposal-record {
+    min-width: 0;
+}
+
+.asset-detail-disposal-record strong,
+.asset-detail-disposal-card strong {
+    color: #0f172a;
+}
+
 .asset-detail-tabs .ant-tabs-nav {
     margin-bottom: 16px;
 }
@@ -4627,6 +4649,72 @@ textarea {
     display: block;
 }
 
+.asset-lifecycle-switch {
+    display: grid;
+    grid-template-columns: minmax(220px, 0.65fr) minmax(360px, 1.35fr);
+    gap: 14px;
+    align-items: center;
+    border: 1px solid rgba(226, 232, 240, 0.96);
+    border-radius: 18px;
+    background: linear-gradient(135deg, rgba(248, 250, 252, 0.98), rgba(255, 255, 255, 0.92));
+    padding: 12px;
+    box-shadow: 0 14px 34px rgba(15, 23, 42, 0.06);
+}
+
+.asset-lifecycle-switch__copy {
+    display: grid;
+    gap: 2px;
+    min-width: 0;
+}
+
+.asset-lifecycle-switch__copy span {
+    color: #64748b;
+    font-size: 11px;
+    font-weight: 800;
+    letter-spacing: 0;
+    text-transform: uppercase;
+}
+
+.asset-lifecycle-switch__copy strong {
+    color: #0f172a;
+    font-size: 15px;
+    font-weight: 900;
+}
+
+.asset-lifecycle-switch__copy small {
+    color: #64748b;
+    font-size: 12px;
+    font-weight: 600;
+    line-height: 1.35;
+}
+
+.asset-lifecycle-switch .ant-segmented {
+    min-width: 0;
+    border: 1px solid rgba(226, 232, 240, 0.9);
+    border-radius: 14px;
+    background: #f8fafc;
+    padding: 4px;
+}
+
+.asset-lifecycle-switch .ant-segmented-item {
+    border-radius: 10px;
+    font-weight: 800;
+}
+
+.asset-row--pending_disposal td {
+    background: #fff7ed !important;
+}
+
+.asset-row--disposed td {
+    background: #f8fafc !important;
+    color: #64748b;
+}
+
+.asset-row--disposed .ant-tag,
+.asset-row--disposed button {
+    opacity: 0.82;
+}
+
 .asset-mobile-card {
     border: 1px solid rgba(226, 232, 240, 0.92);
     border-radius: 14px;
@@ -4638,6 +4726,23 @@ textarea {
     border-color: rgba(37, 99, 235, 0.42);
     background: #f8fbff;
     box-shadow: inset 3px 0 0 #2563eb;
+}
+
+.asset-mobile-card--pending_disposal {
+    border-color: rgba(251, 146, 60, 0.42);
+    background: linear-gradient(180deg, #fff7ed, #ffffff);
+    box-shadow: inset 4px 0 0 #f97316;
+}
+
+.asset-mobile-card--disposed {
+    border-color: rgba(148, 163, 184, 0.48);
+    background: #f8fafc;
+    box-shadow: inset 4px 0 0 #64748b;
+}
+
+.asset-mobile-card--disposed .asset-mobile-card__title,
+.asset-mobile-card--disposed .asset-mobile-card__meta {
+    color: #64748b;
 }
 
 .asset-mobile-card__main {
@@ -5641,6 +5746,26 @@ textarea {
 
     .asset-desktop-table {
         display: none;
+    }
+
+    .asset-lifecycle-switch {
+        grid-template-columns: 1fr;
+        gap: 10px;
+        border-radius: 16px;
+        padding: 10px;
+    }
+
+    .asset-lifecycle-switch .ant-segmented {
+        overflow-x: auto;
+    }
+
+    .asset-lifecycle-switch .ant-segmented-group {
+        min-width: max-content;
+    }
+
+    .asset-lifecycle-switch .ant-segmented-item-label {
+        padding-inline: 10px;
+        font-size: 12px;
     }
 
     .asset-mobile-list {
@@ -7223,4 +7348,201 @@ body.chat-immersive .mobile-bottom-nav {
 
 .context-chat__message--mine .chat-page__reply-quote {
     background: rgba(15, 107, 220, 0.14);
+}
+
+/* Asset disposal page: scoped responsive polish for table/card heavy workflow */
+.asset-disposal-page {
+    min-width: 0;
+}
+
+.asset-disposal-page .page-header-card {
+    overflow: hidden;
+}
+
+.asset-disposal-page .page-header-card__actions {
+    min-width: 0;
+}
+
+.asset-disposal-actions,
+.asset-disposal-inline-actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 8px;
+    min-width: 0;
+}
+
+.asset-disposal-action-button.ant-btn {
+    display: inline-flex;
+    min-height: 38px;
+    align-items: center;
+    justify-content: center;
+    border-radius: 12px;
+    font-weight: 700;
+}
+
+.asset-disposal-card.ant-card {
+    overflow: hidden;
+    border-color: #e2e8f0;
+}
+
+.asset-disposal-card .ant-card-body {
+    min-width: 0;
+}
+
+.asset-disposal-filter-card .ant-input-affix-wrapper,
+.asset-disposal-filter-card .ant-select-selector,
+.asset-disposal-modal-form .ant-input,
+.asset-disposal-modal-form .ant-input-number,
+.asset-disposal-modal-form .ant-select-selector {
+    border-radius: 12px !important;
+}
+
+.asset-disposal-status-tag.ant-tag {
+    margin: 0;
+    max-width: 100%;
+    border-radius: 999px;
+    padding: 1px 8px;
+    font-size: 11.5px;
+    font-weight: 700;
+    line-height: 20px;
+    text-align: center;
+    white-space: normal;
+}
+
+.asset-disposal-code-tag.ant-tag {
+    margin: 0;
+    max-width: 100%;
+    overflow: hidden;
+    border-radius: 999px;
+    font-size: 11px;
+    font-weight: 700;
+    line-height: 19px;
+    text-overflow: ellipsis;
+}
+
+.asset-disposal-item-title,
+.asset-disposal-card-title,
+.asset-disposal-muted-line,
+.asset-disposal-table-text,
+.asset-disposal-detail-facts {
+    overflow-wrap: anywhere;
+    word-break: break-word;
+}
+
+.asset-disposal-item-title {
+    line-height: 1.35;
+}
+
+.asset-disposal-table-card .ant-card-body {
+    overflow: hidden;
+}
+
+.asset-disposal-table-card .ant-table-wrapper {
+    overflow: auto;
+}
+
+.asset-disposal-table-card .ant-table-thead > tr > th {
+    background: #f8fafc !important;
+    color: #334155 !important;
+    font-size: 12px;
+    font-weight: 700;
+}
+
+.asset-disposal-table-card .ant-table-tbody > tr > td {
+    vertical-align: top;
+}
+
+.asset-disposal-stat-card .ant-card-body {
+    padding: 16px !important;
+}
+
+.asset-disposal-stat-card .ant-statistic-title,
+.asset-disposal-mini-stats .ant-statistic-title {
+    margin-bottom: 6px;
+    color: #64748b;
+    font-size: 12px;
+    font-weight: 700;
+    line-height: 1.25;
+    white-space: normal;
+}
+
+.asset-disposal-stat-card .ant-statistic-content {
+    font-size: 26px;
+    font-weight: 900;
+    line-height: 1.1;
+}
+
+.asset-disposal-mini-stats .ant-statistic-content {
+    font-size: 18px;
+    font-weight: 800;
+    line-height: 1.15;
+}
+
+.asset-disposal-scan-input {
+    min-width: 0;
+}
+
+.asset-disposal-scan-input .ant-input {
+    min-width: 0;
+}
+
+.asset-disposal-scanner-card video,
+.asset-disposal-scanner-card canvas {
+    max-width: 100%;
+}
+
+@media (max-width: 767px) {
+    .asset-disposal-page .page-header-card__actions,
+    .asset-disposal-actions,
+    .asset-disposal-inline-actions {
+        width: 100%;
+    }
+
+    .asset-disposal-actions,
+    .asset-disposal-inline-actions {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        justify-content: stretch;
+    }
+
+    .asset-disposal-actions .ant-btn,
+    .asset-disposal-inline-actions .ant-btn,
+    .asset-disposal-filter-card .ant-btn {
+        width: 100%;
+        padding-inline: 10px;
+        font-size: 13px;
+    }
+
+    .asset-disposal-card .ant-card-body {
+        padding: 14px !important;
+    }
+
+    .asset-disposal-stat-card .ant-card-body {
+        padding: 12px !important;
+    }
+
+    .asset-disposal-stat-card .ant-statistic-title {
+        font-size: 11px;
+    }
+
+    .asset-disposal-stat-card .ant-statistic-content {
+        font-size: 22px;
+    }
+
+    .asset-disposal-scan-input {
+        flex-direction: column;
+    }
+
+    .asset-disposal-scan-input .ant-btn {
+        width: 100%;
+    }
+}
+
+@media (max-width: 420px) {
+    .asset-disposal-actions,
+    .asset-disposal-inline-actions {
+        grid-template-columns: 1fr;
+    }
 }

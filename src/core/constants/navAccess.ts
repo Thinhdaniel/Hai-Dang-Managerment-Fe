@@ -34,6 +34,8 @@ export const requireDirectorUp: AccessCheck = (user) =>
  */
 export const ROUTE_ACCESS: Record<string, AccessCheck> = {
     '/assets/map': requireDirectorUp,
+    '/assets/disposals': requireCap('assetDisposal.manage'),
+    '/assets/disposals/:id': requireCap('assetDisposal.manage'),
     '/qr-labels': requireCap('qrlabel.manage'),
     '/qr-labels/batches/:id/print': requireCap('qrlabel.manage'),
     '/qr/:publicId/activate': requireCap('qrlabel.manage'),

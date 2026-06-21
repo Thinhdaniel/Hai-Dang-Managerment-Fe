@@ -5,6 +5,8 @@ export enum AssetStatus {
     BROKEN = 'broken',
     BORROWING = 'borrowing',
     STORAGE = 'storage',
+    PENDING_DISPOSAL = 'pending_disposal',
+    DISPOSED = 'disposed',
     RETURNED_TO_PARTNER = 'returned_to_partner',
 }
 
@@ -13,6 +15,8 @@ export enum AssetOwnershipType {
     PARTNER_BORROWED = 'partner_borrowed',
     RENTAL = 'rental',
 }
+
+export type AssetLifecycleView = 'operating' | 'pending_disposal' | 'disposed' | 'all';
 
 export enum MaintenanceType {
     PERIODIC = 'periodic',
@@ -168,12 +172,14 @@ export interface Asset {
     createdAt: string;
     updatedAt: string;
     hasOpenTransfer?: boolean;
+    disposalRecords?: AssetDisposalItem[];
 }
 
 export interface AssetFilter extends PaginationParams {
     search?: string;
     name?: string;
     status?: AssetStatus;
+    lifecycle?: AssetLifecycleView;
     ownershipType?: AssetOwnershipType;
     plantId?: string;
     model?: string;
@@ -337,6 +343,174 @@ export interface TransferFilter extends PaginationParams {
     toPlantId?: string;
     status?: TransferStatus;
 }
+
+// ===== ASSET DISPOSAL (Thanh ly may) =====
+export enum AssetDisposalBatchStatus {
+    DRAFT = 'draft',
+    SCANNING = 'scanning',
+    REVIEWING = 'reviewing',
+    APPROVED = 'approved',
+    COMPLETED = 'completed',
+    CANCELLED = 'cancelled',
+}
+
+export enum AssetDisposalItemStatus {
+    PENDING = 'pending',
+    CHECKED = 'checked',
+    APPROVED = 'approved',
+    DISPOSED = 'disposed',
+    KEPT = 'kept',
+    CANCELLED = 'cancelled',
+}
+
+export enum AssetDisposalSourceType {
+    ASSET = 'asset',
+    EXTERNAL = 'external',
+    QR_ONLY = 'qr_only',
+}
+
+export enum AssetDisposalCondition {
+    USABLE = 'usable',
+    MINOR_FAULT = 'minor_fault',
+    MAJOR_FAULT = 'major_fault',
+    MISSING_PARTS = 'missing_parts',
+    SCRAP = 'scrap',
+    UNKNOWN = 'unknown',
+}
+
+export enum AssetDisposalAction {
+    SELL = 'sell',
+    PART_OUT = 'part_out',
+    SCRAP = 'scrap',
+    KEEP = 'keep',
+    REPAIR = 'repair',
+    UNKNOWN = 'unknown',
+}
+
+export interface AssetDisposalBatch {
+    id: string;
+    code: string;
+    plantId: string;
+    plant?: Plant;
+    area?: string;
+    status: AssetDisposalBatchStatus;
+    reason: string;
+    note?: string;
+    submittedBy?: string;
+    submittedByName?: string;
+    submittedAt?: string;
+    approvedBy?: string;
+    approvedByName?: string;
+    approvedAt?: string;
+    approvalNote?: string;
+    completedBy?: string;
+    completedByName?: string;
+    completedAt?: string;
+    cancelledBy?: string;
+    cancelledByName?: string;
+    cancelledAt?: string;
+    cancelReason?: string;
+    totalItems?: number;
+    assetItems?: number;
+    externalItems?: number;
+    pendingItems?: number;
+    checkedItems?: number;
+    approvedItems?: number;
+    disposedItems?: number;
+    keptItems?: number;
+    createdBy?: string;
+    createdByName?: string;
+    updatedBy?: string;
+    updatedByName?: string;
+    createdAt: string;
+    updatedAt: string;
+}
+
+export interface AssetDisposalItem {
+    id: string;
+    batchId: string;
+    batch?: AssetDisposalBatch;
+    sourceType: AssetDisposalSourceType;
+    assetId?: string;
+    asset?: Asset;
+    qrLabelId?: string;
+    qrLabel?: Pick<QrLabel, 'id' | 'publicId' | 'status'>;
+    publicId?: string;
+    machineCode?: string;
+    name?: string;
+    type?: string;
+    model?: string;
+    serial?: string;
+    plantId?: string;
+    plant?: Plant;
+    area?: string;
+    condition?: AssetDisposalCondition;
+    reason?: string;
+    suggestedAction?: AssetDisposalAction;
+    estimatedValue?: number;
+    finalValue?: number;
+    photos?: string[];
+    status: AssetDisposalItemStatus;
+    previousAssetStatus?: AssetStatus;
+    checkedBy?: string;
+    checkedByName?: string;
+    checkedAt?: string;
+    disposedAt?: string;
+    note?: string;
+    createdBy?: string;
+    createdByName?: string;
+    updatedBy?: string;
+    updatedByName?: string;
+    createdAt: string;
+    updatedAt: string;
+}
+
+export interface AssetDisposalBatchDetail {
+    batch: AssetDisposalBatch;
+    items: AssetDisposalItem[];
+    summary: {
+        total: number;
+        asset: number;
+        external: number;
+        pending: number;
+        checked: number;
+        approved: number;
+        disposed: number;
+        kept: number;
+    };
+}
+
+export interface CreateAssetDisposalBatchPayload {
+    plantId: string;
+    area?: string;
+    reason: string;
+    note?: string;
+}
+
+export type AssetDisposalItemPayload = Partial<
+    Pick<
+        AssetDisposalItem,
+        | 'sourceType'
+        | 'assetId'
+        | 'qrLabelId'
+        | 'publicId'
+        | 'machineCode'
+        | 'name'
+        | 'type'
+        | 'model'
+        | 'serial'
+        | 'plantId'
+        | 'area'
+        | 'condition'
+        | 'reason'
+        | 'suggestedAction'
+        | 'estimatedValue'
+        | 'finalValue'
+        | 'photos'
+        | 'note'
+        | 'status'
+    >
+>;
 
 // ===== BORROWING (Mượn/Trả) =====
 export interface Borrowing {
@@ -1003,7 +1177,9 @@ export type QrScanAction =
     | 'borrowing_receive'
     | 'borrowing_receive_success'
     | 'borrowing_return'
-    | 'borrowing_return_success';
+    | 'borrowing_return_success'
+    | 'asset_disposal_scan'
+    | 'asset_disposal_scan_success';
 
 export type QrScanResult =
     | 'resolved'
