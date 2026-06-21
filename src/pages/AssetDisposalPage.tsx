@@ -265,6 +265,14 @@ const AssetDisposalPage: React.FC = () => {
         },
     });
 
+    const deleteItemMutation = useMutation({
+        mutationFn: (itemId: string) => assetDisposalService.deleteItem(itemId),
+        onSuccess: () => {
+            refreshDetail();
+            message.success('Đã xóa dòng khỏi đợt thanh lý');
+        },
+    });
+
     const scanMutation = useMutation({
         mutationFn: (rawValue: string) => assetDisposalService.scanQr(id!, { rawValue }),
         onSuccess: (result) => {
@@ -529,12 +537,32 @@ const AssetDisposalPage: React.FC = () => {
         },
         {
             title: 'Thao tác',
-            width: 120,
+            width: 132,
             align: 'right',
             render: (_value, record) => (
-                <Tooltip title='Cập nhật thông tin rà soát'>
-                    <Button icon={<EditOutlined />} disabled={!canEditBatch} onClick={() => openEditItem(record)} />
-                </Tooltip>
+                <div className='flex items-center justify-end gap-1.5'>
+                    <Tooltip title='Cập nhật thông tin rà soát'>
+                        <Button icon={<EditOutlined />} disabled={!canEditBatch} onClick={() => openEditItem(record)} />
+                    </Tooltip>
+                    <Popconfirm
+                        title='Xóa khỏi lô thanh lý?'
+                        description='Chỉ xóa dòng khỏi lô, không xóa hồ sơ máy. Nếu là máy trong hệ thống, trạng thái sẽ được trả về trước khi quét.'
+                        okText='Xóa khỏi lô'
+                        cancelText='Giữ lại'
+                        okButtonProps={{ danger: true, loading: deleteItemMutation.isPending }}
+                        onConfirm={() => deleteItemMutation.mutate(record.id)}
+                        disabled={!canEditBatch}
+                    >
+                        <Tooltip title='Xóa dòng quét nhầm'>
+                            <Button
+                                danger
+                                icon={<DeleteOutlined />}
+                                disabled={!canEditBatch}
+                                loading={deleteItemMutation.isPending}
+                            />
+                        </Tooltip>
+                    </Popconfirm>
+                </div>
             ),
         },
     ];
@@ -719,14 +747,35 @@ const AssetDisposalPage: React.FC = () => {
                             <div>Ước tính: {formatMoney(item.estimatedValue)}</div>
                             <div>Chốt: {formatMoney(item.finalValue)}</div>
                         </div>
-                        <Button
-                            className='asset-disposal-action-button mt-3 w-full'
-                            icon={<EditOutlined />}
-                            disabled={!canEditBatch}
-                            onClick={() => openEditItem(item)}
-                        >
-                            Cập nhật
-                        </Button>
+                        <div className='asset-disposal-inline-actions mt-3'>
+                            <Button
+                                className='asset-disposal-action-button'
+                                icon={<EditOutlined />}
+                                disabled={!canEditBatch}
+                                onClick={() => openEditItem(item)}
+                            >
+                                Cập nhật
+                            </Button>
+                            <Popconfirm
+                                title='Xóa khỏi lô thanh lý?'
+                                description='Chỉ xóa dòng khỏi lô, không xóa hồ sơ máy. Nếu là máy trong hệ thống, trạng thái sẽ được trả về trước khi quét.'
+                                okText='Xóa khỏi lô'
+                                cancelText='Giữ lại'
+                                okButtonProps={{ danger: true, loading: deleteItemMutation.isPending }}
+                                onConfirm={() => deleteItemMutation.mutate(item.id)}
+                                disabled={!canEditBatch}
+                            >
+                                <Button
+                                    className='asset-disposal-action-button'
+                                    danger
+                                    icon={<DeleteOutlined />}
+                                    disabled={!canEditBatch}
+                                    loading={deleteItemMutation.isPending}
+                                >
+                                    Xóa khỏi lô
+                                </Button>
+                            </Popconfirm>
+                        </div>
                     </Card>
                 ))}
             </div>

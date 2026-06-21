@@ -53,6 +53,9 @@ export const assetDisposalService = {
     updateItem: (itemId: string, data: AssetDisposalItemPayload): Promise<AssetDisposalItem> =>
         api.patch<AssetDisposalItem, AssetDisposalItemPayload>(`${BASE}/items/${itemId}`, data),
 
+    deleteItem: (itemId: string): Promise<AssetDisposalBatchDetail> =>
+        api.delete<AssetDisposalBatchDetail>(`${BASE}/items/${itemId}`),
+
     submitBatch: (id: string, note?: string): Promise<AssetDisposalBatchDetail> =>
         api.post<AssetDisposalBatchDetail, { note?: string }>(`${BASE}/batches/${id}/submit`, { note }),
 
