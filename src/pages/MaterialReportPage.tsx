@@ -1054,7 +1054,8 @@ function OverviewTab({
                     name: 'Giá trị cấp phát vật tư',
                     type: 'bar',
                     data: combinedTrend.map((row) => row.distributionValue),
-                    barMaxWidth: 30,
+                    barMaxWidth: 28,
+                    barGap: '18%',
                     itemStyle: {
                         color: barGradient(CHART_SEMANTIC.material),
                         borderRadius: [8, 8, 0, 0],
@@ -1067,33 +1068,18 @@ function OverviewTab({
                 },
                 {
                     name: 'Chi phí mua vật tư net',
-                    type: 'line',
+                    type: 'bar',
                     data: combinedTrend.map((row) => row.purchaseCost),
-                    smooth: true,
-                    symbol: 'circle',
-                    symbolSize: 7,
-                    lineStyle: {
-                        width: 3,
-                        color: CHART_SEMANTIC.purchaseLine,
+                    barMaxWidth: 28,
+                    itemStyle: {
+                        color: barGradient(CHART_SEMANTIC.purchaseLine),
+                        borderRadius: [8, 8, 0, 0],
                         shadowBlur: 8,
-                        shadowColor: 'rgba(30, 58, 138, 0.3)',
+                        shadowColor: 'rgba(30, 58, 138, 0.26)',
                         shadowOffsetY: 4,
                     },
-                    itemStyle: { color: CHART_SEMANTIC.purchaseLine, borderColor: '#ffffff', borderWidth: 2 },
-                    areaStyle: {
-                        color: {
-                            type: 'linear',
-                            x: 0,
-                            y: 0,
-                            x2: 0,
-                            y2: 1,
-                            colorStops: [
-                                { offset: 0, color: 'rgba(30, 58, 138, 0.18)' },
-                                { offset: 1, color: 'rgba(30, 58, 138, 0)' },
-                            ],
-                        },
-                    },
-                    emphasis: { focus: 'series' },
+                    emphasis: { focus: 'series', itemStyle: { shadowBlur: 16 } },
+                    animationDelay: (idx: number) => idx * 70 + 35,
                 },
             ],
         };
