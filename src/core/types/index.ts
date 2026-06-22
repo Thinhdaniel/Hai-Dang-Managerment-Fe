@@ -938,7 +938,12 @@ export interface DashboardInsights {
 export interface AssetLocationPoint {
     id: string;
     machineCode?: string;
+    publicId?: string;
     name?: string;
+    type?: string;
+    model?: string;
+    brandName?: string;
+    area?: string;
     status: AssetStatus;
     plantId?: string;
     plantName?: string;
