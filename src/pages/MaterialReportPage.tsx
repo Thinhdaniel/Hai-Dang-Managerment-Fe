@@ -131,7 +131,8 @@ const STATUS_LABEL: Record<string, { label: string; color: string }> = {
     draft: { label: 'Nháp', color: 'default' },
     pending: { label: 'Chờ xử lý', color: 'warning' },
     confirmed: { label: 'Đã xác nhận', color: 'blue' },
-    ordered: { label: 'Đã đặt', color: 'processing' },
+    in_progress: { label: 'Đang lên đơn', color: 'blue' },
+    ordered: { label: 'Đã đặt hàng', color: 'processing' },
     received: { label: 'Đã nhận', color: 'success' },
     cancelled: { label: 'Đã hủy', color: 'error' },
     distributed: { label: 'Đã xuất', color: 'processing' },
@@ -640,7 +641,9 @@ export default function MaterialReportPage() {
                             onChange={(status) => setFilters((current) => ({ ...current, status }))}
                             options={Object.entries(STATUS_LABEL)
                                 .filter(([status]) =>
-                                    ['draft', 'confirmed', 'ordered', 'received', 'cancelled'].includes(status)
+                                    ['draft', 'confirmed', 'in_progress', 'ordered', 'received', 'cancelled'].includes(
+                                        status
+                                    )
                                 )
                                 .map(([value, info]) => ({ label: info.label, value }))}
                         />

@@ -581,7 +581,8 @@ const STATUS_META: Record<string, { color: string; label: string; icon: React.Re
     pending: { color: 'warning', label: 'Chờ duyệt', icon: <ClockCircleOutlined /> },
     approved: { color: 'success', label: 'Đã duyệt', icon: <CheckCircleOutlined /> },
     rejected: { color: 'error', label: 'Từ chối', icon: <CloseCircleOutlined /> },
-    ordered: { color: 'processing', label: 'Đặt hàng', icon: <ShoppingOutlined /> },
+    in_progress: { color: 'blue', label: 'Đang lên đơn', icon: <ShoppingOutlined /> },
+    ordered: { color: 'processing', label: 'Đã đặt hàng', icon: <ShoppingOutlined /> },
     received: { color: 'cyan', label: 'Đã nhận', icon: <InboxOutlined /> },
     distributed: { color: 'default', label: 'Đã cấp phát', icon: null },
 };
@@ -696,6 +697,7 @@ type ModalFormProps = {
 const ModalForm: React.FC<ModalFormProps> = ({ open, initial, plants, mainPlantId, submitting, onClose, onSave }) => {
     const { modal, notification } = App.useApp();
     const screens = useBreakpoint();
+    const isEditingPending = initial?.status === 'pending';
     // workspace: 2-panel fullscreen for xl+ (≥1280px), card drawer for everything else
     const useWorkspace = Boolean(screens.xl);
     const isMobile = !screens.sm;
@@ -1798,16 +1800,18 @@ const ModalForm: React.FC<ModalFormProps> = ({ open, initial, plants, mainPlantI
                 <Button onClick={onClose} disabled={submitting}>
                     Hủy
                 </Button>
-                <Button loading={submitting} disabled={submitting} onClick={() => handleSubmit('draft')}>
-                    Lưu nháp
-                </Button>
+                {!isEditingPending && (
+                    <Button loading={submitting} disabled={submitting} onClick={() => handleSubmit('draft')}>
+                        Lưu nháp
+                    </Button>
+                )}
                 <Button
                     type='primary'
                     style={{ background: '#1A3A5C', minWidth: 96 }}
                     loading={submitting}
                     onClick={() => handleSubmit('pending')}
                 >
-                    Gửi duyệt
+                    {isEditingPending ? 'Cập nhật phiếu' : 'Gửi duyệt'}
                 </Button>
             </Space>
         </div>
@@ -1834,9 +1838,11 @@ const ModalForm: React.FC<ModalFormProps> = ({ open, initial, plants, mainPlantI
                             <Button onClick={onClose} block>
                                 Hủy
                             </Button>
-                            <Button loading={submitting} onClick={() => handleSubmit('draft')} block>
-                                Lưu nháp
-                            </Button>
+                            {!isEditingPending && (
+                                <Button loading={submitting} onClick={() => handleSubmit('draft')} block>
+                                    Lưu nháp
+                                </Button>
+                            )}
                             <Button
                                 type='primary'
                                 style={{ background: '#1A3A5C' }}
@@ -1844,7 +1850,7 @@ const ModalForm: React.FC<ModalFormProps> = ({ open, initial, plants, mainPlantI
                                 onClick={() => handleSubmit('pending')}
                                 block
                             >
-                                Gửi duyệt
+                                {isEditingPending ? 'Cập nhật phiếu' : 'Gửi duyệt'}
                             </Button>
                         </div>
                     </div>
@@ -2874,16 +2880,20 @@ const PurchaseRequestPage: React.FC = () => {
     const { data: statsResp } = useQuery({
         queryKey: ['purchase-requests', 'stats'],
         queryFn: async () => {
-            const [all, pending, approved, rejected] = await Promise.all([
+            const [all, pending, approved, inProgress, ordered, rejected] = await Promise.all([
                 purchaseRequestService.getAll({ limit: 1 }),
                 purchaseRequestService.getAll({ status: 'pending', limit: 1 }),
                 purchaseRequestService.getAll({ status: 'approved', limit: 1 }),
+                purchaseRequestService.getAll({ status: 'in_progress', limit: 1 }),
+                purchaseRequestService.getAll({ status: 'ordered', limit: 1 }),
                 purchaseRequestService.getAll({ status: 'rejected', limit: 1 }),
             ]);
             return {
                 total: normResp(all, 1, 1).total,
                 pending: normResp(pending, 1, 1).total,
                 approved: normResp(approved, 1, 1).total,
+                inProgress: normResp(inProgress, 1, 1).total,
+                ordered: normResp(ordered, 1, 1).total,
                 rejected: normResp(rejected, 1, 1).total,
             };
         },
@@ -2891,7 +2901,7 @@ const PurchaseRequestPage: React.FC = () => {
         enabled: isCS1Manager,
     });
 
-    const stats = statsResp ?? { total: 0, pending: 0, approved: 0, rejected: 0 };
+    const stats = statsResp ?? { total: 0, pending: 0, approved: 0, inProgress: 0, ordered: 0, rejected: 0 };
 
     const invalidate = async (id?: string) => {
         await queryClient.invalidateQueries({ queryKey: ['purchase-requests'] });
@@ -3126,11 +3136,13 @@ const PurchaseRequestPage: React.FC = () => {
             />
 
             {/* Stats */}
-            <div className='grid grid-cols-2 gap-2 sm:grid-cols-4 sm:gap-3'>
+            <div className='grid grid-cols-2 gap-2 sm:grid-cols-3 sm:gap-3 xl:grid-cols-6'>
                 {[
                     { label: 'Tổng phiếu', value: stats.total, color: '#1A3A5C', icon: <FileExcelOutlined /> },
                     { label: 'Chờ duyệt', value: stats.pending, color: '#FA8C16', icon: <ClockCircleOutlined /> },
                     { label: 'Đã duyệt', value: stats.approved, color: '#52C41A', icon: <CheckCircleOutlined /> },
+                    { label: 'Đang lên đơn', value: stats.inProgress, color: '#1677ff', icon: <ShoppingOutlined /> },
+                    { label: 'Đã đặt hàng', value: stats.ordered, color: '#0f766e', icon: <ShoppingOutlined /> },
                     { label: 'Từ chối', value: stats.rejected, color: '#FF4D4F', icon: <CloseCircleOutlined /> },
                 ].map(({ label, value, color, icon }) => (
                     <div

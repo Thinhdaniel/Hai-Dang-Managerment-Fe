@@ -844,9 +844,9 @@ const DetailDrawer: React.FC<DrawerProps> = ({
                             {record.status === 'draft' && isCS1Director && (
                                 <ConfirmAction
                                     intent='primary'
-                                    title='Xác nhận đơn hàng?'
-                                    description='Xác nhận đơn hàng này?'
-                                    okLabel='Xác nhận'
+                                    title='Xác nhận đặt hàng?'
+                                    description='Đơn sẽ chuyển sang Đang đặt hàng, các phiếu đề xuất liên quan chuyển sang Đã đặt hàng.'
+                                    okLabel='Xác nhận đặt hàng'
                                     onConfirm={() => onConfirm(record.id)}
                                 >
                                     <Button
@@ -855,7 +855,7 @@ const DetailDrawer: React.FC<DrawerProps> = ({
                                         loading={confirmingId === record.id}
                                         style={{ background: '#16a34a', borderColor: '#16a34a' }}
                                     >
-                                        Xác nhận đơn hàng
+                                        Xác nhận đặt hàng
                                     </Button>
                                 </ConfirmAction>
                             )}
@@ -863,8 +863,8 @@ const DetailDrawer: React.FC<DrawerProps> = ({
                                 isCS1Director && (
                                     <ConfirmAction
                                         intent='primary'
-                                        title='Xác nhận nhận hàng?'
-                                        description='Tồn kho cơ sở mua sẽ được cập nhật tự động với các vật tư đã chuẩn hóa.'
+                                        title='Mở form nhận hàng?'
+                                        description='Nhập số lượng thực nhận. Tồn kho cơ sở mua sẽ được cập nhật tự động với các vật tư đã chuẩn hóa.'
                                         okLabel='Mở form nhận hàng'
                                         onConfirm={() => {
                                             resetReceiveForm();
@@ -876,7 +876,7 @@ const DetailDrawer: React.FC<DrawerProps> = ({
                                             loading={receivingId === record.id}
                                             style={{ borderColor: '#0284c7', color: '#0284c7' }}
                                         >
-                                            Nhận hàng
+                                            Nhập nhận hàng
                                         </Button>
                                     </ConfirmAction>
                                 )}
@@ -1504,6 +1504,7 @@ const PurchaseOrderPage: React.FC = () => {
     const isCS1Director =
         Boolean(user?.plantId && procurementPlantIds.includes(user.plantId)) &&
         ['admin', 'director'].includes(user?.role ?? '');
+    const userScope = `${user?.id ?? 'anonymous'}:${user?.role ?? ''}:${user?.plantId ?? ''}`;
 
     const [search, setSearch] = useState('');
     const [filterStatus, setFilterStatus] = useState<PurchaseOrderStatus | undefined>();
@@ -1528,39 +1529,41 @@ const PurchaseOrderPage: React.FC = () => {
         isLoading,
         isFetching,
     } = useQuery({
-        queryKey: ['purchase-orders', listParams],
+        queryKey: ['purchase-orders', userScope, listParams],
         queryFn: async () => normResp(await purchaseOrderService.getAll(listParams), page, DEFAULT_LIMIT),
         placeholderData: (p) => p,
         enabled: isCS1Manager,
     });
 
     const { data: detailRecord, isLoading: detailLoading } = useQuery({
-        queryKey: ['purchase-order', selectedId],
+        queryKey: ['purchase-order', selectedId, userScope],
         queryFn: () => purchaseOrderService.getById(selectedId!),
         enabled: isCS1Manager && Boolean(selectedId),
     });
 
     const { data: statsResp } = useQuery({
-        queryKey: ['purchase-orders', 'stats'],
+        queryKey: ['purchase-orders', 'stats', userScope],
         queryFn: async () => {
-            const [all, draft, confirmed, partial, received] = await Promise.all([
+            const [all, draft, confirmed, ordered, partial, received] = await Promise.all([
                 purchaseOrderService.getAll({ limit: 1 }),
                 purchaseOrderService.getAll({ status: 'draft', limit: 1 }),
                 purchaseOrderService.getAll({ status: 'confirmed', limit: 1 }),
+                purchaseOrderService.getAll({ status: 'ordered', limit: 1 }),
                 purchaseOrderService.getAll({ status: 'partially_received', limit: 1 }),
                 purchaseOrderService.getAll({ status: 'received', limit: 1 }),
             ]);
             return {
                 total: normResp(all, 1, 1).total,
                 draft: normResp(draft, 1, 1).total,
-                active: normResp(confirmed, 1, 1).total + normResp(partial, 1, 1).total,
+                ordered: normResp(confirmed, 1, 1).total + normResp(ordered, 1, 1).total,
+                partial: normResp(partial, 1, 1).total,
                 received: normResp(received, 1, 1).total,
             };
         },
         placeholderData: (p) => p,
         enabled: isCS1Manager,
     });
-    const stats = statsResp ?? { total: 0, draft: 0, active: 0, received: 0 };
+    const stats = statsResp ?? { total: 0, draft: 0, ordered: 0, partial: 0, received: 0 };
 
     const invalidate = async (id?: string) => {
         await queryClient.invalidateQueries({ queryKey: ['purchase-orders'] });
@@ -1750,12 +1753,12 @@ const PurchaseOrderPage: React.FC = () => {
                         />
                     </Tooltip>
                     {r.status === 'draft' && isCS1Director && (
-                        <Tooltip title='Xác nhận'>
+                        <Tooltip title='Xác nhận đặt hàng'>
                             <ConfirmAction
                                 intent='primary'
-                                title='Xác nhận đơn?'
-                                description={`Xác nhận ${r.orderCode}?`}
-                                okLabel='Xác nhận'
+                                title='Xác nhận đặt hàng?'
+                                description={`${r.orderCode} sẽ chuyển sang trạng thái Đang đặt hàng.`}
+                                okLabel='Xác nhận đặt hàng'
                                 onConfirm={() => handleConfirm(r.id)}
                             >
                                 <Button
@@ -1768,10 +1771,10 @@ const PurchaseOrderPage: React.FC = () => {
                         </Tooltip>
                     )}
                     {['confirmed', 'ordered', 'partially_received'].includes(r.status) && isCS1Director && (
-                        <Tooltip title='Nhận hàng'>
+                        <Tooltip title='Nhập nhận hàng'>
                             <ConfirmAction
                                 intent='primary'
-                                title='Mở chi tiết đơn?'
+                                title='Mở form nhận hàng?'
                                 description='Mở chi tiết để nhập số lượng thực nhận.'
                                 okLabel='Mở chi tiết'
                                 onConfirm={() => setSelectedId(r.id)}
@@ -1810,11 +1813,12 @@ const PurchaseOrderPage: React.FC = () => {
             />
 
             {/* Stats */}
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 12 }}>
                 {[
                     { label: 'Tổng đơn', value: stats.total, color: '#1A3A5C', icon: null },
                     { label: 'Bản nháp', value: stats.draft, color: '#888', icon: null },
-                    { label: 'Đang xử lý', value: stats.active, color: '#FA8C16', icon: <ClockCircleOutlined /> },
+                    { label: 'Đang đặt hàng', value: stats.ordered, color: '#FA8C16', icon: <ShoppingOutlined /> },
+                    { label: 'Nhận một phần', value: stats.partial, color: '#0891b2', icon: <InboxOutlined /> },
                     { label: 'Đã nhận hàng', value: stats.received, color: '#52C41A', icon: <CheckCircleOutlined /> },
                 ].map(({ label, value, color, icon }) => (
                     <Card

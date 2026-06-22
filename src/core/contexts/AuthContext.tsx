@@ -158,6 +158,10 @@ export const AuthProvider = ({ children }: PropsWithChildren) => {
     const login = async (email: string, password: string) => {
         const result = await authService.login(email, password);
 
+        queryClient.clear();
+        useNotificationStore.getState().clearNotifications();
+        void syncAppBadge(0);
+
         setStoredAccessToken(result.access_token);
         setAccessToken(result.access_token);
         setUserState(result.user);
