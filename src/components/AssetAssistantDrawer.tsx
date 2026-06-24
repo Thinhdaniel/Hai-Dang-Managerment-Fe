@@ -432,6 +432,8 @@ const AssistantResult: React.FC<{
     const supplierComparison = aggregates.supplierComparison;
     const distributionAnalysis = aggregates.distributionAnalysis;
     const purchaseSuggestion = aggregates.purchaseSuggestion;
+    const locate = aggregates.locate;
+    const transferOrders = aggregates.transferOrders;
     const maxPurchase = purchaseAnalysis?.rows?.length
         ? Math.max(1, ...purchaseAnalysis.rows.map((x) => x.current))
         : 1;
@@ -448,6 +450,8 @@ const AssistantResult: React.FC<{
         !!supplierComparison?.suppliers?.length ||
         !!distributionAnalysis ||
         !!purchaseSuggestion?.suggestions?.length ||
+        !!locate?.asset ||
+        !!transferOrders?.orders?.length ||
         !!aggregates.topBroken?.length ||
         !!aggregates.breakdown?.length ||
         items.length > 0;
@@ -464,6 +468,119 @@ const AssistantResult: React.FC<{
                         <span className='h-1.5 w-1.5 rounded-full' style={{ background: badge.color }} />
                         {badge.label}
                     </span>
+                </div>
+            ) : null}
+
+            {locate?.asset
+                ? (() => {
+                      const meta = getAssetStatusColor(locate.asset.status as AssetStatus);
+                      return (
+                          <div className='overflow-hidden rounded-2xl border border-slate-200/70 bg-white shadow-sm'>
+                              <div className='flex items-center gap-2 border-b border-slate-100 px-3 py-2.5'>
+                                  <span className='flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-blue-50 text-blue-600'>
+                                      <EnvironmentOutlined />
+                                  </span>
+                                  <div className='min-w-0 flex-1'>
+                                      <div className='truncate text-[13px] font-bold text-slate-800'>
+                                          {locate.asset.machineCode}
+                                      </div>
+                                      <div className='truncate text-[11.5px] text-slate-500'>
+                                          {locate.asset.name}
+                                          {locate.asset.serial ? ` · SN ${locate.asset.serial}` : ''}
+                                      </div>
+                                  </div>
+                                  <span
+                                      className='shrink-0 rounded-full px-2 py-0.5 text-[10.5px] font-semibold'
+                                      style={{ background: `${meta.color}1a`, color: meta.color }}
+                                  >
+                                      {locate.asset.statusLabel}
+                                  </span>
+                              </div>
+                              <div className='space-y-1 px-3 py-2 text-[12px]'>
+                                  <div className='flex gap-2'>
+                                      <span className='w-[72px] shrink-0 text-slate-400'>Cơ sở</span>
+                                      <span className='font-medium text-slate-700'>
+                                          {locate.asset.managedPlant}
+                                          {locate.asset.area ? ` · ${locate.asset.area}` : ''}
+                                      </span>
+                                  </div>
+                                  {locate.asset.lastSeenPlant ? (
+                                      <div className='flex gap-2'>
+                                          <span className='w-[72px] shrink-0 text-slate-400'>Quét cuối</span>
+                                          <span
+                                              className={
+                                                  locate.asset.mislocated
+                                                      ? 'font-medium text-rose-600'
+                                                      : 'font-medium text-slate-700'
+                                              }
+                                          >
+                                              {locate.asset.lastSeenPlant}
+                                              {locate.asset.mislocated ? ' ⚠ lệch vị trí' : ''}
+                                          </span>
+                                      </div>
+                                  ) : null}
+                                  <div className='flex gap-2'>
+                                      <span className='w-[72px] shrink-0 text-slate-400'>Điều chuyển</span>
+                                      {locate.asset.activeTransfers.length ? (
+                                          <span className='flex flex-wrap gap-1'>
+                                              {locate.asset.activeTransfers.map((t, i) => (
+                                                  <span
+                                                      key={i}
+                                                      className='rounded-full bg-amber-50 px-2 py-0.5 text-[11px] text-amber-700'
+                                                  >
+                                                      {t.from}→{t.to} ({t.statusLabel})
+                                                  </span>
+                                              ))}
+                                          </span>
+                                      ) : (
+                                          <span className='text-slate-400'>không có lệnh đang mở</span>
+                                      )}
+                                  </div>
+                              </div>
+                              <button
+                                  type='button'
+                                  onClick={() => onOpen(locate.asset!.id)}
+                                  className='w-full bg-slate-50 px-3 py-2 text-center text-[12px] font-semibold text-blue-600 transition-colors hover:bg-blue-50'
+                              >
+                                  Xem chi tiết máy →
+                              </button>
+                          </div>
+                      );
+                  })()
+                : null}
+
+            {transferOrders?.orders?.length ? (
+                <div className='space-y-1.5'>
+                    <div className='px-1 text-[11px] font-semibold text-slate-400'>
+                        Lệnh điều chuyển · {transferOrders.periodLabel} · {transferOrders.count}
+                    </div>
+                    {transferOrders.orders.slice(0, 8).map((o) => (
+                        <div
+                            key={o.id}
+                            className='overflow-hidden rounded-2xl border border-slate-200/70 bg-white shadow-sm'
+                        >
+                            <div className='flex items-center gap-2 px-3 py-2 text-[12.5px]'>
+                                <span className='min-w-0 flex-1 truncate'>
+                                    <b className='text-slate-700'>{o.from}</b> <span className='text-slate-400'>→</span>{' '}
+                                    <b className='text-slate-700'>{o.to}</b>
+                                </span>
+                                <Tag className='!m-0 !rounded-full !text-[10.5px]'>{o.statusLabel}</Tag>
+                                <span className='shrink-0 text-[11px] text-slate-400'>{o.assetCount} máy</span>
+                            </div>
+                            {o.machines.length ? (
+                                <div className='flex flex-wrap gap-1 border-t border-slate-100 bg-slate-50/50 px-3 py-1.5'>
+                                    {o.machines.slice(0, 10).map((m, i) => (
+                                        <span
+                                            key={i}
+                                            className='rounded-full bg-white px-2 py-0.5 text-[10.5px] text-slate-600 ring-1 ring-slate-200'
+                                        >
+                                            {m.machineCode}
+                                        </span>
+                                    ))}
+                                </div>
+                            ) : null}
+                        </div>
+                    ))}
                 </div>
             ) : null}
 

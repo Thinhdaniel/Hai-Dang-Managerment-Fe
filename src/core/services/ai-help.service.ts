@@ -202,6 +202,53 @@ export type AssistantAggregates = {
             }[];
         }[];
     };
+    // Tra cứu vị trí + lệnh điều chuyển của 1 máy cụ thể.
+    locate?: {
+        found: number;
+        asset: {
+            id: string;
+            machineCode: string;
+            name: string;
+            serial?: string;
+            type?: string;
+            brandName?: string;
+            status: string;
+            statusLabel: string;
+            managedPlant: string;
+            area?: string;
+            lastSeenPlant?: string;
+            lastSeenAt?: string;
+            lastSeenDistanceM?: number;
+            mislocated: boolean;
+            nextMaintenanceDate?: string;
+            activeTransfers: {
+                from: string;
+                to: string;
+                status: string;
+                statusLabel: string;
+                transferDate?: string;
+                reason?: string;
+            }[];
+            recentTransfers: { from: string; to: string; statusLabel: string; transferDate?: string }[];
+        } | null;
+        others: { id: string; machineCode: string; name: string }[];
+    };
+    // Danh sách lệnh điều chuyển (kèm máy trong lệnh).
+    transferOrders?: {
+        periodLabel: string;
+        count: number;
+        orders: {
+            id: string;
+            from: string;
+            to: string;
+            status: string;
+            statusLabel: string;
+            transferDate?: string;
+            reason?: string;
+            assetCount: number;
+            machines: { machineCode: string; name: string }[];
+        }[];
+    };
 };
 
 export type AssistantAppliedFilters = {
