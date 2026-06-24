@@ -53,7 +53,7 @@ const STARTER_GROUPS: { label: string; color: string; items: { icon: React.React
         label: 'Máy & bảo trì',
         color: '#6366f1',
         items: [
-            { icon: <WarningOutlined />, text: 'Máy nào đang hỏng ở Cơ sở 1?' },
+            { icon: <AppstoreOutlined />, text: 'Có đơn cần máy 1 kim Hikari, còn máy nào rảnh không?' },
             { icon: <TrophyOutlined />, text: 'Top 5 máy hỏng nhiều nhất' },
             { icon: <EnvironmentOutlined />, text: 'Máy nào lệch vị trí GPS?' },
         ],
@@ -71,7 +71,8 @@ const STARTER_GROUPS: { label: string; color: string; items: { icon: React.React
         color: '#f59e0b',
         items: [
             { icon: <DollarOutlined />, text: 'Phân tích chi phí mua vật tư tháng này so với tháng trước' },
-            { icon: <FileTextOutlined />, text: 'Xem các đơn hàng vật tư gần đây' },
+            { icon: <FileTextOutlined />, text: 'Đề xuất mua sắm cho tuần tới' },
+            { icon: <ShoppingOutlined />, text: 'Xem các đơn hàng vật tư gần đây' },
         ],
     },
 ];
@@ -427,8 +428,15 @@ const AssistantResult: React.FC<{
     const usageByPlant = aggregates.usageByPlant;
     const purchaseAnalysis = aggregates.purchaseAnalysis;
     const purchaseOrders = aggregates.purchaseOrders;
+    const priceHistory = aggregates.priceHistory;
+    const supplierComparison = aggregates.supplierComparison;
+    const distributionAnalysis = aggregates.distributionAnalysis;
+    const purchaseSuggestion = aggregates.purchaseSuggestion;
     const maxPurchase = purchaseAnalysis?.rows?.length
         ? Math.max(1, ...purchaseAnalysis.rows.map((x) => x.current))
+        : 1;
+    const maxPricePoint = priceHistory?.points?.length
+        ? Math.max(1, ...priceHistory.points.map((p) => p.unitPrice))
         : 1;
     const hasContent =
         hasStats ||
@@ -436,6 +444,10 @@ const AssistantResult: React.FC<{
         !!purchaseAnalysis ||
         !!usageByPlant?.materials?.length ||
         !!purchaseOrders?.orders?.length ||
+        !!priceHistory?.count ||
+        !!supplierComparison?.suppliers?.length ||
+        !!distributionAnalysis ||
+        !!purchaseSuggestion?.suggestions?.length ||
         !!aggregates.topBroken?.length ||
         !!aggregates.breakdown?.length ||
         items.length > 0;
@@ -673,6 +685,144 @@ const AssistantResult: React.FC<{
                                     {o.itemCount} dòng vật tư
                                 </div>
                             )}
+                        </div>
+                    ))}
+                </div>
+            ) : null}
+
+            {priceHistory?.count ? (
+                <div className='rounded-2xl border border-slate-200/70 bg-white p-3 shadow-sm'>
+                    <div className='mb-1 flex items-center gap-1.5 text-[11px] font-medium text-slate-400'>
+                        <DollarOutlined style={{ color: '#f59e0b' }} />
+                        Lịch sử giá · {priceHistory.materialName}
+                    </div>
+                    <div className='flex flex-wrap items-center gap-x-3 gap-y-1 text-[12px]'>
+                        <span className='text-slate-500'>
+                            TB <b className='text-slate-800'>{fmtD(priceHistory.avgPrice)}</b>
+                        </span>
+                        <span className='text-slate-400'>thấp {fmtD(priceHistory.minPrice)}</span>
+                        <span className='text-slate-400'>cao {fmtD(priceHistory.maxPrice)}</span>
+                        {priceHistory.trendPct !== 0 ? (
+                            <span
+                                className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${
+                                    priceHistory.trendPct > 0
+                                        ? 'bg-rose-50 text-rose-600'
+                                        : 'bg-emerald-50 text-emerald-600'
+                                }`}
+                            >
+                                {priceHistory.trendPct > 0 ? '↑' : '↓'} {Math.abs(priceHistory.trendPct)}%
+                            </span>
+                        ) : null}
+                    </div>
+                    {priceHistory.points.slice(-8).map((p, i) => (
+                        <div key={`${p.orderCode}-${i}`} className='mt-1.5 flex items-center gap-2 text-[11.5px]'>
+                            <span className='w-24 shrink-0 truncate text-slate-500'>{p.supplierName}</span>
+                            <div className='h-1.5 flex-1 rounded-full bg-slate-100'>
+                                <div
+                                    className='h-1.5 rounded-full bg-amber-400'
+                                    style={{ width: `${(p.unitPrice / maxPricePoint) * 100}%` }}
+                                />
+                            </div>
+                            <span className='w-20 shrink-0 text-right font-medium text-slate-700'>
+                                {fmtD(p.unitPrice)}
+                            </span>
+                        </div>
+                    ))}
+                </div>
+            ) : null}
+
+            {supplierComparison?.suppliers?.length ? (
+                <div className='overflow-hidden rounded-2xl border border-slate-200/70 bg-white shadow-sm'>
+                    <div className='flex items-center gap-1.5 border-b border-slate-100 bg-slate-50/60 px-3 py-1.5 text-[11px] font-medium text-slate-500'>
+                        <ShoppingOutlined style={{ color: '#f59e0b' }} />
+                        So sánh giá NCC · {supplierComparison.materialName}
+                    </div>
+                    {supplierComparison.suppliers.map((s, i) => (
+                        <div
+                            key={`${s.supplierName}-${i}`}
+                            className='flex items-center gap-2 border-b border-slate-100 px-3 py-2 text-[12.5px] last:border-0'
+                        >
+                            {i === 0 ? (
+                                <Tag color='green' className='!m-0 !rounded-full !text-[10px]'>
+                                    rẻ nhất
+                                </Tag>
+                            ) : (
+                                <span className='w-1' />
+                            )}
+                            <span className='min-w-0 flex-1 truncate font-medium text-slate-700'>{s.supplierName}</span>
+                            <span className='shrink-0 text-slate-400'>{s.orders} đơn</span>
+                            <span className='w-24 shrink-0 text-right font-semibold text-slate-800'>
+                                {fmtD(s.avgPrice)}
+                                <span className='text-[10px] font-normal text-slate-400'>/{s.unit}</span>
+                            </span>
+                        </div>
+                    ))}
+                </div>
+            ) : null}
+
+            {distributionAnalysis ? (
+                <div className='rounded-2xl border border-slate-200/70 bg-white p-3 shadow-sm'>
+                    <div className='mb-1 flex items-center gap-1.5 text-[11px] font-medium text-slate-400'>
+                        <AppstoreOutlined style={{ color: '#10b981' }} />
+                        Cấp phát {distributionAnalysis.plantName ? `· ${distributionAnalysis.plantName} ` : ''}·{' '}
+                        {distributionAnalysis.periodLabel}
+                    </div>
+                    <div className='flex flex-wrap items-center gap-x-3 gap-y-1 text-[12px]'>
+                        <span className='text-slate-500'>
+                            Tổng <b className='text-emerald-700'>{fmtD(distributionAnalysis.totalValue)}</b>
+                        </span>
+                        {distributionAnalysis.totalShortageQty > 0 ? (
+                            <span className='rounded-full bg-rose-50 px-2 py-0.5 text-[11px] font-semibold text-rose-600'>
+                                thiếu {distributionAnalysis.totalShortageQty} ({distributionAnalysis.totalShortageLines}{' '}
+                                dòng)
+                            </span>
+                        ) : (
+                            <span className='rounded-full bg-emerald-50 px-2 py-0.5 text-[11px] font-semibold text-emerald-600'>
+                                đủ, không thiếu
+                            </span>
+                        )}
+                    </div>
+                    {distributionAnalysis.topMaterials.slice(0, 5).map((m, i) => (
+                        <div key={`${m.materialName}-${i}`} className='mt-1 flex items-center gap-2 text-[12px]'>
+                            <span className='min-w-0 flex-1 truncate text-slate-600'>{m.materialName}</span>
+                            <span className='shrink-0 text-slate-400'>
+                                {m.qty} {m.unit}
+                            </span>
+                            <span className='w-20 shrink-0 text-right font-medium text-slate-700'>{fmtD(m.value)}</span>
+                        </div>
+                    ))}
+                    {distributionAnalysis.topShortages.length ? (
+                        <div className='mt-1.5 flex flex-wrap gap-1'>
+                            {distributionAnalysis.topShortages.slice(0, 5).map((s) => (
+                                <span
+                                    key={s.materialName}
+                                    className='rounded-full bg-rose-50 px-2 py-0.5 text-[10.5px] text-rose-500'
+                                >
+                                    {s.materialName} thiếu <b>{s.shortageQty}</b>
+                                </span>
+                            ))}
+                        </div>
+                    ) : null}
+                </div>
+            ) : null}
+
+            {purchaseSuggestion?.suggestions?.length ? (
+                <div className='overflow-hidden rounded-2xl border border-amber-200/70 bg-amber-50/40 shadow-sm'>
+                    <div className='flex items-center gap-1.5 border-b border-amber-100 bg-amber-50 px-3 py-1.5 text-[11px] font-semibold text-amber-700'>
+                        <FileTextOutlined /> Đề xuất mua sắm · {purchaseSuggestion.count} vật tư
+                    </div>
+                    {purchaseSuggestion.suggestions.slice(0, 10).map((s, i) => (
+                        <div
+                            key={`${s.materialName}-${i}`}
+                            className='flex items-center gap-2 border-b border-amber-100/60 px-3 py-2 text-[12.5px] last:border-0'
+                        >
+                            <span className='min-w-0 flex-1 truncate font-medium text-slate-700'>{s.materialName}</span>
+                            <span className='shrink-0 text-[11px] text-slate-400'>
+                                tồn {s.stock}/{s.minLevel}
+                            </span>
+                            <span className='shrink-0 rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-bold text-amber-700'>
+                                mua {s.suggestQty} {s.unit}
+                            </span>
                         </div>
                     ))}
                 </div>

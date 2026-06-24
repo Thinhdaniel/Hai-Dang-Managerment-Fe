@@ -109,7 +109,75 @@ export type AssistantAggregates = {
         current: number;
         previous: number;
         deltaPct: number;
-        rows: { label: string; unit: string; current: number; previous: number; qty: number; delta: number; contributionPct: number }[];
+        rows: {
+            label: string;
+            unit: string;
+            current: number;
+            previous: number;
+            qty: number;
+            delta: number;
+            contributionPct: number;
+        }[];
+    };
+    // Lịch sử & xu hướng giá mua 1 vật tư.
+    priceHistory?: {
+        materialName: string;
+        unit: string;
+        count: number;
+        minPrice: number;
+        maxPrice: number;
+        avgPrice: number;
+        trendPct: number;
+        points: {
+            orderCode: string;
+            date?: string;
+            supplierName: string;
+            unit: string;
+            qty: number;
+            unitPrice: number;
+            totalWithVat: number;
+        }[];
+    };
+    // So sánh giá giữa các nhà cung cấp cho 1 vật tư.
+    supplierComparison?: {
+        materialName: string;
+        unit: string;
+        cheapest?: string;
+        suppliers: {
+            supplierName: string;
+            avgPrice: number;
+            minPrice: number;
+            maxPrice: number;
+            qty: number;
+            value: number;
+            orders: number;
+            unit: string;
+        }[];
+    };
+    // Phân tích cấp phát chi tiết + thiếu hụt.
+    distributionAnalysis?: {
+        periodLabel: string;
+        plantName?: string;
+        totalValue: number;
+        totalQty: number;
+        totalShortageQty: number;
+        totalShortageLines: number;
+        topMaterials: { materialName: string; unit: string; qty: number; value: number; shortageQty: number }[];
+        topShortages: { materialName: string; unit: string; shortageQty: number }[];
+    };
+    // Đề xuất mua sắm.
+    purchaseSuggestion?: {
+        count: number;
+        suggestions: {
+            materialName: string;
+            code?: string;
+            unit: string;
+            stock: number;
+            minLevel: number;
+            used30: number;
+            suggestQty: number;
+            urgency: number;
+        }[];
     };
     // Danh sách / chi tiết đơn hàng mua vật tư.
     purchaseOrders?: {
@@ -123,7 +191,15 @@ export type AssistantAggregates = {
             totalWithVat: number;
             itemCount: number;
             createdAt?: string;
-            items?: { materialName: string; unit: string; quantityOrdered: number; quantityReceived: number; unitPrice: number; totalWithVat: number; supplierName?: string }[];
+            items?: {
+                materialName: string;
+                unit: string;
+                quantityOrdered: number;
+                quantityReceived: number;
+                unitPrice: number;
+                totalWithVat: number;
+                supplierName?: string;
+            }[];
         }[];
     };
 };
@@ -157,7 +233,11 @@ export type AssetAssistantResponse = {
 // Trợ lý vận hành toàn cục: tự định tuyến máy / vật tư / chi phí.
 export const operationsAssistantService = {
     ask: (messages: AssistantMessage[]): Promise<AssetAssistantResponse> =>
-        api.post<AssetAssistantResponse, { messages: AssistantMessage[] }>('/ai/assistant', { messages }, { timeout: 90000 }),
+        api.post<AssetAssistantResponse, { messages: AssistantMessage[] }>(
+            '/ai/assistant',
+            { messages },
+            { timeout: 90000 }
+        ),
 };
 
 export type AiMaterialMatchRequestItem = {
