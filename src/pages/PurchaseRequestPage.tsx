@@ -42,6 +42,7 @@ import {
     PlusOutlined,
     RightOutlined,
     ShoppingOutlined,
+    ThunderboltOutlined,
 } from '@ant-design/icons';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Navigate, useSearchParams } from 'react-router-dom';
@@ -50,6 +51,7 @@ import PageHeader from '../components/shared/PageHeader';
 import ContextChatDrawer from '../components/chat/ContextChatDrawer';
 import { useAuth } from '../core/contexts/AuthContext';
 import { plantService } from '../core/services';
+import { aiMaterialMatchService, type AiMaterialMatchItem } from '../core/services/ai-help.service';
 import {
     materialService,
     materialSupplierService,
@@ -713,6 +715,8 @@ const ModalForm: React.FC<ModalFormProps> = ({ open, initial, plants, mainPlantI
     const [checkedKeys, setCheckedKeys] = useState<Set<string>>(new Set());
     const [recentlyUpdatedKeys, setRecentlyUpdatedKeys] = useState<Set<string>>(new Set());
     const [showMissingOnly, setShowMissingOnly] = useState(false);
+    const [aiMatches, setAiMatches] = useState<Record<string, AiMaterialMatchItem>>({});
+    const [aiMatching, setAiMatching] = useState(false);
     const [summaryPulse, setSummaryPulse] = useState(false);
     const [bulkProposedBy, setBulkProposedBy] = useState('');
     const [bulkSupplierId, setBulkSupplierId] = useState<string | undefined>();
@@ -826,6 +830,8 @@ const ModalForm: React.FC<ModalFormProps> = ({ open, initial, plants, mainPlantI
         setErrors(new Set());
         setValidationMessages([]);
         setShowMissingOnly(false);
+        setAiMatches({});
+        setAiMatching(false);
         setMaterialSearchInput('');
         lastTotalRef.current = loadedItems.reduce((s, r) => s + r.totalWithVat, 0);
     }, [open, initial]);
@@ -962,6 +968,14 @@ const ModalForm: React.FC<ModalFormProps> = ({ open, initial, plants, mainPlantI
 
     const updateRow = (key: string, patch: Partial<ItemRow>) => {
         setItems((p) => patchRow(p, key, patch));
+        if ('materialName' in patch || 'materialId' in patch || 'unit' in patch) {
+            setAiMatches((prev) => {
+                if (!prev[key]) return prev;
+                const next = { ...prev };
+                delete next[key];
+                return next;
+            });
+        }
         clearPatchedErrors([key], patch);
     };
 
@@ -1035,7 +1049,144 @@ const ModalForm: React.FC<ModalFormProps> = ({ open, initial, plants, mainPlantI
         notification.warning({ title: 'Chưa tìm thấy vật tư phù hợp trong danh mục' });
     };
 
+    const applyAiMaterialMatch = (key: string, match: AiMaterialMatchItem) => {
+        if (!match.materialId && !match.candidate) return;
+
+        const material = match.materialId ? materialById.get(match.materialId) : undefined;
+        if (material) {
+            applyMaterialToRow(key, material);
+            return;
+        }
+
+        if (match.candidate) {
+            updateRow(key, {
+                materialId: match.candidate.id,
+                materialName: match.candidate.name,
+                unit: match.candidate.unit || '',
+            });
+            markRecent([key]);
+        }
+    };
+
+    const handleAiMaterialMatch = async () => {
+        const rows = items.filter((row) => row.materialName.trim() && !row.materialId);
+        if (!rows.length) {
+            notification.info({ title: 'Không có dòng vật tư cần AI so khớp' });
+            return;
+        }
+
+        setAiMatching(true);
+        try {
+            const result = await aiMaterialMatchService.match(
+                rows.map((row) => ({
+                    key: row.key,
+                    materialName: row.materialName,
+                    unit: row.unit,
+                    note: row.purpose || row.note,
+                }))
+            );
+
+            const nextMatches = Object.fromEntries(result.items.map((item) => [item.key, item]));
+            setAiMatches((prev) => ({ ...prev, ...nextMatches }));
+
+            const strong = result.items.filter((item) => item.status === 'matched' && item.materialId).length;
+            const needsConfirm = result.items.filter(
+                (item) => item.status === 'suggested' || item.status === 'ambiguous'
+            ).length;
+            const unmatched = result.items.filter((item) => item.status === 'unmatched').length;
+
+            notification.success({
+                title: `AI đã phân tích ${result.items.length} dòng vật tư`,
+                description: [
+                    strong ? `${strong} dòng khớp mạnh` : '',
+                    needsConfirm ? `${needsConfirm} dòng cần xác nhận` : '',
+                    unmatched ? `${unmatched} dòng chưa tìm thấy` : '',
+                    result.usedFallback ? 'Đang dùng bộ so khớp dự phòng vì AI chưa khả dụng.' : '',
+                ]
+                    .filter(Boolean)
+                    .join(' · '),
+            });
+        } catch {
+            notification.error({
+                title: 'Không gọi được AI khớp vật tư',
+                description: 'Có thể 9Router/provider đang tắt hoặc mất kết nối. Bộ tự khớp danh mục vẫn dùng được.',
+            });
+        } finally {
+            setAiMatching(false);
+        }
+    };
+
+    const applyStrongAiMatches = () => {
+        const strongRows = items.filter((row) => {
+            const match = aiMatches[row.key];
+            return !row.materialId && match?.materialId && match.status === 'matched' && match.confidence >= 92;
+        });
+
+        if (!strongRows.length) {
+            notification.info({ title: 'Chưa có gợi ý AI đủ chắc để áp dụng hàng loạt' });
+            return;
+        }
+
+        strongRows.forEach((row) => applyAiMaterialMatch(row.key, aiMatches[row.key]));
+        notification.success({ title: `Đã áp dụng ${strongRows.length} gợi ý AI khớp mạnh` });
+    };
+
     const renderCatalogHint = (row: ItemRow, compact = false) => {
+        const aiMatch = aiMatches[row.key];
+        if (!row.materialId && aiMatch && row.materialName.trim()) {
+            const aiMaterial = aiMatch.materialId ? materialById.get(aiMatch.materialId) : undefined;
+            const candidate = aiMaterial
+                ? {
+                      code: aiMaterial.code,
+                      name: aiMaterial.name,
+                      unit: aiMaterial.unit,
+                  }
+                : aiMatch.candidate;
+
+            if (candidate && aiMatch.status !== 'unmatched') {
+                const color =
+                    aiMatch.status === 'matched' ? '#2563eb' : aiMatch.status === 'suggested' ? '#0891b2' : '#b45309';
+                return (
+                    <div style={{ marginTop: compact ? 6 : 5, lineHeight: 1.3 }}>
+                        <Button
+                            type='link'
+                            size='small'
+                            style={{
+                                height: 'auto',
+                                maxWidth: '100%',
+                                padding: 0,
+                                whiteSpace: 'normal',
+                                textAlign: 'left',
+                                lineHeight: 1.3,
+                                color,
+                                fontSize: compact ? 12 : 11,
+                                fontWeight: 700,
+                            }}
+                            onClick={(event) => {
+                                event.stopPropagation();
+                                applyAiMaterialMatch(row.key, aiMatch);
+                            }}
+                        >
+                            AI {aiMatch.status === 'matched' ? 'khớp mạnh' : 'gợi ý'} {aiMatch.confidence}%:{' '}
+                            {candidate.code ? `[${candidate.code}] ` : ''}
+                            {candidate.name}
+                        </Button>
+                        {aiMatch.warnings.length ? (
+                            <Tooltip title={aiMatch.warnings.join(' · ')}>
+                                <InfoCircleOutlined style={{ marginLeft: 6, color: '#f59e0b', fontSize: 11 }} />
+                            </Tooltip>
+                        ) : null}
+                    </div>
+                );
+            }
+
+            return (
+                <Tag color='volcano' style={{ margin: compact ? '6px 0 0' : '6px 0 0', fontSize: 10 }}>
+                    AI chưa tìm thấy danh mục phù hợp
+                </Tag>
+            );
+        }
+
         const match = getRowCatalogMatch(row);
         if (!row.materialName.trim()) return null;
 
@@ -1188,6 +1339,14 @@ const ModalForm: React.FC<ModalFormProps> = ({ open, initial, plants, mainPlantI
     const unmatchedCatalogCount = catalogMatches.filter(
         ({ row, match }) => row.materialName.trim() && match.status === 'unmatched'
     ).length;
+    const strongAiMatchCount = items.filter((row) => {
+        const match = aiMatches[row.key];
+        return !row.materialId && match?.materialId && match.status === 'matched' && match.confidence >= 92;
+    }).length;
+    const aiSuggestionCount = items.filter((row) => {
+        const match = aiMatches[row.key];
+        return !row.materialId && match && match.status !== 'unmatched';
+    }).length;
 
     const toggleAllVisible = (checked: boolean) => {
         setCheckedKeys((prev) => {
@@ -2215,6 +2374,19 @@ const ModalForm: React.FC<ModalFormProps> = ({ open, initial, plants, mainPlantI
                             </Button>
                             <Button
                                 size='small'
+                                icon={<ThunderboltOutlined />}
+                                loading={aiMatching}
+                                onClick={handleAiMaterialMatch}
+                            >
+                                AI khớp vật tư
+                            </Button>
+                            {strongAiMatchCount > 0 ? (
+                                <Button size='small' type='primary' ghost onClick={applyStrongAiMatches}>
+                                    Áp dụng AI ({strongAiMatchCount})
+                                </Button>
+                            ) : null}
+                            <Button
+                                size='small'
                                 icon={<FilterOutlined />}
                                 type={showMissingOnly ? 'primary' : 'default'}
                                 ghost={showMissingOnly}
@@ -2320,6 +2492,7 @@ const ModalForm: React.FC<ModalFormProps> = ({ open, initial, plants, mainPlantI
                         ['Chưa có đơn giá', missingPriceCount],
                         ['Cần xác nhận DM', suggestedCatalogCount],
                         ['Chưa có DM', unmatchedCatalogCount],
+                        ['AI gợi ý', aiSuggestionCount],
                     ].map(([label, value]) => (
                         <Tag
                             key={label}

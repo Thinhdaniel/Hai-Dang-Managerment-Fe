@@ -246,16 +246,28 @@ const AssetList: React.FC = () => {
     const [quickUpdateAsset, setQuickUpdateAsset] = useState<Asset | null>(null);
     const [qrAsset, setQrAsset] = useState<Asset | null>(null);
     const [qrLoadingAssetId, setQrLoadingAssetId] = useState<string | null>(null);
-    const [filters, setFilters] = useState(() => createDefaultFilters(initialSearch));
-    const [draftFilters, setDraftFilters] = useState(() => createDefaultFilters(initialSearch));
+    // Lọc khởi tạo từ query params (cho phép trợ lý/điều hướng truyền search/status/cơ sở/hãng/nguồn gốc).
+    const filtersFromParams = () => {
+        const base = createDefaultFilters(normalizeSearchTerm(searchParams.get('search')));
+        const status = searchParams.get('status');
+        const plantId = searchParams.get('plantId');
+        const brandId = searchParams.get('brandId');
+        const ownershipType = searchParams.get('ownershipType');
+        if (status) base.status = status as AssetStatus;
+        if (plantId) base.plantId = plantId;
+        if (brandId) base.brandId = brandId;
+        if (ownershipType) base.ownershipType = ownershipType as AssetOwnershipType;
+        return base;
+    };
+
+    const [filters, setFilters] = useState(filtersFromParams);
+    const [draftFilters, setDraftFilters] = useState(filtersFromParams);
 
     useEffect(() => {
-        const normalizedQuerySearch = normalizeSearchTerm(searchParams.get('search'));
-
-        setDraftFilters((prev) => ({ ...prev, search: normalizedQuerySearch }));
-        setFilters((prev) =>
-            prev.search === normalizedQuerySearch ? prev : { ...prev, page: 1, search: normalizedQuerySearch }
-        );
+        const next = filtersFromParams();
+        setDraftFilters(next);
+        setFilters(next);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [searchParams]);
 
     const { data: assetResponse, isLoading } = useQuery({

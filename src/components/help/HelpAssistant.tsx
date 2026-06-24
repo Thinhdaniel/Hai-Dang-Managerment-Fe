@@ -28,7 +28,7 @@ type AssistantMessage = {
     role: 'user' | 'assistant';
     text: string;
     topics?: HelpTopic[];
-    provider?: 'ollama' | 'fallback' | 'local';
+    provider?: string;
     isPending?: boolean;
 };
 
@@ -63,12 +63,15 @@ const toAiContextTopic = (topic: HelpTopic) => ({
 
 const providerLabel = (message: AssistantMessage) => {
     if (message.isPending) return 'Đang xử lý';
+    if (message.provider === '9router') return 'AI 9Router';
+    if (message.provider === 'openrouter') return 'AI OpenRouter';
     if (message.provider === 'ollama') return 'AI local';
     return 'Hướng dẫn nội bộ';
 };
 
 const providerColor = (message: AssistantMessage) => {
     if (message.isPending) return 'processing';
+    if (message.provider === '9router' || message.provider === 'openrouter') return 'blue';
     if (message.provider === 'ollama') return 'cyan';
     return 'default';
 };
@@ -333,7 +336,7 @@ const HelpAssistant = () => {
                               ...message,
                               text: response.answer || fallbackText,
                               topics,
-                              provider: response.usedFallback ? 'fallback' : 'ollama',
+                              provider: response.usedFallback ? 'fallback' : response.provider,
                               isPending: false,
                           }
                         : message
@@ -491,7 +494,7 @@ const HelpAssistant = () => {
                         />
                         <div className='mt-2 flex items-center justify-between gap-3'>
                             <Text className='text-[11px] leading-5 text-slate-400'>
-                                AI local trả lời từ hướng dẫn nội bộ. Nếu Ollama lỗi, hệ thống tự dùng fallback.
+                                AI trả lời từ hướng dẫn nội bộ. Nếu provider lỗi, hệ thống tự dùng fallback.
                             </Text>
                             <Button type='link' size='small' onClick={clearConversation} className='!px-0'>
                                 Xóa hội thoại

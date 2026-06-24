@@ -1,6 +1,7 @@
-import React from 'react';
-import { Button, Result } from 'antd';
+import React, { useEffect, useState } from 'react';
+import { Button, Result, Spin } from 'antd';
 import { useNavigate, useRouteError } from 'react-router-dom';
+import { maybeRecoverFromStaleError } from '../core/lib/stale-asset-recovery';
 
 interface RouteErrorLike {
     status?: number;
@@ -11,6 +12,24 @@ interface RouteErrorLike {
 const RouteErrorPage: React.FC = () => {
     const navigate = useNavigate();
     const error = useRouteError() as RouteErrorLike;
+
+    // Lỗi lệch module do service worker cache chunk cũ -> tự xoá cache + reload (không bắt người dùng tự xử lý).
+    const [recovering, setRecovering] = useState(false);
+    useEffect(() => {
+        if (maybeRecoverFromStaleError(error)) setRecovering(true);
+    }, [error]);
+
+    if (recovering) {
+        return (
+            <div className='flex h-screen w-full flex-col items-center justify-center gap-4 bg-slate-50'>
+                <Spin size='large' />
+                <div className='text-base font-medium text-slate-600'>Đang cập nhật phiên bản mới…</div>
+                <div className='max-w-xs text-center text-[13px] text-slate-400'>
+                    Hệ thống vừa được nâng cấp, đang làm mới dữ liệu trên máy bạn. Vui lòng đợi trong giây lát.
+                </div>
+            </div>
+        );
+    }
 
     const statusCode = error?.status === 404 ? '404' : '500';
     const title = statusCode === '404' ? '404' : 'Đã xảy ra lỗi';

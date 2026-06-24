@@ -4,6 +4,11 @@ const STALE_ASSET_PATTERNS = [
     'Importing a module script failed',
     'Loading chunk',
     'dynamically imported module',
+    // Lệch pha module do service worker phục vụ chunk cũ (export không khớp).
+    'does not provide an export named',
+    'error loading dynamically imported module',
+    "Unexpected token '<'",
+    'is not a valid JavaScript MIME type',
 ];
 
 const hasStaleAssetMessage = (value: unknown) => {
@@ -52,6 +57,15 @@ const recoverFromStaleAssets = async () => {
     } finally {
         window.location.reload();
     }
+};
+
+// Cho ErrorBoundary React gọi: nếu lỗi là stale-asset thì tự phục hồi (xoá cache + reload) và trả true.
+export const maybeRecoverFromStaleError = (error: unknown): boolean => {
+    if (typeof window === 'undefined' || !hasStaleAssetMessage(error)) {
+        return false;
+    }
+    void recoverFromStaleAssets();
+    return true;
 };
 
 export const installStaleAssetRecovery = () => {

@@ -21,6 +21,8 @@ import DashboardCostTrendCard from '../components/dashboard/DashboardCostTrendCa
 import DashboardFacilityDistributionCard from '../components/dashboard/DashboardFacilityDistributionCard';
 import DashboardOperationsCard from '../components/dashboard/DashboardOperationsCard';
 import DashboardMislocatedCard from '../components/dashboard/DashboardMislocatedCard';
+import DashboardDigestCard from '../components/dashboard/DashboardDigestCard';
+import DashboardVarianceCard from '../components/dashboard/DashboardVarianceCard';
 import DashboardOverdueCard from '../components/dashboard/DashboardOverdueCard';
 import DashboardRecentActivityCard from '../components/dashboard/DashboardRecentActivityCard';
 import DashboardTopBrokenCard from '../components/dashboard/DashboardTopBrokenCard';
@@ -265,6 +267,13 @@ const Dashboard: React.FC = () => {
                     </button>
                 ))}
             </div>
+
+            {canViewCost ? (
+                <div className='grid grid-cols-1 gap-4 xl:grid-cols-2'>
+                    <DashboardDigestCard />
+                    <DashboardVarianceCard />
+                </div>
+            ) : null}
 
             <div className='dashboard-attention-grid'>
                 {attentionItems.map((item) => (

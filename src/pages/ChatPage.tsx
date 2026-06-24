@@ -44,6 +44,7 @@ import {
     SmileOutlined,
     SwapOutlined,
     TeamOutlined,
+    ThunderboltOutlined,
     ToolOutlined,
 } from '@ant-design/icons';
 import { useNavigate, useSearchParams } from 'react-router-dom';
@@ -79,6 +80,7 @@ import {
 import ChatAudioPlayer from '../components/chat/ChatAudioPlayer';
 import ImageAnnotationModal from '../components/chat/ImageAnnotationModal';
 import ChatMessageAttachments from '../components/chat/ChatMessageAttachments';
+import ChatAiSummaryDrawer from '../components/chat/ChatAiSummaryDrawer';
 import VoiceRecorderButton, { type ChatVoiceNoteDraft } from '../components/chat/VoiceRecorderButton';
 import { compressChatImage } from '../core/lib/chatMedia';
 import type { ChatConversation, ChatMessage, ChatUserSummary, ChatWorkflowContextType, UserRole } from '../core/types';
@@ -222,6 +224,7 @@ const ChatPage: React.FC = () => {
     const [actionMenuId, setActionMenuId] = useState<string | null>(null);
     const [pinnedMessages, setPinnedMessages] = useState<ChatMessage[]>([]);
     const [searchOpen, setSearchOpen] = useState(false);
+    const [summaryOpen, setSummaryOpen] = useState(false);
     const [messageSearch, setMessageSearch] = useState('');
     const [searchResults, setSearchResults] = useState<ChatMessage[]>([]);
     const [searching, setSearching] = useState(false);
@@ -1009,15 +1012,12 @@ const ChatPage: React.FC = () => {
         }
     };
 
-    const handleVoiceRecorded = useCallback(
-        (draft: ChatVoiceNoteDraft) => {
-            setSelectedVoiceNote((prev) => {
-                if (prev) URL.revokeObjectURL(prev.previewUrl);
-                return draft;
-            });
-        },
-        []
-    );
+    const handleVoiceRecorded = useCallback((draft: ChatVoiceNoteDraft) => {
+        setSelectedVoiceNote((prev) => {
+            if (prev) URL.revokeObjectURL(prev.previewUrl);
+            return draft;
+        });
+    }, []);
 
     const removeSelectedVoiceNote = () => {
         clearSelectedVoiceNote();
@@ -1293,6 +1293,15 @@ const ChatPage: React.FC = () => {
                                         onClick={() => setSearchOpen((open) => !open)}
                                         className={`chat-page__icon-button ${searchOpen ? 'chat-page__icon-button--active' : ''}`}
                                     />
+                                </Tooltip>
+                                <Tooltip title='AI tóm tắt hội thoại'>
+                                    <Button
+                                        icon={<ThunderboltOutlined />}
+                                        onClick={() => setSummaryOpen(true)}
+                                        className='chat-page__icon-button'
+                                    >
+                                        {!isMobile ? 'Tóm tắt' : null}
+                                    </Button>
                                 </Tooltip>
                                 {selectedConversation.context?.path ? (
                                     <Tooltip title='Mở phiếu liên quan'>
@@ -1644,7 +1653,7 @@ const ChatPage: React.FC = () => {
                                                                           ? '🖼️ Hình ảnh'
                                                                           : item.replyTo.hasAudio && !item.replyTo.body
                                                                             ? 'Ghi âm'
-                                                                          : item.replyTo.body}
+                                                                            : item.replyTo.body}
                                                                 </span>
                                                             </button>
                                                         ) : null}
@@ -1659,13 +1668,16 @@ const ChatPage: React.FC = () => {
                                                             <div
                                                                 className={`${bubbleClass}${
                                                                     iMentioned && !mine
-                                                                        ? ' !bg-blue-50 ring-1 ring-blue-200'
+                                                                        ? '!bg-blue-50 ring-1 ring-blue-200'
                                                                         : ''
                                                                 }`}
                                                                 title={formatFullTime(item.createdAt)}
                                                             >
                                                                 <span>
-                                                                    <MentionText text={item.body} names={mentionNames} />
+                                                                    <MentionText
+                                                                        text={item.body}
+                                                                        names={mentionNames}
+                                                                    />
                                                                 </span>
                                                             </div>
                                                         ) : null}
@@ -2049,6 +2061,12 @@ const ChatPage: React.FC = () => {
                 previewUrl={annotatingImage?.previewUrl}
                 onApply={handleApplyAnnotatedImage}
                 onClose={() => setAnnotatingImage(null)}
+            />
+            <ChatAiSummaryDrawer
+                open={summaryOpen}
+                conversationId={selectedConversation?.id}
+                title={selectedConversation?.title}
+                onClose={() => setSummaryOpen(false)}
             />
         </div>
     );

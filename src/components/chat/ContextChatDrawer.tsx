@@ -26,6 +26,7 @@ import {
     RollbackOutlined,
     SendOutlined,
     SmileOutlined,
+    ThunderboltOutlined,
 } from '@ant-design/icons';
 import { useAuth } from '../../core/contexts/AuthContext';
 import {
@@ -59,6 +60,7 @@ import {
 import ChatAudioPlayer from './ChatAudioPlayer';
 import ImageAnnotationModal from './ImageAnnotationModal';
 import ChatMessageAttachments from './ChatMessageAttachments';
+import ChatAiSummaryDrawer from './ChatAiSummaryDrawer';
 import VoiceRecorderButton, { type ChatVoiceNoteDraft } from './VoiceRecorderButton';
 import { compressChatImage } from '../../core/lib/chatMedia';
 import type { ChatConversation, ChatMessage, ChatWorkflowContextType } from '../../core/types';
@@ -131,6 +133,7 @@ const ContextChatDrawer: React.FC<ContextChatDrawerProps> = ({
     const [replyTarget, setReplyTarget] = useState<ChatMessage | null>(null);
     const [typingUsers, setTypingUsers] = useState<Record<string, string>>({});
     const [actionMenuId, setActionMenuId] = useState<string | null>(null);
+    const [summaryOpen, setSummaryOpen] = useState(false);
     const mention = useMentionInput();
 
     const streamRows = useMemo(() => buildChatStream(messages), [messages]);
@@ -550,6 +553,15 @@ const ContextChatDrawer: React.FC<ContextChatDrawerProps> = ({
                     <div className='flex items-center gap-2'>
                         <Tag className='context-chat__tag'>{CONTEXT_TYPE_LABEL[contextType] || 'Nghiệp vụ'}</Tag>
                         {conversation ? (
+                            <Tooltip title='AI tóm tắt trao đổi'>
+                                <Button
+                                    icon={<ThunderboltOutlined />}
+                                    onClick={() => setSummaryOpen(true)}
+                                    className='context-chat__close'
+                                />
+                            </Tooltip>
+                        ) : null}
+                        {conversation ? (
                             <Tooltip
                                 title={
                                     conversation.muted
@@ -725,7 +737,7 @@ const ContextChatDrawer: React.FC<ContextChatDrawerProps> = ({
                                                                   ? '🖼️ Hình ảnh'
                                                                   : item.replyTo.hasAudio && !item.replyTo.body
                                                                     ? 'Ghi âm'
-                                                                  : item.replyTo.body}
+                                                                    : item.replyTo.body}
                                                         </span>
                                                     </button>
                                                 ) : null}
@@ -741,7 +753,7 @@ const ContextChatDrawer: React.FC<ContextChatDrawerProps> = ({
                                                         <div
                                                             className={`${bubbleClass}${
                                                                 iMentioned && !mine
-                                                                    ? ' !bg-blue-50 ring-1 ring-blue-200'
+                                                                    ? '!bg-blue-50 ring-1 ring-blue-200'
                                                                     : ''
                                                             }`}
                                                             title={formatFullTime(item.createdAt)}
@@ -798,9 +810,7 @@ const ContextChatDrawer: React.FC<ContextChatDrawerProps> = ({
                                             ))}
                                         </div>
                                         {seenByLast.length > 3 ? (
-                                            <Text className='text-[11px] text-slate-400'>
-                                                +{seenByLast.length - 3}
-                                            </Text>
+                                            <Text className='text-[11px] text-slate-400'>+{seenByLast.length - 3}</Text>
                                         ) : null}
                                     </div>
                                 ) : null}
@@ -1012,6 +1022,12 @@ const ContextChatDrawer: React.FC<ContextChatDrawerProps> = ({
                 previewUrl={annotatingImage?.previewUrl}
                 onApply={handleApplyAnnotatedImage}
                 onClose={() => setAnnotatingImage(null)}
+            />
+            <ChatAiSummaryDrawer
+                open={summaryOpen}
+                conversationId={conversation?.id}
+                title={title}
+                onClose={() => setSummaryOpen(false)}
             />
         </Drawer>
     );

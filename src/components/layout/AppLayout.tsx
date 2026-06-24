@@ -1,9 +1,12 @@
-import React, { useEffect, useState } from 'react';
-import { Grid, Layout } from 'antd';
+import React, { lazy, Suspense, useEffect, useState } from 'react';
+import { FloatButton, Grid, Layout } from 'antd';
+import { RobotOutlined } from '@ant-design/icons';
 import { Outlet } from 'react-router-dom';
 import AppHeader from './AppHeader';
 import AppSidebar from './AppSidebar';
 import MobileBottomNav from '../pwa/MobileBottomNav';
+
+const AssetAssistantDrawer = lazy(() => import('../AssetAssistantDrawer'));
 
 const { Content } = Layout;
 const { useBreakpoint } = Grid;
@@ -19,6 +22,7 @@ const AppLayout: React.FC = () => {
     const headerHeight = isDesktop ? DESKTOP_HEADER_HEIGHT : MOBILE_HEADER_HEIGHT;
     const [desktopCollapsed, setDesktopCollapsed] = useState(false);
     const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
+    const [assistantOpen, setAssistantOpen] = useState(false);
 
     useEffect(() => {
         if (isDesktop) {
@@ -82,6 +86,23 @@ const AppLayout: React.FC = () => {
             </Layout>
 
             {!isDesktop ? <MobileBottomNav onOpenMenu={() => setMobileSidebarOpen(true)} /> : null}
+
+            {/* Trợ lý vận hành toàn cục — truy cập ở mọi trang */}
+            <FloatButton
+                icon={<RobotOutlined />}
+                type='primary'
+                tooltip='Trợ lý vận hành'
+                onClick={() => setAssistantOpen(true)}
+                style={{
+                    right: isDesktop ? 28 : 16,
+                    bottom: isDesktop ? 28 : 'calc(96px + env(safe-area-inset-bottom))',
+                }}
+            />
+            {assistantOpen ? (
+                <Suspense fallback={null}>
+                    <AssetAssistantDrawer open={assistantOpen} onClose={() => setAssistantOpen(false)} />
+                </Suspense>
+            ) : null}
         </Layout>
     );
 };

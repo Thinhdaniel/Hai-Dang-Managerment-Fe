@@ -972,6 +972,24 @@ export interface AssetLocationsResponse {
     withoutGps: number;
 }
 
+// ===== BẢN TIN AI ĐỊNH KỲ =====
+export interface AiDigest {
+    _id: string;
+    periodType: 'week' | 'month';
+    periodKey: string;
+    periodLabel?: string;
+    rangeStart?: string;
+    rangeEnd?: string;
+    snapshot?: Record<string, unknown>;
+    narrative?: string;
+    highlights?: string[];
+    alerts?: string[];
+    recommendations?: string[];
+    provider?: string;
+    model?: string;
+    createdAt?: string;
+}
+
 // ===== MÃ MÁY THÔNG MINH =====
 export interface AssetCodeSuggestion {
     code: string;

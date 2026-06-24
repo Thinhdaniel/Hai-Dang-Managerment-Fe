@@ -155,10 +155,10 @@ const AssetAiSearchBar: React.FC<AssetAiSearchBarProps> = ({ onApply, onReset })
                                     <div className='flex items-center gap-2'>
                                         <span className='text-[12px] font-bold text-slate-700'>AI đã hiểu</span>
                                         <Tag
-                                            color={result.provider === 'ollama' ? 'green' : 'default'}
+                                            color={result.provider === 'fallback' ? 'default' : 'green'}
                                             className='!m-0 !text-[10px]'
                                         >
-                                            {result.provider === 'ollama' ? 'AI local' : 'Suy luận từ khóa'}
+                                            {result.provider === 'fallback' ? 'Suy luận từ khóa' : result.provider}
                                         </Tag>
                                     </div>
                                     <p className='m-0 mt-0.5 text-[12px] leading-5 text-slate-600'>
