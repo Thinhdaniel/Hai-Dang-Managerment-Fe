@@ -27,7 +27,7 @@ import {
     type AssistantStreamStep,
 } from '../core/services/ai-help.service';
 import { getAssetStatusColor } from '../core/constants/assetStatusColor';
-import { useVoiceChat, VOICE_STYLES, type VoiceStyleKey } from '../core/hooks/useVoiceChat';
+import { useVoiceChat, VOICE_STYLES, NEURAL_VOICES, DEFAULT_NEURAL_VOICE, type VoiceStyleKey } from '../core/hooks/useVoiceChat';
 import type { AssetStatus } from '../core/types';
 
 type ChatMessage = { role: 'user' | 'assistant'; content: string; data?: AssetAssistantResponse; animate?: boolean };
@@ -96,14 +96,6 @@ const DOMAIN_BADGE: Record<string, { label: string; color: string }> = {
     asset: { label: 'Máy móc', color: '#6366f1' },
     material: { label: 'Vật tư', color: '#10b981' },
     cost: { label: 'Chi phí', color: '#f59e0b' },
-};
-
-// Đoán giới tính giọng từ tên để gắn nhãn (Nam/Nữ) cho dễ chọn.
-const guessVoiceGender = (name: string): string => {
-    const n = name.toLowerCase();
-    if (/female|nữ|woman|hoaimy|hoai my|\bmy\b|linh|lan|huong|ngan|thu|mai|nguyet|female/.test(n)) return 'Nữ';
-    if (/male|nam|man|namminh|nam minh|minh|hoang|quan|long|duc|\ban\b/.test(n)) return 'Nam';
-    return '';
 };
 
 // Nhãn + màu mức tin cậy của câu trả lời (theo việc có truy vấn dữ liệu thật hay không).
@@ -217,16 +209,16 @@ const AssetAssistantDrawer: React.FC<Props> = ({ open, onClose }) => {
     });
     const [voiceURI, setVoiceURI] = useState<string>(() => {
         try {
-            return localStorage.getItem(VOICE_URI_KEY) || '';
+            return localStorage.getItem(VOICE_URI_KEY) || DEFAULT_NEURAL_VOICE;
         } catch {
-            return '';
+            return DEFAULT_NEURAL_VOICE;
         }
     });
     const [voiceStyle, setVoiceStyle] = useState<VoiceStyleKey>(() => {
         try {
-            return (localStorage.getItem(VOICE_STYLE_KEY) as VoiceStyleKey) || 'professional';
+            return (localStorage.getItem(VOICE_STYLE_KEY) as VoiceStyleKey) || 'energetic';
         } catch {
-            return 'professional';
+            return 'energetic';
         }
     });
     const endRef = useRef<HTMLDivElement>(null);
@@ -235,16 +227,20 @@ const AssetAssistantDrawer: React.FC<Props> = ({ open, onClose }) => {
         ttsSupported,
         listening,
         speaking,
-        vietnameseVoices,
-        voices,
         startListening,
         stopListening,
         speak,
+        speakNeural,
         stopSpeaking,
     } = useVoiceChat();
 
-    // Cấu hình đọc hiện tại = giọng đã chọn + cặp tốc độ/cao độ của phong cách.
-    const speakOpts = () => ({ voiceURI: voiceURI || undefined, ...VOICE_STYLES[voiceStyle] });
+    // Đọc câu trả lời: ưu tiên giọng NEURAL (CapCut-like); lỗi mạng/BE thì fallback giọng trình duyệt.
+    const readOut = (text: string) => {
+        const st = VOICE_STYLES[voiceStyle];
+        speakNeural(text, { voice: voiceURI || DEFAULT_NEURAL_VOICE, rate: st.rate, pitch: st.pitch }).then((ok) => {
+            if (!ok) speak(text, { rate: st.rate, pitch: st.pitch });
+        });
+    };
 
     useEffect(() => {
         endRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -292,11 +288,11 @@ const AssetAssistantDrawer: React.FC<Props> = ({ open, onClose }) => {
                 resp = await operationsAssistantService.ask(convo);
             }
             setMessages((prev) => [...prev, { role: 'assistant', content: resp.answer, data: resp, animate: true }]);
-            if (readAloud) speak(resp.answer, speakOpts());
+            if (readAloud) readOut(resp.answer);
         } catch {
             const fail = 'Xin lỗi, mình chưa xử lý được câu này. Thử hỏi lại nhé.';
             setMessages((prev) => [...prev, { role: 'assistant', content: fail }]);
-            if (readAloud) speak(fail, speakOpts());
+            if (readAloud) readOut(fail);
         } finally {
             setLoading(false);
             setLiveStep('');
@@ -348,8 +344,8 @@ const AssetAssistantDrawer: React.FC<Props> = ({ open, onClose }) => {
             /* noop */
         }
     };
-    // Nghe thử = hành động người dùng -> "mở khoá" TTS của trình duyệt (lần đầu hay bị chặn).
-    const previewVoice = () => speak(VOICE_SAMPLE, { voiceURI: voiceURI || undefined, ...VOICE_STYLES[voiceStyle] });
+    // Nghe thử = hành động người dùng -> "mở khoá" audio của trình duyệt (lần đầu hay bị chặn).
+    const previewVoice = () => readOut(VOICE_SAMPLE);
 
     // Đóng drawer / nhấn nút đóng: ngắt giọng đang đọc + dừng nghe.
     const handleClose = () => {
@@ -416,32 +412,13 @@ const AssetAssistantDrawer: React.FC<Props> = ({ open, onClose }) => {
                                     <Switch size='small' checked={readAloud} onChange={toggleReadAloud} />
                                 </div>
                                 <div>
-                                    <div className='mb-1 text-[11px] font-medium text-slate-400'>Giọng đọc</div>
+                                    <div className='mb-1 text-[11px] font-medium text-slate-400'>Giọng đọc (neural)</div>
                                     <Select
                                         size='small'
                                         className='w-full'
                                         value={voiceURI}
                                         onChange={changeVoice}
-                                        options={[
-                                            { value: '', label: 'Tự động (giọng Việt máy)' },
-                                            ...(vietnameseVoices.length
-                                                ? [
-                                                      {
-                                                          label: 'Tiếng Việt',
-                                                          options: vietnameseVoices.map((v) => ({
-                                                              value: v.voiceURI,
-                                                              label: `${v.name}${guessVoiceGender(v.name) ? ` · ${guessVoiceGender(v.name)}` : ''}`,
-                                                          })),
-                                                      },
-                                                  ]
-                                                : []),
-                                            {
-                                                label: 'Khác (ngôn ngữ khác)',
-                                                options: voices
-                                                    .filter((v) => !v.lang?.toLowerCase().startsWith('vi'))
-                                                    .map((v) => ({ value: v.voiceURI, label: `${v.name} (${v.lang})` })),
-                                            },
-                                        ]}
+                                        options={NEURAL_VOICES.map((v) => ({ value: v.id, label: v.label }))}
                                     />
                                 </div>
                                 <div>
@@ -464,11 +441,9 @@ const AssetAssistantDrawer: React.FC<Props> = ({ open, onClose }) => {
                                 >
                                     Nghe thử
                                 </Button>
-                                {!vietnameseVoices.length ? (
-                                    <div className='text-[10.5px] leading-4 text-amber-600'>
-                                        Máy chưa có giọng tiếng Việt. Cài thêm giọng trong Cài đặt hệ điều hành để đọc tự nhiên hơn.
-                                    </div>
-                                ) : null}
+                                <div className='text-[10.5px] leading-4 text-slate-400'>
+                                    Giọng neural (Microsoft Edge) — tự nhiên như CapCut, miễn phí.
+                                </div>
                             </div>
                         }
                     >

@@ -1,9 +1,22 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { getStoredAccessToken } from '../lib/auth-session';
 
-// Voice chat cho trợ lý — dùng Web Speech API có sẵn trong trình duyệt:
+// Voice chat cho trợ lý:
 //  - SpeechRecognition (nói → chữ, tiếng Việt vi-VN): Chrome/Edge/Android. Firefox/iOS Safari hạn chế.
-//  - SpeechSynthesis (đọc câu trả lời): hỗ trợ rộng (gồm iOS), giọng Việt tuỳ máy.
-// Hoàn toàn miễn phí, không cần backend / API key.
+//  - Đọc câu trả lời: ưu tiên GIỌNG NEURAL (Edge TTS qua backend /ai/tts) — tự nhiên như CapCut;
+//    nếu lỗi thì fallback SpeechSynthesis của trình duyệt. Miễn phí, không cần API key.
+
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000/api';
+
+// Giọng neural tiếng Việt của Microsoft Edge (chính là giọng CapCut dùng).
+export const NEURAL_VOICES: { id: string; label: string }[] = [
+    { id: 'vi-VN-HoaiMyNeural', label: 'HoaiMy · Nữ trẻ (tự nhiên)' },
+    { id: 'vi-VN-NamMinhNeural', label: 'NamMinh · Nam' },
+];
+export const DEFAULT_NEURAL_VOICE = 'vi-VN-HoaiMyNeural';
+
+// Đổi hệ số (1.18) -> chuỗi prosody SSML ("+18%") cho Edge TTS.
+const toEdgePct = (n: number) => `${n >= 1 ? '+' : ''}${Math.round((n - 1) * 100)}%`;
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type SpeechRecognitionLike = any;
@@ -18,11 +31,11 @@ const getRecognitionCtor = (): (new () => SpeechRecognitionLike) | null => {
 // "Phong cách" đọc = cặp tốc độ/cao độ; kết hợp với việc chọn giọng nam/nữ thực tế của máy.
 export type VoiceStyleKey = 'professional' | 'gentle' | 'warm' | 'sexy' | 'energetic';
 export const VOICE_STYLES: Record<VoiceStyleKey, { label: string; rate: number; pitch: number }> = {
+    energetic: { label: 'Năng động · nhanh', rate: 1.15, pitch: 1.08 },
+    sexy: { label: 'Trẻ trung · gợi cảm', rate: 0.94, pitch: 1.06 },
+    gentle: { label: 'Nhẹ nhàng', rate: 0.98, pitch: 1.1 },
     professional: { label: 'Chuyên nghiệp', rate: 1.0, pitch: 1.0 },
-    gentle: { label: 'Nữ tính · nhẹ nhàng', rate: 0.98, pitch: 1.2 },
-    warm: { label: 'Nam tính · trầm ấm', rate: 0.96, pitch: 0.8 },
-    sexy: { label: 'Truyền cảm · gợi cảm', rate: 0.88, pitch: 0.92 },
-    energetic: { label: 'Năng động · nhanh', rate: 1.18, pitch: 1.06 },
+    warm: { label: 'Trầm ấm', rate: 0.96, pitch: 0.9 },
 };
 
 export type SpeakOptions = { voiceURI?: string; rate?: number; pitch?: number };
@@ -51,6 +64,7 @@ export const useVoiceChat = () => {
     const recRef = useRef<SpeechRecognitionLike | null>(null);
     const finalRef = useRef('');
     const handlersRef = useRef<StartHandlers>({});
+    const audioRef = useRef<HTMLAudioElement | null>(null);
 
     // Nạp danh sách giọng (getVoices() có thể rỗng lần đầu -> đợi onvoiceschanged).
     useEffect(() => {
@@ -116,11 +130,61 @@ export const useVoiceChat = () => {
         [listening]
     );
 
+    const stopNeural = useCallback(() => {
+        try {
+            audioRef.current?.pause();
+        } catch {
+            /* noop */
+        }
+        audioRef.current = null;
+    }, []);
+
     const stopSpeaking = useCallback(() => {
-        if (!ttsSupported) return;
-        window.speechSynthesis.cancel();
+        stopNeural();
+        if (ttsSupported) window.speechSynthesis.cancel();
         setSpeaking(false);
-    }, [ttsSupported]);
+    }, [ttsSupported, stopNeural]);
+
+    // Đọc bằng GIỌNG NEURAL qua backend. Trả về true nếu phát được, false để nơi gọi fallback.
+    const speakNeural = useCallback(
+        async (text: string, opts: { voice?: string; rate?: number; pitch?: number } = {}): Promise<boolean> => {
+            const clean = cleanForSpeech(text);
+            if (!clean) return false;
+            try {
+                stopSpeaking();
+                const token = getStoredAccessToken();
+                const resp = await fetch(`${API_BASE_URL}/ai/tts`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+                    credentials: 'include',
+                    body: JSON.stringify({
+                        text: clean,
+                        voice: opts.voice || DEFAULT_NEURAL_VOICE,
+                        rate: toEdgePct(opts.rate ?? 1),
+                        pitch: toEdgePct(opts.pitch ?? 1),
+                    }),
+                });
+                if (!resp.ok) throw new Error(`tts ${resp.status}`);
+                const blob = await resp.blob();
+                if (!blob.size) throw new Error('empty audio');
+                const url = URL.createObjectURL(blob);
+                const audio = new Audio(url);
+                audioRef.current = audio;
+                audio.onplay = () => setSpeaking(true);
+                audio.onended = () => {
+                    setSpeaking(false);
+                    URL.revokeObjectURL(url);
+                };
+                audio.onerror = () => setSpeaking(false);
+                await audio.play();
+                return true;
+            } catch {
+                setSpeaking(false);
+                return false;
+            }
+        },
+        [stopSpeaking]
+    );
 
     const speak = useCallback(
         (text: string, opts: SpeakOptions = {}) => {
@@ -131,9 +195,10 @@ export const useVoiceChat = () => {
 
             const u = new SpeechSynthesisUtterance(clean);
             const all = synth.getVoices();
-            const chosen =
-                (opts.voiceURI && all.find((v) => v.voiceURI === opts.voiceURI)) ||
-                all.find((v) => v.lang?.toLowerCase().startsWith('vi'));
+            const vi = all.filter((v) => v.lang?.toLowerCase().startsWith('vi'));
+            // Tự động: ưu tiên giọng NỮ tiếng Việt (trẻ/tự nhiên hơn) nếu có.
+            const autoVi = vi.find((v) => /female|nữ|hoaimy|hoai my|\bmy\b|linh|lan|huong|mai|thu/i.test(v.name)) || vi[0];
+            const chosen = (opts.voiceURI && all.find((v) => v.voiceURI === opts.voiceURI)) || autoVi;
             if (chosen) {
                 u.voice = chosen;
                 u.lang = chosen.lang;
@@ -165,6 +230,11 @@ export const useVoiceChat = () => {
             } catch {
                 /* noop */
             }
+            try {
+                audioRef.current?.pause();
+            } catch {
+                /* noop */
+            }
             if (typeof window !== 'undefined' && 'speechSynthesis' in window) window.speechSynthesis.cancel();
         },
         []
@@ -183,6 +253,7 @@ export const useVoiceChat = () => {
         startListening,
         stopListening,
         speak,
+        speakNeural,
         stopSpeaking,
     };
 };
