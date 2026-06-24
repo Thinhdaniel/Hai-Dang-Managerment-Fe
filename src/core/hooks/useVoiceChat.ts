@@ -15,10 +15,30 @@ const getRecognitionCtor = (): (new () => SpeechRecognitionLike) | null => {
     return w.SpeechRecognition || w.webkitSpeechRecognition || null;
 };
 
+// "Phong cách" đọc = cặp tốc độ/cao độ; kết hợp với việc chọn giọng nam/nữ thực tế của máy.
+export type VoiceStyleKey = 'professional' | 'gentle' | 'warm' | 'sexy' | 'energetic';
+export const VOICE_STYLES: Record<VoiceStyleKey, { label: string; rate: number; pitch: number }> = {
+    professional: { label: 'Chuyên nghiệp', rate: 1.0, pitch: 1.0 },
+    gentle: { label: 'Nữ tính · nhẹ nhàng', rate: 0.98, pitch: 1.2 },
+    warm: { label: 'Nam tính · trầm ấm', rate: 0.96, pitch: 0.8 },
+    sexy: { label: 'Truyền cảm · gợi cảm', rate: 0.88, pitch: 0.92 },
+    energetic: { label: 'Năng động · nhanh', rate: 1.18, pitch: 1.06 },
+};
+
+export type SpeakOptions = { voiceURI?: string; rate?: number; pitch?: number };
+
 interface StartHandlers {
     onInterim?: (text: string) => void; // chữ tạm (cập nhật liên tục khi đang nói)
     onFinal?: (text: string) => void; // chữ chốt (khi nói xong)
 }
+
+// Bỏ markdown/emoji để đọc cho tự nhiên (không đọc dấu * # và icon).
+const cleanForSpeech = (t: string) =>
+    (t || '')
+        .replace(/[*_`#>~|]/g, ' ')
+        .replace(/\p{Extended_Pictographic}/gu, '')
+        .replace(/\s+/g, ' ')
+        .trim();
 
 export const useVoiceChat = () => {
     const recognitionSupported = !!getRecognitionCtor();
@@ -26,10 +46,23 @@ export const useVoiceChat = () => {
 
     const [listening, setListening] = useState(false);
     const [speaking, setSpeaking] = useState(false);
+    const [voices, setVoices] = useState<SpeechSynthesisVoice[]>([]);
 
     const recRef = useRef<SpeechRecognitionLike | null>(null);
     const finalRef = useRef('');
     const handlersRef = useRef<StartHandlers>({});
+
+    // Nạp danh sách giọng (getVoices() có thể rỗng lần đầu -> đợi onvoiceschanged).
+    useEffect(() => {
+        if (!ttsSupported) return;
+        const load = () => {
+            const list = window.speechSynthesis.getVoices();
+            if (list.length) setVoices(list);
+        };
+        load();
+        window.speechSynthesis.addEventListener('voiceschanged', load);
+        return () => window.speechSynthesis.removeEventListener('voiceschanged', load);
+    }, [ttsSupported]);
 
     const stopListening = useCallback(() => {
         try {
@@ -55,16 +88,16 @@ export const useVoiceChat = () => {
 
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             rec.onresult = (e: any) => {
+                // Dựng lại TOÀN BỘ transcript từ đầu mỗi sự kiện (KHÔNG cộng dồn) -> tránh lặp chữ/câu.
                 let interim = '';
                 let final = '';
-                for (let i = e.resultIndex; i < e.results.length; i++) {
+                for (let i = 0; i < e.results.length; i += 1) {
                     const t = e.results[i][0]?.transcript ?? '';
                     if (e.results[i].isFinal) final += t;
                     else interim += t;
                 }
-                if (final) finalRef.current += final;
-                const live = (finalRef.current + interim).trim();
-                handlersRef.current.onInterim?.(live);
+                finalRef.current = final.trim();
+                handlersRef.current.onInterim?.((final + interim).trim());
             };
             rec.onerror = () => setListening(false);
             rec.onend = () => {
@@ -90,19 +123,35 @@ export const useVoiceChat = () => {
     }, [ttsSupported]);
 
     const speak = useCallback(
-        (text: string) => {
-            const clean = (text || '').trim();
+        (text: string, opts: SpeakOptions = {}) => {
+            const clean = cleanForSpeech(text);
             if (!ttsSupported || !clean) return;
             const synth = window.speechSynthesis;
-            synth.cancel(); // ngắt câu đang đọc (nếu có) trước khi đọc câu mới
+            synth.cancel(); // ngắt câu đang đọc (nếu có)
+
             const u = new SpeechSynthesisUtterance(clean);
-            u.lang = 'vi-VN';
-            u.rate = 1.05;
-            const vi = synth.getVoices().find((v) => v.lang?.toLowerCase().startsWith('vi'));
-            if (vi) u.voice = vi;
+            const all = synth.getVoices();
+            const chosen =
+                (opts.voiceURI && all.find((v) => v.voiceURI === opts.voiceURI)) ||
+                all.find((v) => v.lang?.toLowerCase().startsWith('vi'));
+            if (chosen) {
+                u.voice = chosen;
+                u.lang = chosen.lang;
+            } else {
+                u.lang = 'vi-VN';
+            }
+            u.rate = opts.rate ?? 1.0;
+            u.pitch = opts.pitch ?? 1.0;
             u.onstart = () => setSpeaking(true);
             u.onend = () => setSpeaking(false);
             u.onerror = () => setSpeaking(false);
+
+            // Chrome đôi khi kẹt trạng thái "pause" ngầm -> resume trước khi nói cho chắc.
+            try {
+                synth.resume();
+            } catch {
+                /* noop */
+            }
             synth.speak(u);
         },
         [ttsSupported]
@@ -121,11 +170,16 @@ export const useVoiceChat = () => {
         []
     );
 
+    // Lọc giọng tiếng Việt lên đầu (nếu có), kèm toàn bộ để người dùng tự chọn.
+    const vietnameseVoices = voices.filter((v) => v.lang?.toLowerCase().startsWith('vi'));
+
     return {
         recognitionSupported,
         ttsSupported,
         listening,
         speaking,
+        voices,
+        vietnameseVoices,
         startListening,
         stopListening,
         speak,

@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Button, Drawer, Grid, Input, Tag, Tooltip } from 'antd';
+import { Button, Drawer, Grid, Input, Popover, Select, Switch, Tag, Tooltip } from 'antd';
 import {
     AppstoreOutlined,
     AudioOutlined,
@@ -27,7 +27,7 @@ import {
     type AssistantStreamStep,
 } from '../core/services/ai-help.service';
 import { getAssetStatusColor } from '../core/constants/assetStatusColor';
-import { useVoiceChat } from '../core/hooks/useVoiceChat';
+import { useVoiceChat, VOICE_STYLES, type VoiceStyleKey } from '../core/hooks/useVoiceChat';
 import type { AssetStatus } from '../core/types';
 
 type ChatMessage = { role: 'user' | 'assistant'; content: string; data?: AssetAssistantResponse; animate?: boolean };
@@ -36,6 +36,9 @@ type ChatMessage = { role: 'user' | 'assistant'; content: string; data?: AssetAs
 const CHAT_KEY = 'hd-asset-assistant-chat';
 // Bật/tắt đọc câu trả lời thành giọng nói (ghi nhớ lựa chọn).
 const READ_ALOUD_KEY = 'hd-asset-assistant-read-aloud';
+const VOICE_URI_KEY = 'hd-asset-assistant-voice-uri';
+const VOICE_STYLE_KEY = 'hd-asset-assistant-voice-style';
+const VOICE_SAMPLE = 'Xin chào, tôi là trợ lý vận hành Hải Đăng. Đây là giọng đọc bạn vừa chọn.';
 const loadChat = (): ChatMessage[] => {
     try {
         const raw = localStorage.getItem(CHAT_KEY);
@@ -93,6 +96,14 @@ const DOMAIN_BADGE: Record<string, { label: string; color: string }> = {
     asset: { label: 'Máy móc', color: '#6366f1' },
     material: { label: 'Vật tư', color: '#10b981' },
     cost: { label: 'Chi phí', color: '#f59e0b' },
+};
+
+// Đoán giới tính giọng từ tên để gắn nhãn (Nam/Nữ) cho dễ chọn.
+const guessVoiceGender = (name: string): string => {
+    const n = name.toLowerCase();
+    if (/female|nữ|woman|hoaimy|hoai my|\bmy\b|linh|lan|huong|ngan|thu|mai|nguyet|female/.test(n)) return 'Nữ';
+    if (/male|nam|man|namminh|nam minh|minh|hoang|quan|long|duc|\ban\b/.test(n)) return 'Nam';
+    return '';
 };
 
 // Nhãn + màu mức tin cậy của câu trả lời (theo việc có truy vấn dữ liệu thật hay không).
@@ -204,9 +215,36 @@ const AssetAssistantDrawer: React.FC<Props> = ({ open, onClose }) => {
             return false;
         }
     });
+    const [voiceURI, setVoiceURI] = useState<string>(() => {
+        try {
+            return localStorage.getItem(VOICE_URI_KEY) || '';
+        } catch {
+            return '';
+        }
+    });
+    const [voiceStyle, setVoiceStyle] = useState<VoiceStyleKey>(() => {
+        try {
+            return (localStorage.getItem(VOICE_STYLE_KEY) as VoiceStyleKey) || 'professional';
+        } catch {
+            return 'professional';
+        }
+    });
     const endRef = useRef<HTMLDivElement>(null);
-    const { recognitionSupported, ttsSupported, listening, speaking, startListening, stopListening, speak, stopSpeaking } =
-        useVoiceChat();
+    const {
+        recognitionSupported,
+        ttsSupported,
+        listening,
+        speaking,
+        vietnameseVoices,
+        voices,
+        startListening,
+        stopListening,
+        speak,
+        stopSpeaking,
+    } = useVoiceChat();
+
+    // Cấu hình đọc hiện tại = giọng đã chọn + cặp tốc độ/cao độ của phong cách.
+    const speakOpts = () => ({ voiceURI: voiceURI || undefined, ...VOICE_STYLES[voiceStyle] });
 
     useEffect(() => {
         endRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -254,11 +292,11 @@ const AssetAssistantDrawer: React.FC<Props> = ({ open, onClose }) => {
                 resp = await operationsAssistantService.ask(convo);
             }
             setMessages((prev) => [...prev, { role: 'assistant', content: resp.answer, data: resp, animate: true }]);
-            if (readAloud) speak(resp.answer);
+            if (readAloud) speak(resp.answer, speakOpts());
         } catch {
             const fail = 'Xin lỗi, mình chưa xử lý được câu này. Thử hỏi lại nhé.';
             setMessages((prev) => [...prev, { role: 'assistant', content: fail }]);
-            if (readAloud) speak(fail);
+            if (readAloud) speak(fail, speakOpts());
         } finally {
             setLoading(false);
             setLiveStep('');
@@ -293,6 +331,25 @@ const AssetAssistantDrawer: React.FC<Props> = ({ open, onClose }) => {
             return next;
         });
     };
+
+    const changeVoice = (uri: string) => {
+        setVoiceURI(uri);
+        try {
+            localStorage.setItem(VOICE_URI_KEY, uri);
+        } catch {
+            /* noop */
+        }
+    };
+    const changeStyle = (style: VoiceStyleKey) => {
+        setVoiceStyle(style);
+        try {
+            localStorage.setItem(VOICE_STYLE_KEY, style);
+        } catch {
+            /* noop */
+        }
+    };
+    // Nghe thử = hành động người dùng -> "mở khoá" TTS của trình duyệt (lần đầu hay bị chặn).
+    const previewVoice = () => speak(VOICE_SAMPLE, { voiceURI: voiceURI || undefined, ...VOICE_STYLES[voiceStyle] });
 
     // Đóng drawer / nhấn nút đóng: ngắt giọng đang đọc + dừng nghe.
     const handleClose = () => {
@@ -349,19 +406,87 @@ const AssetAssistantDrawer: React.FC<Props> = ({ open, onClose }) => {
                     </div>
                 </div>
                 {ttsSupported ? (
-                    <Tooltip title={readAloud ? 'Tắt đọc câu trả lời' : 'Đọc câu trả lời thành giọng nói'}>
-                        <Button
-                            type='text'
-                            shape='circle'
-                            icon={<SoundOutlined />}
-                            onClick={toggleReadAloud}
-                            className={
-                                readAloud
-                                    ? `!text-blue-600 ${speaking ? 'hd-glow' : ''}`
-                                    : 'text-slate-400 hover:!text-blue-600'
-                            }
-                        />
-                    </Tooltip>
+                    <Popover
+                        trigger='click'
+                        placement='bottomRight'
+                        content={
+                            <div className='w-[268px] space-y-2.5'>
+                                <div className='flex items-center justify-between'>
+                                    <span className='text-[13px] font-semibold text-slate-700'>Đọc câu trả lời</span>
+                                    <Switch size='small' checked={readAloud} onChange={toggleReadAloud} />
+                                </div>
+                                <div>
+                                    <div className='mb-1 text-[11px] font-medium text-slate-400'>Giọng đọc</div>
+                                    <Select
+                                        size='small'
+                                        className='w-full'
+                                        value={voiceURI}
+                                        onChange={changeVoice}
+                                        options={[
+                                            { value: '', label: 'Tự động (giọng Việt máy)' },
+                                            ...(vietnameseVoices.length
+                                                ? [
+                                                      {
+                                                          label: 'Tiếng Việt',
+                                                          options: vietnameseVoices.map((v) => ({
+                                                              value: v.voiceURI,
+                                                              label: `${v.name}${guessVoiceGender(v.name) ? ` · ${guessVoiceGender(v.name)}` : ''}`,
+                                                          })),
+                                                      },
+                                                  ]
+                                                : []),
+                                            {
+                                                label: 'Khác (ngôn ngữ khác)',
+                                                options: voices
+                                                    .filter((v) => !v.lang?.toLowerCase().startsWith('vi'))
+                                                    .map((v) => ({ value: v.voiceURI, label: `${v.name} (${v.lang})` })),
+                                            },
+                                        ]}
+                                    />
+                                </div>
+                                <div>
+                                    <div className='mb-1 text-[11px] font-medium text-slate-400'>Phong cách</div>
+                                    <Select
+                                        size='small'
+                                        className='w-full'
+                                        value={voiceStyle}
+                                        onChange={changeStyle}
+                                        options={Object.entries(VOICE_STYLES).map(([k, v]) => ({ value: k, label: v.label }))}
+                                    />
+                                </div>
+                                <Button
+                                    block
+                                    size='small'
+                                    icon={<SoundOutlined />}
+                                    loading={speaking}
+                                    onClick={previewVoice}
+                                    className='!rounded-lg'
+                                >
+                                    Nghe thử
+                                </Button>
+                                {!vietnameseVoices.length ? (
+                                    <div className='text-[10.5px] leading-4 text-amber-600'>
+                                        Máy chưa có giọng tiếng Việt. Cài thêm giọng trong Cài đặt hệ điều hành để đọc tự nhiên hơn.
+                                    </div>
+                                ) : null}
+                            </div>
+                        }
+                    >
+                        <span>
+                            <Tooltip title='Cài đặt giọng đọc'>
+                                <Button
+                                    type='text'
+                                    shape='circle'
+                                    icon={<SoundOutlined />}
+                                    className={
+                                        readAloud
+                                            ? `!text-blue-600 ${speaking ? 'hd-glow' : ''}`
+                                            : 'text-slate-400 hover:!text-blue-600'
+                                    }
+                                />
+                            </Tooltip>
+                        </span>
+                    </Popover>
                 ) : null}
                 {messages.length ? (
                     <Tooltip title='Trò chuyện mới'>
