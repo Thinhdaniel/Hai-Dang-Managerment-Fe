@@ -1,5 +1,8 @@
 import api from '../lib/api';
+import { getStoredAccessToken } from '../lib/auth-session';
 import type { HelpTopic } from '../help/helpKnowledge';
+
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000/api';
 
 export type AiHelpContextTopic = Pick<
     HelpTopic,
@@ -101,11 +104,30 @@ export type AssistantAggregates = {
             plants: { plantName: string; qty: number; value: number }[];
         }[];
     };
+    // Tách 3 loại chi phí (mua / cấp phát / sửa ngoài) cho câu hỏi chi phí chung chung.
+    costOverview?: {
+        periodLabel: string;
+        prevLabel: string;
+        purchase: { current: number; previous: number; deltaPct: number };
+        distribution: { current: number; previous: number; deltaPct: number };
+        repair: { current: number; previous: number; deltaPct: number };
+        total: { current: number; previous: number; deltaPct: number };
+    };
+    // So sánh chi phí mua vs cấp phát trong kỳ.
+    compareCost?: {
+        periodLabel: string;
+        prevLabel: string;
+        purchase: { current: number; previous: number; deltaPct: number };
+        distribution: { current: number; previous: number; deltaPct: number };
+        gap: number;
+        higher: 'purchase' | 'distribution' | 'equal';
+    };
     // Phân tích chi tiết chi phí mua vật tư (kỳ này vs kỳ trước, theo vật tư/NCC).
     purchaseAnalysis?: {
         periodLabel: string;
         prevLabel: string;
         groupBy: 'material' | 'supplier';
+        plantName?: string;
         current: number;
         previous: number;
         deltaPct: number;
@@ -185,7 +207,11 @@ export type AssistantAggregates = {
         orders: {
             orderCode: string;
             supplierName: string;
+            suppliers?: string[];
+            supplierCount?: number;
+            multiSupplier?: boolean;
             plantName?: string;
+            plants?: string[];
             status: string;
             statusLabel: string;
             totalWithVat: number;
@@ -199,6 +225,7 @@ export type AssistantAggregates = {
                 unitPrice: number;
                 totalWithVat: number;
                 supplierName?: string;
+                plantName?: string;
             }[];
         }[];
     };
@@ -263,6 +290,14 @@ export type AssistantAppliedFilters = {
     flags?: string[];
 };
 
+export type AssistantSource = {
+    tool: string;
+    label: string;
+    module: string;
+    scope?: string;
+    records?: number;
+};
+
 export type AssetAssistantResponse = {
     domain?: 'asset' | 'material' | 'cost';
     answer: string;
@@ -272,10 +307,20 @@ export type AssetAssistantResponse = {
     aggregates: AssistantAggregates;
     appliedFilters?: AssistantAppliedFilters;
     followups: string[];
+    sources?: AssistantSource[];
+    confidence?: 'high' | 'medium' | 'low' | 'none';
+    reqId?: string;
+    tookMs?: number;
     provider: string;
     model?: string;
     tier?: 'light' | 'standard' | 'heavy';
 };
+
+// Bước tiến trình bắn ra trong lúc trợ lý đang xử lý (streaming).
+export type AssistantStreamStep =
+    | { type: 'analyze'; tier: 'light' | 'standard' | 'heavy' }
+    | { type: 'tool'; tool: string; label: string }
+    | { type: 'synthesize' };
 
 // Trợ lý vận hành toàn cục: tự định tuyến máy / vật tư / chi phí.
 export const operationsAssistantService = {
@@ -285,6 +330,64 @@ export const operationsAssistantService = {
             { messages },
             { timeout: 90000 }
         ),
+
+    // Streaming (SSE qua fetch): nhận tiến trình thật theo thời gian thực rồi trả kết quả cuối.
+    // Nếu trình duyệt/mạng/proxy không hỗ trợ -> ném lỗi để nơi gọi fallback sang ask().
+    askStream: async (
+        messages: AssistantMessage[],
+        handlers: { onStep?: (step: AssistantStreamStep) => void; signal?: AbortSignal } = {}
+    ): Promise<AssetAssistantResponse> => {
+        const token = getStoredAccessToken();
+        const resp = await fetch(`${API_BASE_URL}/ai/assistant/stream`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+            credentials: 'include',
+            body: JSON.stringify({ messages }),
+            signal: handlers.signal,
+        });
+        if (!resp.ok || !resp.body) throw new Error(`stream HTTP ${resp.status}`);
+
+        const reader = resp.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = '';
+        let done: AssetAssistantResponse | null = null;
+        let errored = false;
+
+        const handleFrame = (frame: string) => {
+            let event = 'message';
+            const dataLines: string[] = [];
+            for (const line of frame.split('\n')) {
+                if (line.startsWith(':')) continue; // heartbeat / comment
+                if (line.startsWith('event:')) event = line.slice(6).trim();
+                else if (line.startsWith('data:')) dataLines.push(line.slice(5).trim());
+            }
+            if (!dataLines.length) return;
+            let payload: unknown;
+            try {
+                payload = JSON.parse(dataLines.join('\n'));
+            } catch {
+                return;
+            }
+            if (event === 'step') handlers.onStep?.(payload as AssistantStreamStep);
+            else if (event === 'done') done = payload as AssetAssistantResponse;
+            else if (event === 'error') errored = true;
+        };
+
+        // eslint-disable-next-line no-constant-condition
+        while (true) {
+            const { done: streamDone, value } = await reader.read();
+            if (streamDone) break;
+            buffer += decoder.decode(value, { stream: true });
+            let idx: number;
+            while ((idx = buffer.indexOf('\n\n')) >= 0) {
+                handleFrame(buffer.slice(0, idx));
+                buffer = buffer.slice(idx + 2);
+            }
+        }
+        if (buffer.trim()) handleFrame(buffer);
+        if (errored || !done) throw new Error('stream incomplete');
+        return done;
+    },
 };
 
 export type AiMaterialMatchRequestItem = {

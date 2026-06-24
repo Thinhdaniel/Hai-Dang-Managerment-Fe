@@ -2,14 +2,18 @@ import React, { useEffect, useRef, useState } from 'react';
 import { Button, Drawer, Grid, Input, Tag, Tooltip } from 'antd';
 import {
     AppstoreOutlined,
+    AudioOutlined,
     CloseOutlined,
+    DatabaseOutlined,
     DollarOutlined,
     EnvironmentOutlined,
     FileTextOutlined,
     FormOutlined,
+    LoadingOutlined,
     RobotOutlined,
     SendOutlined,
     ShoppingOutlined,
+    SoundOutlined,
     ThunderboltOutlined,
     ToolOutlined,
     TrophyOutlined,
@@ -20,14 +24,18 @@ import {
     operationsAssistantService,
     type AssetAssistantResponse,
     type AssistantAppliedFilters,
+    type AssistantStreamStep,
 } from '../core/services/ai-help.service';
 import { getAssetStatusColor } from '../core/constants/assetStatusColor';
+import { useVoiceChat } from '../core/hooks/useVoiceChat';
 import type { AssetStatus } from '../core/types';
 
 type ChatMessage = { role: 'user' | 'assistant'; content: string; data?: AssetAssistantResponse; animate?: boolean };
 
 // Lưu phiên chat để không mất khi chuyển trang / reload (giữ tối đa 30 tin gần nhất).
 const CHAT_KEY = 'hd-asset-assistant-chat';
+// Bật/tắt đọc câu trả lời thành giọng nói (ghi nhớ lựa chọn).
+const READ_ALOUD_KEY = 'hd-asset-assistant-read-aloud';
 const loadChat = (): ChatMessage[] => {
     try {
         const raw = localStorage.getItem(CHAT_KEY);
@@ -85,6 +93,14 @@ const DOMAIN_BADGE: Record<string, { label: string; color: string }> = {
     asset: { label: 'Máy móc', color: '#6366f1' },
     material: { label: 'Vật tư', color: '#10b981' },
     cost: { label: 'Chi phí', color: '#f59e0b' },
+};
+
+// Nhãn + màu mức tin cậy của câu trả lời (theo việc có truy vấn dữ liệu thật hay không).
+const CONFIDENCE: Record<string, { label: string; color: string }> = {
+    high: { label: 'độ tin cao', color: '#10b981' },
+    medium: { label: 'độ tin vừa', color: '#f59e0b' },
+    low: { label: 'độ tin thấp', color: '#ef4444' },
+    none: { label: 'tham khảo', color: '#94a3b8' },
 };
 
 const STYLES = `
@@ -145,13 +161,15 @@ const TypewriterText: React.FC<{ text: string; animate?: boolean }> = ({ text, a
     );
 };
 
-// Báo "đang suy nghĩ" với dòng trạng thái xoay vòng.
-const ThinkingIndicator: React.FC = () => {
+// Báo "đang suy nghĩ". Nếu có `label` (bước thật từ streaming) -> hiển thị đúng bước; nếu không -> xoay vòng.
+const ThinkingIndicator: React.FC<{ label?: string }> = ({ label }) => {
     const [step, setStep] = useState(0);
     useEffect(() => {
+        if (label) return; // có bước thật rồi thì không xoay vòng
         const id = window.setInterval(() => setStep((s) => (s + 1) % THINKING_STEPS.length), 1400);
         return () => window.clearInterval(id);
-    }, []);
+    }, [label]);
+    const text = label || THINKING_STEPS[step];
     return (
         <div className='flex items-center gap-2 rounded-3xl rounded-tl-md border border-slate-200/70 bg-white px-4 py-3 shadow-sm'>
             <span className='hd-typing flex items-center gap-1'>
@@ -159,8 +177,8 @@ const ThinkingIndicator: React.FC = () => {
                 <span className='h-1.5 w-1.5 rounded-full bg-indigo-400' />
                 <span className='h-1.5 w-1.5 rounded-full bg-fuchsia-400' />
             </span>
-            <span key={step} className='hd-msg text-[12px] font-medium text-slate-400'>
-                {THINKING_STEPS[step]}
+            <span key={text} className='hd-msg text-[12px] font-medium text-slate-500'>
+                {text}
             </span>
         </div>
     );
@@ -178,7 +196,17 @@ const AssetAssistantDrawer: React.FC<Props> = ({ open, onClose }) => {
     const [messages, setMessages] = useState<ChatMessage[]>(() => loadChat());
     const [input, setInput] = useState('');
     const [loading, setLoading] = useState(false);
+    const [liveStep, setLiveStep] = useState<string>('');
+    const [readAloud, setReadAloud] = useState<boolean>(() => {
+        try {
+            return localStorage.getItem(READ_ALOUD_KEY) === '1';
+        } catch {
+            return false;
+        }
+    });
     const endRef = useRef<HTMLDivElement>(null);
+    const { recognitionSupported, ttsSupported, listening, speaking, startListening, stopListening, speak, stopSpeaking } =
+        useVoiceChat();
 
     useEffect(() => {
         endRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -199,24 +227,78 @@ const AssetAssistantDrawer: React.FC<Props> = ({ open, onClose }) => {
         }
     };
 
+    // Đổi bước tiến trình (streaming) -> câu mô tả tiếng Việt hiển thị cho người dùng.
+    const stepText = (s: AssistantStreamStep): string => {
+        if (s.type === 'tool') return `Đang truy vấn: ${s.label}…`;
+        if (s.type === 'synthesize') return 'Đang tổng hợp kết quả…';
+        return 'Đang phân tích câu hỏi…';
+    };
+
     const send = async (text: string) => {
         const q = text.trim();
         if (!q || loading) return;
         const history = messages.map((m) => ({ role: m.role, content: m.content }));
+        const convo = [...history, { role: 'user' as const, content: q }];
         setMessages((prev) => [...prev, { role: 'user', content: q }]);
         setInput('');
         setLoading(true);
+        setLiveStep('');
         try {
-            const resp = await operationsAssistantService.ask([...history, { role: 'user', content: q }]);
+            let resp: AssetAssistantResponse;
+            try {
+                // Ưu tiên streaming để thấy tiến trình thật; lỗi (proxy/trình duyệt) -> fallback ask().
+                resp = await operationsAssistantService.askStream(convo, {
+                    onStep: (s) => setLiveStep(stepText(s)),
+                });
+            } catch {
+                resp = await operationsAssistantService.ask(convo);
+            }
             setMessages((prev) => [...prev, { role: 'assistant', content: resp.answer, data: resp, animate: true }]);
+            if (readAloud) speak(resp.answer);
         } catch {
-            setMessages((prev) => [
-                ...prev,
-                { role: 'assistant', content: 'Xin lỗi, mình chưa xử lý được câu này. Thử hỏi lại nhé.' },
-            ]);
+            const fail = 'Xin lỗi, mình chưa xử lý được câu này. Thử hỏi lại nhé.';
+            setMessages((prev) => [...prev, { role: 'assistant', content: fail }]);
+            if (readAloud) speak(fail);
         } finally {
             setLoading(false);
+            setLiveStep('');
         }
+    };
+
+    // Nhấn mic: nói → đổ chữ vào ô nhập (xem trước), nói xong tự gửi (rảnh tay).
+    const toggleMic = () => {
+        if (listening) {
+            stopListening();
+            return;
+        }
+        stopSpeaking();
+        startListening({
+            onInterim: (t) => setInput(t),
+            onFinal: (t) => {
+                setInput('');
+                send(t);
+            },
+        });
+    };
+
+    const toggleReadAloud = () => {
+        setReadAloud((prev) => {
+            const next = !prev;
+            try {
+                localStorage.setItem(READ_ALOUD_KEY, next ? '1' : '0');
+            } catch {
+                /* noop */
+            }
+            if (!next) stopSpeaking(); // tắt thì ngắt câu đang đọc
+            return next;
+        });
+    };
+
+    // Đóng drawer / nhấn nút đóng: ngắt giọng đang đọc + dừng nghe.
+    const handleClose = () => {
+        stopSpeaking();
+        stopListening();
+        onClose();
     };
 
     // Áp bộ lọc -> điều hướng tới danh sách máy kèm query (toàn cục, không phụ thuộc trang đang đứng).
@@ -228,18 +310,20 @@ const AssetAssistantDrawer: React.FC<Props> = ({ open, onClose }) => {
         if (f.plantId) params.set('plantId', f.plantId);
         if (f.brandId) params.set('brandId', f.brandId);
         navigate(`/assets?${params.toString()}`);
+        stopSpeaking();
         onClose();
     };
 
     const openAsset = (id: string) => {
         navigate(`/assets/${id}`);
+        stopSpeaking();
         onClose();
     };
 
     return (
         <Drawer
             open={open}
-            onClose={onClose}
+            onClose={handleClose}
             placement={isMobile ? 'bottom' : 'right'}
             width={isMobile ? '100%' : 480}
             height={isMobile ? '90vh' : undefined}
@@ -264,6 +348,21 @@ const AssetAssistantDrawer: React.FC<Props> = ({ open, onClose }) => {
                         Hỏi đáp máy · bảo trì · vật tư · chi phí
                     </div>
                 </div>
+                {ttsSupported ? (
+                    <Tooltip title={readAloud ? 'Tắt đọc câu trả lời' : 'Đọc câu trả lời thành giọng nói'}>
+                        <Button
+                            type='text'
+                            shape='circle'
+                            icon={<SoundOutlined />}
+                            onClick={toggleReadAloud}
+                            className={
+                                readAloud
+                                    ? `!text-blue-600 ${speaking ? 'hd-glow' : ''}`
+                                    : 'text-slate-400 hover:!text-blue-600'
+                            }
+                        />
+                    </Tooltip>
+                ) : null}
                 {messages.length ? (
                     <Tooltip title='Trò chuyện mới'>
                         <Button
@@ -279,7 +378,7 @@ const AssetAssistantDrawer: React.FC<Props> = ({ open, onClose }) => {
                     type='text'
                     shape='circle'
                     icon={<CloseOutlined />}
-                    onClick={onClose}
+                    onClick={handleClose}
                     className='text-slate-400'
                 />
             </div>
@@ -364,7 +463,7 @@ const AssetAssistantDrawer: React.FC<Props> = ({ open, onClose }) => {
                         <span className='hd-glow flex h-8 w-8 shrink-0 items-center justify-center rounded-2xl bg-white text-blue-600 shadow-sm ring-1 ring-slate-200'>
                             <RobotOutlined className='text-sm' />
                         </span>
-                        <ThinkingIndicator />
+                        <ThinkingIndicator label={liveStep || undefined} />
                     </div>
                 ) : null}
                 <div ref={endRef} />
@@ -382,7 +481,7 @@ const AssetAssistantDrawer: React.FC<Props> = ({ open, onClose }) => {
                         autoSize={{ minRows: 1, maxRows: 5 }}
                         variant='borderless'
                         className='!bg-transparent !px-0 !py-1.5 text-[13.5px]'
-                        placeholder='Hỏi về máy móc...'
+                        placeholder={listening ? 'Đang nghe… cứ nói đi' : 'Hỏi về máy móc...'}
                         onPressEnter={(e) => {
                             if (!e.shiftKey) {
                                 e.preventDefault();
@@ -390,6 +489,23 @@ const AssetAssistantDrawer: React.FC<Props> = ({ open, onClose }) => {
                             }
                         }}
                     />
+                    {recognitionSupported ? (
+                        <Tooltip title={listening ? 'Đang nghe — nhấn để dừng' : 'Nói để hỏi'}>
+                            <Button
+                                type='text'
+                                shape='circle'
+                                aria-label='Nhập bằng giọng nói'
+                                icon={listening ? <LoadingOutlined /> : <AudioOutlined />}
+                                onClick={toggleMic}
+                                disabled={loading}
+                                className={
+                                    listening
+                                        ? 'hd-glow mb-1 shrink-0 !bg-rose-500 !text-white'
+                                        : 'mb-1 shrink-0 text-slate-400 hover:!text-blue-600'
+                                }
+                            />
+                        </Tooltip>
+                    ) : null}
                     <Button
                         type='primary'
                         shape='circle'
@@ -401,7 +517,11 @@ const AssetAssistantDrawer: React.FC<Props> = ({ open, onClose }) => {
                     />
                 </div>
                 <div className='mt-1.5 text-center text-[10.5px] text-slate-400'>
-                    Trợ lý truy vấn dữ liệu thật · Enter để gửi, Shift+Enter xuống dòng
+                    {listening
+                        ? '🎤 Đang nghe — nói xong sẽ tự gửi'
+                        : recognitionSupported
+                          ? 'Trợ lý truy vấn dữ liệu thật · Enter gửi · 🎤 nói để hỏi'
+                          : 'Trợ lý truy vấn dữ liệu thật · Enter để gửi, Shift+Enter xuống dòng'}
                 </div>
             </div>
         </Drawer>
@@ -434,6 +554,8 @@ const AssistantResult: React.FC<{
     const purchaseSuggestion = aggregates.purchaseSuggestion;
     const locate = aggregates.locate;
     const transferOrders = aggregates.transferOrders;
+    const costOverview = aggregates.costOverview;
+    const compareCost = aggregates.compareCost;
     const maxPurchase = purchaseAnalysis?.rows?.length
         ? Math.max(1, ...purchaseAnalysis.rows.map((x) => x.current))
         : 1;
@@ -449,6 +571,8 @@ const AssistantResult: React.FC<{
         !!priceHistory?.count ||
         !!supplierComparison?.suppliers?.length ||
         !!distributionAnalysis ||
+        !!costOverview ||
+        !!compareCost ||
         !!purchaseSuggestion?.suggestions?.length ||
         !!locate?.asset ||
         !!transferOrders?.orders?.length ||
@@ -652,7 +776,8 @@ const AssistantResult: React.FC<{
                 <div className='rounded-2xl border border-slate-200/70 bg-white p-3 shadow-sm'>
                     <div className='mb-1 flex items-center gap-1.5 text-[11px] font-medium text-slate-400'>
                         <DollarOutlined style={{ color: '#f59e0b' }} />
-                        Mua vật tư · phân rã theo {purchaseAnalysis.groupBy === 'supplier' ? 'nhà cung cấp' : 'vật tư'}
+                        Mua vật tư{purchaseAnalysis.plantName ? ` · ${purchaseAnalysis.plantName}` : ''} · phân rã theo{' '}
+                        {purchaseAnalysis.groupBy === 'supplier' ? 'nhà cung cấp' : 'vật tư'}
                     </div>
                     <div className='flex flex-wrap items-end gap-2'>
                         <div>
@@ -778,6 +903,19 @@ const AssistantResult: React.FC<{
                                 </Tag>
                                 <span className='shrink-0 font-semibold text-slate-800'>{fmtD(o.totalWithVat)}</span>
                             </div>
+                            {o.multiSupplier && o.suppliers?.length ? (
+                                <div className='flex flex-wrap gap-1 border-t border-slate-100 bg-amber-50/40 px-3 py-1.5'>
+                                    <span className='text-[10.5px] font-medium text-amber-700'>NCC trong đơn:</span>
+                                    {o.suppliers.map((s) => (
+                                        <span
+                                            key={s}
+                                            className='rounded-full bg-white px-2 py-0.5 text-[10.5px] text-slate-600 ring-1 ring-amber-200'
+                                        >
+                                            {s}
+                                        </span>
+                                    ))}
+                                </div>
+                            ) : null}
                             {o.items?.length ? (
                                 <div className='border-t border-slate-100 bg-slate-50/50'>
                                     {o.items.map((it, i) => (
@@ -787,6 +925,9 @@ const AssistantResult: React.FC<{
                                         >
                                             <span className='min-w-0 flex-1 truncate text-slate-600'>
                                                 {it.materialName}
+                                                {it.supplierName ? (
+                                                    <span className='text-slate-400'> · {it.supplierName}</span>
+                                                ) : null}
                                             </span>
                                             <span className='shrink-0 text-slate-400'>
                                                 {it.quantityOrdered} {it.unit}
@@ -923,6 +1064,88 @@ const AssistantResult: React.FC<{
                 </div>
             ) : null}
 
+            {costOverview ? (
+                <div className='rounded-2xl border border-slate-200/70 bg-white p-3 shadow-sm'>
+                    <div className='mb-1.5 flex items-center gap-1.5 text-[11px] font-medium text-slate-400'>
+                        <DollarOutlined style={{ color: '#f59e0b' }} />
+                        Chi phí {costOverview.periodLabel} · tách 3 loại
+                    </div>
+                    {(
+                        [
+                            { label: 'Mua vật tư', v: costOverview.purchase, hint: 'nhập kho' },
+                            { label: 'Cấp phát', v: costOverview.distribution, hint: 'xuất dùng' },
+                            { label: 'Sửa ngoài', v: costOverview.repair, hint: 'sửa chữa' },
+                        ] as const
+                    ).map((r) => (
+                        <div key={r.label} className='mt-1 flex items-center gap-2 text-[12.5px]'>
+                            <span className='w-20 shrink-0 text-slate-500'>{r.label}</span>
+                            <span className='min-w-0 flex-1 truncate font-semibold text-slate-800'>{fmtD(r.v.current)}</span>
+                            <span className='shrink-0 text-[10px] text-slate-400'>{r.hint}</span>
+                            <span
+                                className={`w-12 shrink-0 text-right text-[11px] font-medium ${r.v.deltaPct >= 0 ? 'text-rose-500' : 'text-emerald-500'}`}
+                            >
+                                {r.v.deltaPct >= 0 ? '+' : ''}
+                                {r.v.deltaPct}%
+                            </span>
+                        </div>
+                    ))}
+                    <div className='mt-2 flex items-center gap-2 border-t border-slate-100 pt-2 text-[12.5px]'>
+                        <span className='w-20 shrink-0 font-semibold text-slate-600'>Tổng cộng</span>
+                        <span className='min-w-0 flex-1 truncate font-bold text-slate-900'>{fmtD(costOverview.total.current)}</span>
+                        <span
+                            className={`shrink-0 rounded-full px-2 py-0.5 text-[11px] font-semibold ${costOverview.total.deltaPct >= 0 ? 'bg-rose-50 text-rose-600' : 'bg-emerald-50 text-emerald-600'}`}
+                        >
+                            {costOverview.total.deltaPct >= 0 ? '+' : ''}
+                            {costOverview.total.deltaPct}% so {costOverview.prevLabel}
+                        </span>
+                    </div>
+                    <div className='mt-1.5 text-[10.5px] leading-4 text-slate-400'>
+                        Mua = nhập kho, cấp phát = xuất dùng — 2 dòng tiền khác bản chất, không cộng để đánh giá hiệu quả.
+                    </div>
+                </div>
+            ) : null}
+
+            {compareCost ? (
+                <div className='rounded-2xl border border-slate-200/70 bg-white p-3 shadow-sm'>
+                    <div className='mb-1.5 flex items-center gap-1.5 text-[11px] font-medium text-slate-400'>
+                        <DollarOutlined style={{ color: '#6366f1' }} />
+                        Mua vs Cấp phát · {compareCost.periodLabel}
+                    </div>
+                    {(
+                        [
+                            { label: 'Mua', v: compareCost.purchase.current, color: '#3b82f6', key: 'purchase' as const },
+                            { label: 'Cấp phát', v: compareCost.distribution.current, color: '#10b981', key: 'distribution' as const },
+                        ] as const
+                    ).map((r) => {
+                        const max = Math.max(1, compareCost.purchase.current, compareCost.distribution.current);
+                        return (
+                            <div key={r.label} className='mt-1 text-[12.5px]'>
+                                <div className='flex items-center gap-2'>
+                                    <span className='w-16 shrink-0 text-slate-500'>{r.label}</span>
+                                    <span className='min-w-0 flex-1 truncate font-semibold text-slate-800'>{fmtD(r.v)}</span>
+                                    {compareCost.higher === r.key ? (
+                                        <Tag color='blue' className='!m-0 !rounded-full !text-[10px]'>
+                                            cao hơn
+                                        </Tag>
+                                    ) : null}
+                                </div>
+                                <div className='mt-0.5 h-1.5 rounded-full bg-slate-100'>
+                                    <div className='h-1.5 rounded-full' style={{ width: `${(r.v / max) * 100}%`, background: r.color }} />
+                                </div>
+                            </div>
+                        );
+                    })}
+                    <div className='mt-2 text-[11.5px] text-slate-500'>
+                        Chênh lệch <b className='text-slate-800'>{fmtD(Math.abs(compareCost.gap))}</b> ·{' '}
+                        {compareCost.higher === 'purchase'
+                            ? 'mua nhiều hơn cấp phát (tăng tồn kho)'
+                            : compareCost.higher === 'distribution'
+                              ? 'cấp phát nhiều hơn mua (giảm tồn kho)'
+                              : 'bằng nhau'}
+                    </div>
+                </div>
+            ) : null}
+
             {purchaseSuggestion?.suggestions?.length ? (
                 <div className='overflow-hidden rounded-2xl border border-amber-200/70 bg-amber-50/40 shadow-sm'>
                     <div className='flex items-center gap-1.5 border-b border-amber-100 bg-amber-50 px-3 py-1.5 text-[11px] font-semibold text-amber-700'>
@@ -1049,14 +1272,50 @@ const AssistantResult: React.FC<{
                 </div>
             ) : null}
 
+            {data.sources?.length ? (
+                <div className='rounded-xl border border-slate-200/70 bg-slate-50/60 px-2.5 py-1.5'>
+                    <div className='mb-1 flex items-center gap-1 text-[10px] font-semibold tracking-wide text-slate-400 uppercase'>
+                        <DatabaseOutlined />
+                        Nguồn dữ liệu
+                        {data.confidence ? (
+                            <span
+                                className='ml-auto rounded-full px-1.5 py-0.5 text-[9.5px] font-bold'
+                                style={{ background: `${CONFIDENCE[data.confidence].color}1a`, color: CONFIDENCE[data.confidence].color }}
+                            >
+                                {CONFIDENCE[data.confidence].label}
+                            </span>
+                        ) : null}
+                    </div>
+                    <div className='flex flex-wrap gap-1'>
+                        {data.sources.map((s) => (
+                            <span
+                                key={s.tool}
+                                className='inline-flex items-center gap-1 rounded-full bg-white px-2 py-0.5 text-[10.5px] text-slate-600 ring-1 ring-slate-200'
+                                title={s.module}
+                            >
+                                {s.label}
+                                {s.scope ? <span className='text-slate-400'>· {s.scope}</span> : null}
+                                {s.records ? <b className='text-slate-700'>· {s.records}</b> : null}
+                            </span>
+                        ))}
+                    </div>
+                </div>
+            ) : null}
+
             {data.model ? (
-                <div className='pt-0.5 text-[10.5px] text-slate-400'>
-                    {data.tier === 'light'
-                        ? '⚡ tiết kiệm'
-                        : data.tier === 'heavy'
-                          ? '🧠 phân tích sâu'
-                          : '◆ tiêu chuẩn'}{' '}
-                    · {data.model}
+                <div className='flex items-center gap-1.5 pt-0.5 text-[10.5px] text-slate-400'>
+                    <span>
+                        {data.tier === 'light'
+                            ? '⚡ tiết kiệm'
+                            : data.tier === 'heavy'
+                              ? '🧠 phân tích sâu'
+                              : '◆ tiêu chuẩn'}{' '}
+                        · {data.model}
+                    </span>
+                    {data.confidence && !data.sources?.length ? (
+                        <span style={{ color: CONFIDENCE[data.confidence].color }}>· {CONFIDENCE[data.confidence].label}</span>
+                    ) : null}
+                    {data.tookMs ? <span className='ml-auto'>{(data.tookMs / 1000).toFixed(1)}s</span> : null}
                 </div>
             ) : null}
         </div>
