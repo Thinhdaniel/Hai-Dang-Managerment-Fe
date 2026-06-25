@@ -95,7 +95,10 @@
     color: #0f6bdc;
 }
 
-/* Cho hai lớp bọc của Spin tham gia flex để danh sách hội thoại cuộn được trong sidebar */
+/* Cho các lớp bọc của Spin tham gia flex để danh sách hội thoại cuộn được trong sidebar.
+   AntD bản này render lớp bọc ngoài là .ant-spin (con trực tiếp của sidebar), không phải
+   .ant-spin-nested-loading — thiếu nó thì list giãn hết cỡ theo nội dung và không cuộn được. */
+.chat-page__sidebar > .ant-spin,
 .chat-page__sidebar .ant-spin-nested-loading,
 .chat-page__sidebar .ant-spin-container {
     display: flex;
