@@ -772,6 +772,8 @@ export interface ChatMessage {
 export interface ChatConversationListResponse {
     conversations: ChatConversation[];
     unreadCount: number;
+    archivedCount?: number;
+    archived?: boolean;
 }
 
 export interface ChatUnreadSummary {

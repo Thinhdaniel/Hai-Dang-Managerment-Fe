@@ -56,7 +56,7 @@ export const chatService = {
 
     getUnreadSummary: (): Promise<ChatUnreadSummary> => api.get<ChatUnreadSummary>('/chat/unread'),
 
-    getConversations: (params?: { limit?: number }): Promise<ChatConversationListResponse> =>
+    getConversations: (params?: { limit?: number; archived?: boolean }): Promise<ChatConversationListResponse> =>
         api.get<ChatConversationListResponse>('/chat/conversations', { params }),
 
     getContextConversation: (type: string, id: string): Promise<ChatConversation> =>

@@ -27,6 +27,7 @@ import {
     CameraOutlined,
     CarOutlined,
     CloseOutlined,
+    ContainerOutlined,
     CopyOutlined,
     DeleteOutlined,
     EditOutlined,
@@ -236,11 +237,15 @@ const ChatPage: React.FC = () => {
     const [groupTitle, setGroupTitle] = useState('');
     const [creatingConversation, setCreatingConversation] = useState(false);
     const [mentionConversationIds, setMentionConversationIds] = useState<Set<string>>(new Set());
+    const [archivedView, setArchivedView] = useState(false);
+    const [archivedConversations, setArchivedConversations] = useState<ChatConversation[]>([]);
+    const [archivedLoading, setArchivedLoading] = useState(false);
+    const [archivedCount, setArchivedCount] = useState(0);
     const mention = useMentionInput();
 
     const selectedConversation = useMemo(
-        () => conversations.find((conversation) => conversation.id === selectedId),
-        [conversations, selectedId]
+        () => [...conversations, ...archivedConversations].find((conversation) => conversation.id === selectedId),
+        [conversations, archivedConversations, selectedId]
     );
 
     const selectedDirectPeer =
@@ -377,6 +382,7 @@ const ChatPage: React.FC = () => {
         try {
             const result = await chatService.getConversations({ limit: 80 });
             setConversations(result.conversations);
+            setArchivedCount(result.archivedCount ?? 0);
             void refreshUnread();
 
             if (!isMobile && !selectedIdRef.current && result.conversations[0]) {
@@ -389,6 +395,28 @@ const ChatPage: React.FC = () => {
             setConversationLoading(false);
         }
     }, [isMobile, message, refreshUnread, setSearchParams]);
+
+    // Lưu trữ: hội thoại im hơn 90 ngày, tải riêng khi người dùng bấm xem
+    const loadArchived = useCallback(async () => {
+        setArchivedLoading(true);
+        try {
+            const result = await chatService.getConversations({ limit: 100, archived: true });
+            setArchivedConversations(result.conversations);
+            setArchivedCount(result.archivedCount ?? result.conversations.length);
+        } catch {
+            message.error('Không tải được hội thoại lưu trữ');
+        } finally {
+            setArchivedLoading(false);
+        }
+    }, [message]);
+
+    const toggleArchivedView = useCallback(() => {
+        setArchivedView((prev) => {
+            const next = !prev;
+            if (next) void loadArchived();
+            return next;
+        });
+    }, [loadArchived]);
 
     const selectConversation = useCallback(
         (conversationId: string) => {
@@ -942,9 +970,13 @@ const ChatPage: React.FC = () => {
         focusTextAreaCaret(composerRef, caret);
     };
 
+    const sourceConversations = archivedView ? archivedConversations : conversations;
+    const listLoading = archivedView ? archivedLoading : conversationLoading;
+
     const filteredConversations = useMemo(() => {
         const keyword = conversationSearch.trim().toLowerCase();
-        const base = conversations.filter((conversation) => {
+        const base = sourceConversations.filter((conversation) => {
+            if (archivedView) return true; // ở lưu trữ không áp bộ lọc phụ
             if (listFilter === 'unread') return Number(conversation.unreadCount ?? 0) > 0;
             if (listFilter === 'workflow') return conversation.type === 'workflow_thread';
             if (listFilter === 'mention') return mentionConversationIds.has(conversation.id);
@@ -967,7 +999,7 @@ const ChatPage: React.FC = () => {
 
             return haystack.includes(keyword);
         });
-    }, [conversationSearch, conversations, listFilter, mentionConversationIds, user?.id]);
+    }, [archivedView, conversationSearch, sourceConversations, listFilter, mentionConversationIds, user?.id]);
 
     const handleImageSelect = async (files: FileList | null) => {
         if (!files?.length) return;
@@ -1096,10 +1128,20 @@ const ChatPage: React.FC = () => {
                     <Text className='text-xs font-semibold text-slate-500'>Trao đổi vận hành nội bộ</Text>
                 </div>
                 <Space size={8}>
+                    <Tooltip title={archivedView ? 'Quay lại hộp thư' : 'Hội thoại lưu trữ (im hơn 90 ngày)'}>
+                        <Badge count={archivedView ? 0 : archivedCount} size='small' overflowCount={99}>
+                            <Button
+                                icon={<ContainerOutlined />}
+                                onClick={toggleArchivedView}
+                                className='chat-page__icon-button'
+                                style={archivedView ? { color: '#0f6bdc', borderColor: '#0f6bdc' } : undefined}
+                            />
+                        </Badge>
+                    </Tooltip>
                     <Tooltip title='Tải lại'>
                         <Button
                             icon={<ReloadOutlined />}
-                            onClick={() => void loadConversations()}
+                            onClick={() => void (archivedView ? loadArchived() : loadConversations())}
                             className='chat-page__icon-button'
                         />
                     </Tooltip>
@@ -1123,26 +1165,41 @@ const ChatPage: React.FC = () => {
                 className='chat-page__search-input'
             />
 
-            <Segmented
-                block
-                value={listFilter}
-                onChange={(value) => setListFilter(value as ConversationFilter)}
-                options={[
-                    { label: 'Tất cả', value: 'all' },
-                    { label: 'Chưa đọc', value: 'unread' },
-                    { label: '@ Tôi', value: 'mention' },
-                    { label: 'Phiếu', value: 'workflow' },
-                ]}
-                className='chat-page__filter'
-            />
+            {archivedView ? (
+                <div className='mx-3 mt-2 flex items-center justify-between rounded-xl border border-amber-200 bg-amber-50 px-3 py-2'>
+                    <Text className='text-[12px] font-semibold text-amber-800'>
+                        Lưu trữ · hội thoại im hơn 90 ngày
+                    </Text>
+                    <Button type='link' size='small' onClick={toggleArchivedView} className='!h-auto !px-0 !text-[12px]'>
+                        ← Quay lại
+                    </Button>
+                </div>
+            ) : (
+                <Segmented
+                    block
+                    value={listFilter}
+                    onChange={(value) => setListFilter(value as ConversationFilter)}
+                    options={[
+                        { label: 'Tất cả', value: 'all' },
+                        { label: 'Chưa đọc', value: 'unread' },
+                        { label: '@ Tôi', value: 'mention' },
+                        { label: 'Phiếu', value: 'workflow' },
+                    ]}
+                    className='chat-page__filter'
+                />
+            )}
 
-            <Spin spinning={conversationLoading}>
+            <Spin spinning={listLoading}>
                 <div className='chat-page__conversation-list'>
-                    {!conversations.length && !conversationLoading ? (
-                        <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description='Chưa có hội thoại' className='mt-14' />
+                    {!sourceConversations.length && !listLoading ? (
+                        <Empty
+                            image={Empty.PRESENTED_IMAGE_SIMPLE}
+                            description={archivedView ? 'Chưa có hội thoại lưu trữ' : 'Chưa có hội thoại'}
+                            className='mt-14'
+                        />
                     ) : null}
 
-                    {conversations.length > 0 && !filteredConversations.length ? (
+                    {sourceConversations.length > 0 && !filteredConversations.length ? (
                         <Empty
                             image={Empty.PRESENTED_IMAGE_SIMPLE}
                             description='Không tìm thấy hội thoại'
