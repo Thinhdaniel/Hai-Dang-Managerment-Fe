@@ -74,6 +74,7 @@ export const useVoiceChat = () => {
     const finalRef = useRef('');
     const handlersRef = useRef<StartHandlers>({});
     const audioRef = useRef<HTMLAudioElement | null>(null);
+    const playTokenRef = useRef(0); // tăng mỗi lần stop -> huỷ vòng đọc theo câu đang chạy
 
     // Nạp danh sách giọng (getVoices() có thể rỗng lần đầu -> đợi onvoiceschanged).
     useEffect(() => {
@@ -149,46 +150,98 @@ export const useVoiceChat = () => {
     }, []);
 
     const stopSpeaking = useCallback(() => {
+        playTokenRef.current += 1; // huỷ vòng đọc-theo-câu đang chạy
         stopNeural();
         if (ttsSupported) window.speechSynthesis.cancel();
         setSpeaking(false);
     }, [ttsSupported, stopNeural]);
 
     // Đọc bằng GIỌNG NEURAL qua backend. Trả về true nếu phát được, false để nơi gọi fallback.
+    // Để có tiếng NGAY (không chờ tạo xong cả file), text được CẮT THEO CÂU: sinh+phát câu đầu
+    // trong khi prefetch câu kế tiếp -> độ trễ ban đầu chỉ bằng thời gian tạo 1 câu.
     const speakNeural = useCallback(
         async (text: string, opts: { voice?: string; rate?: number; pitch?: number } = {}): Promise<boolean> => {
-            // Gửi TEXT GỐC (giữ xuống dòng/gạch đầu dòng) — backend tự chuẩn hoá thành dấu câu
-            // để giọng neural NGHỈ NGẮT đúng nhịp. KHÔNG gộp khoảng trắng ở đây.
             const raw = (text || '').trim();
             if (!raw) return false;
-            try {
-                stopSpeaking();
-                const token = getStoredAccessToken();
-                const resp = await fetch(`${API_BASE_URL}/ai/tts`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
-                    credentials: 'include',
-                    body: JSON.stringify({
-                        text: raw,
-                        voice: opts.voice || DEFAULT_NEURAL_VOICE,
-                        rate: toEdgePct(opts.rate ?? 1),
-                        pitch: toEdgePct(opts.pitch ?? 1),
-                    }),
+
+            stopSpeaking();
+            const myToken = (playTokenRef.current += 1);
+            const voice = opts.voice || DEFAULT_NEURAL_VOICE;
+            const rate = toEdgePct(opts.rate ?? 1);
+            const pitch = toEdgePct(opts.pitch ?? 1);
+
+            // Tách theo câu rồi gộp các mẩu ngắn (~90 ký tự) để không quá vụn nhưng vẫn nhanh.
+            const splitForSpeech = (t: string): string[] => {
+                const parts = t.split(/(?<=[.!?…:])\s+/);
+                const out: string[] = [];
+                let cur = '';
+                for (const p of parts) {
+                    cur = cur ? `${cur} ${p}` : p;
+                    if (cur.length >= 90) {
+                        out.push(cur);
+                        cur = '';
+                    }
+                }
+                if (cur.trim()) out.push(cur);
+                return out.length ? out : [t];
+            };
+
+            // Gọi backend tạo audio cho 1 mẩu text. Trả Blob hoặc null nếu lỗi.
+            const fetchChunk = async (chunk: string): Promise<Blob | null> => {
+                try {
+                    const token = getStoredAccessToken();
+                    const resp = await fetch(`${API_BASE_URL}/ai/tts`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+                        credentials: 'include',
+                        body: JSON.stringify({ text: chunk, voice, rate, pitch }),
+                    });
+                    if (!resp.ok) return null;
+                    const blob = await resp.blob();
+                    return blob.size ? blob : null;
+                } catch {
+                    return null;
+                }
+            };
+
+            // Phát 1 blob, resolve khi xong (hoặc bị huỷ/lỗi).
+            const playBlob = (blob: Blob): Promise<void> =>
+                new Promise<void>((resolve) => {
+                    if (myToken !== playTokenRef.current) return resolve();
+                    const url = URL.createObjectURL(blob);
+                    const audio = new Audio(url);
+                    audioRef.current = audio;
+                    audio.onplay = () => setSpeaking(true);
+                    audio.onended = () => {
+                        URL.revokeObjectURL(url);
+                        resolve();
+                    };
+                    audio.onerror = () => {
+                        URL.revokeObjectURL(url);
+                        resolve();
+                    };
+                    audio.play().catch(() => resolve());
                 });
-                if (!resp.ok) throw new Error(`tts ${resp.status}`);
-                const blob = await resp.blob();
-                if (!blob.size) throw new Error('empty audio');
-                const url = URL.createObjectURL(blob);
-                const audio = new Audio(url);
-                audioRef.current = audio;
-                audio.onplay = () => setSpeaking(true);
-                audio.onended = () => {
-                    setSpeaking(false);
-                    URL.revokeObjectURL(url);
-                };
-                audio.onerror = () => setSpeaking(false);
-                await audio.play();
-                return true;
+
+            const chunks = splitForSpeech(raw);
+            try {
+                let nextBlob = fetchChunk(chunks[0]); // prefetch câu đầu
+                let okAny = false;
+                for (let i = 0; i < chunks.length; i += 1) {
+                    if (myToken !== playTokenRef.current) return okAny; // bị stop
+                    const blob = await nextBlob;
+                    // bắt đầu prefetch câu kế tiếp NGAY trong lúc phát câu hiện tại
+                    nextBlob = i + 1 < chunks.length ? fetchChunk(chunks[i + 1]) : Promise.resolve(null);
+                    if (!blob) {
+                        if (!okAny && i === 0) return false; // câu đầu lỗi -> để nơi gọi fallback
+                        continue;
+                    }
+                    if (myToken !== playTokenRef.current) return okAny;
+                    okAny = true;
+                    await playBlob(blob);
+                }
+                if (myToken === playTokenRef.current) setSpeaking(false);
+                return okAny;
             } catch {
                 setSpeaking(false);
                 return false;
