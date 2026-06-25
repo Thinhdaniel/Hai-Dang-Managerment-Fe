@@ -29,13 +29,22 @@ const getRecognitionCtor = (): (new () => SpeechRecognitionLike) | null => {
 };
 
 // "Phong cách" đọc = cặp tốc độ/cao độ; kết hợp với việc chọn giọng nam/nữ thực tế của máy.
-export type VoiceStyleKey = 'professional' | 'gentle' | 'warm' | 'sexy' | 'energetic';
+// Velvet tạo cảm giác mềm, chậm, có màu hơn nhưng vẫn đủ sạch cho app nội bộ công ty.
+export type VoiceStyleKey = 'review' | 'professional' | 'gentle' | 'warm' | 'velvet' | 'anime' | 'energetic';
 export const VOICE_STYLES: Record<VoiceStyleKey, { label: string; rate: number; pitch: number }> = {
+    // "Review TikTok": rõ, hơi nhanh nhưng VẪN nghỉ ngắt đúng (không rượt như energetic).
+    review: { label: 'Review · chuyên nghiệp (mặc định)', rate: 1.06, pitch: 1.0 },
+    velvet: { label: 'Velvet · quyến rũ nhẹ', rate: 0.92, pitch: 1.05 },
+    anime: { label: 'Anime cute · vui tai', rate: 1.08, pitch: 1.18 },
     energetic: { label: 'Năng động · nhanh', rate: 1.15, pitch: 1.08 },
-    sexy: { label: 'Trẻ trung · gợi cảm', rate: 0.94, pitch: 1.06 },
     gentle: { label: 'Nhẹ nhàng', rate: 0.98, pitch: 1.1 },
-    professional: { label: 'Chuyên nghiệp', rate: 1.0, pitch: 1.0 },
+    professional: { label: 'Chuyên nghiệp · chuẩn', rate: 1.0, pitch: 1.0 },
     warm: { label: 'Trầm ấm', rate: 0.96, pitch: 0.9 },
+};
+
+export const normalizeVoiceStyle = (value?: string | null): VoiceStyleKey => {
+    if (value === 'sexy') return 'velvet'; // legacy localStorage key from older builds.
+    return value && value in VOICE_STYLES ? (value as VoiceStyleKey) : 'review';
 };
 
 export type SpeakOptions = { voiceURI?: string; rate?: number; pitch?: number };
@@ -148,8 +157,10 @@ export const useVoiceChat = () => {
     // Đọc bằng GIỌNG NEURAL qua backend. Trả về true nếu phát được, false để nơi gọi fallback.
     const speakNeural = useCallback(
         async (text: string, opts: { voice?: string; rate?: number; pitch?: number } = {}): Promise<boolean> => {
-            const clean = cleanForSpeech(text);
-            if (!clean) return false;
+            // Gửi TEXT GỐC (giữ xuống dòng/gạch đầu dòng) — backend tự chuẩn hoá thành dấu câu
+            // để giọng neural NGHỈ NGẮT đúng nhịp. KHÔNG gộp khoảng trắng ở đây.
+            const raw = (text || '').trim();
+            if (!raw) return false;
             try {
                 stopSpeaking();
                 const token = getStoredAccessToken();
@@ -158,7 +169,7 @@ export const useVoiceChat = () => {
                     headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
                     credentials: 'include',
                     body: JSON.stringify({
-                        text: clean,
+                        text: raw,
                         voice: opts.voice || DEFAULT_NEURAL_VOICE,
                         rate: toEdgePct(opts.rate ?? 1),
                         pitch: toEdgePct(opts.pitch ?? 1),

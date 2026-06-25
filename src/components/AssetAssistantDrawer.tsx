@@ -27,7 +27,14 @@ import {
     type AssistantStreamStep,
 } from '../core/services/ai-help.service';
 import { getAssetStatusColor } from '../core/constants/assetStatusColor';
-import { useVoiceChat, VOICE_STYLES, NEURAL_VOICES, DEFAULT_NEURAL_VOICE, type VoiceStyleKey } from '../core/hooks/useVoiceChat';
+import {
+    useVoiceChat,
+    VOICE_STYLES,
+    NEURAL_VOICES,
+    DEFAULT_NEURAL_VOICE,
+    normalizeVoiceStyle,
+    type VoiceStyleKey,
+} from '../core/hooks/useVoiceChat';
 import type { AssetStatus } from '../core/types';
 
 type ChatMessage = { role: 'user' | 'assistant'; content: string; data?: AssetAssistantResponse; animate?: boolean };
@@ -38,7 +45,8 @@ const CHAT_KEY = 'hd-asset-assistant-chat';
 const READ_ALOUD_KEY = 'hd-asset-assistant-read-aloud';
 const VOICE_URI_KEY = 'hd-asset-assistant-voice-uri';
 const VOICE_STYLE_KEY = 'hd-asset-assistant-voice-style';
-const VOICE_SAMPLE = 'Xin chào, tôi là trợ lý vận hành Hải Đăng. Đây là giọng đọc bạn vừa chọn.';
+const VOICE_SAMPLE =
+    'Xin chào, mình là trợ lý vận hành Hải Đăng. Hôm nay mình sẽ tổng hợp số liệu, đọc rõ ràng và ngắt nghỉ đúng nhịp để bạn dễ nghe nhé.';
 const loadChat = (): ChatMessage[] => {
     try {
         const raw = localStorage.getItem(CHAT_KEY);
@@ -216,9 +224,9 @@ const AssetAssistantDrawer: React.FC<Props> = ({ open, onClose }) => {
     });
     const [voiceStyle, setVoiceStyle] = useState<VoiceStyleKey>(() => {
         try {
-            return (localStorage.getItem(VOICE_STYLE_KEY) as VoiceStyleKey) || 'energetic';
+            return normalizeVoiceStyle(localStorage.getItem(VOICE_STYLE_KEY));
         } catch {
-            return 'energetic';
+            return 'review';
         }
     });
     const endRef = useRef<HTMLDivElement>(null);
@@ -236,7 +244,8 @@ const AssetAssistantDrawer: React.FC<Props> = ({ open, onClose }) => {
 
     // Đọc câu trả lời: ưu tiên giọng NEURAL (CapCut-like); lỗi mạng/BE thì fallback giọng trình duyệt.
     const readOut = (text: string) => {
-        const st = VOICE_STYLES[voiceStyle];
+        const safeStyle = normalizeVoiceStyle(voiceStyle);
+        const st = VOICE_STYLES[safeStyle];
         speakNeural(text, { voice: voiceURI || DEFAULT_NEURAL_VOICE, rate: st.rate, pitch: st.pitch }).then((ok) => {
             if (!ok) speak(text, { rate: st.rate, pitch: st.pitch });
         });
@@ -337,9 +346,10 @@ const AssetAssistantDrawer: React.FC<Props> = ({ open, onClose }) => {
         }
     };
     const changeStyle = (style: VoiceStyleKey) => {
-        setVoiceStyle(style);
+        const next = normalizeVoiceStyle(style);
+        setVoiceStyle(next);
         try {
-            localStorage.setItem(VOICE_STYLE_KEY, style);
+            localStorage.setItem(VOICE_STYLE_KEY, next);
         } catch {
             /* noop */
         }
