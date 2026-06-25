@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Button, Drawer, Grid, Input, Popover, Select, Switch, Tag, Tooltip } from 'antd';
+import { createPortal } from 'react-dom';
+import { Button, Grid, Input, Popover, Select, Switch, Tag, Tooltip } from 'antd';
 import {
     AppstoreOutlined,
     AudioOutlined,
@@ -9,6 +10,7 @@ import {
     EnvironmentOutlined,
     FileTextOutlined,
     FormOutlined,
+    HolderOutlined,
     LoadingOutlined,
     RobotOutlined,
     SendOutlined,
@@ -20,6 +22,7 @@ import {
     WarningOutlined,
 } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
+import { useFloatingWindow, type Rect } from '../core/hooks/useFloatingWindow';
 import {
     operationsAssistantService,
     type AssetAssistantResponse,
@@ -47,6 +50,10 @@ const VOICE_URI_KEY = 'hd-asset-assistant-voice-uri';
 const VOICE_STYLE_KEY = 'hd-asset-assistant-voice-style';
 const VOICE_SAMPLE =
     'Xin chào, mình là trợ lý vận hành Hải Đăng. Hôm nay mình sẽ tổng hợp số liệu, đọc rõ ràng và ngắt nghỉ đúng nhịp để bạn dễ nghe nhé.';
+// Vị trí/kích thước cửa sổ nổi (desktop) — nhớ qua reload.
+const WINDOW_RECT_KEY = 'hd-asset-assistant-rect';
+// Màu nhấn thương hiệu duy nhất (phẳng, sạch — bỏ gradient nhiều màu).
+const ACCENT = '#2f51d9';
 const loadChat = (): ChatMessage[] => {
     try {
         const raw = localStorage.getItem(CHAT_KEY);
@@ -115,34 +122,28 @@ const CONFIDENCE: Record<string, { label: string; color: string }> = {
 };
 
 const STYLES = `
-@keyframes hd-msg-in { from { opacity:0; transform: translateY(12px) scale(.98); } to { opacity:1; transform:none; } }
-.hd-msg { animation: hd-msg-in .32s cubic-bezier(.22,1,.36,1) both; }
-@keyframes hd-pop { 0% { opacity:0; transform: scale(.92) translateY(6px); } 60% { transform: scale(1.015); } 100% { opacity:1; transform:none; } }
-.hd-pop { animation: hd-pop .28s cubic-bezier(.34,1.56,.64,1) both; }
+@keyframes hd-msg-in { from { opacity:0; transform: translateY(10px); } to { opacity:1; transform:none; } }
+.hd-msg { animation: hd-msg-in .28s cubic-bezier(.22,1,.36,1) both; }
+@keyframes hd-pop { from { opacity:0; transform: translateY(6px); } to { opacity:1; transform:none; } }
+.hd-pop { animation: hd-pop .24s ease both; }
 @keyframes hd-dot { 0%,80%,100% { transform: scale(.5); opacity:.35; } 40% { transform: scale(1); opacity:1; } }
 .hd-typing span { animation: hd-dot 1.1s infinite ease-in-out; }
 .hd-typing span:nth-child(2) { animation-delay: .15s; }
 .hd-typing span:nth-child(3) { animation-delay: .3s; }
-@keyframes hd-float { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-7px); } }
-.hd-float { animation: hd-float 3.6s ease-in-out infinite; }
-@keyframes hd-glow { 0%,100% { box-shadow: 0 0 0 0 rgba(99,102,241,.45); } 50% { box-shadow: 0 0 0 7px rgba(99,102,241,0); } }
-.hd-glow { animation: hd-glow 2.6s ease-in-out infinite; }
-@keyframes hd-grad { 0% { background-position:0% 50%; } 50% { background-position:100% 50%; } 100% { background-position:0% 50%; } }
-.hd-grad { background-size: 220% 220%; animation: hd-grad 7s ease infinite; }
 @keyframes hd-caret { 0%,100% { opacity:1; } 50% { opacity:0; } }
-.hd-caret { display:inline-block; width:2px; height:1em; margin-left:2px; vertical-align:-2px; background: linear-gradient(180deg,#2563eb,#7c3aed); animation: hd-caret .9s step-end infinite; border-radius:2px; }
-.hd-stagger > * { animation: hd-msg-in .34s cubic-bezier(.22,1,.36,1) both; }
-.hd-stagger > *:nth-child(1){animation-delay:.03s;} .hd-stagger > *:nth-child(2){animation-delay:.07s;}
-.hd-stagger > *:nth-child(3){animation-delay:.11s;} .hd-stagger > *:nth-child(4){animation-delay:.15s;}
-.hd-stagger > *:nth-child(5){animation-delay:.19s;} .hd-stagger > *:nth-child(6){animation-delay:.23s;}
-.hd-stagger > *:nth-child(7){animation-delay:.27s;} .hd-stagger > *:nth-child(8){animation-delay:.31s;}
+.hd-caret { display:inline-block; width:2px; height:1em; margin-left:2px; vertical-align:-2px; background:${ACCENT}; animation: hd-caret .9s step-end infinite; border-radius:2px; }
+.hd-stagger > * { animation: hd-msg-in .3s cubic-bezier(.22,1,.36,1) both; }
+.hd-stagger > *:nth-child(1){animation-delay:.03s;} .hd-stagger > *:nth-child(2){animation-delay:.06s;}
+.hd-stagger > *:nth-child(3){animation-delay:.09s;} .hd-stagger > *:nth-child(4){animation-delay:.12s;}
+.hd-stagger > *:nth-child(5){animation-delay:.15s;} .hd-stagger > *:nth-child(6){animation-delay:.18s;}
+.hd-stagger > *:nth-child(7){animation-delay:.21s;} .hd-stagger > *:nth-child(8){animation-delay:.24s;}
 .hd-scroll::-webkit-scrollbar { width: 6px; }
 .hd-scroll::-webkit-scrollbar-thumb { background: rgba(100,116,139,.28); border-radius: 99px; }
 .hd-scroll::-webkit-scrollbar-thumb:hover { background: rgba(100,116,139,.45); }
 .hd-lift { transition: transform .18s ease, box-shadow .18s ease, border-color .18s ease; }
 .hd-lift:hover { transform: translateY(-1px); box-shadow: 0 6px 16px rgba(15,23,42,.08); }
 @media (prefers-reduced-motion: reduce) {
-  .hd-msg,.hd-pop,.hd-typing span,.hd-float,.hd-glow,.hd-grad,.hd-caret,.hd-stagger > *,.hd-lift { animation: none !important; transition: none !important; }
+  .hd-msg,.hd-pop,.hd-typing span,.hd-caret,.hd-stagger > *,.hd-lift { animation: none !important; transition: none !important; }
 }
 `;
 
@@ -184,9 +185,9 @@ const ThinkingIndicator: React.FC<{ label?: string }> = ({ label }) => {
     return (
         <div className='flex items-center gap-2 rounded-3xl rounded-tl-md border border-slate-200/70 bg-white px-4 py-3 shadow-sm'>
             <span className='hd-typing flex items-center gap-1'>
-                <span className='h-1.5 w-1.5 rounded-full bg-blue-400' />
-                <span className='h-1.5 w-1.5 rounded-full bg-indigo-400' />
-                <span className='h-1.5 w-1.5 rounded-full bg-fuchsia-400' />
+                <span className='h-1.5 w-1.5 rounded-full' style={{ background: ACCENT }} />
+                <span className='h-1.5 w-1.5 rounded-full' style={{ background: ACCENT, opacity: 0.7 }} />
+                <span className='h-1.5 w-1.5 rounded-full' style={{ background: ACCENT, opacity: 0.45 }} />
             </span>
             <span key={text} className='hd-msg text-[12px] font-medium text-slate-500'>
                 {text}
@@ -230,6 +231,17 @@ const AssetAssistantDrawer: React.FC<Props> = ({ open, onClose }) => {
         }
     });
     const endRef = useRef<HTMLDivElement>(null);
+
+    // Cửa sổ nổi (desktop): kéo tiêu đề để di chuyển, kéo góc để đổi cỡ; nhớ vị trí/kích thước.
+    const defaultRect = (): Rect => {
+        const w = 400;
+        const h = Math.min(640, (typeof window !== 'undefined' ? window.innerHeight : 800) - 120);
+        const vw = typeof window !== 'undefined' ? window.innerWidth : 1280;
+        const vh = typeof window !== 'undefined' ? window.innerHeight : 800;
+        return { x: vw - w - 28, y: vh - h - 96, w, h };
+    };
+    const { rect, dragging, startDrag, startResize } = useFloatingWindow(WINDOW_RECT_KEY, defaultRect, open && !isMobile);
+
     const {
         recognitionSupported,
         ttsSupported,
@@ -357,12 +369,23 @@ const AssetAssistantDrawer: React.FC<Props> = ({ open, onClose }) => {
     // Nghe thử = hành động người dùng -> "mở khoá" audio của trình duyệt (lần đầu hay bị chặn).
     const previewVoice = () => readOut(VOICE_SAMPLE);
 
-    // Đóng drawer / nhấn nút đóng: ngắt giọng đang đọc + dừng nghe.
+    // Đóng cửa sổ / nhấn nút đóng: ngắt giọng đang đọc + dừng nghe.
     const handleClose = () => {
         stopSpeaking();
         stopListening();
         onClose();
     };
+
+    // Esc để đóng nhanh.
+    useEffect(() => {
+        if (!open) return;
+        const onKey = (e: KeyboardEvent) => {
+            if (e.key === 'Escape') handleClose();
+        };
+        window.addEventListener('keydown', onKey);
+        return () => window.removeEventListener('keydown', onKey);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [open]);
 
     // Áp bộ lọc -> điều hướng tới danh sách máy kèm query (toàn cục, không phụ thuộc trang đang đứng).
     const applyToList = (f: AssistantAppliedFilters) => {
@@ -383,34 +406,47 @@ const AssetAssistantDrawer: React.FC<Props> = ({ open, onClose }) => {
         onClose();
     };
 
-    return (
-        <Drawer
-            open={open}
-            onClose={handleClose}
-            placement={isMobile ? 'bottom' : 'right'}
-            width={isMobile ? '100%' : 480}
-            height={isMobile ? '90vh' : undefined}
-            closable={false}
-            styles={{
-                body: { padding: 0, display: 'flex', flexDirection: 'column', background: '#f8fafc' },
-                header: { display: 'none' },
-                content: isMobile ? { borderTopLeftRadius: 20, borderTopRightRadius: 20, overflow: 'hidden' } : {},
-            }}
-        >
-            <style>{STYLES}</style>
+    // Cửa sổ: desktop = nổi theo rect (kéo/đổi cỡ); mobile = bottom sheet.
+    const panelStyle: React.CSSProperties = isMobile
+        ? { position: 'fixed', left: 0, right: 0, bottom: 0, height: '90vh', zIndex: 1100 }
+        : { position: 'fixed', left: rect.x, top: rect.y, width: rect.w, height: rect.h, zIndex: 1100 };
 
-            {/* Header */}
-            <div className='flex items-center gap-3 border-b border-slate-200/70 bg-white/90 px-4 py-3 backdrop-blur'>
-                <span className='hd-grad hd-glow flex h-10 w-10 items-center justify-center rounded-2xl bg-gradient-to-br from-blue-600 via-indigo-600 to-fuchsia-600 text-white shadow-[0_6px_16px_rgba(37,99,235,0.32)]'>
-                    <RobotOutlined className='text-lg' />
-                </span>
-                <div className='min-w-0 flex-1'>
-                    <div className='text-[15px] font-bold text-slate-900'>Trợ lý vận hành</div>
-                    <div className='flex items-center gap-1.5 text-[11px] text-slate-500'>
-                        <span className='h-1.5 w-1.5 rounded-full bg-emerald-500' />
-                        Hỏi đáp máy · bảo trì · vật tư · chi phí
+    return createPortal(
+        <>
+            <style>{STYLES}</style>
+            {/* Mobile: nền mờ bấm để đóng. Desktop: không có backdrop (vẫn thao tác trang nền). */}
+            {isMobile ? (
+                <div className='fixed inset-0 z-[1099] bg-slate-900/30 backdrop-blur-[1px]' onClick={handleClose} />
+            ) : null}
+
+            <div
+                className={`flex flex-col overflow-hidden border border-slate-200 bg-[#f8fafc] shadow-2xl ${
+                    isMobile ? 'rounded-t-2xl' : 'rounded-2xl'
+                } ${dragging ? 'select-none' : ''}`}
+                style={panelStyle}
+            >
+                {/* Header — desktop kiêm thanh kéo */}
+                <div
+                    className={`flex items-center gap-2.5 border-b border-slate-200/70 bg-white px-4 py-3 ${
+                        isMobile ? '' : 'cursor-move'
+                    }`}
+                    onPointerDown={isMobile ? undefined : startDrag}
+                >
+                    {isMobile ? null : <HolderOutlined className='shrink-0 text-base text-slate-300' />}
+                    <span
+                        className='flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl text-white'
+                        style={{ background: ACCENT }}
+                    >
+                        <RobotOutlined className='text-lg' />
+                    </span>
+                    <div className='min-w-0 flex-1'>
+                        <div className='text-[15px] font-bold text-slate-900'>Trợ lý vận hành</div>
+                        <div className='flex items-center gap-1.5 text-[11px] text-slate-500'>
+                            <span className='h-1.5 w-1.5 rounded-full bg-emerald-500' />
+                            Hỏi đáp máy · bảo trì · vật tư · chi phí
+                        </div>
                     </div>
-                </div>
+                    <div className='flex items-center gap-0.5' onPointerDown={(e) => e.stopPropagation()}>
                 {ttsSupported ? (
                     <Popover
                         trigger='click'
@@ -463,11 +499,8 @@ const AssetAssistantDrawer: React.FC<Props> = ({ open, onClose }) => {
                                     type='text'
                                     shape='circle'
                                     icon={<SoundOutlined />}
-                                    className={
-                                        readAloud
-                                            ? `!text-blue-600 ${speaking ? 'hd-glow' : ''}`
-                                            : 'text-slate-400 hover:!text-blue-600'
-                                    }
+                                    style={readAloud ? { color: ACCENT } : undefined}
+                                    className={readAloud ? '' : 'text-slate-400 hover:!text-[#2f51d9]'}
                                 />
                             </Tooltip>
                         </span>
@@ -480,7 +513,7 @@ const AssetAssistantDrawer: React.FC<Props> = ({ open, onClose }) => {
                             shape='circle'
                             icon={<FormOutlined />}
                             onClick={startNewChat}
-                            className='text-slate-400 hover:!text-blue-600'
+                            className='text-slate-400 hover:!text-[#2f51d9]'
                         />
                     </Tooltip>
                 ) : null}
@@ -491,6 +524,7 @@ const AssetAssistantDrawer: React.FC<Props> = ({ open, onClose }) => {
                     onClick={handleClose}
                     className='text-slate-400'
                 />
+                    </div>
             </div>
 
             {/* Messages */}
@@ -498,7 +532,10 @@ const AssetAssistantDrawer: React.FC<Props> = ({ open, onClose }) => {
                 {messages.length === 0 ? (
                     <div className='hd-msg mt-2'>
                         <div className='flex flex-col items-center text-center'>
-                            <span className='hd-float hd-grad flex h-14 w-14 items-center justify-center rounded-3xl bg-gradient-to-br from-blue-600 via-indigo-600 to-fuchsia-600 text-2xl text-white shadow-[0_10px_24px_rgba(37,99,235,0.3)]'>
+                            <span
+                                className='flex h-14 w-14 items-center justify-center rounded-3xl text-2xl text-white shadow-[0_8px_20px_rgba(47,81,217,0.28)]'
+                                style={{ background: ACCENT }}
+                            >
                                 <RobotOutlined />
                             </span>
                             <div className='mt-3 text-[15px] font-bold text-slate-800'>Chào bạn 👋</div>
@@ -542,13 +579,19 @@ const AssetAssistantDrawer: React.FC<Props> = ({ open, onClose }) => {
                 {messages.map((m, i) =>
                     m.role === 'user' ? (
                         <div key={i} className='hd-msg flex justify-end'>
-                            <div className='hd-pop max-w-[82%] rounded-3xl rounded-br-md bg-gradient-to-br from-blue-600 to-indigo-600 px-4 py-2.5 text-[13.5px] leading-relaxed text-white shadow-[0_4px_14px_rgba(37,99,235,0.28)]'>
+                            <div
+                                className='hd-pop max-w-[82%] rounded-3xl rounded-br-md px-4 py-2.5 text-[13.5px] leading-relaxed text-white shadow-[0_3px_10px_rgba(47,81,217,0.22)]'
+                                style={{ background: ACCENT }}
+                            >
                                 {m.content}
                             </div>
                         </div>
                     ) : (
                         <div key={i} className='hd-msg flex gap-2.5'>
-                            <span className='flex h-8 w-8 shrink-0 items-center justify-center rounded-2xl bg-white text-blue-600 shadow-sm ring-1 ring-slate-200'>
+                            <span
+                                className='flex h-8 w-8 shrink-0 items-center justify-center rounded-2xl bg-white shadow-sm ring-1 ring-slate-200'
+                                style={{ color: ACCENT }}
+                            >
                                 <RobotOutlined className='text-sm' />
                             </span>
                             <div className='min-w-0 flex-1 space-y-2'>
@@ -570,7 +613,10 @@ const AssetAssistantDrawer: React.FC<Props> = ({ open, onClose }) => {
 
                 {loading ? (
                     <div className='hd-msg flex gap-2.5'>
-                        <span className='hd-glow flex h-8 w-8 shrink-0 items-center justify-center rounded-2xl bg-white text-blue-600 shadow-sm ring-1 ring-slate-200'>
+                        <span
+                            className='flex h-8 w-8 shrink-0 items-center justify-center rounded-2xl bg-white shadow-sm ring-1 ring-slate-200'
+                            style={{ color: ACCENT }}
+                        >
                             <RobotOutlined className='text-sm' />
                         </span>
                         <ThinkingIndicator label={liveStep || undefined} />
@@ -584,7 +630,7 @@ const AssetAssistantDrawer: React.FC<Props> = ({ open, onClose }) => {
                 className='border-t border-slate-200/70 bg-white px-3 py-3'
                 style={{ paddingBottom: isMobile ? 'calc(0.75rem + env(safe-area-inset-bottom))' : undefined }}
             >
-                <div className='flex items-end gap-2 rounded-3xl border border-slate-200 bg-slate-50 px-3 py-1.5 shadow-sm transition-all focus-within:border-blue-400 focus-within:bg-white focus-within:shadow-[0_0_0_4px_rgba(37,99,235,0.1)]'>
+                <div className='flex items-end gap-2 rounded-3xl border border-slate-200 bg-slate-50 px-3 py-1.5 shadow-sm transition-all focus-within:border-[#2f51d9] focus-within:bg-white focus-within:shadow-[0_0_0_4px_rgba(47,81,217,0.12)]'>
                     <Input.TextArea
                         value={input}
                         onChange={(e) => setInput(e.target.value)}
@@ -610,8 +656,8 @@ const AssetAssistantDrawer: React.FC<Props> = ({ open, onClose }) => {
                                 disabled={loading}
                                 className={
                                     listening
-                                        ? 'hd-glow mb-1 shrink-0 !bg-rose-500 !text-white'
-                                        : 'mb-1 shrink-0 text-slate-400 hover:!text-blue-600'
+                                        ? 'mb-1 shrink-0 !bg-rose-500 !text-white'
+                                        : 'mb-1 shrink-0 text-slate-400 hover:!text-[#2f51d9]'
                                 }
                             />
                         </Tooltip>
@@ -623,7 +669,8 @@ const AssetAssistantDrawer: React.FC<Props> = ({ open, onClose }) => {
                         loading={loading}
                         disabled={!input.trim()}
                         onClick={() => send(input)}
-                        className='hd-grad mb-1 shrink-0 bg-gradient-to-br from-blue-600 via-indigo-600 to-fuchsia-600 transition-transform hover:scale-110 active:scale-95'
+                        style={{ background: input.trim() ? ACCENT : undefined }}
+                        className='mb-1 shrink-0 transition-transform hover:scale-105 active:scale-95'
                     />
                 </div>
                 <div className='mt-1.5 text-center text-[10.5px] text-slate-400'>
@@ -634,7 +681,22 @@ const AssetAssistantDrawer: React.FC<Props> = ({ open, onClose }) => {
                           : 'Trợ lý truy vấn dữ liệu thật · Enter để gửi, Shift+Enter xuống dòng'}
                 </div>
             </div>
-        </Drawer>
+
+            {/* Tay nắm đổi cỡ (chỉ desktop) — kéo góc dưới–phải */}
+            {isMobile ? null : (
+                <div
+                    onPointerDown={startResize}
+                    className='absolute right-0.5 bottom-0.5 flex h-4 w-4 cursor-nwse-resize items-end justify-end text-slate-300 hover:text-slate-400'
+                    title='Kéo để đổi cỡ'
+                >
+                    <svg width='10' height='10' viewBox='0 0 10 10' fill='none'>
+                        <path d='M9 1v8H1' stroke='currentColor' strokeWidth='1.2' strokeLinecap='round' />
+                    </svg>
+                </div>
+            )}
+            </div>
+        </>,
+        document.body
     );
 };
 
