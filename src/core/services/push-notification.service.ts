@@ -17,8 +17,13 @@ export type PushSendSummary = {
     failed: number;
 };
 
+export type TelegramSendSummary = PushSendSummary & {
+    linked: boolean;
+};
+
 type PushTestResponse = {
     delivery: PushSendSummary;
+    telegramDelivery?: TelegramSendSummary;
 };
 
 export type TelegramNotificationStatus = {

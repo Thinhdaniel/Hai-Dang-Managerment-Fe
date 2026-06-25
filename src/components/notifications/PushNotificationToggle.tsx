@@ -342,6 +342,14 @@ const PushNotificationToggle = () => {
             } else {
                 message.error(`Web Push gửi lỗi: ${delivery.failed}/${delivery.attempted} thiết bị`);
             }
+
+            if (result.telegramDelivery?.sent) {
+                message.success('Telegram đã nhận thông báo thử nghiệm');
+            } else if (result.telegramDelivery?.enabled && !result.telegramDelivery.linked) {
+                message.warning('Telegram chưa được kết nối với tài khoản này');
+            } else if (result.telegramDelivery?.enabled && result.telegramDelivery.linked) {
+                message.warning('Telegram đã kết nối nhưng gửi thử chưa thành công');
+            }
             await refresh();
         } catch {
             message.error('Không thể gửi thông báo thử nghiệm');
