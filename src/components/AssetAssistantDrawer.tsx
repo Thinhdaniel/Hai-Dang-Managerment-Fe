@@ -700,6 +700,34 @@ const AssetAssistantDrawer: React.FC<Props> = ({ open, onClose }) => {
     );
 };
 
+const REQUEST_STATUS_TONE: Record<string, string> = {
+    draft: 'bg-slate-100 text-slate-600 ring-slate-200',
+    pending: 'bg-amber-50 text-amber-700 ring-amber-100',
+    approved: 'bg-blue-50 text-blue-700 ring-blue-100',
+    ordered: 'bg-violet-50 text-violet-700 ring-violet-100',
+    received: 'bg-emerald-50 text-emerald-700 ring-emerald-100',
+    distributed: 'bg-emerald-50 text-emerald-700 ring-emerald-100',
+    partially_distributed: 'bg-cyan-50 text-cyan-700 ring-cyan-100',
+    rejected: 'bg-rose-50 text-rose-700 ring-rose-100',
+};
+
+const LIFECYCLE_TONE: Record<string, { dot: string; text: string; line: string }> = {
+    done: { dot: 'bg-emerald-500', text: 'text-emerald-700', line: 'bg-emerald-100' },
+    current: { dot: 'bg-blue-500', text: 'text-blue-700', line: 'bg-blue-100' },
+    pending: { dot: 'bg-slate-300', text: 'text-slate-500', line: 'bg-slate-100' },
+    warning: { dot: 'bg-amber-500', text: 'text-amber-700', line: 'bg-amber-100' },
+    blocked: { dot: 'bg-rose-500', text: 'text-rose-700', line: 'bg-rose-100' },
+};
+
+const fmtShortDate = (value?: string) => {
+    if (!value) return '';
+    try {
+        return new Date(value).toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit' });
+    } catch {
+        return '';
+    }
+};
+
 const AssistantResult: React.FC<{
     data: AssetAssistantResponse;
     onOpen: (id: string) => void;
@@ -716,6 +744,7 @@ const AssistantResult: React.FC<{
     const drivers = variance?.drivers ?? [];
     const fmtV = (v: number, isCost: boolean) => (isCost ? `${Math.round(v).toLocaleString('vi-VN')}đ` : `${v}`);
     const fmtD = (v: number) => `${Math.round(v).toLocaleString('vi-VN')}đ`;
+    const fmtN = (v?: number) => Math.round(Number(v || 0)).toLocaleString('vi-VN');
     const maxDelta = drivers.length ? Math.max(1, ...drivers.map((d) => Math.abs(d.delta))) : 1;
     const usageByPlant = aggregates.usageByPlant;
     const purchaseAnalysis = aggregates.purchaseAnalysis;
@@ -728,11 +757,20 @@ const AssistantResult: React.FC<{
     const transferOrders = aggregates.transferOrders;
     const costOverview = aggregates.costOverview;
     const compareCost = aggregates.compareCost;
+    const materialRequests = aggregates.materialRequests;
+    const requestAnalysis = aggregates.requestAnalysis;
+    const requestLifecycle = aggregates.requestLifecycle;
+    const requestBacklog = aggregates.requestBacklog;
+    const requestRiskAnalysis = aggregates.requestRiskAnalysis;
     const maxPurchase = purchaseAnalysis?.rows?.length
         ? Math.max(1, ...purchaseAnalysis.rows.map((x) => x.current))
         : 1;
     const maxPricePoint = priceHistory?.points?.length
         ? Math.max(1, ...priceHistory.points.map((p) => p.unitPrice))
+        : 1;
+    const requestTopMaterials = requestAnalysis?.topMaterials ?? materialRequests?.summary?.topMaterials ?? [];
+    const maxRequestTopQty = requestTopMaterials.length
+        ? Math.max(1, ...requestTopMaterials.map((m) => Number(m.quantityRequested || m.requestCount || 0)))
         : 1;
     const hasContent =
         hasStats ||
@@ -742,6 +780,11 @@ const AssistantResult: React.FC<{
         !!purchaseOrders?.orders?.length ||
         !!priceHistory?.count ||
         !!supplierComparison?.suppliers?.length ||
+        !!materialRequests?.rows?.length ||
+        !!requestAnalysis ||
+        !!requestLifecycle?.request ||
+        !!requestBacklog?.cards?.length ||
+        !!requestRiskAnalysis?.risks?.length ||
         !!distributionAnalysis ||
         !!costOverview ||
         !!compareCost ||
@@ -875,6 +918,286 @@ const AssistantResult: React.FC<{
                                     ))}
                                 </div>
                             ) : null}
+                        </div>
+                    ))}
+                </div>
+            ) : null}
+
+            {requestLifecycle?.request ? (
+                <div className='overflow-hidden rounded-2xl border border-slate-200/70 bg-white shadow-sm'>
+                    <div className='border-b border-slate-100 bg-slate-50/70 px-3 py-2'>
+                        <div className='flex items-center gap-2'>
+                            <span className='flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-indigo-50 text-indigo-600'>
+                                <FileTextOutlined />
+                            </span>
+                            <div className='min-w-0 flex-1'>
+                                <div className='truncate text-[13px] font-bold text-slate-800'>
+                                    {requestLifecycle.request.requestCode}
+                                </div>
+                                <div className='truncate text-[11.5px] text-slate-500'>
+                                    {requestLifecycle.request.requestTypeLabel || 'Phiếu đề xuất'} ·{' '}
+                                    {requestLifecycle.request.fromPlantName ||
+                                        requestLifecycle.request.toPlantName ||
+                                        requestLifecycle.request.plantName ||
+                                        'Chưa rõ cơ sở'}
+                                </div>
+                            </div>
+                            <span
+                                className={`rounded-full px-2 py-0.5 text-[10.5px] font-semibold ring-1 ${
+                                    REQUEST_STATUS_TONE[requestLifecycle.request.status] ||
+                                    'bg-slate-100 text-slate-600 ring-slate-200'
+                                }`}
+                            >
+                                {requestLifecycle.request.statusLabel}
+                            </span>
+                        </div>
+                    </div>
+                    <div className='px-3 py-2'>
+                        {(requestLifecycle.timeline ?? []).map((step, idx, arr) => {
+                            const tone = LIFECYCLE_TONE[step.status] || LIFECYCLE_TONE.pending;
+                            return (
+                                <div key={`${step.label}-${idx}`} className='flex gap-2 text-[12px]'>
+                                    <div className='flex w-4 shrink-0 flex-col items-center'>
+                                        <span className={`mt-1 h-2.5 w-2.5 rounded-full ${tone.dot}`} />
+                                        {idx < arr.length - 1 ? <span className={`mt-1 h-7 w-px ${tone.line}`} /> : null}
+                                    </div>
+                                    <div className='min-w-0 flex-1 pb-2'>
+                                        <div className={`font-semibold ${tone.text}`}>{step.label}</div>
+                                        <div className='truncate text-[11px] text-slate-400'>
+                                            {fmtShortDate(step.at) || 'chưa ghi nhận'}
+                                            {step.by ? ` · ${step.by}` : ''}
+                                        </div>
+                                    </div>
+                                </div>
+                            );
+                        })}
+                    </div>
+                </div>
+            ) : null}
+
+            {materialRequests?.rows?.length ? (
+                <div className='overflow-hidden rounded-2xl border border-slate-200/70 bg-white shadow-sm'>
+                    <div className='border-b border-slate-100 bg-slate-50/70 px-3 py-2'>
+                        <div className='flex items-center justify-between gap-2'>
+                            <div className='min-w-0'>
+                                <div className='flex items-center gap-1.5 text-[11px] font-semibold text-slate-500'>
+                                    <FileTextOutlined style={{ color: materialRequests.kind === 'supply' ? '#10b981' : '#f59e0b' }} />
+                                    <span className='truncate'>
+                                        {materialRequests.title} · {materialRequests.periodLabel}
+                                    </span>
+                                </div>
+                                <div className='mt-0.5 text-[12px] text-slate-400'>
+                                    {materialRequests.total} phiếu · {fmtD(materialRequests.summary?.totalValue || 0)}
+                                </div>
+                            </div>
+                            <span className='shrink-0 rounded-full bg-blue-50 px-2 py-0.5 text-[11px] font-bold text-blue-700'>
+                                {materialRequests.rows.length} đang xem
+                            </span>
+                        </div>
+                        {materialRequests.summary?.byStatus?.length ? (
+                            <div className='mt-2 flex flex-wrap gap-1'>
+                                {materialRequests.summary.byStatus.slice(0, 5).map((s) => (
+                                    <span
+                                        key={s.label}
+                                        className='rounded-full bg-white px-2 py-0.5 text-[10.5px] font-medium text-slate-600 ring-1 ring-slate-200'
+                                    >
+                                        {s.label} <b>{s.count}</b>
+                                    </span>
+                                ))}
+                            </div>
+                        ) : null}
+                    </div>
+                    {materialRequests.rows.slice(0, 8).map((r) => {
+                        const tone = REQUEST_STATUS_TONE[r.status] || 'bg-slate-100 text-slate-600 ring-slate-200';
+                        const plant =
+                            r.fromPlantName || r.toPlantName || r.plantName || (materialRequests.kind === 'supply' ? 'Chưa rõ nơi cấp' : 'Chưa rõ cơ sở');
+                        const linkCodes =
+                            materialRequests.kind === 'supply'
+                                ? r.distribution?.distributionCodes || []
+                                : r.orders?.orderCodes || [];
+                        const shortageQty =
+                            materialRequests.kind === 'supply'
+                                ? Number(r.distribution?.outstandingQty || 0)
+                                : Number(r.orders?.missingQty || 0);
+                        return (
+                            <div key={r.id || r.requestCode} className='border-b border-slate-100 px-3 py-2 last:border-0'>
+                                <div className='flex items-start gap-2'>
+                                    <div className='min-w-0 flex-1'>
+                                        <div className='flex flex-wrap items-center gap-1.5'>
+                                            <span className='font-mono text-[12.5px] font-bold text-slate-800'>
+                                                {r.requestCode}
+                                            </span>
+                                            <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ring-1 ${tone}`}>
+                                                {r.statusLabel}
+                                            </span>
+                                        </div>
+                                        <div className='mt-0.5 truncate text-[11px] text-slate-400'>
+                                            {plant}
+                                            {r.requestedBy ? ` · ${r.requestedBy}` : ''}
+                                            {r.createdAt ? ` · ${fmtShortDate(r.createdAt)}` : ''}
+                                        </div>
+                                    </div>
+                                    <div className='shrink-0 text-right'>
+                                        <div className='text-[12px] font-bold text-slate-800'>{fmtD(Number(r.totalWithVat || 0))}</div>
+                                        <div className='text-[10.5px] text-slate-400'>{r.itemCount || 0} dòng</div>
+                                    </div>
+                                </div>
+                                {r.items?.length ? (
+                                    <div className='mt-1.5 flex flex-wrap gap-1'>
+                                        {r.items.slice(0, 3).map((it, idx) => (
+                                            <span
+                                                key={`${r.requestCode}-${it.materialName}-${idx}`}
+                                                className='rounded-full bg-slate-50 px-2 py-0.5 text-[10.5px] text-slate-500 ring-1 ring-slate-100'
+                                            >
+                                                {it.materialName} · {fmtN(it.quantityRequested)} {it.unit}
+                                            </span>
+                                        ))}
+                                        {r.items.length > 3 ? (
+                                            <span className='rounded-full bg-slate-50 px-2 py-0.5 text-[10.5px] text-slate-400 ring-1 ring-slate-100'>
+                                                +{r.items.length - 3}
+                                            </span>
+                                        ) : null}
+                                    </div>
+                                ) : null}
+                                <div className='mt-1.5 flex flex-wrap gap-1'>
+                                    {linkCodes.length ? (
+                                        linkCodes.slice(0, 3).map((code) => (
+                                            <span
+                                                key={`${r.requestCode}-${code}`}
+                                                className='rounded-full bg-blue-50 px-2 py-0.5 text-[10.5px] font-medium text-blue-600'
+                                            >
+                                                {materialRequests.kind === 'supply' ? 'PX' : 'PO'} {code}
+                                            </span>
+                                        ))
+                                    ) : (
+                                        <span className='rounded-full bg-amber-50 px-2 py-0.5 text-[10.5px] font-medium text-amber-700'>
+                                            {materialRequests.kind === 'supply' ? 'chưa cấp phát' : 'chưa lên đơn'}
+                                        </span>
+                                    )}
+                                    {shortageQty > 0 ? (
+                                        <span className='rounded-full bg-rose-50 px-2 py-0.5 text-[10.5px] font-semibold text-rose-600'>
+                                            thiếu {fmtN(shortageQty)}
+                                        </span>
+                                    ) : null}
+                                </div>
+                            </div>
+                        );
+                    })}
+                </div>
+            ) : null}
+
+            {requestAnalysis ? (
+                <div className='rounded-2xl border border-slate-200/70 bg-white p-3 shadow-sm'>
+                    <div className='mb-2 flex items-center justify-between gap-2'>
+                        <div className='min-w-0'>
+                            <div className='flex items-center gap-1.5 text-[11px] font-semibold text-slate-500'>
+                                <DatabaseOutlined style={{ color: requestAnalysis.kind === 'supply' ? '#10b981' : '#f59e0b' }} />
+                                <span className='truncate'>
+                                    {requestAnalysis.title} · {requestAnalysis.periodLabel}
+                                </span>
+                            </div>
+                            <div className='mt-0.5 text-[12px] text-slate-400'>
+                                {requestAnalysis.total} phiếu · {fmtD(requestAnalysis.totalValue || 0)}
+                            </div>
+                        </div>
+                        {(requestAnalysis.staleApproved?.length || 0) > 0 ? (
+                            <span className='shrink-0 rounded-full bg-rose-50 px-2 py-0.5 text-[10.5px] font-bold text-rose-600'>
+                                {requestAnalysis.staleApproved.length} quá hạn
+                            </span>
+                        ) : null}
+                    </div>
+                    {requestAnalysis.byStatus?.length ? (
+                        <div className='grid grid-cols-2 gap-1.5'>
+                            {requestAnalysis.byStatus.slice(0, 6).map((s) => (
+                                <div key={s.label} className='rounded-xl bg-slate-50 px-2 py-1.5 ring-1 ring-slate-100'>
+                                    <div className='truncate text-[10.5px] text-slate-400'>{s.label}</div>
+                                    <div className='text-sm font-bold text-slate-800'>{s.count}</div>
+                                </div>
+                            ))}
+                        </div>
+                    ) : null}
+                    {requestTopMaterials.length ? (
+                        <div className='mt-2 space-y-1.5'>
+                            {requestTopMaterials.slice(0, 5).map((m, idx) => {
+                                const qty = Number(m.quantityRequested || m.requestCount || 0);
+                                return (
+                                    <div key={`${m.materialName}-${idx}`} className='text-[12px]'>
+                                        <div className='flex items-center gap-2'>
+                                            <span className='min-w-0 flex-1 truncate text-slate-600'>{m.materialName}</span>
+                                            <span className='shrink-0 text-[11px] font-semibold text-slate-700'>
+                                                {fmtN(qty)} {m.unit}
+                                            </span>
+                                        </div>
+                                        <div className='mt-0.5 h-1.5 rounded-full bg-slate-100'>
+                                            <div
+                                                className='h-1.5 rounded-full bg-cyan-400'
+                                                style={{ width: `${(qty / maxRequestTopQty) * 100}%` }}
+                                            />
+                                        </div>
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    ) : null}
+                    {(requestAnalysis.approvedWithoutNextStep?.length || 0) > 0 ? (
+                        <div className='mt-2 flex flex-wrap gap-1'>
+                            {requestAnalysis.approvedWithoutNextStep.slice(0, 5).map((r) => (
+                                <span
+                                    key={`next-${r.requestCode}`}
+                                    className='rounded-full bg-amber-50 px-2 py-0.5 text-[10.5px] font-medium text-amber-700'
+                                >
+                                    {r.requestCode} chưa {requestAnalysis.kind === 'supply' ? 'cấp' : 'lên PO'}
+                                </span>
+                            ))}
+                        </div>
+                    ) : null}
+                </div>
+            ) : null}
+
+            {requestBacklog?.cards?.length ? (
+                <div className='rounded-2xl border border-slate-200/70 bg-white p-3 shadow-sm'>
+                    <div className='mb-2 flex items-center gap-1.5 text-[11px] font-semibold text-slate-500'>
+                        <WarningOutlined style={{ color: '#f59e0b' }} />
+                        Backlog phiếu đề xuất · {requestBacklog.periodLabel}
+                    </div>
+                    <div className='grid grid-cols-2 gap-1.5'>
+                        {requestBacklog.cards.map((c) => (
+                            <div key={c.key} className='rounded-xl bg-slate-50 px-2 py-1.5 ring-1 ring-slate-100'>
+                                <div className='truncate text-[10.5px] text-slate-400'>{c.label}</div>
+                                <div className='flex items-baseline gap-1'>
+                                    <span className='text-base font-bold text-slate-800'>{fmtN(c.count)}</span>
+                                    {c.quantity ? <span className='text-[10px] text-rose-500'>thiếu {fmtN(c.quantity)}</span> : null}
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            ) : null}
+
+            {requestRiskAnalysis?.risks?.length ? (
+                <div className='overflow-hidden rounded-2xl border border-rose-100 bg-rose-50/30 shadow-sm'>
+                    <div className='flex items-center justify-between border-b border-rose-100 bg-rose-50 px-3 py-1.5 text-[11px] font-semibold text-rose-700'>
+                        <span className='flex items-center gap-1.5'>
+                            <WarningOutlined /> Rủi ro phiếu đề xuất
+                        </span>
+                        <span>{requestRiskAnalysis.riskCount}</span>
+                    </div>
+                    {requestRiskAnalysis.risks.slice(0, 8).map((risk, idx) => (
+                        <div key={`${risk.requestCode || risk.title}-${idx}`} className='border-b border-rose-100/70 px-3 py-2 text-[12px] last:border-0'>
+                            <div className='flex items-start gap-2'>
+                                <span
+                                    className={`mt-0.5 h-2 w-2 shrink-0 rounded-full ${
+                                        risk.severity === 'high' ? 'bg-rose-500' : 'bg-amber-500'
+                                    }`}
+                                />
+                                <div className='min-w-0 flex-1'>
+                                    <div className='font-semibold text-slate-800'>{risk.title}</div>
+                                    <div className='mt-0.5 text-[11px] text-slate-500'>
+                                        {risk.module || 'Phiếu'}{risk.plantName ? ` · ${risk.plantName}` : ''}
+                                    </div>
+                                    {risk.action ? <div className='mt-1 text-[11px] text-rose-700'>{risk.action}</div> : null}
+                                </div>
+                            </div>
                         </div>
                     ))}
                 </div>

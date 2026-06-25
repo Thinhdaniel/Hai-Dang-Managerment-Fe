@@ -78,6 +78,147 @@ export type AssistantItem = {
     mislocated?: boolean;
 };
 
+export type AssistantRequestBucket = { label: string; count: number; value?: number };
+
+export type AssistantMaterialRequestRow = {
+    id: string;
+    requestCode: string;
+    requestType?: string;
+    requestTypeLabel?: string;
+    status: string;
+    statusLabel: string;
+    plantName?: string;
+    fromPlantName?: string;
+    toPlantName?: string;
+    requestedBy?: string;
+    approvedBy?: string;
+    approvedAt?: string;
+    rejectedReason?: string;
+    note?: string;
+    createdAt?: string;
+    requestDate?: string;
+    ageDays?: number;
+    itemCount?: number;
+    totalRequested?: number;
+    totalApproved?: number;
+    totalOrdered?: number;
+    totalWithVat?: number;
+    items?: {
+        materialName: string;
+        unit?: string;
+        quantityRequested?: number;
+        quantityApproved?: number;
+        quantityOrdered?: number;
+        quantityReceived?: number;
+        unitPrice?: number;
+        totalWithVat?: number;
+        supplierName?: string;
+        proposedBy?: string;
+        purpose?: string;
+        catalogStatus?: string;
+        note?: string;
+    }[];
+    distribution?: {
+        distributionCount: number;
+        distributionCodes: string[];
+        distributedQty?: number;
+        shortageQty?: number;
+        outstandingQty?: number;
+        shortageLines?: number;
+        totalWithVat?: number;
+        distributedAt?: string;
+        shortages?: {
+            materialName: string;
+            unit?: string;
+            quantityShortage?: number;
+            quantityResolved?: number;
+            outstandingQty?: number;
+            statusLabel?: string;
+        }[];
+    };
+    orders?: {
+        orderCount: number;
+        orderCodes: string[];
+        statuses?: string[];
+        orderedQty?: number;
+        receivedQty?: number;
+        missingQty?: number;
+        totalWithVat?: number;
+        firstOrderedAt?: string;
+        lastReceivedAt?: string;
+    };
+};
+
+export type AssistantMaterialRequestTopMaterial = {
+    materialName: string;
+    unit?: string;
+    requestCount: number;
+    quantityRequested?: number;
+    quantityApproved?: number;
+    quantityOrdered?: number;
+    totalWithVat?: number;
+    requestCodes?: string[];
+};
+
+export type AssistantMaterialRequestsAggregate = {
+    kind: 'supply' | 'purchase';
+    title: string;
+    periodLabel: string;
+    total: number;
+    rows: AssistantMaterialRequestRow[];
+    summary?: {
+        totalValue?: number;
+        byStatus?: AssistantRequestBucket[];
+        byPlant?: AssistantRequestBucket[];
+        topMaterials?: AssistantMaterialRequestTopMaterial[];
+    };
+};
+
+export type AssistantRequestAnalysisAggregate = {
+    kind: 'supply' | 'purchase';
+    title: string;
+    periodLabel: string;
+    total: number;
+    totalValue?: number;
+    byStatus: AssistantRequestBucket[];
+    byPlant: AssistantRequestBucket[];
+    byRequester: AssistantRequestBucket[];
+    topMaterials: AssistantMaterialRequestTopMaterial[];
+    oldestPending: AssistantMaterialRequestRow[];
+    largest: AssistantMaterialRequestRow[];
+    approvedWithoutNextStep: AssistantMaterialRequestRow[];
+    staleApproved: AssistantMaterialRequestRow[];
+    shortages: AssistantMaterialRequestRow[];
+};
+
+export type AssistantRequestLifecycleAggregate = {
+    found: number;
+    message?: string;
+    request: AssistantMaterialRequestRow | null;
+    timeline?: { label: string; at?: string; by?: string; status: 'done' | 'current' | 'pending' | 'warning' | 'blocked' | string }[];
+};
+
+export type AssistantRequestBacklogAggregate = {
+    periodLabel: string;
+    cards: { key: string; label: string; count: number; quantity?: number }[];
+    supply?: AssistantRequestAnalysisAggregate;
+    purchase?: AssistantRequestAnalysisAggregate;
+};
+
+export type AssistantRequestRiskAggregate = {
+    periodLabel: string;
+    riskCount: number;
+    risks: {
+        severity: 'high' | 'medium' | 'low' | string;
+        title: string;
+        module?: string;
+        requestCode?: string;
+        plantName?: string;
+        action?: string;
+    }[];
+    backlogCards?: { key: string; label: string; count: number; quantity?: number }[];
+};
+
 export type AssistantAggregates = {
     totalValue?: number;
     breakdown?: { key: string; label: string; count: number }[];
@@ -229,6 +370,12 @@ export type AssistantAggregates = {
             }[];
         }[];
     };
+    // Phiếu đề xuất cấp/mua: danh sách, phân tích, vòng đời, backlog và rủi ro.
+    materialRequests?: AssistantMaterialRequestsAggregate;
+    requestAnalysis?: AssistantRequestAnalysisAggregate;
+    requestLifecycle?: AssistantRequestLifecycleAggregate;
+    requestBacklog?: AssistantRequestBacklogAggregate;
+    requestRiskAnalysis?: AssistantRequestRiskAggregate;
     // Tra cứu vị trí + lệnh điều chuyển của 1 máy cụ thể.
     locate?: {
         found: number;
