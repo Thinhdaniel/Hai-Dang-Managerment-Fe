@@ -21,6 +21,24 @@ type PushTestResponse = {
     delivery: PushSendSummary;
 };
 
+export type TelegramNotificationStatus = {
+    enabled: boolean;
+    linked: boolean;
+    botUsername?: string;
+    telegramUsername?: string;
+    telegramFirstName?: string;
+    linkedAt?: string;
+    disabledAt?: string | null;
+};
+
+export type TelegramLinkResponse = {
+    enabled: boolean;
+    linked: boolean;
+    botUsername?: string;
+    deepLink?: string;
+    expiresAt?: string;
+};
+
 export type PushNotificationState = {
     supported: boolean;
     enabled: boolean;
@@ -58,6 +76,7 @@ type SerializedPushSubscription = {
 };
 
 const SERVICE_WORKER_PATH = '/sw.js';
+const PUSH_EVER_ENABLED_KEY = 'hd-web-push-ever-enabled';
 
 const urlBase64ToUint8Array = (base64String: string) => {
     const padding = '='.repeat((4 - (base64String.length % 4)) % 4);
@@ -101,6 +120,26 @@ const getPublicKey = () => api.get<PushPublicKeyResponse>('/notifications/push/p
 
 const getBackendStatus = () => api.get<PushStatusResponse>('/notifications/push/status');
 
+const getDeviceName = () =>
+    [navigator.platform, navigator.userAgent.includes('Mobile') ? 'Mobile' : 'Desktop'].filter(Boolean).join(' · ');
+
+const markPushEverEnabled = (enabled: boolean) => {
+    try {
+        if (enabled) localStorage.setItem(PUSH_EVER_ENABLED_KEY, '1');
+        else localStorage.removeItem(PUSH_EVER_ENABLED_KEY);
+    } catch {
+        /* noop */
+    }
+};
+
+const wasPushEverEnabled = () => {
+    try {
+        return localStorage.getItem(PUSH_EVER_ENABLED_KEY) === '1';
+    } catch {
+        return false;
+    }
+};
+
 export const pushNotificationService = {
     isSupported,
 
@@ -116,6 +155,7 @@ export const pushNotificationService = {
         }
 
         const [backendStatus, subscription] = await Promise.all([getBackendStatus(), getSubscription()]);
+        if (subscription) markPushEverEnabled(true);
 
         return {
             supported: true,
@@ -155,15 +195,12 @@ export const pushNotificationService = {
             endpoint: serialized.endpoint,
             expirationTime: serialized.expirationTime ?? null,
             keys: serialized.keys,
-            deviceName:
-                deviceName ||
-                [navigator.platform, navigator.userAgent.includes('Mobile') ? 'Mobile' : 'Desktop']
-                    .filter(Boolean)
-                    .join(' · '),
+            deviceName: deviceName || getDeviceName(),
             platform: navigator.platform,
             trusted: true,
         });
 
+        markPushEverEnabled(true);
         return subscription;
     },
 
@@ -172,16 +209,32 @@ export const pushNotificationService = {
 
         const serialized = await getSerializedSubscription();
         if (!serialized?.endpoint || !serialized.keys) return null;
+        markPushEverEnabled(true);
 
         return api.post('/notifications/push/sync', {
             endpoint: serialized.endpoint,
             expirationTime: serialized.expirationTime ?? null,
             keys: serialized.keys,
-            deviceName: [navigator.platform, navigator.userAgent.includes('Mobile') ? 'Mobile' : 'Desktop']
-                .filter(Boolean)
-                .join(' · '),
+            deviceName: getDeviceName(),
             platform: navigator.platform,
         });
+    },
+
+    ensureCurrentDevice: async () => {
+        if (!isSupported()) return null;
+
+        const subscription = await getSubscription();
+        if (subscription) {
+            return pushNotificationService.syncCurrentDevice();
+        }
+
+        if (!wasPushEverEnabled()) return null;
+        if (window.Notification.permission !== 'granted') return null;
+
+        const backendStatus = await getBackendStatus().catch(() => null);
+        if (!backendStatus?.enabled) return null;
+
+        return pushNotificationService.subscribeCurrentDevice(getDeviceName());
     },
 
     unsubscribeCurrentDevice: async () => {
@@ -197,6 +250,7 @@ export const pushNotificationService = {
         }
 
         await api.post('/notifications/push/unsubscribe', { endpoint });
+        markPushEverEnabled(false);
     },
 
     getDevices: () => api.get<PushDevice[]>('/notifications/push/devices'),
@@ -207,4 +261,10 @@ export const pushNotificationService = {
     deactivateDevice: (deviceId: string) => api.delete(`/notifications/push/devices/${deviceId}`),
 
     sendTest: () => api.post<PushTestResponse>('/notifications/push/test'),
+
+    getTelegramStatus: () => api.get<TelegramNotificationStatus>('/telegram/status'),
+
+    createTelegramLink: () => api.post<TelegramLinkResponse>('/telegram/link'),
+
+    unlinkTelegram: () => api.delete('/telegram/link'),
 };

@@ -4,6 +4,8 @@ import {
     BellOutlined,
     CheckCircleOutlined,
     CloseCircleOutlined,
+    DisconnectOutlined,
+    LinkOutlined,
     SafetyCertificateOutlined,
     SendOutlined,
 } from '@ant-design/icons';
@@ -11,6 +13,7 @@ import {
     pushNotificationService,
     type PushDevice,
     type PushNotificationState,
+    type TelegramNotificationStatus,
 } from '../../core/services/push-notification.service';
 
 const { Text } = Typography;
@@ -24,6 +27,11 @@ const DEFAULT_STATE: PushNotificationState = {
 };
 
 const getStateCopy = (state: PushNotificationState) => ({ ...state });
+
+const DEFAULT_TELEGRAM_STATUS: TelegramNotificationStatus = {
+    enabled: false,
+    linked: false,
+};
 
 const formatDateTime = (value?: string) => {
     if (!value) return 'Chưa có dữ liệu';
@@ -96,16 +104,22 @@ const getStatus = (state: PushNotificationState) => {
 const PushNotificationToggle = () => {
     const { message } = App.useApp();
     const [state, setState] = useState<PushNotificationState>(DEFAULT_STATE);
+    const [telegramStatus, setTelegramStatus] = useState<TelegramNotificationStatus>(DEFAULT_TELEGRAM_STATUS);
     const [devices, setDevices] = useState<PushDevice[]>([]);
     const [loading, setLoading] = useState(true);
     const [actionLoading, setActionLoading] = useState<'enable' | 'disable' | 'test' | null>(null);
+    const [telegramLoading, setTelegramLoading] = useState<'link' | 'unlink' | null>(null);
     const [deviceActionId, setDeviceActionId] = useState<string | null>(null);
 
     const refresh = useCallback(async () => {
         try {
             setLoading(true);
-            const nextState = await pushNotificationService.getState();
+            const [nextState, nextTelegram] = await Promise.all([
+                pushNotificationService.getState(),
+                pushNotificationService.getTelegramStatus().catch(() => DEFAULT_TELEGRAM_STATUS),
+            ]);
             setState(getStateCopy(nextState));
+            setTelegramStatus(nextTelegram);
             if (nextState.supported && nextState.enabled) {
                 const nextDevices = await pushNotificationService.getDevices();
                 setDevices(nextDevices);
@@ -128,6 +142,7 @@ const PushNotificationToggle = () => {
     const canEnable = state.supported && state.enabled && state.permission !== 'denied';
     const canTest = state.supported && state.enabled && (state.subscribed || state.activeDevices > 0);
     const activeDevices = devices.filter((device) => device.isActive);
+    const shouldShowIosGuide = isAppleMobile() && !isStandalonePwa();
 
     const handleEnable = async () => {
         try {
@@ -211,6 +226,38 @@ const PushNotificationToggle = () => {
         }
     };
 
+    const handleConnectTelegram = async () => {
+        try {
+            setTelegramLoading('link');
+            const result = await pushNotificationService.createTelegramLink();
+
+            if (!result.enabled || !result.deepLink) {
+                message.warning('Server chưa cấu hình Telegram Bot');
+                return;
+            }
+
+            window.open(result.deepLink, '_blank', 'noopener,noreferrer');
+            message.info('Telegram đã mở. Bấm Start trong bot rồi quay lại app kiểm tra trạng thái.');
+        } catch {
+            message.error('Không thể tạo liên kết Telegram');
+        } finally {
+            setTelegramLoading(null);
+        }
+    };
+
+    const handleUnlinkTelegram = async () => {
+        try {
+            setTelegramLoading('unlink');
+            await pushNotificationService.unlinkTelegram();
+            message.success('Đã ngắt Telegram khỏi tài khoản');
+            await refresh();
+        } catch {
+            message.error('Không thể ngắt Telegram');
+        } finally {
+            setTelegramLoading(null);
+        }
+    };
+
     return (
         <div className='border-b border-slate-100 bg-slate-50/80 px-4 py-3'>
             <div className='flex items-start justify-between gap-3'>
@@ -227,6 +274,12 @@ const PushNotificationToggle = () => {
                         <Text className='mt-1 block text-[11px] text-slate-400'>
                             {state.activeDevices} thiết bị đang bật thông báo.
                         </Text>
+                    ) : null}
+                    {shouldShowIosGuide ? (
+                        <div className='mt-2 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-[11px] leading-5 text-amber-800'>
+                            iPhone Safari chỉ nhận Web Push khi cài PWA: bấm <b>Chia sẻ</b> →{' '}
+                            <b>Thêm vào Màn hình chính</b> → mở lại từ icon Hải Đăng.
+                        </div>
                     ) : null}
                 </div>
             </div>
@@ -263,6 +316,64 @@ const PushNotificationToggle = () => {
                     Gửi thử
                 </Button>
             </Space>
+
+            <div className='mt-4 rounded-xl border border-slate-200 bg-white p-3'>
+                <div className='flex items-start justify-between gap-3'>
+                    <div className='min-w-0'>
+                        <div className='flex flex-wrap items-center gap-2'>
+                            <SendOutlined className='text-sky-600' />
+                            <Text className='text-[12px] font-semibold text-slate-900'>Telegram dự phòng</Text>
+                            <Tag
+                                color={
+                                    !telegramStatus.enabled
+                                        ? 'default'
+                                        : telegramStatus.linked && !telegramStatus.disabledAt
+                                          ? 'green'
+                                          : 'orange'
+                                }
+                                className='m-0 rounded-full text-[10px]'
+                            >
+                                {!telegramStatus.enabled
+                                    ? 'Chưa cấu hình'
+                                    : telegramStatus.linked && !telegramStatus.disabledAt
+                                      ? 'Đã kết nối'
+                                      : 'Chưa kết nối'}
+                            </Tag>
+                        </div>
+                        <p className='mt-1 mb-0 text-[11px] leading-5 text-slate-500'>
+                            Kênh miễn phí để nhận thông báo khi trình duyệt/PWA không còn hoạt động.
+                        </p>
+                        {telegramStatus.linked ? (
+                            <Text className='mt-1 block text-[11px] text-slate-400'>
+                                Đã nối {telegramStatus.telegramUsername ? `@${telegramStatus.telegramUsername}` : 'Telegram'}
+                                {telegramStatus.linkedAt ? ` · ${formatDateTime(telegramStatus.linkedAt)}` : ''}
+                            </Text>
+                        ) : null}
+                    </div>
+                    {telegramStatus.linked ? (
+                        <Button
+                            size='small'
+                            icon={<DisconnectOutlined />}
+                            loading={telegramLoading === 'unlink'}
+                            disabled={Boolean(telegramLoading)}
+                            onClick={handleUnlinkTelegram}
+                        >
+                            Ngắt
+                        </Button>
+                    ) : (
+                        <Button
+                            size='small'
+                            type='primary'
+                            icon={<LinkOutlined />}
+                            loading={telegramLoading === 'link'}
+                            disabled={!telegramStatus.enabled || Boolean(telegramLoading)}
+                            onClick={handleConnectTelegram}
+                        >
+                            Kết nối
+                        </Button>
+                    )}
+                </div>
+            </div>
 
             {devices.length > 0 ? (
                 <div className='mt-4 border-t border-slate-200 pt-3'>

@@ -52,7 +52,7 @@ export const AuthProvider = ({ children }: PropsWithChildren) => {
         try {
             const currentUser = await userService.getMe();
             setUserState(currentUser);
-            void pushNotificationService.syncCurrentDevice().catch(() => {});
+            void pushNotificationService.ensureCurrentDevice().catch(() => {});
         } catch {
             clearLocalSession();
         }
@@ -71,7 +71,7 @@ export const AuthProvider = ({ children }: PropsWithChildren) => {
                 const currentUser = await userService.getMe();
                 if (!ignore) {
                     setUserState(currentUser);
-                    void pushNotificationService.syncCurrentDevice().catch(() => {});
+                    void pushNotificationService.ensureCurrentDevice().catch(() => {});
                 }
             } catch {
                 if (!ignore) {
@@ -165,7 +165,7 @@ export const AuthProvider = ({ children }: PropsWithChildren) => {
         setStoredAccessToken(result.access_token);
         setAccessToken(result.access_token);
         setUserState(result.user);
-        void pushNotificationService.syncCurrentDevice().catch(() => {});
+        void pushNotificationService.ensureCurrentDevice().catch(() => {});
 
         return result;
     };
