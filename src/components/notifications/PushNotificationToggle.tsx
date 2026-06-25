@@ -1,17 +1,20 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { App, Button, Space, Tag, Typography } from 'antd';
 import {
     BellOutlined,
     CheckCircleOutlined,
     CloseCircleOutlined,
+    CopyOutlined,
     DisconnectOutlined,
     LinkOutlined,
+    ReloadOutlined,
     SafetyCertificateOutlined,
     SendOutlined,
 } from '@ant-design/icons';
 import {
     pushNotificationService,
     type PushDevice,
+    type TelegramLinkResponse,
     type PushNotificationState,
     type TelegramNotificationStatus,
 } from '../../core/services/push-notification.service';
@@ -33,6 +36,9 @@ const DEFAULT_TELEGRAM_STATUS: TelegramNotificationStatus = {
     linked: false,
 };
 
+const TELEGRAM_POLL_INTERVAL_MS = 2500;
+const TELEGRAM_POLL_TIMEOUT_MS = 90 * 1000;
+
 const formatDateTime = (value?: string) => {
     if (!value) return 'Chưa có dữ liệu';
     return new Date(value).toLocaleString('vi-VN', {
@@ -52,6 +58,43 @@ const isStandalonePwa = () =>
     typeof window !== 'undefined' &&
     (window.matchMedia('(display-mode: standalone)').matches ||
         (navigator as Navigator & { standalone?: boolean }).standalone === true);
+
+const isMobileDevice = () =>
+    typeof navigator !== 'undefined' && /Android|iPad|iPhone|iPod/i.test(navigator.userAgent);
+
+const buildTelegramAppDeepLink = (deepLink?: string) => {
+    if (!deepLink) return undefined;
+
+    try {
+        const url = new URL(deepLink);
+        const botUsername = url.pathname.replace(/^\/+/, '');
+        const startToken = url.searchParams.get('start');
+
+        if (!botUsername || !startToken) return undefined;
+        return `tg://resolve?domain=${encodeURIComponent(botUsername)}&start=${encodeURIComponent(startToken)}`;
+    } catch {
+        return undefined;
+    }
+};
+
+const openTelegramLink = (deepLink: string, preparedWindow?: Window | null) => {
+    if (preparedWindow && !preparedWindow.closed) {
+        try {
+            preparedWindow.opener = null;
+            preparedWindow.location.href = deepLink;
+            return;
+        } catch {
+            /* fall back below */
+        }
+    }
+
+    if (isMobileDevice()) {
+        window.location.href = deepLink;
+        return;
+    }
+
+    window.open(deepLink, '_blank', 'noopener,noreferrer');
+};
 
 const getStatus = (state: PushNotificationState) => {
     if (!state.supported) {
@@ -103,23 +146,87 @@ const getStatus = (state: PushNotificationState) => {
 
 const PushNotificationToggle = () => {
     const { message } = App.useApp();
+    const telegramPollTimerRef = useRef<number | null>(null);
     const [state, setState] = useState<PushNotificationState>(DEFAULT_STATE);
     const [telegramStatus, setTelegramStatus] = useState<TelegramNotificationStatus>(DEFAULT_TELEGRAM_STATUS);
+    const [telegramLink, setTelegramLink] = useState<TelegramLinkResponse | null>(null);
+    const [telegramPolling, setTelegramPolling] = useState(false);
     const [devices, setDevices] = useState<PushDevice[]>([]);
     const [loading, setLoading] = useState(true);
     const [actionLoading, setActionLoading] = useState<'enable' | 'disable' | 'test' | null>(null);
     const [telegramLoading, setTelegramLoading] = useState<'link' | 'unlink' | null>(null);
     const [deviceActionId, setDeviceActionId] = useState<string | null>(null);
 
-    const refresh = useCallback(async () => {
+    const clearTelegramPollTimer = useCallback(() => {
+        if (telegramPollTimerRef.current !== null) {
+            window.clearTimeout(telegramPollTimerRef.current);
+            telegramPollTimerRef.current = null;
+        }
+    }, []);
+
+    const refreshTelegramStatus = useCallback(async () => {
+        const nextTelegram = await pushNotificationService.getTelegramStatus();
+        setTelegramStatus(nextTelegram);
+
+        if (nextTelegram.linked && !nextTelegram.disabledAt) {
+            setTelegramLink(null);
+        }
+
+        return nextTelegram;
+    }, []);
+
+    const startTelegramStatusPolling = useCallback(
+        (expiresAt?: string) => {
+            clearTelegramPollTimer();
+            setTelegramPolling(true);
+
+            const startedAt = Date.now();
+            const expiresAtMs = expiresAt ? new Date(expiresAt).getTime() : Number.NaN;
+            const timeoutAt = Number.isFinite(expiresAtMs)
+                ? Math.min(expiresAtMs, startedAt + TELEGRAM_POLL_TIMEOUT_MS)
+                : startedAt + TELEGRAM_POLL_TIMEOUT_MS;
+
+            const check = async () => {
+                try {
+                    const nextTelegram = await refreshTelegramStatus();
+
+                    if (nextTelegram.linked && !nextTelegram.disabledAt) {
+                        clearTelegramPollTimer();
+                        setTelegramPolling(false);
+                        message.success('Đã kết nối Telegram với tài khoản này');
+                        return;
+                    }
+                } catch {
+                    /* keep polling while the user is switching apps */
+                }
+
+                if (Date.now() >= timeoutAt) {
+                    clearTelegramPollTimer();
+                    setTelegramPolling(false);
+                    message.warning('Chưa xác nhận được Telegram. Nếu Telegram chỉ hiện /start, hãy bấm Gửi rồi quay lại app.');
+                    return;
+                }
+
+                telegramPollTimerRef.current = window.setTimeout(check, TELEGRAM_POLL_INTERVAL_MS);
+            };
+
+            telegramPollTimerRef.current = window.setTimeout(check, 1200);
+        },
+        [clearTelegramPollTimer, message, refreshTelegramStatus]
+    );
+
+    const refresh = useCallback(async (showLoading = true) => {
         try {
-            setLoading(true);
+            if (showLoading) setLoading(true);
             const [nextState, nextTelegram] = await Promise.all([
                 pushNotificationService.getState(),
                 pushNotificationService.getTelegramStatus().catch(() => DEFAULT_TELEGRAM_STATUS),
             ]);
             setState(getStateCopy(nextState));
             setTelegramStatus(nextTelegram);
+            if (nextTelegram.linked && !nextTelegram.disabledAt) {
+                setTelegramLink(null);
+            }
             if (nextState.supported && nextState.enabled) {
                 const nextDevices = await pushNotificationService.getDevices();
                 setDevices(nextDevices);
@@ -130,7 +237,7 @@ const PushNotificationToggle = () => {
             setState(DEFAULT_STATE);
             setDevices([]);
         } finally {
-            setLoading(false);
+            if (showLoading) setLoading(false);
         }
     }, []);
 
@@ -138,11 +245,28 @@ const PushNotificationToggle = () => {
         void refresh();
     }, [refresh]);
 
+    useEffect(() => {
+        const handleResume = () => {
+            if (document.visibilityState === 'hidden') return;
+            void refreshTelegramStatus().catch(() => undefined);
+        };
+
+        document.addEventListener('visibilitychange', handleResume);
+        window.addEventListener('focus', handleResume);
+
+        return () => {
+            document.removeEventListener('visibilitychange', handleResume);
+            window.removeEventListener('focus', handleResume);
+            clearTelegramPollTimer();
+        };
+    }, [clearTelegramPollTimer, refreshTelegramStatus]);
+
     const status = getStatus(state);
     const canEnable = state.supported && state.enabled && state.permission !== 'denied';
     const canTest = state.supported && state.enabled && (state.subscribed || state.activeDevices > 0);
     const activeDevices = devices.filter((device) => device.isActive);
     const shouldShowIosGuide = isAppleMobile() && !isStandalonePwa();
+    const telegramAppDeepLink = useMemo(() => buildTelegramAppDeepLink(telegramLink?.deepLink), [telegramLink?.deepLink]);
 
     const handleEnable = async () => {
         try {
@@ -227,18 +351,29 @@ const PushNotificationToggle = () => {
     };
 
     const handleConnectTelegram = async () => {
+        const preparedWindow = window.open('', '_blank');
+
         try {
+            if (preparedWindow) {
+                preparedWindow.document.title = 'Đang mở Telegram';
+                preparedWindow.document.body.innerHTML =
+                    '<div style="font-family:system-ui;padding:24px;color:#0f172a">Đang mở Telegram...</div>';
+            }
             setTelegramLoading('link');
             const result = await pushNotificationService.createTelegramLink();
 
             if (!result.enabled || !result.deepLink) {
+                preparedWindow?.close();
                 message.warning('Server chưa cấu hình Telegram Bot');
                 return;
             }
 
-            window.open(result.deepLink, '_blank', 'noopener,noreferrer');
-            message.info('Telegram đã mở. Bấm Start trong bot rồi quay lại app kiểm tra trạng thái.');
+            setTelegramLink(result);
+            openTelegramLink(result.deepLink, preparedWindow);
+            startTelegramStatusPolling(result.expiresAt);
+            message.info('Telegram đã mở. Bấm Start/Gửi trong bot, app sẽ tự cập nhật khi kết nối xong.');
         } catch {
+            preparedWindow?.close();
             message.error('Không thể tạo liên kết Telegram');
         } finally {
             setTelegramLoading(null);
@@ -249,6 +384,9 @@ const PushNotificationToggle = () => {
         try {
             setTelegramLoading('unlink');
             await pushNotificationService.unlinkTelegram();
+            clearTelegramPollTimer();
+            setTelegramPolling(false);
+            setTelegramLink(null);
             message.success('Đã ngắt Telegram khỏi tài khoản');
             await refresh();
         } catch {
@@ -373,6 +511,66 @@ const PushNotificationToggle = () => {
                         </Button>
                     )}
                 </div>
+                {telegramLink?.deepLink && !telegramStatus.linked ? (
+                    <div className='mt-3 rounded-xl border border-sky-200 bg-sky-50/80 p-3'>
+                        <div className='flex flex-wrap items-center justify-between gap-2'>
+                            <Text className='text-[12px] font-semibold text-sky-900'>
+                                {telegramPolling ? 'Đang chờ Telegram xác nhận...' : 'Chưa thấy Telegram xác nhận'}
+                            </Text>
+                            <Tag color='blue' className='m-0 rounded-full text-[10px]'>
+                                Link hết hạn {formatDateTime(telegramLink.expiresAt)}
+                            </Tag>
+                        </div>
+                        <p className='mt-1 mb-2 text-[11px] leading-5 text-sky-700'>
+                            Nếu iPhone không tự mở app, bấm <b>Mở Telegram</b>, sau đó bấm <b>Start</b> hoặc{' '}
+                            <b>Gửi</b> lệnh /start trong bot rồi quay lại Hải Đăng MS.
+                        </p>
+                        <Space wrap size={8}>
+                            <Button
+                                size='small'
+                                type='primary'
+                                icon={<SendOutlined />}
+                                href={telegramLink.deepLink}
+                                target='_blank'
+                                rel='noopener noreferrer'
+                                onClick={() => startTelegramStatusPolling(telegramLink.expiresAt)}
+                            >
+                                Mở Telegram
+                            </Button>
+                            {telegramAppDeepLink ? (
+                                <Button
+                                    size='small'
+                                    href={telegramAppDeepLink}
+                                    onClick={() => startTelegramStatusPolling(telegramLink.expiresAt)}
+                                >
+                                    Mở app
+                                </Button>
+                            ) : null}
+                            <Button
+                                size='small'
+                                icon={<ReloadOutlined />}
+                                loading={telegramPolling}
+                                onClick={() => startTelegramStatusPolling(telegramLink.expiresAt)}
+                            >
+                                Kiểm tra
+                            </Button>
+                            <Button
+                                size='small'
+                                icon={<CopyOutlined />}
+                                onClick={async () => {
+                                    try {
+                                        await navigator.clipboard.writeText(telegramLink.deepLink || '');
+                                        message.success('Đã copy link Telegram');
+                                    } catch {
+                                        message.warning('Không copy được, hãy bấm Mở Telegram');
+                                    }
+                                }}
+                            >
+                                Copy link
+                            </Button>
+                        </Space>
+                    </div>
+                ) : null}
             </div>
 
             {devices.length > 0 ? (
