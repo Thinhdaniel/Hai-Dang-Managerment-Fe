@@ -1,10 +1,10 @@
 import React, { lazy, Suspense, useEffect, useState } from 'react';
-import { FloatButton, Grid, Layout } from 'antd';
-import { RobotOutlined } from '@ant-design/icons';
+import { Grid, Layout } from 'antd';
 import { Outlet } from 'react-router-dom';
 import AppHeader from './AppHeader';
 import AppSidebar from './AppSidebar';
 import MobileBottomNav from '../pwa/MobileBottomNav';
+import AssistantLauncher from '../AssistantLauncher';
 
 const AssetAssistantDrawer = lazy(() => import('../AssetAssistantDrawer'));
 
@@ -87,17 +87,10 @@ const AppLayout: React.FC = () => {
 
             {!isDesktop ? <MobileBottomNav onOpenMenu={() => setMobileSidebarOpen(true)} /> : null}
 
-            {/* Trợ lý vận hành toàn cục — truy cập ở mọi trang */}
-            <FloatButton
-                icon={<RobotOutlined />}
-                type='primary'
-                tooltip='Trợ lý vận hành'
-                onClick={() => setAssistantOpen(true)}
-                style={{
-                    right: isDesktop ? 28 : 16,
-                    bottom: isDesktop ? 28 : 'calc(96px + env(safe-area-inset-bottom))',
-                }}
-            />
+            {/* Trợ lý vận hành toàn cục — truy cập ở mọi trang; ẩn nút khi cửa sổ đang mở */}
+            {!assistantOpen ? (
+                <AssistantLauncher isDesktop={isDesktop} onClick={() => setAssistantOpen(true)} />
+            ) : null}
             {assistantOpen ? (
                 <Suspense fallback={null}>
                     <AssetAssistantDrawer open={assistantOpen} onClose={() => setAssistantOpen(false)} />
