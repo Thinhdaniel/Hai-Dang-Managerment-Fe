@@ -304,6 +304,13 @@ const QrActivateMachinePage: React.FC = () => {
                                             <Input allowClear placeholder='Ví dụ: Xưởng May 1 - Chuyền 02' />
                                         </Form.Item>
                                         <Form.Item
+                                            name='serial'
+                                            label='Serial (số máy hãng dập)'
+                                            extra='Quan trọng: là cách tìm lại máy để in QR mới khi mất tem. Đọc được thì nên nhập.'
+                                        >
+                                            <Input allowClear placeholder='Số serial in/dập trên thân máy' />
+                                        </Form.Item>
+                                        <Form.Item
                                             name='machineCode'
                                             label='Mã máy'
                                             extra='Để trống sẽ tự sinh mã thông minh theo loại/nhãn hiệu.'
@@ -322,9 +329,6 @@ const QrActivateMachinePage: React.FC = () => {
                                                 label: 'Thông tin thêm (tùy chọn)',
                                                 children: (
                                                     <div className='grid grid-cols-1 gap-4 lg:grid-cols-2'>
-                                                        <Form.Item name='serial' label='Serial'>
-                                                            <Input allowClear placeholder='Nhập serial nếu có' />
-                                                        </Form.Item>
                                                         <Form.Item name='status' label='Trạng thái'>
                                                             <Select options={statusOptions} />
                                                         </Form.Item>
