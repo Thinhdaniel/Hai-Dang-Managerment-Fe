@@ -4,6 +4,7 @@ import {
     Button,
     Card,
     Checkbox,
+    Collapse,
     DatePicker,
     Form,
     Input,
@@ -24,13 +25,13 @@ import { assetService } from '../core/services/asset.service';
 import { brandService, plantService } from '../core/services';
 import { qrLabelService } from '../core/services/qr-label.service';
 import { useAuth } from '../core/contexts/AuthContext';
-import { AssetOwnershipType, AssetStatus, QrLabelStatus, type Asset } from '../core/types';
+import { AssetOwnershipType, AssetStatus, QrLabelStatus, type ActivateMachineQrPayload } from '../core/types';
 
 const { Text } = Typography;
 
 type AssetFormValues = {
     name: string;
-    machineCode: string;
+    machineCode?: string;
     serial?: string;
     type: string;
     model: string;
@@ -125,9 +126,7 @@ const QrActivateMachinePage: React.FC = () => {
     );
 
     const activateMutation = useMutation({
-        mutationFn: (payload: {
-            asset: Omit<Asset, 'id' | 'createdAt' | 'updatedAt' | 'brand' | 'plant' | 'hasOpenTransfer'>;
-        }) => qrLabelService.activateMachine(publicId, payload),
+        mutationFn: (payload: ActivateMachineQrPayload) => qrLabelService.activateMachine(publicId, payload),
         onSuccess: ({ asset }) => {
             message.success('Đã kích hoạt tem và tạo hồ sơ máy');
             navigate(`/assets/${asset.id}`);
@@ -163,7 +162,7 @@ const QrActivateMachinePage: React.FC = () => {
         activateMutation.mutate({
             asset: {
                 name: values.name.trim(),
-                machineCode: values.machineCode.trim(),
+                machineCode: values.machineCode?.trim() || undefined,
                 serial: values.serial?.trim() || '',
                 type: values.type.trim(),
                 model: values.model.trim(),
@@ -254,6 +253,7 @@ const QrActivateMachinePage: React.FC = () => {
                                         area: qrData.label?.plannedArea,
                                     }}
                                 >
+                                    {/* Trường lõi — đủ để gán nhanh tại hiện trường */}
                                     <div className='grid grid-cols-1 gap-4 lg:grid-cols-2'>
                                         <Form.Item
                                             name='name'
@@ -263,14 +263,11 @@ const QrActivateMachinePage: React.FC = () => {
                                             <Input allowClear placeholder='Ví dụ: Máy may 1 kim điện tử Juki' />
                                         </Form.Item>
                                         <Form.Item
-                                            name='machineCode'
-                                            label='Mã máy'
-                                            rules={[{ required: true, whitespace: true, message: 'Nhập mã máy' }]}
+                                            name='type'
+                                            label='Loại máy'
+                                            rules={[{ required: true, whitespace: true, message: 'Nhập loại máy' }]}
                                         >
-                                            <Input allowClear placeholder='Ví dụ: MM-001' />
-                                        </Form.Item>
-                                        <Form.Item name='serial' label='Serial'>
-                                            <Input allowClear placeholder='Nhập serial nếu có' />
+                                            <Input allowClear placeholder='Ví dụ: Máy may 1 kim' />
                                         </Form.Item>
                                         <Form.Item
                                             name='brandId'
@@ -283,13 +280,6 @@ const QrActivateMachinePage: React.FC = () => {
                                                 options={brandOptions}
                                                 placeholder='Chọn nhãn hiệu'
                                             />
-                                        </Form.Item>
-                                        <Form.Item
-                                            name='type'
-                                            label='Loại máy'
-                                            rules={[{ required: true, whitespace: true, message: 'Nhập loại máy' }]}
-                                        >
-                                            <Input allowClear placeholder='Ví dụ: Máy may 1 kim' />
                                         </Form.Item>
                                         <Form.Item
                                             name='model'
@@ -314,49 +304,69 @@ const QrActivateMachinePage: React.FC = () => {
                                             <Input allowClear placeholder='Ví dụ: Xưởng May 1 - Chuyền 02' />
                                         </Form.Item>
                                         <Form.Item
-                                            name='status'
-                                            label='Trạng thái'
-                                            rules={[{ required: true, message: 'Chọn trạng thái' }]}
+                                            name='machineCode'
+                                            label='Mã máy'
+                                            extra='Để trống sẽ tự sinh mã thông minh theo loại/nhãn hiệu.'
                                         >
-                                            <Select options={statusOptions} />
-                                        </Form.Item>
-                                        <Form.Item
-                                            name='ownershipType'
-                                            label='Nguồn gốc máy'
-                                            rules={[{ required: true, message: 'Chọn nguồn gốc máy' }]}
-                                        >
-                                            <Select options={ASSET_OWNERSHIP_OPTIONS} />
-                                        </Form.Item>
-                                        <Form.Item name='purchaseDate' label='Ngày nhập / mua'>
-                                            <DatePicker className='w-full' format='DD/MM/YYYY' />
-                                        </Form.Item>
-                                        <Form.Item name='purchasePrice' label='Giá trị'>
-                                            <InputNumber<number>
-                                                className='w-full'
-                                                min={0}
-                                                formatter={(value) =>
-                                                    `${value ?? ''}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')
-                                                }
-                                                parser={(value) => Number(String(value ?? '').replace(/,/g, ''))}
-                                            />
-                                        </Form.Item>
-                                        <Form.Item
-                                            name='specificationsText'
-                                            label='Thông số kỹ thuật (JSON)'
-                                            className='lg:col-span-2'
-                                        >
-                                            <Input.TextArea
-                                                rows={4}
-                                                placeholder='{"tocDo": "5000 mũi/phút", "congSuat": 15}'
-                                            />
-                                        </Form.Item>
-                                        <Form.Item name='note' label='Ghi chú' className='lg:col-span-2'>
-                                            <Input.TextArea
-                                                rows={3}
-                                                placeholder='Ghi chú hiện trạng, phụ kiện, lưu ý vận hành...'
-                                            />
+                                            <Input allowClear placeholder='Để trống = tự sinh mã' />
                                         </Form.Item>
                                     </div>
+
+                                    {/* Thông tin thêm — gập lại để hiện trường thao tác nhanh */}
+                                    <Collapse
+                                        ghost
+                                        className='mt-1'
+                                        items={[
+                                            {
+                                                key: 'more',
+                                                label: 'Thông tin thêm (tùy chọn)',
+                                                children: (
+                                                    <div className='grid grid-cols-1 gap-4 lg:grid-cols-2'>
+                                                        <Form.Item name='serial' label='Serial'>
+                                                            <Input allowClear placeholder='Nhập serial nếu có' />
+                                                        </Form.Item>
+                                                        <Form.Item name='status' label='Trạng thái'>
+                                                            <Select options={statusOptions} />
+                                                        </Form.Item>
+                                                        <Form.Item name='ownershipType' label='Nguồn gốc máy'>
+                                                            <Select options={ASSET_OWNERSHIP_OPTIONS} />
+                                                        </Form.Item>
+                                                        <Form.Item name='purchaseDate' label='Ngày nhập / mua'>
+                                                            <DatePicker className='w-full' format='DD/MM/YYYY' />
+                                                        </Form.Item>
+                                                        <Form.Item name='purchasePrice' label='Giá trị'>
+                                                            <InputNumber<number>
+                                                                className='w-full'
+                                                                min={0}
+                                                                formatter={(value) =>
+                                                                    `${value ?? ''}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')
+                                                                }
+                                                                parser={(value) =>
+                                                                    Number(String(value ?? '').replace(/,/g, ''))
+                                                                }
+                                                            />
+                                                        </Form.Item>
+                                                        <Form.Item
+                                                            name='specificationsText'
+                                                            label='Thông số kỹ thuật (JSON)'
+                                                            className='lg:col-span-2'
+                                                        >
+                                                            <Input.TextArea
+                                                                rows={4}
+                                                                placeholder='{"tocDo": "5000 mũi/phút", "congSuat": 15}'
+                                                            />
+                                                        </Form.Item>
+                                                        <Form.Item name='note' label='Ghi chú' className='lg:col-span-2'>
+                                                            <Input.TextArea
+                                                                rows={3}
+                                                                placeholder='Ghi chú hiện trạng, phụ kiện, lưu ý vận hành...'
+                                                            />
+                                                        </Form.Item>
+                                                    </div>
+                                                ),
+                                            },
+                                        ]}
+                                    />
                                     <div className='mt-4 flex justify-end'>
                                         <Button
                                             type='primary'

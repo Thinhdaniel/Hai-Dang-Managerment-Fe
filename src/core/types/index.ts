@@ -1259,5 +1259,7 @@ export type CreateQrBatchPayload = {
 };
 
 export type ActivateMachineQrPayload = {
-    asset: Omit<Asset, 'id' | 'createdAt' | 'updatedAt' | 'brand' | 'plant' | 'hasOpenTransfer'>;
+    asset: Omit<Asset, 'id' | 'createdAt' | 'updatedAt' | 'brand' | 'plant' | 'hasOpenTransfer' | 'machineCode'> & {
+        machineCode?: string; // để trống -> BE tự sinh mã thông minh
+    };
 };
