@@ -2250,8 +2250,30 @@ const ModalForm: React.FC<ModalFormProps> = ({ open, initial, plants, mainPlantI
                             </div>
                         </div>
                     ))}
+                    <Upload
+                        accept='image/*'
+                        showUploadList={false}
+                        maxCount={1}
+                        className='block w-full [&_.ant-upload]:block'
+                        beforeUpload={(file) => {
+                            handleScanInvoice(file as unknown as File);
+                            return false;
+                        }}
+                    >
+                        <Button
+                            block
+                            icon={<CameraOutlined />}
+                            loading={scanningInvoice}
+                            style={{ color: '#2f51d9', borderColor: '#2f51d9' }}
+                        >
+                            Quét hóa đơn
+                        </Button>
+                    </Upload>
                     <Button type='dashed' block icon={<PlusOutlined />} onClick={addRow}>
                         Thêm vật tư
+                    </Button>
+                    <Button block icon={<ThunderboltOutlined />} loading={aiMatching} onClick={handleAiMaterialMatch}>
+                        AI khớp vật tư
                     </Button>
                     <Button block onClick={applySmartCatalogMatch}>
                         Tự khớp danh mục vật tư
