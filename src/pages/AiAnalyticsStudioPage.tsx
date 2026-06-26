@@ -24,7 +24,8 @@ const ACCENT = '#2f51d9';
 const PALETTE = ['#2f51d9', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#0891b2', '#ec4899', '#64748b'];
 const PINS_KEY = 'hd-analytics-pins';
 
-type Pin = { id: string; spec: AnalyticsSpec };
+// Ghim được cả catalog (theo spec, mở lại nhanh+chuẩn) lẫn agentic (theo câu hỏi, mở lại chạy lại).
+type Pin = { id: string; title: string; spec?: AnalyticsSpec; question?: string };
 
 const loadPins = (): Pin[] => {
     try {
@@ -135,15 +136,15 @@ const DataTable: React.FC<{ table?: { columns: string[]; rows: (string | number)
 // Một chart đã ghim — tự truy vấn lại theo spec (không cần AI).
 const PinnedCard: React.FC<{ pin: Pin; onRemove: (id: string) => void }> = ({ pin, onRemove }) => {
     const { data, isFetching, refetch } = useQuery({
-        queryKey: ['analytics-pin', pin.id, pin.spec],
-        queryFn: () => aiAnalyticsService.query({ spec: pin.spec }),
+        queryKey: ['analytics-pin', pin.id],
+        queryFn: () => aiAnalyticsService.query(pin.spec ? { spec: pin.spec } : { question: pin.question }),
         staleTime: 60_000,
     });
     return (
         <Card
             size='small'
             className='rounded-2xl border-slate-200 shadow-sm'
-            title={<span className='text-[13px] font-semibold text-slate-700'>{pin.spec.title}</span>}
+            title={<span className='text-[13px] font-semibold text-slate-700'>{pin.title || pin.spec?.title}</span>}
             extra={
                 <span className='flex items-center gap-1'>
                     <Tooltip title='Làm mới'>
@@ -172,6 +173,7 @@ const PinnedCard: React.FC<{ pin: Pin; onRemove: (id: string) => void }> = ({ pi
 const AiAnalyticsStudioPage: React.FC = () => {
     const { message } = App.useApp();
     const [question, setQuestion] = useState('');
+    const [submittedQuestion, setSubmittedQuestion] = useState('');
     const [result, setResult] = useState<AnalyticsResult | null>(null);
     const [pins, setPins] = useState<Pin[]>(() => loadPins());
 
@@ -187,6 +189,7 @@ const AiAnalyticsStudioPage: React.FC = () => {
         const text = q.trim();
         if (!text || queryMut.isPending) return;
         setQuestion(text);
+        setSubmittedQuestion(text);
         queryMut.mutate(text);
     };
 
@@ -199,11 +202,19 @@ const AiAnalyticsStudioPage: React.FC = () => {
         });
     };
 
-    // Chỉ ghim được kết quả CATALOG (có spec để truy vấn lại deterministic).
+    // Ghim cả catalog (theo spec) lẫn agentic (theo câu hỏi).
     const pinResult = () => {
-        if (!result?.spec || !result.chart) return;
-        const id = `${result.spec.metric}-${result.spec.dimension}-${Date.now()}`;
-        const next = [{ id, spec: { ...result.spec, chartType: result.chart.type } }, ...pins].slice(0, 12);
+        if (!result) return;
+        const title = result.chart?.title || result.spec?.title || submittedQuestion || 'Phân tích';
+        const id = `pin-${Date.now()}`;
+        const pin: Pin = result.spec
+            ? { id, title, spec: { ...result.spec, chartType: result.chart?.type ?? result.spec.chartType } }
+            : { id, title, question: submittedQuestion };
+        if (!pin.spec && !pin.question) {
+            message.info('Không ghim được kết quả này');
+            return;
+        }
+        const next = [pin, ...pins].slice(0, 12);
         setPins(next);
         savePins(next);
         message.success('Đã ghim vào bảng phân tích');
@@ -316,7 +327,7 @@ const AiAnalyticsStudioPage: React.FC = () => {
                                     ]}
                                 />
                             ) : null}
-                            {result.spec ? (
+                            {result.spec || submittedQuestion ? (
                                 <Button icon={<PushpinOutlined />} onClick={pinResult}>
                                     Ghim
                                 </Button>
