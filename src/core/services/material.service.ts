@@ -716,6 +716,22 @@ export const materialSupplierService = {
     },
 };
 
+export type ApprovalReviewFlag = {
+    severity: 'high' | 'medium' | 'info';
+    type: string;
+    item?: string;
+    message: string;
+};
+
+export type ApprovalReviewResult = {
+    requestCode: string;
+    overall: 'ok' | 'review' | 'warn';
+    flags: ApprovalReviewFlag[];
+    summary: string;
+    checkedItems: number;
+    historyDepth: number;
+};
+
 export const purchaseRequestService = {
     getAll: (params?: PurchaseRequestQueryParams): Promise<PurchaseRequestListApiResponse> =>
         api.get<PurchaseRequestListApiResponse>(PURCHASE_REQUESTS_BASE, { params }),
@@ -735,6 +751,10 @@ export const purchaseRequestService = {
 
     reject: (id: string, reason: string): Promise<PurchaseRequest> =>
         api.patch<PurchaseRequest, { reason: string }>(`${PURCHASE_REQUESTS_BASE}/${id}/reject`, { reason }),
+
+    // Trợ lý duyệt thông minh: rà soát phiếu (giá lệch, SL bất thường, NCC lạ, trùng phiếu) + tóm tắt AI.
+    review: (id: string): Promise<ApprovalReviewResult> =>
+        api.post<ApprovalReviewResult, Record<string, never>>(`/ai/purchase-request/${id}/review`, {}),
 
     consolidate: (data: ConsolidatePurchaseRequestsPayload): Promise<PurchaseOrder> =>
         api.post<PurchaseOrder, ConsolidatePurchaseRequestsPayload>(`${PURCHASE_REQUESTS_BASE}/consolidate`, data),

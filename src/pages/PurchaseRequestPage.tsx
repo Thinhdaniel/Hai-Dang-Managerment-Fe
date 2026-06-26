@@ -59,6 +59,7 @@ import {
     materialSupplierService,
     type Material,
     purchaseRequestService,
+    type ApprovalReviewResult,
     type PurchaseRequest,
     type PurchaseRequestItem,
     type PurchaseRequestPayload,
@@ -2749,10 +2750,29 @@ const DetailDrawer: React.FC<DrawerProps> = ({
     const isPending = record?.status === 'pending';
     const meta = record ? STATUS_META[record.status] : null;
 
+    // Trợ lý duyệt: rà soát phiếu (giá/SL/NCC/trùng) khi mở phiếu chờ duyệt.
+    const [review, setReview] = useState<ApprovalReviewResult | null>(null);
+    const [reviewLoading, setReviewLoading] = useState(false);
+    const loadReview = React.useCallback(async (id: string) => {
+        setReviewLoading(true);
+        try {
+            setReview(await purchaseRequestService.review(id));
+        } catch {
+            setReview(null);
+        } finally {
+            setReviewLoading(false);
+        }
+    }, []);
+
     // Đóng chat khi phiếu đang xem thay đổi hoặc drawer chi tiết đóng
     useEffect(() => {
         setChatOpen(false);
     }, [record?.id]);
+
+    useEffect(() => {
+        setReview(null);
+        if (record?.id && record.status === 'pending') loadReview(record.id);
+    }, [record?.id, record?.status, loadReview]);
 
     const sumPrice = record?.items.reduce((s, i) => s + (i.totalPrice ?? 0), 0) ?? 0;
     const sumVat = record?.items.reduce((s, i) => s + (i.vatAmount ?? 0), 0) ?? 0;
@@ -2932,6 +2952,82 @@ const DetailDrawer: React.FC<DrawerProps> = ({
                         <div className='flex flex-col gap-4 p-4 sm:p-5'>
                             {record.status === 'rejected' && record.rejectedReason && (
                                 <Alert type='error' showIcon title={`Lý do từ chối: ${record.rejectedReason}`} />
+                            )}
+
+                            {/* Trợ lý duyệt thông minh — chỉ phiếu chờ duyệt */}
+                            {isPending && (
+                                <div className='overflow-hidden rounded-2xl border border-indigo-200 bg-indigo-50/40'>
+                                    <div className='flex items-center justify-between border-b border-indigo-100 px-4 py-2.5'>
+                                        <div className='flex items-center gap-2 text-sm font-semibold text-indigo-700'>
+                                            <ThunderboltOutlined /> AI rà soát duyệt
+                                        </div>
+                                        <Button
+                                            size='small'
+                                            type='text'
+                                            loading={reviewLoading}
+                                            onClick={() => record && loadReview(record.id)}
+                                        >
+                                            Rà soát lại
+                                        </Button>
+                                    </div>
+                                    <div className='px-4 py-3'>
+                                        {reviewLoading ? (
+                                            <div className='text-sm text-slate-500'>
+                                                Đang rà soát giá, số lượng, nhà cung cấp, trùng phiếu…
+                                            </div>
+                                        ) : review ? (
+                                            <div className='flex flex-col gap-2'>
+                                                <div
+                                                    className={`text-sm font-semibold ${
+                                                        review.overall === 'warn'
+                                                            ? 'text-rose-700'
+                                                            : review.overall === 'review'
+                                                              ? 'text-amber-700'
+                                                              : 'text-emerald-700'
+                                                    }`}
+                                                >
+                                                    {review.overall === 'warn'
+                                                        ? '⚠ Cần cân nhắc trước khi duyệt'
+                                                        : review.overall === 'review'
+                                                          ? 'Có điểm cần lưu ý'
+                                                          : '✓ Không phát hiện bất thường'}
+                                                </div>
+                                                {review.summary && (
+                                                    <div className='text-[13px] leading-relaxed whitespace-pre-wrap text-slate-700'>
+                                                        {review.summary}
+                                                    </div>
+                                                )}
+                                                {review.flags.length > 0 && (
+                                                    <div className='flex flex-col gap-1.5'>
+                                                        {review.flags.map((f, i) => (
+                                                            <div
+                                                                key={i}
+                                                                className={`rounded-lg px-2.5 py-1.5 text-[12.5px] leading-snug ${
+                                                                    f.severity === 'high'
+                                                                        ? 'bg-rose-50 text-rose-700'
+                                                                        : f.severity === 'medium'
+                                                                          ? 'bg-amber-50 text-amber-700'
+                                                                          : 'bg-blue-50 text-blue-700'
+                                                                }`}
+                                                            >
+                                                                {f.item ? <b>{f.item}: </b> : null}
+                                                                {f.message}
+                                                            </div>
+                                                        ))}
+                                                    </div>
+                                                )}
+                                                <div className='text-[11px] text-slate-400'>
+                                                    Đã đối chiếu {review.checkedItems} dòng với {review.historyDepth} phiếu
+                                                    lịch sử.
+                                                </div>
+                                            </div>
+                                        ) : (
+                                            <div className='text-sm text-slate-400'>
+                                                Chưa rà soát được — bấm “Rà soát lại”.
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
                             )}
 
                             {/* Info */}
