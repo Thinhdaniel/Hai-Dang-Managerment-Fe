@@ -32,6 +32,12 @@ import { recordQrScan } from '../core/lib/qrScanAudit';
 import { getCurrentCoords } from '../core/lib/geolocation';
 import { evaluateScanLocation, type ScanLocationResult } from '../core/lib/locationMismatch';
 import { hasManagerAccess } from '../core/lib/permissions';
+import {
+    aiQrFieldService,
+    type AiQrFieldInsight,
+    type AiQrFieldSeverity,
+    type AiQrFieldSuggestion,
+} from '../core/services/ai-help.service';
 import { maintenanceService, type MaintenancePayload } from '../core/services/maintenance.service';
 import { plantService } from '../core/services/plant.service';
 import { qrLabelService } from '../core/services/qr-label.service';
@@ -233,6 +239,175 @@ const buildAssetSignals = (asset: Asset) => {
     return signals;
 };
 
+const qrFieldSeverityType: Record<AiQrFieldSeverity, 'success' | 'info' | 'warning' | 'error'> = {
+    success: 'success',
+    info: 'info',
+    warning: 'warning',
+    danger: 'error',
+};
+
+const qrFieldTagColor: Record<AiQrFieldSeverity, string> = {
+    success: 'green',
+    info: 'blue',
+    warning: 'gold',
+    danger: 'red',
+};
+
+const formatInsightTime = (value?: string) => {
+    if (!value) return '';
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return '';
+    return date.toLocaleString('vi-VN', {
+        day: '2-digit',
+        month: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+    });
+};
+
+type QrFieldAssistantPanelProps = {
+    insight?: AiQrFieldInsight;
+    loading: boolean;
+    onSuggestion: (suggestion: AiQrFieldSuggestion) => void;
+};
+
+const QrFieldAssistantPanel: React.FC<QrFieldAssistantPanelProps> = ({ insight, loading, onSuggestion }) => {
+    if (loading) {
+        return (
+            <div className='global-scan-ai-field global-scan-ai-field--loading'>
+                <div className='flex items-center gap-3'>
+                    <div className='global-scan-ai-field__badge'>
+                        <ThunderboltOutlined />
+                    </div>
+                    <div className='min-w-0 flex-1'>
+                        <div className='text-xs font-black tracking-[0.16em] text-slate-500 uppercase'>
+                            AI QR Field Assistant
+                        </div>
+                        <Skeleton active paragraph={{ rows: 2 }} title={false} className='mt-2' />
+                    </div>
+                </div>
+            </div>
+        );
+    }
+
+    if (!insight) return null;
+
+    return (
+        <div className={`global-scan-ai-field global-scan-ai-field--${insight.health.tone}`}>
+            <div className='global-scan-ai-field__sheen' />
+            <div className='relative z-10 flex min-w-0 items-start gap-3'>
+                <div className='global-scan-ai-field__badge'>
+                    <ThunderboltOutlined />
+                </div>
+                <div className='min-w-0 flex-1'>
+                    <div className='flex flex-wrap items-center gap-2'>
+                        <span className='text-xs font-black tracking-[0.16em] text-slate-500 uppercase'>
+                            AI QR Field Assistant
+                        </span>
+                        <Tag color={qrFieldTagColor[insight.health.level]} className='!m-0'>
+                            {insight.health.label}
+                        </Tag>
+                    </div>
+                    <div className='mt-1 text-lg leading-snug font-black text-slate-950'>{insight.health.summary}</div>
+                    <div className='mt-1 text-xs font-semibold text-slate-500'>
+                        Cập nhật lúc {formatInsightTime(insight.generatedAt) || 'vừa xong'}
+                    </div>
+                </div>
+            </div>
+
+            <div className='global-scan-ai-facts'>
+                {insight.facts.map((fact) => (
+                    <div key={fact.key} className={`global-scan-ai-fact global-scan-ai-fact--${fact.tone}`}>
+                        <span>{fact.label}</span>
+                        <strong>{fact.value}</strong>
+                    </div>
+                ))}
+            </div>
+
+            {insight.alerts.length ? (
+                <div className='global-scan-ai-alerts'>
+                    {insight.alerts.slice(0, 3).map((alert) => (
+                        <Alert
+                            key={`${alert.title}-${alert.description}`}
+                            showIcon
+                            type={qrFieldSeverityType[alert.severity]}
+                            className='global-scan-ai-alert'
+                            message={alert.title}
+                            description={
+                                <div className='space-y-1'>
+                                    <div>{alert.description}</div>
+                                    {alert.evidence?.length ? (
+                                        <div className='flex flex-wrap gap-1'>
+                                            {alert.evidence.slice(0, 2).map((evidence) => (
+                                                <Tag key={evidence} className='!m-0 max-w-full truncate'>
+                                                    {evidence}
+                                                </Tag>
+                                            ))}
+                                        </div>
+                                    ) : null}
+                                </div>
+                            }
+                        />
+                    ))}
+                </div>
+            ) : null}
+
+            {insight.suggestions.length ? (
+                <div className='global-scan-ai-section'>
+                    <div className='global-scan-ai-section__title'>Việc nên làm tiếp theo</div>
+                    <div className='global-scan-ai-suggestions'>
+                        {insight.suggestions.slice(0, 4).map((suggestion) => (
+                            <button
+                                key={suggestion.key}
+                                type='button'
+                                onClick={() => onSuggestion(suggestion)}
+                                className={`global-scan-ai-suggestion global-scan-ai-suggestion--${suggestion.tone}`}
+                            >
+                                <span>{suggestion.label}</span>
+                                <small>{suggestion.description}</small>
+                            </button>
+                        ))}
+                    </div>
+                </div>
+            ) : null}
+
+            {insight.timeline.length ? (
+                <div className='global-scan-ai-section'>
+                    <div className='global-scan-ai-section__title'>Dấu vết gần nhất</div>
+                    <div className='global-scan-ai-timeline'>
+                        {insight.timeline.slice(0, 5).map((item) => (
+                            <button
+                                key={item.id}
+                                type='button'
+                                disabled={!item.route}
+                                onClick={() =>
+                                    item.route &&
+                                    onSuggestion({
+                                        key: item.type,
+                                        label: item.label,
+                                        description: item.description || item.status || '',
+                                        tone: item.tone,
+                                        priority: 0,
+                                        route: item.route,
+                                    })
+                                }
+                                className={`global-scan-ai-timeline__row global-scan-ai-timeline__row--${item.tone}`}
+                            >
+                                <span className='global-scan-ai-timeline__dot' />
+                                <span className='min-w-0 flex-1'>
+                                    <strong>{item.label}</strong>
+                                    <small>{[item.description, item.status].filter(Boolean).join(' - ')}</small>
+                                </span>
+                                <em>{formatInsightTime(item.at)}</em>
+                            </button>
+                        ))}
+                    </div>
+                </div>
+            ) : null}
+        </div>
+    );
+};
+
 const GlobalQrScannerPage: React.FC = () => {
     const navigate = useNavigate();
     const queryClient = useQueryClient();
@@ -256,6 +431,14 @@ const GlobalQrScannerPage: React.FC = () => {
     const { data: plants = [] } = useQuery({
         queryKey: ['plants'],
         queryFn: () => plantService.getAll(),
+    });
+
+    const { data: qrFieldInsight, isFetching: qrFieldInsightLoading } = useQuery({
+        queryKey: ['ai-qr-field', asset?.id, scanResult?.resolvedAt],
+        queryFn: () => aiQrFieldService.getInsight(asset!.id),
+        enabled: Boolean(asset?.id),
+        staleTime: 15000,
+        retry: 1,
     });
 
     const createMaintenanceMutation = useMutation({
@@ -488,6 +671,44 @@ const GlobalQrScannerPage: React.FC = () => {
 
     const primaryAction = actionItems.find((item) => item.recommended && !item.disabled) ?? actionItems[0];
     const secondaryActions = primaryAction ? actionItems.filter((item) => item.key !== primaryAction.key) : actionItems;
+
+    const handleFieldSuggestion = (suggestion: AiQrFieldSuggestion) => {
+        if (!asset) return;
+
+        recordQrScan({
+            rawValue: scanResult?.meta.rawValue,
+            publicId: scanResult?.meta.publicId,
+            labelId: scanResult?.meta.labelId,
+            assetId: asset.id,
+            action:
+                suggestion.key === 'quick_update'
+                    ? 'quick_update'
+                    : suggestion.key === 'transfer'
+                      ? 'transfer_scan'
+                      : suggestion.key === 'maintenance'
+                        ? 'maintenance_quick_create'
+                        : 'open_profile',
+            result: 'resolved',
+            source: scanResult?.meta.source ?? 'unknown',
+            metadata: { context: 'ai_qr_field_assistant', suggestionKey: suggestion.key },
+        });
+
+        if (suggestion.key === 'maintenance') {
+            setMaintenanceOpen(true);
+            return;
+        }
+        if (suggestion.key === 'quick_update') {
+            setQuickUpdateOpen(true);
+            return;
+        }
+        if (suggestion.key === 'transfer' && canTransferAsset(asset)) {
+            setTransferOpen(true);
+            return;
+        }
+        if (suggestion.route) {
+            navigate(suggestion.route);
+        }
+    };
 
     const resetScan = () => {
         setScanResult(null);
@@ -727,6 +948,12 @@ const GlobalQrScannerPage: React.FC = () => {
                                         }
                                     />
                                 ) : null}
+
+                                <QrFieldAssistantPanel
+                                    insight={qrFieldInsight}
+                                    loading={qrFieldInsightLoading}
+                                    onSuggestion={handleFieldSuggestion}
+                                />
 
                                 {smartInsight && primaryAction ? (
                                     <div

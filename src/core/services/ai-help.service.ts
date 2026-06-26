@@ -62,6 +62,82 @@ export const aiAssetSearchService = {
         ),
 };
 
+export type AiQrFieldTone = 'blue' | 'emerald' | 'amber' | 'indigo' | 'slate' | 'rose' | 'violet';
+export type AiQrFieldSeverity = 'info' | 'success' | 'warning' | 'danger';
+
+export type AiQrFieldFact = {
+    key: string;
+    label: string;
+    value: string;
+    tone: AiQrFieldTone;
+};
+
+export type AiQrFieldAlert = {
+    severity: AiQrFieldSeverity;
+    title: string;
+    description: string;
+    evidence?: string[];
+};
+
+export type AiQrFieldSuggestion = {
+    key: string;
+    label: string;
+    description: string;
+    tone: AiQrFieldTone;
+    priority: number;
+    route?: string;
+};
+
+export type AiQrFieldTimelineItem = {
+    id: string;
+    type: 'maintenance' | 'transfer' | 'borrowing' | 'disposal' | 'scan';
+    label: string;
+    description?: string;
+    status?: string;
+    tone: AiQrFieldTone;
+    at?: string;
+    route?: string;
+};
+
+export type AiQrFieldInsight = {
+    generatedAt: string;
+    asset: {
+        id?: string;
+        machineCode?: string;
+        name?: string;
+        status?: string;
+        statusLabel?: string;
+        plantName?: string;
+        brandName?: string;
+        area?: string;
+        purchasePrice?: number;
+        mislocated?: boolean;
+    };
+    health: {
+        level: AiQrFieldSeverity;
+        tone: AiQrFieldTone;
+        label: string;
+        summary: string;
+    };
+    facts: AiQrFieldFact[];
+    alerts: AiQrFieldAlert[];
+    suggestions: AiQrFieldSuggestion[];
+    timeline: AiQrFieldTimelineItem[];
+    counters: {
+        openMaintenanceCount: number;
+        openTransferCount: number;
+        activeDisposalCount: number;
+        hasActiveBorrowing: boolean;
+    };
+};
+
+export const aiQrFieldService = {
+    getInsight: (assetId: string): Promise<AiQrFieldInsight> =>
+        api.get<AiQrFieldInsight>(`/ai/qr-field/${assetId}`, {
+            timeout: 30000,
+        }),
+};
+
 // ===== TRỢ LÝ MÁY MÓC (chat đa lượt) =====
 export type AssistantMessage = { role: 'user' | 'assistant'; content: string };
 

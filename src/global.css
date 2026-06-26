@@ -3208,6 +3208,338 @@ textarea {
     color: #0f766e;
 }
 
+.global-scan-ai-field {
+    position: relative;
+    overflow: hidden;
+    border: 1px solid rgba(37, 99, 235, 0.14);
+    border-radius: 28px;
+    background:
+        linear-gradient(145deg, rgba(255, 255, 255, 0.98), rgba(248, 250, 252, 0.96)),
+        linear-gradient(90deg, rgba(14, 165, 233, 0.08), rgba(16, 185, 129, 0.06));
+    padding: 16px;
+    box-shadow:
+        0 18px 38px rgba(15, 23, 42, 0.08),
+        inset 0 1px 0 rgba(255, 255, 255, 0.84);
+}
+
+.global-scan-ai-field__sheen {
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(105deg, transparent 0%, rgba(255, 255, 255, 0.55) 36%, transparent 68%);
+    opacity: 0.55;
+    transform: translateX(-42%);
+    animation: global-scan-ai-sheen 4.8s ease-in-out infinite;
+    pointer-events: none;
+}
+
+.global-scan-ai-field--loading .global-scan-ai-field__badge,
+.global-scan-ai-field__badge {
+    position: relative;
+    z-index: 1;
+    display: flex;
+    width: 48px;
+    height: 48px;
+    flex: 0 0 auto;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid rgba(255, 255, 255, 0.78);
+    border-radius: 18px;
+    background: linear-gradient(135deg, #2563eb, #06b6d4);
+    color: #fff;
+    font-size: 20px;
+    box-shadow: 0 14px 28px rgba(37, 99, 235, 0.22);
+}
+
+.global-scan-ai-field--rose {
+    border-color: rgba(244, 63, 94, 0.24);
+    background:
+        linear-gradient(145deg, rgba(255, 241, 242, 0.98), rgba(255, 255, 255, 0.96)),
+        linear-gradient(90deg, rgba(244, 63, 94, 0.08), rgba(249, 115, 22, 0.06));
+}
+
+.global-scan-ai-field--rose .global-scan-ai-field__badge {
+    background: linear-gradient(135deg, #e11d48, #f97316);
+}
+
+.global-scan-ai-field--amber {
+    border-color: rgba(245, 158, 11, 0.24);
+    background:
+        linear-gradient(145deg, rgba(255, 251, 235, 0.98), rgba(255, 255, 255, 0.96)),
+        linear-gradient(90deg, rgba(245, 158, 11, 0.08), rgba(14, 165, 233, 0.05));
+}
+
+.global-scan-ai-field--amber .global-scan-ai-field__badge {
+    background: linear-gradient(135deg, #d97706, #f59e0b);
+}
+
+.global-scan-ai-field--indigo .global-scan-ai-field__badge {
+    background: linear-gradient(135deg, #4f46e5, #2563eb);
+}
+
+.global-scan-ai-field--violet .global-scan-ai-field__badge {
+    background: linear-gradient(135deg, #7c3aed, #4f46e5);
+}
+
+.global-scan-ai-field--slate .global-scan-ai-field__badge {
+    background: linear-gradient(135deg, #334155, #0f172a);
+}
+
+.global-scan-ai-field--emerald .global-scan-ai-field__badge {
+    background: linear-gradient(135deg, #059669, #0d9488);
+}
+
+.global-scan-ai-facts {
+    position: relative;
+    z-index: 1;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 9px;
+    margin-top: 14px;
+}
+
+.global-scan-ai-fact {
+    min-width: 0;
+    border: 1px solid rgba(148, 163, 184, 0.18);
+    border-radius: 18px;
+    background: rgba(255, 255, 255, 0.82);
+    padding: 10px 11px;
+    box-shadow: 0 8px 18px rgba(15, 23, 42, 0.04);
+}
+
+.global-scan-ai-fact span {
+    display: block;
+    color: #64748b;
+    font-size: 11px;
+    font-weight: 800;
+}
+
+.global-scan-ai-fact strong {
+    display: block;
+    overflow: hidden;
+    margin-top: 3px;
+    color: #0f172a;
+    font-size: 13px;
+    font-weight: 950;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.global-scan-ai-fact--rose {
+    border-color: rgba(244, 63, 94, 0.24);
+    background: rgba(255, 241, 242, 0.86);
+}
+
+.global-scan-ai-fact--amber {
+    border-color: rgba(245, 158, 11, 0.24);
+    background: rgba(255, 251, 235, 0.9);
+}
+
+.global-scan-ai-fact--emerald {
+    border-color: rgba(16, 185, 129, 0.2);
+    background: rgba(236, 253, 245, 0.9);
+}
+
+.global-scan-ai-fact--indigo,
+.global-scan-ai-fact--violet {
+    border-color: rgba(99, 102, 241, 0.2);
+    background: rgba(238, 242, 255, 0.88);
+}
+
+.global-scan-ai-alerts,
+.global-scan-ai-section {
+    position: relative;
+    z-index: 1;
+    margin-top: 12px;
+}
+
+.global-scan-ai-alert {
+    border-radius: 18px;
+}
+
+.global-scan-ai-alert + .global-scan-ai-alert {
+    margin-top: 8px;
+}
+
+.global-scan-ai-section__title {
+    margin-bottom: 8px;
+    color: #475569;
+    font-size: 11px;
+    font-weight: 950;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+}
+
+.global-scan-ai-suggestions {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+}
+
+.global-scan-ai-suggestion {
+    display: flex;
+    min-width: 0;
+    flex-direction: column;
+    gap: 3px;
+    border: 1px solid rgba(148, 163, 184, 0.2);
+    border-radius: 18px;
+    background: rgba(255, 255, 255, 0.88);
+    padding: 11px;
+    text-align: left;
+    box-shadow: 0 10px 22px rgba(15, 23, 42, 0.05);
+    transition:
+        transform 0.18s ease,
+        border-color 0.18s ease,
+        box-shadow 0.18s ease;
+}
+
+.global-scan-ai-suggestion:hover {
+    transform: translateY(-1px);
+    border-color: rgba(37, 99, 235, 0.26);
+    box-shadow: 0 16px 28px rgba(15, 23, 42, 0.09);
+}
+
+.global-scan-ai-suggestion span {
+    overflow: hidden;
+    color: #0f172a;
+    font-size: 13px;
+    font-weight: 950;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.global-scan-ai-suggestion small {
+    display: -webkit-box;
+    overflow: hidden;
+    color: #64748b;
+    font-size: 11px;
+    font-weight: 700;
+    line-height: 1.35;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+}
+
+.global-scan-ai-suggestion--rose {
+    background: rgba(255, 241, 242, 0.9);
+}
+
+.global-scan-ai-suggestion--amber {
+    background: rgba(255, 251, 235, 0.92);
+}
+
+.global-scan-ai-suggestion--emerald {
+    background: rgba(236, 253, 245, 0.92);
+}
+
+.global-scan-ai-suggestion--indigo,
+.global-scan-ai-suggestion--violet {
+    background: rgba(238, 242, 255, 0.9);
+}
+
+.global-scan-ai-timeline {
+    display: flex;
+    flex-direction: column;
+    gap: 7px;
+}
+
+.global-scan-ai-timeline__row {
+    display: flex;
+    min-width: 0;
+    align-items: center;
+    gap: 9px;
+    border: 1px solid rgba(148, 163, 184, 0.16);
+    border-radius: 16px;
+    background: rgba(255, 255, 255, 0.78);
+    padding: 9px 10px;
+    text-align: left;
+    transition:
+        transform 0.18s ease,
+        background 0.18s ease;
+}
+
+.global-scan-ai-timeline__row:not(:disabled):hover {
+    transform: translateX(2px);
+    background: rgba(255, 255, 255, 0.96);
+}
+
+.global-scan-ai-timeline__row:disabled {
+    cursor: default;
+}
+
+.global-scan-ai-timeline__dot {
+    width: 9px;
+    height: 9px;
+    flex: 0 0 auto;
+    border-radius: 999px;
+    background: #2563eb;
+    box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.1);
+}
+
+.global-scan-ai-timeline__row--rose .global-scan-ai-timeline__dot {
+    background: #e11d48;
+    box-shadow: 0 0 0 4px rgba(225, 29, 72, 0.1);
+}
+
+.global-scan-ai-timeline__row--amber .global-scan-ai-timeline__dot {
+    background: #d97706;
+    box-shadow: 0 0 0 4px rgba(217, 119, 6, 0.1);
+}
+
+.global-scan-ai-timeline__row--emerald .global-scan-ai-timeline__dot {
+    background: #059669;
+    box-shadow: 0 0 0 4px rgba(5, 150, 105, 0.1);
+}
+
+.global-scan-ai-timeline__row--indigo .global-scan-ai-timeline__dot,
+.global-scan-ai-timeline__row--violet .global-scan-ai-timeline__dot {
+    background: #4f46e5;
+    box-shadow: 0 0 0 4px rgba(79, 70, 229, 0.1);
+}
+
+.global-scan-ai-timeline__row strong,
+.global-scan-ai-timeline__row small {
+    display: block;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.global-scan-ai-timeline__row strong {
+    color: #0f172a;
+    font-size: 12px;
+    font-weight: 950;
+}
+
+.global-scan-ai-timeline__row small,
+.global-scan-ai-timeline__row em {
+    color: #64748b;
+    font-size: 11px;
+    font-style: normal;
+    font-weight: 700;
+}
+
+@keyframes global-scan-ai-sheen {
+    0%,
+    46% {
+        transform: translateX(-56%);
+    }
+    72%,
+    100% {
+        transform: translateX(58%);
+    }
+}
+
+@media (max-width: 520px) {
+    .global-scan-ai-facts,
+    .global-scan-ai-suggestions {
+        grid-template-columns: minmax(0, 1fr);
+    }
+
+    .global-scan-ai-field {
+        border-radius: 24px;
+        padding: 14px;
+    }
+}
+
 .global-scan-primary-action {
     position: relative;
     z-index: 1;
