@@ -92,12 +92,44 @@ const buildOption = (chart: AnalyticsChart): EChartsCoreOption => {
     };
 };
 
-const ResultChart: React.FC<{ result: AnalyticsResult; height?: number }> = ({ result, height = 320 }) => {
-    const option = useMemo(() => buildOption(result.chart), [result]);
-    if (!result.chart.categories.length) {
-        return <Empty description='Chưa có dữ liệu phù hợp' image={Empty.PRESENTED_IMAGE_SIMPLE} />;
+const ResultChart: React.FC<{ chart: AnalyticsChart | null; height?: number }> = ({ chart, height = 320 }) => {
+    const option = useMemo(() => (chart ? buildOption(chart) : ({} as EChartsCoreOption)), [chart]);
+    if (!chart || !chart.categories.length) {
+        return <Empty description='Không vẽ được biểu đồ — xem bảng số bên dưới' image={Empty.PRESENTED_IMAGE_SIMPLE} />;
     }
     return <EChart option={option} height={height} />;
+};
+
+// Bảng đối chiếu số (giám đốc kiểm chứng), nhất là với kết quả "tham khảo" từ AI.
+const DataTable: React.FC<{ table?: { columns: string[]; rows: (string | number)[][] }; unit?: string }> = ({ table, unit }) => {
+    if (!table?.rows?.length) return null;
+    const fmt = (v: string | number) => (typeof v === 'number' ? (unit === 'đ' ? `${v.toLocaleString('vi-VN')}đ` : v.toLocaleString('vi-VN')) : v);
+    return (
+        <div className='mt-2 max-h-56 overflow-auto rounded-lg border border-slate-200'>
+            <table className='w-full text-[12.5px]'>
+                <thead className='bg-slate-50 text-slate-500'>
+                    <tr>
+                        {table.columns.map((c) => (
+                            <th key={c} className='px-3 py-1.5 text-left font-medium'>
+                                {c}
+                            </th>
+                        ))}
+                    </tr>
+                </thead>
+                <tbody>
+                    {table.rows.map((r, i) => (
+                        <tr key={i} className='border-t border-slate-100'>
+                            {r.map((cell, j) => (
+                                <td key={j} className={`px-3 py-1.5 ${j === 0 ? 'text-slate-700' : 'text-right font-medium text-slate-800'}`}>
+                                    {fmt(cell)}
+                                </td>
+                            ))}
+                        </tr>
+                    ))}
+                </tbody>
+            </table>
+        </div>
+    );
 };
 
 // Một chart đã ghim — tự truy vấn lại theo spec (không cần AI).
@@ -125,7 +157,7 @@ const PinnedCard: React.FC<{ pin: Pin; onRemove: (id: string) => void }> = ({ pi
         >
             {data ? (
                 <>
-                    <ResultChart result={data} height={240} />
+                    <ResultChart chart={data.chart} height={240} />
                     <div className='mt-1 text-[11.5px] text-slate-500'>{data.narrative}</div>
                 </>
             ) : (
@@ -159,12 +191,17 @@ const AiAnalyticsStudioPage: React.FC = () => {
     };
 
     const setChartType = (type: 'bar' | 'line' | 'pie') => {
-        if (!result) return;
-        setResult({ ...result, spec: { ...result.spec, chartType: type }, chart: { ...result.chart, type } });
+        if (!result?.chart) return;
+        setResult({
+            ...result,
+            spec: result.spec ? { ...result.spec, chartType: type } : result.spec,
+            chart: { ...result.chart, type },
+        });
     };
 
+    // Chỉ ghim được kết quả CATALOG (có spec để truy vấn lại deterministic).
     const pinResult = () => {
-        if (!result) return;
+        if (!result?.spec || !result.chart) return;
         const id = `${result.spec.metric}-${result.spec.dimension}-${Date.now()}`;
         const next = [{ id, spec: { ...result.spec, chartType: result.chart.type } }, ...pins].slice(0, 12);
         setPins(next);
@@ -243,32 +280,54 @@ const AiAnalyticsStudioPage: React.FC = () => {
                 <Card className='rounded-2xl border-slate-200 shadow-sm'>
                     <div className='mb-2 flex flex-wrap items-center justify-between gap-2'>
                         <div className='min-w-0'>
-                            <div className='text-[15px] font-bold text-slate-800'>{result.chart.title}</div>
+                            <div className='flex items-center gap-2'>
+                                <div className='text-[15px] font-bold text-slate-800'>
+                                    {result.chart?.title || 'Kết quả phân tích'}
+                                </div>
+                                {result.trusted ? (
+                                    <Tag color='green' className='!m-0 !rounded-full !text-[10.5px]'>
+                                        Số liệu chuẩn
+                                    </Tag>
+                                ) : (
+                                    <Tooltip title='Câu mở — AI tự khám phá từ dữ liệu thật. Đối chiếu bảng số bên dưới trước khi báo cáo.'>
+                                        <Tag color='orange' className='!m-0 !rounded-full !text-[10.5px]'>
+                                            Tham khảo (AI khám phá)
+                                        </Tag>
+                                    </Tooltip>
+                                )}
+                            </div>
                             <div className='text-[12px] text-slate-500'>
-                                {result.spec.metricLabel} · theo {result.spec.dimensionLabel}
+                                {result.spec
+                                    ? `${result.spec.metricLabel} · theo ${result.spec.dimensionLabel}`
+                                    : 'Trợ lý AI tổng hợp từ dữ liệu thật'}
                                 {result.aiUsed ? ' · AI chọn chỉ số' : ''}
                             </div>
                         </div>
                         <div className='flex items-center gap-2'>
-                            <Segmented
-                                size='small'
-                                value={result.chart.type}
-                                onChange={(v) => setChartType(v as 'bar' | 'line' | 'pie')}
-                                options={[
-                                    { value: 'bar', icon: <BarChartOutlined /> },
-                                    { value: 'line', icon: <LineChartOutlined /> },
-                                    { value: 'pie', icon: <PieChartOutlined /> },
-                                ]}
-                            />
-                            <Button icon={<PushpinOutlined />} onClick={pinResult}>
-                                Ghim
-                            </Button>
+                            {result.chart ? (
+                                <Segmented
+                                    size='small'
+                                    value={result.chart.type}
+                                    onChange={(v) => setChartType(v as 'bar' | 'line' | 'pie')}
+                                    options={[
+                                        { value: 'bar', icon: <BarChartOutlined /> },
+                                        { value: 'line', icon: <LineChartOutlined /> },
+                                        { value: 'pie', icon: <PieChartOutlined /> },
+                                    ]}
+                                />
+                            ) : null}
+                            {result.spec ? (
+                                <Button icon={<PushpinOutlined />} onClick={pinResult}>
+                                    Ghim
+                                </Button>
+                            ) : null}
                         </div>
                     </div>
-                    <ResultChart result={result} />
+                    <ResultChart chart={result.chart} />
                     <div className='mt-2 rounded-lg bg-slate-50 px-3 py-2 text-[13px] text-slate-600'>
                         {result.narrative}
                     </div>
+                    {!result.trusted || !result.chart ? <DataTable table={result.table} unit={result.chart?.unit} /> : null}
                 </Card>
             ) : (
                 <Card className='rounded-2xl border-dashed border-slate-200'>

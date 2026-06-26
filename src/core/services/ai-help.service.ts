@@ -750,7 +750,16 @@ export type AnalyticsSpec = {
     metricLabel: string;
     dimensionLabel: string;
 };
-export type AnalyticsResult = { spec: AnalyticsSpec; chart: AnalyticsChart; narrative: string; aiUsed: boolean };
+export type AnalyticsTable = { columns: string[]; rows: (string | number)[][] };
+export type AnalyticsResult = {
+    source: 'catalog' | 'agentic';
+    trusted: boolean;
+    spec?: AnalyticsSpec;
+    chart: AnalyticsChart | null;
+    table?: AnalyticsTable;
+    narrative: string;
+    aiUsed: boolean;
+};
 export type AnalyticsCatalog = {
     metrics: { key: string; label: string; unit: string; dimensions: { key: string; label: string }[] }[];
     samples: string[];
