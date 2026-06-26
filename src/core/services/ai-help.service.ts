@@ -588,9 +588,17 @@ export const aiMaterialMatchService = {
 export type InvoiceOcrItem = {
     materialName: string;
     unit?: string;
-    quantity?: number;
+    quantityRequested?: number; // Số lượng cần
+    quantity?: number; // Số lượng mua (khớp thành tiền)
     unitPrice?: number;
     vatRate?: number;
+    plantName?: string; // Cơ sở
+    proposedBy?: string; // Người đề xuất
+    supplierName?: string; // Nhà cung cấp
+    purpose?: string; // Nội dung / mục đích
+    note?: string; // Ghi chú
+    orderDate?: string; // Ngày lên đơn (ISO)
+    receivedDate?: string; // Ngày nhận (ISO)
 };
 
 export type InvoiceOcrResponse = {

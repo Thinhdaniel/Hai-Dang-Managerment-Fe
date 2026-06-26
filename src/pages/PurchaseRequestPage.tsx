@@ -1132,18 +1132,55 @@ const ModalForm: React.FC<ModalFormProps> = ({ open, initial, plants, mainPlantI
                 return;
             }
 
+            // Dò "Cơ sở"/"Nhà cung cấp" từ tên đọc được -> id (khớp không dấu, ưu tiên trùng khít).
+            const findOption = (opts: { value: string; label: string }[], name?: string) => {
+                const q = normalizeSearchText(name);
+                if (!q) return undefined;
+                return (
+                    opts.find((o) => normalizeSearchText(o.label) === q) ||
+                    opts.find((o) => {
+                        const l = normalizeSearchText(o.label);
+                        return l.includes(q) || q.includes(l);
+                    })
+                );
+            };
+            const parseDate = (value?: string) => {
+                if (!value) return undefined;
+                const d = dayjs(value);
+                return d.isValid() ? d : undefined;
+            };
             const invoiceTag = result.header?.invoiceNo ? `HĐ ${result.header.invoiceNo}` : '';
+
+            let matchedPlants = 0;
+            let matchedSuppliers = 0;
             const scannedRows = result.items.map((it) => {
-                const qty = it.quantity && it.quantity > 0 ? it.quantity : 1;
+                const qReq =
+                    it.quantityRequested && it.quantityRequested > 0
+                        ? it.quantityRequested
+                        : it.quantity && it.quantity > 0
+                          ? it.quantity
+                          : 1;
+                const qBuy = it.quantity && it.quantity > 0 ? it.quantity : qReq;
+                const plant = findOption(plantOptions, it.plantName);
+                const supplier = findOption(supplierOptions, it.supplierName);
+                if (plant) matchedPlants += 1;
+                if (supplier) matchedSuppliers += 1;
                 return computeRow({
                     ...newRow(),
                     materialName: it.materialName,
                     unit: it.unit ?? '',
-                    quantityRequested: qty,
-                    quantityOrdered: qty,
+                    quantityRequested: qReq,
+                    quantityOrdered: qBuy,
                     unitPrice: it.unitPrice ?? 0,
                     vatRate: it.vatRate != null ? it.vatRate : 8,
-                    note: invoiceTag,
+                    plantId: plant?.value ?? mainPlantId,
+                    proposedBy: it.proposedBy ?? '',
+                    supplierId: supplier?.value,
+                    supplierName: supplier?.label ?? it.supplierName,
+                    purpose: it.purpose ?? '',
+                    note: it.note || invoiceTag,
+                    orderDate: parseDate(it.orderDate),
+                    receivedDate: parseDate(it.receivedDate),
                 });
             });
 
@@ -1158,8 +1195,9 @@ const ModalForm: React.FC<ModalFormProps> = ({ open, initial, plants, mainPlantI
             notification.success({
                 title: `Đã quét ${scannedRows.length} dòng từ hóa đơn`,
                 description: [
-                    result.header?.supplierName ? `NCC: ${result.header.supplierName}` : '',
-                    'Đang khớp vật tư với danh mục — kiểm tra lại số lượng & đơn giá giúp.',
+                    matchedPlants ? `${matchedPlants} cơ sở` : '',
+                    matchedSuppliers ? `${matchedSuppliers} NCC đã dò` : '',
+                    'Đang khớp vật tư — kiểm tra lại số lượng, đơn giá & cơ sở giúp.',
                 ]
                     .filter(Boolean)
                     .join(' · '),
