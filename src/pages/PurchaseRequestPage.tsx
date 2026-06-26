@@ -991,6 +991,12 @@ const ModalForm: React.FC<ModalFormProps> = ({ open, initial, plants, mainPlantI
         markRecent([key]);
     };
 
+    // Áp dụng 1 ứng viên AI cụ thể (chip chọn nhanh) — giữ tên gốc đọc được, chỉ gắn mã danh mục.
+    const applyCandidateToRow = (key: string, candidate: { id: string; name: string; unit?: string }) => {
+        updateRow(key, { materialId: candidate.id, materialName: candidate.name, unit: candidate.unit || '' });
+        markRecent([key]);
+    };
+
     const autoApplyMaterialMatch = (key: string) => {
         const row = items.find((item) => item.key === key);
         if (!row || row.materialId || !row.materialName.trim()) return;
@@ -1252,6 +1258,29 @@ const ModalForm: React.FC<ModalFormProps> = ({ open, initial, plants, mainPlantI
                   }
                 : aiMatch.candidate;
 
+            // Các ứng viên gần nhất (trừ cái đang hiển thị chính) -> chip bấm-1-phát-chọn.
+            const primaryId = aiMatch.materialId || aiMatch.candidate?.id;
+            const altCandidates = (aiMatch.candidates ?? []).filter((c) => c.id !== primaryId).slice(0, 4);
+            const candidateChips = altCandidates.length ? (
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 4, alignItems: 'center' }}>
+                    <span style={{ fontSize: 10, color: '#94a3b8' }}>Hoặc chọn:</span>
+                    {altCandidates.map((c) => (
+                        <Tag
+                            key={c.id}
+                            color='blue'
+                            style={{ cursor: 'pointer', margin: 0, fontSize: 10, lineHeight: '18px' }}
+                            onClick={(event) => {
+                                event.stopPropagation();
+                                applyCandidateToRow(row.key, c);
+                            }}
+                        >
+                            {c.code ? `[${c.code}] ` : ''}
+                            {c.name} · {c.score}%
+                        </Tag>
+                    ))}
+                </div>
+            ) : null;
+
             if (candidate && aiMatch.status !== 'unmatched') {
                 const color =
                     aiMatch.status === 'matched' ? '#2563eb' : aiMatch.status === 'suggested' ? '#0891b2' : '#b45309';
@@ -1285,14 +1314,19 @@ const ModalForm: React.FC<ModalFormProps> = ({ open, initial, plants, mainPlantI
                                 <InfoCircleOutlined style={{ marginLeft: 6, color: '#f59e0b', fontSize: 11 }} />
                             </Tooltip>
                         ) : null}
+                        {candidateChips}
                     </div>
                 );
             }
 
+            // Chưa khớp chắc: nếu vẫn có ứng viên gần đúng thì cho chọn nhanh thay vì bắt gõ tay.
             return (
-                <Tag color='volcano' style={{ margin: compact ? '6px 0 0' : '6px 0 0', fontSize: 10 }}>
-                    AI chưa tìm thấy danh mục phù hợp
-                </Tag>
+                <div style={{ marginTop: compact ? 6 : 5 }}>
+                    <Tag color='volcano' style={{ margin: 0, fontSize: 10 }}>
+                        AI chưa chắc vật tư
+                    </Tag>
+                    {candidateChips}
+                </div>
             );
         }
 
