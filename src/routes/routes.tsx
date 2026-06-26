@@ -34,6 +34,7 @@ const PurchaseOrderPage = lazy(() => import('../pages/PurchaseOrderPage'));
 const DistributionPage = lazy(() => import('../pages/DistributionPage'));
 const MaterialReportPage = lazy(() => import('../pages/MaterialReportPage'));
 const FacilityCostReportPage = lazy(() => import('../pages/FacilityCostReportPage'));
+const AiAnalyticsStudioPage = lazy(() => import('../pages/AiAnalyticsStudioPage'));
 const DataQualityDashboard = lazy(() => import('../pages/DataQualityDashboard'));
 const LoginPage = lazy(() => import('../pages/LoginPage'));
 const ForgotPasswordPage = lazy(() => import('../pages/ForgotPasswordPage'));
@@ -138,6 +139,7 @@ export const router = createBrowserRouter([
             { path: 'materials/distributions', element: guarded('/materials/distributions', <DistributionPage />) },
             { path: 'materials/reports', element: guarded('/materials/reports', <MaterialReportPage />) },
             { path: 'reports/facility-costs', element: guarded('/reports/facility-costs', <FacilityCostReportPage />) },
+            { path: 'ai-analytics', element: guarded('/ai-analytics', <AiAnalyticsStudioPage />) },
             { path: 'admin/data-quality', element: guarded('/admin/data-quality', <DataQualityDashboard />) },
         ],
     },

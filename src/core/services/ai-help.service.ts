@@ -732,3 +732,33 @@ export const aiChatSummaryService = {
             }
         ),
 };
+
+// ===== AI ANALYTICS STUDIO (NL -> chart) =====
+export type AnalyticsChart = {
+    type: 'bar' | 'line' | 'pie';
+    title: string;
+    categories: string[];
+    series: { name: string; data: number[] }[];
+    unit: string;
+};
+export type AnalyticsSpec = {
+    metric: string;
+    dimension: string;
+    period: number;
+    chartType: 'bar' | 'line' | 'pie';
+    title: string;
+    metricLabel: string;
+    dimensionLabel: string;
+};
+export type AnalyticsResult = { spec: AnalyticsSpec; chart: AnalyticsChart; narrative: string; aiUsed: boolean };
+export type AnalyticsCatalog = {
+    metrics: { key: string; label: string; unit: string; dimensions: { key: string; label: string }[] }[];
+    samples: string[];
+};
+export type AnalyticsQueryBody = { question?: string; spec?: Partial<AnalyticsSpec>; plantId?: string };
+
+export const aiAnalyticsService = {
+    catalog: (): Promise<AnalyticsCatalog> => api.get<AnalyticsCatalog>('/ai/analytics/catalog'),
+    query: (body: AnalyticsQueryBody): Promise<AnalyticsResult> =>
+        api.post<AnalyticsResult, AnalyticsQueryBody>('/ai/analytics/query', body, { timeout: 65000 }),
+};
