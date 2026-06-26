@@ -60,6 +60,9 @@ const QrActivateMachinePage: React.FC = () => {
     const [assetForm] = Form.useForm<AssetFormValues>();
     const [linkForm] = Form.useForm<LinkFormValues>();
     const [assetSearch, setAssetSearch] = useState('');
+    // Kiểm kê: mặc định chỉ tìm máy trong cơ sở của tem (giảm nhiễu, bớt chọn nhầm),
+    // cho phép mở rộng toàn bộ cơ sở khi máy bị lệch vị trí.
+    const [scopeToPlant, setScopeToPlant] = useState(true);
     const canManage = hasManagerAccess(role);
 
     const { data: qrData, isLoading: isLoadingQr } = useQuery({
@@ -79,9 +82,19 @@ const QrActivateMachinePage: React.FC = () => {
         queryFn: () => brandService.getAll(),
     });
 
+    const plannedPlantId = qrData?.label?.plannedPlantId;
+    const plannedPlantName = qrData?.label?.plannedPlant?.name;
+    const scopedPlantId = scopeToPlant ? plannedPlantId : undefined;
+
     const { data: assetOptionsResponse, isFetching: isSearchingAssets } = useQuery({
-        queryKey: ['assets', 'qr-link-options', assetSearch],
-        queryFn: () => assetService.getAll({ search: assetSearch.trim() || undefined, page: 1, limit: 20 }),
+        queryKey: ['assets', 'qr-link-options', assetSearch, scopedPlantId ?? 'all'],
+        queryFn: () =>
+            assetService.getAll({
+                search: assetSearch.trim() || undefined,
+                plantId: scopedPlantId,
+                page: 1,
+                limit: 20,
+            }),
     });
 
     const plantOptions = useMemo(
@@ -97,11 +110,17 @@ const QrActivateMachinePage: React.FC = () => {
 
     const assetOptions = useMemo(
         () =>
-            (assetOptionsResponse?.data ?? []).map((asset) => ({
-                value: asset.id,
-                label: `${asset.machineCode} - ${asset.name}${asset.publicId ? ' (đã có QR)' : ''}`,
-                asset,
-            })),
+            (assetOptionsResponse?.data ?? []).map((asset) => {
+                // Làm giàu nhãn để phân biệt các máy trùng tên: cơ sở · khu vực · serial.
+                const detail = [asset.plant?.name, asset.area, asset.serial ? `SN ${asset.serial}` : '']
+                    .filter(Boolean)
+                    .join(' · ');
+                return {
+                    value: asset.id,
+                    label: `${asset.machineCode} - ${asset.name}${detail ? ` · ${detail}` : ''}${asset.publicId ? ' • đã có QR' : ''}`,
+                    asset,
+                };
+            }),
         [assetOptionsResponse]
     );
 
@@ -216,7 +235,7 @@ const QrActivateMachinePage: React.FC = () => {
             </div>
 
             <Tabs
-                defaultActiveKey='create'
+                defaultActiveKey='link'
                 items={[
                     {
                         key: 'create',
@@ -358,9 +377,25 @@ const QrActivateMachinePage: React.FC = () => {
                         children: (
                             <Card className='rounded-xl border-slate-200 shadow-sm'>
                                 <Form form={linkForm} layout='vertical' size='large'>
+                                    {plannedPlantId && (
+                                        <div className='mb-3 flex items-center justify-between gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2'>
+                                            <Checkbox
+                                                checked={scopeToPlant}
+                                                onChange={(e) => setScopeToPlant(e.target.checked)}
+                                            >
+                                                Chỉ tìm máy trong{' '}
+                                                <Text strong>{plannedPlantName || 'cơ sở của tem'}</Text>
+                                            </Checkbox>
+                                            {!scopeToPlant && (
+                                                <Text type='secondary' className='text-xs'>
+                                                    Đang tìm toàn bộ cơ sở
+                                                </Text>
+                                            )}
+                                        </div>
+                                    )}
                                     <Form.Item
                                         name='assetId'
-                                        label='Chọn máy'
+                                        label='Chọn máy (gõ mã / tên / serial)'
                                         rules={[{ required: true, message: 'Chọn máy cần gán tem' }]}
                                     >
                                         <Select
@@ -370,6 +405,13 @@ const QrActivateMachinePage: React.FC = () => {
                                             loading={isSearchingAssets}
                                             options={assetOptions}
                                             placeholder='Tìm theo mã máy, tên máy, serial...'
+                                            notFoundContent={
+                                                isSearchingAssets
+                                                    ? 'Đang tìm…'
+                                                    : assetSearch
+                                                      ? 'Không thấy máy — thử bỏ lọc cơ sở hoặc gõ serial.'
+                                                      : 'Gõ để tìm máy'
+                                            }
                                         />
                                     </Form.Item>
                                     <Form.Item name='replaceExistingPublicId' valuePropName='checked'>
