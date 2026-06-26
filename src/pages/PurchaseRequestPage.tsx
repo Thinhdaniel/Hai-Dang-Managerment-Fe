@@ -21,9 +21,11 @@ import {
     Tag,
     Tooltip,
     Typography,
+    Upload,
     type TableColumnsType,
 } from 'antd';
 import {
+    CameraOutlined,
     CheckCircleOutlined,
     CheckOutlined,
     ClockCircleOutlined,
@@ -51,7 +53,7 @@ import PageHeader from '../components/shared/PageHeader';
 import ContextChatDrawer from '../components/chat/ContextChatDrawer';
 import { useAuth } from '../core/contexts/AuthContext';
 import { plantService } from '../core/services';
-import { aiMaterialMatchService, type AiMaterialMatchItem } from '../core/services/ai-help.service';
+import { aiMaterialMatchService, aiOcrService, type AiMaterialMatchItem } from '../core/services/ai-help.service';
 import {
     materialService,
     materialSupplierService,
@@ -717,6 +719,7 @@ const ModalForm: React.FC<ModalFormProps> = ({ open, initial, plants, mainPlantI
     const [showMissingOnly, setShowMissingOnly] = useState(false);
     const [aiMatches, setAiMatches] = useState<Record<string, AiMaterialMatchItem>>({});
     const [aiMatching, setAiMatching] = useState(false);
+    const [scanningInvoice, setScanningInvoice] = useState(false);
     const [summaryPulse, setSummaryPulse] = useState(false);
     const [bulkProposedBy, setBulkProposedBy] = useState('');
     const [bulkSupplierId, setBulkSupplierId] = useState<string | undefined>();
@@ -1113,6 +1116,74 @@ const ModalForm: React.FC<ModalFormProps> = ({ open, initial, plants, mainPlantI
             });
         } finally {
             setAiMatching(false);
+        }
+    };
+
+    // Quét ảnh hóa đơn/phiếu mua -> OCR trích dòng -> đổ vào bảng -> tự khớp danh mục.
+    const handleScanInvoice = async (file: File) => {
+        setScanningInvoice(true);
+        try {
+            const result = await aiOcrService.scanPurchaseInvoice(file);
+            if (!result.items.length) {
+                notification.warning({
+                    title: 'Chưa đọc được dòng vật tư nào',
+                    description: 'Hãy chụp hóa đơn rõ nét, đủ sáng và thẳng góc rồi thử lại.',
+                });
+                return;
+            }
+
+            const invoiceTag = result.header?.invoiceNo ? `HĐ ${result.header.invoiceNo}` : '';
+            const scannedRows = result.items.map((it) => {
+                const qty = it.quantity && it.quantity > 0 ? it.quantity : 1;
+                return computeRow({
+                    ...newRow(),
+                    materialName: it.materialName,
+                    unit: it.unit ?? '',
+                    quantityRequested: qty,
+                    quantityOrdered: qty,
+                    unitPrice: it.unitPrice ?? 0,
+                    vatRate: it.vatRate != null ? it.vatRate : 8,
+                    note: invoiceTag,
+                });
+            });
+
+            // Form đang trống (chỉ dòng mặc định rỗng) -> thay; ngược lại nối thêm.
+            setItems((prev) => {
+                const meaningful = prev.filter((r) => r.materialName.trim() || r.unitPrice > 0);
+                return meaningful.length ? [...meaningful, ...scannedRows] : scannedRows;
+            });
+            setSelectedKey(scannedRows[0].key);
+            markRecent(scannedRows.map((r) => r.key));
+
+            notification.success({
+                title: `Đã quét ${scannedRows.length} dòng từ hóa đơn`,
+                description: [
+                    result.header?.supplierName ? `NCC: ${result.header.supplierName}` : '',
+                    'Đang khớp vật tư với danh mục — kiểm tra lại số lượng & đơn giá giúp.',
+                ]
+                    .filter(Boolean)
+                    .join(' · '),
+            });
+
+            // Khớp danh mục cho các dòng vừa quét (tái dùng AI material-match).
+            try {
+                const match = await aiMaterialMatchService.match(
+                    scannedRows.map((r) => ({ key: r.key, materialName: r.materialName, unit: r.unit, note: r.note }))
+                );
+                setAiMatches((prev) => ({
+                    ...prev,
+                    ...Object.fromEntries(match.items.map((item) => [item.key, item])),
+                }));
+            } catch {
+                /* Bỏ qua: người dùng vẫn có thể bấm "AI khớp vật tư" thủ công. */
+            }
+        } catch {
+            notification.error({
+                title: 'Không quét được hóa đơn',
+                description: 'Có thể ảnh quá lớn/mờ hoặc AI đang bận. Thử lại với ảnh rõ hơn nhé.',
+            });
+        } finally {
+            setScanningInvoice(false);
         }
     };
 
@@ -2369,6 +2440,24 @@ const ModalForm: React.FC<ModalFormProps> = ({ open, initial, plants, mainPlantI
                             </Button>
                         </div>
                         <Space size={8}>
+                            <Upload
+                                accept='image/*'
+                                showUploadList={false}
+                                maxCount={1}
+                                beforeUpload={(file) => {
+                                    handleScanInvoice(file as unknown as File);
+                                    return false;
+                                }}
+                            >
+                                <Button
+                                    size='small'
+                                    icon={<CameraOutlined />}
+                                    loading={scanningInvoice}
+                                    style={{ color: '#2f51d9', borderColor: '#2f51d9' }}
+                                >
+                                    Quét hóa đơn
+                                </Button>
+                            </Upload>
                             <Button size='small' onClick={applySmartCatalogMatch}>
                                 Tự khớp danh mục
                             </Button>

@@ -584,6 +584,37 @@ export const aiMaterialMatchService = {
         ),
 };
 
+// OCR ảnh hóa đơn mua vật tư -> dòng có cấu trúc để điền sẵn đơn mua.
+export type InvoiceOcrItem = {
+    materialName: string;
+    unit?: string;
+    quantity?: number;
+    unitPrice?: number;
+    vatRate?: number;
+};
+
+export type InvoiceOcrResponse = {
+    header: { supplierName?: string; invoiceNo?: string; invoiceDate?: string };
+    items: InvoiceOcrItem[];
+    count: number;
+    available: boolean;
+    usedFallback: boolean;
+    provider?: string;
+    model?: string;
+    latencyMs?: number;
+};
+
+export const aiOcrService = {
+    scanPurchaseInvoice: (image: File): Promise<InvoiceOcrResponse> => {
+        const formData = new FormData();
+        formData.append('image', image);
+        return api.post<InvoiceOcrResponse, FormData>('/ai/ocr/purchase-invoice', formData, {
+            headers: { 'Content-Type': 'multipart/form-data' },
+            timeout: 90000,
+        });
+    },
+};
+
 export type AiChatSummaryActionItem = {
     task: string;
     owner?: string;
