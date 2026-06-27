@@ -137,7 +137,7 @@ const AssistantLauncher: React.FC<Props> = ({ onClick, isDesktop }) => {
                         onClick();
                     }
                 }}
-                className={`hd-launcher fixed z-[1090] flex items-center rounded-full text-white shadow-[0_10px_28px_rgba(47,81,217,0.42)] ring-1 ring-white/25 transition-transform active:scale-95 ${
+                className={`hd-launcher fixed z-[250] flex items-center rounded-full text-white shadow-[0_10px_28px_rgba(47,81,217,0.42)] ring-1 ring-white/25 transition-transform active:scale-95 ${
                     dragging ? 'hd-dragging cursor-grabbing' : 'cursor-grab hover:scale-[1.04]'
                 }`}
                 style={style}

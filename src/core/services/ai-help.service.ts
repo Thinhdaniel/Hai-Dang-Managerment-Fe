@@ -688,11 +688,44 @@ export type InvoiceOcrResponse = {
     latencyMs?: number;
 };
 
+export type SupplyRequestOcrItem = {
+    materialName: string;
+    unit?: string;
+    quantityRequested?: number;
+    purpose?: string;
+    note?: string;
+};
+
+export type SupplyRequestOcrResponse = {
+    header: {
+        requestDate?: string;
+        requesterName?: string;
+        plantName?: string;
+        purpose?: string;
+        note?: string;
+    };
+    items: SupplyRequestOcrItem[];
+    count: number;
+    available: boolean;
+    usedFallback: boolean;
+    provider?: string;
+    model?: string;
+    latencyMs?: number;
+};
+
 export const aiOcrService = {
     scanPurchaseInvoice: (image: File): Promise<InvoiceOcrResponse> => {
         const formData = new FormData();
         formData.append('image', image);
         return api.post<InvoiceOcrResponse, FormData>('/ai/ocr/purchase-invoice', formData, {
+            headers: { 'Content-Type': 'multipart/form-data' },
+            timeout: 90000,
+        });
+    },
+    scanSupplyRequest: (image: File): Promise<SupplyRequestOcrResponse> => {
+        const formData = new FormData();
+        formData.append('image', image);
+        return api.post<SupplyRequestOcrResponse, FormData>('/ai/ocr/supply-request', formData, {
             headers: { 'Content-Type': 'multipart/form-data' },
             timeout: 90000,
         });

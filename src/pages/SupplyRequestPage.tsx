@@ -1,6 +1,7 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import dayjs, { type Dayjs } from 'dayjs';
 import {
+    Alert,
     App,
     AutoComplete,
     Badge,
@@ -38,9 +39,11 @@ import {
     PlusOutlined,
     ReloadOutlined,
     RightOutlined,
+    RobotOutlined,
     SearchOutlined,
     SendOutlined,
     SyncOutlined,
+    UploadOutlined,
     WarningOutlined,
 } from '@ant-design/icons';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -52,6 +55,11 @@ import { useAuth } from '../core/contexts/AuthContext';
 import { api } from '../core/lib/api';
 import { normalizeSearchTerm } from '../core/lib/search';
 import { plantService } from '../core/services';
+import {
+    aiMaterialMatchService,
+    aiOcrService,
+    type AiMaterialMatchItem,
+} from '../core/services/ai-help.service';
 import type {
     PurchaseRequest,
     PurchaseRequestPayload,
@@ -85,6 +93,19 @@ type DraftFilterState = {
 };
 type FormItemValue = { materialName?: string; unit?: string; quantityRequested?: number; note?: string };
 type FormValues = { fromPlantId?: string; note?: string; requestDate?: any; items: FormItemValue[] };
+type ScanReviewState = {
+    fileName: string;
+    count: number;
+    strong: number;
+    needsConfirm: number;
+    unmatched: number;
+    plantName?: string;
+    requesterName?: string;
+    requestDate?: string;
+    provider?: string;
+    model?: string;
+    usedFallback?: boolean;
+};
 type Stats = {
     total: number;
     pending: number;
@@ -237,13 +258,21 @@ const FormDrawer: React.FC<{
     onClose: () => void;
     onSubmit: (payload: Partial<PurchaseRequestPayload>) => Promise<void>;
 }> = ({ open, initialValues, defaultPlantId, defaultPlantName, submitting, onClose, onSubmit }) => {
+    const { message } = App.useApp();
     const [form] = Form.useForm<FormValues>();
+    const scanInputRef = useRef<HTMLInputElement | null>(null);
+    const itemListRef = useRef<HTMLDivElement | null>(null);
     const watchedItems: FormItemValue[] = Form.useWatch('items', form) ?? [];
     const screens = useBreakpoint();
     const isMobile = !screens.sm;
+    const [scanningSupply, setScanningSupply] = useState(false);
+    const [scanReview, setScanReview] = useState<ScanReviewState | null>(null);
+    const [scanMatchesByIndex, setScanMatchesByIndex] = useState<Record<number, AiMaterialMatchItem>>({});
 
     useEffect(() => {
         if (!open) return;
+        setScanReview(null);
+        setScanMatchesByIndex({});
         if (initialValues) {
             form.setFieldsValue({
                 fromPlantId: initialValues.fromPlantId,
@@ -261,6 +290,108 @@ const FormDrawer: React.FC<{
             form.setFieldsValue({ fromPlantId: defaultPlantId, requestDate: dayjs(), items: [emptyItem()] });
         }
     }, [open, initialValues, defaultPlantId, form]);
+
+    const clearScanHints = () => {
+        setScanReview(null);
+        setScanMatchesByIndex({});
+    };
+
+    const matchTone = (match?: AiMaterialMatchItem) => {
+        if (!match) return { color: 'default', label: 'Chưa kiểm tra' };
+        if (match.status === 'matched' && match.confidence >= 92) return { color: 'green', label: 'Đã khớp chắc' };
+        if (match.status === 'unmatched') return { color: 'red', label: 'Chưa có danh mục' };
+        return { color: 'orange', label: 'Cần xác nhận' };
+    };
+
+    const handleScanSupplyFile = async (file?: File) => {
+        if (!file) return;
+        setScanningSupply(true);
+        setScanReview(null);
+        setScanMatchesByIndex({});
+        try {
+            const result = await aiOcrService.scanSupplyRequest(file);
+            if (!result.items.length) {
+                message.warning('Chưa đọc được dòng vật tư nào từ phiếu');
+                return;
+            }
+
+            const currentItems = (form.getFieldValue('items') ?? []) as FormItemValue[];
+            const meaningfulItems = currentItems.filter(
+                (item) =>
+                    String(item.materialName ?? '').trim() ||
+                    String(item.unit ?? '').trim() ||
+                    Number(item.quantityRequested ?? 1) > 1 ||
+                    String(item.note ?? '').trim()
+            );
+            const scannedItems = result.items.map((item) => ({
+                materialName: item.materialName,
+                unit: item.unit ?? '',
+                quantityRequested:
+                    item.quantityRequested && Number(item.quantityRequested) > 0
+                        ? Number(item.quantityRequested)
+                        : 1,
+                note: [item.purpose, item.note].filter(Boolean).join(' · '),
+            }));
+            const offset = meaningfulItems.length;
+            const requestDate = result.header?.requestDate ? dayjs(result.header.requestDate) : undefined;
+            const noteFromOcr = normalizeText([result.header?.purpose, result.header?.note].filter(Boolean).join(' · '));
+
+            form.setFieldsValue({
+                requestDate: requestDate?.isValid() ? requestDate : form.getFieldValue('requestDate') || dayjs(),
+                note: form.getFieldValue('note') || noteFromOcr,
+                items: meaningfulItems.length ? [...meaningfulItems, ...scannedItems] : scannedItems,
+            });
+
+            let strong = 0;
+            let needsConfirm = 0;
+            let unmatched = 0;
+            try {
+                const match = await aiMaterialMatchService.match(
+                    scannedItems.map((item, index) => ({
+                        key: `supply-scan-${index}`,
+                        materialName: item.materialName ?? '',
+                        unit: item.unit,
+                        note: item.note,
+                    }))
+                );
+                const byIndex: Record<number, AiMaterialMatchItem> = {};
+                match.items.forEach((item, index) => {
+                    byIndex[offset + index] = item;
+                    if (item.status === 'matched' && item.confidence >= 92) strong += 1;
+                    else if (item.status === 'unmatched') unmatched += 1;
+                    else needsConfirm += 1;
+                });
+                setScanMatchesByIndex(byIndex);
+            } catch {
+                needsConfirm = scannedItems.length;
+            }
+
+            setScanReview({
+                fileName: file.name,
+                count: scannedItems.length,
+                strong,
+                needsConfirm,
+                unmatched,
+                plantName: result.header?.plantName,
+                requesterName: result.header?.requesterName,
+                requestDate: result.header?.requestDate,
+                provider: result.provider,
+                model: result.model,
+                usedFallback: result.usedFallback,
+            });
+            if (isMobile) {
+                window.setTimeout(() => {
+                    itemListRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                }, 150);
+            }
+            message.success(`Đã quét ${scannedItems.length} dòng vật tư. Kiểm tra lại trước khi gửi.`);
+        } catch {
+            message.error('Không quét được phiếu. Hãy dùng ảnh rõ nét JPG/PNG/WebP và thử lại.');
+        } finally {
+            setScanningSupply(false);
+            if (scanInputRef.current) scanInputRef.current.value = '';
+        }
+    };
 
     const handleSubmit = async () => {
         const values = await form.validateFields();
@@ -288,9 +419,10 @@ const FormDrawer: React.FC<{
                 header: { borderBottom: '1px solid #f1f5f9' },
                 body: {
                     padding: 0,
-                    display: 'flex',
+                    paddingBottom: isMobile ? 112 : 0,
+                    display: isMobile ? 'block' : 'flex',
                     flexDirection: 'column',
-                    overflow: 'hidden',
+                    overflow: isMobile ? 'auto' : 'hidden',
                     background: '#f8fafc',
                 },
             }}
@@ -332,7 +464,11 @@ const FormDrawer: React.FC<{
                 </div>
             }
         >
-            <Form form={form} layout='vertical' className='flex h-full min-h-0 flex-col'>
+            <Form
+                form={form}
+                layout='vertical'
+                className={isMobile ? 'min-h-full pb-4' : 'flex h-full min-h-0 flex-col'}
+            >
                 {/* Thông tin chung */}
                 <div className='shrink-0 border-b border-slate-200 bg-white px-4 py-4 sm:px-6 sm:py-5'>
                     <div className='mb-3 flex items-center gap-2 text-sm font-semibold text-slate-700'>
@@ -377,10 +513,94 @@ const FormDrawer: React.FC<{
                     </div>
                 </div>
 
+                {!initialValues && (
+                    <div className='shrink-0 border-b border-slate-200 bg-gradient-to-r from-blue-50 via-cyan-50 to-white px-4 py-3 sm:px-6'>
+                        <input
+                            ref={scanInputRef}
+                            type='file'
+                            accept='.jpg,.jpeg,.png,.webp,.avif,image/jpeg,image/png,image/webp,image/avif'
+                            className='hidden'
+                            style={{ display: 'none' }}
+                            tabIndex={-1}
+                            onChange={(event) => {
+                                void handleScanSupplyFile(event.target.files?.[0]);
+                            }}
+                        />
+                        <div className='flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between'>
+                            <div className='flex min-w-0 items-start gap-3'>
+                                <div className='flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-white text-blue-600 shadow-sm ring-1 ring-blue-100'>
+                                    <RobotOutlined />
+                                </div>
+                                <div className='min-w-0'>
+                                    <div className='font-semibold text-slate-900'>AI quét phiếu đề xuất cấp</div>
+                                    <div className='text-xs text-slate-500'>
+                                        Đọc ảnh phiếu giấy rồi điền vào danh sách để kiểm tra trước khi gửi.
+                                    </div>
+                                </div>
+                            </div>
+                            <Button
+                                icon={<UploadOutlined />}
+                                loading={scanningSupply}
+                                onClick={() => scanInputRef.current?.click()}
+                                className='border-blue-200 bg-white text-blue-700 shadow-sm hover:!border-blue-300 hover:!text-blue-800'
+                                block={isMobile}
+                            >
+                                Quét ảnh phiếu
+                            </Button>
+                        </div>
+                        {scanReview && (
+                            <Alert
+                                className='mt-3 rounded-2xl border-blue-100 bg-white/80'
+                                type={
+                                    scanReview.unmatched ||
+                                    scanReview.needsConfirm ||
+                                    (scanReview.plantName &&
+                                        defaultPlantName &&
+                                        normalizeSearchTerm(scanReview.plantName) !== normalizeSearchTerm(defaultPlantName))
+                                        ? 'warning'
+                                        : 'success'
+                                }
+                                showIcon
+                                message={
+                                    <span className='font-semibold'>
+                                        Đã đọc {scanReview.count} dòng từ {scanReview.fileName}
+                                    </span>
+                                }
+                                description={
+                                    <div className='space-y-1 text-sm'>
+                                        <div>
+                                            {[
+                                                scanReview.strong ? `${scanReview.strong} dòng khớp chắc` : '',
+                                                scanReview.needsConfirm ? `${scanReview.needsConfirm} dòng cần xác nhận` : '',
+                                                scanReview.unmatched
+                                                    ? `${scanReview.unmatched} dòng chưa có trong danh mục`
+                                                    : '',
+                                                scanReview.usedFallback
+                                                    ? 'AI/provider chưa khả dụng, cần kiểm tra thủ công kỹ hơn.'
+                                                    : '',
+                                            ]
+                                                .filter(Boolean)
+                                                .join(' · ')}
+                                        </div>
+                                        {(scanReview.plantName || scanReview.requesterName || scanReview.requestDate) && (
+                                            <div className='text-slate-500'>
+                                                {scanReview.plantName ? `Phiếu ghi cơ sở: ${scanReview.plantName}. ` : ''}
+                                                {scanReview.requesterName ? `Người nhận: ${scanReview.requesterName}. ` : ''}
+                                                {scanReview.requestDate ? `Ngày phiếu: ${dayjs(scanReview.requestDate).format('DD/MM/YYYY')}. ` : ''}
+                                                Form vẫn dùng cơ sở tài khoản: {defaultPlantName || 'chưa rõ'}.
+                                            </div>
+                                        )}
+                                    </div>
+                                }
+                            />
+                        )}
+                    </div>
+                )}
+
                 {/* Danh sách vật tư */}
                 <Form.List name='items'>
                     {(fields, { add, remove }) => (
-                        <div className='flex min-h-0 flex-1 flex-col'>
+                        <div ref={itemListRef} className='flex min-h-0 flex-1 flex-col'>
                             <div className='flex shrink-0 items-center justify-between px-4 pt-4 pb-2 sm:px-6'>
                                 <div className='flex items-center gap-2 text-sm font-semibold text-slate-700'>
                                     <InboxOutlined className='text-blue-500' /> Danh sách vật tư
@@ -392,7 +612,10 @@ const FormDrawer: React.FC<{
                                     type='link'
                                     size='small'
                                     icon={<PlusOutlined />}
-                                    onClick={() => add(emptyItem())}
+                                    onClick={() => {
+                                        clearScanHints();
+                                        add(emptyItem());
+                                    }}
                                     className='px-0'
                                 >
                                     Thêm
@@ -408,18 +631,26 @@ const FormDrawer: React.FC<{
                                             type='primary'
                                             ghost
                                             icon={<PlusOutlined />}
-                                            onClick={() => add(emptyItem())}
+                                            onClick={() => {
+                                                clearScanHints();
+                                                add(emptyItem());
+                                            }}
                                         >
                                             Thêm vật tư đầu tiên
                                         </Button>
                                     </div>
                                 )}
 
-                                {fields.map((field, index) => (
-                                    <div
-                                        key={field.key}
-                                        className='rounded-2xl border border-slate-200 bg-white p-3.5 transition-all hover:border-blue-300 hover:shadow-sm sm:p-4'
-                                    >
+                                {fields.map((field, index) => {
+                                    const match = scanMatchesByIndex[index];
+                                    const tone = matchTone(match);
+                                    const candidate = match?.candidate;
+
+                                    return (
+                                        <div
+                                            key={field.key}
+                                            className='rounded-2xl border border-slate-200 bg-white p-3.5 transition-all hover:border-blue-300 hover:shadow-sm sm:p-4'
+                                        >
                                         <div className='mb-2.5 flex items-center justify-between'>
                                             <span className='inline-flex h-6 min-w-[30px] items-center justify-center rounded-lg bg-blue-50 px-2 text-xs font-bold text-blue-600'>
                                                 #{index + 1}
@@ -431,10 +662,32 @@ const FormDrawer: React.FC<{
                                                     size='small'
                                                     disabled={fields.length === 1}
                                                     icon={<DeleteOutlined />}
-                                                    onClick={() => remove(field.name)}
+                                                    onClick={() => {
+                                                        clearScanHints();
+                                                        remove(field.name);
+                                                    }}
                                                 />
                                             </Tooltip>
                                         </div>
+                                        {match && (
+                                            <div className='mb-3 rounded-xl border border-slate-100 bg-slate-50 px-3 py-2'>
+                                                <div className='flex flex-wrap items-center gap-2'>
+                                                    <Tag color={tone.color} className='m-0 font-semibold'>
+                                                        {tone.label} · {match.confidence}%
+                                                    </Tag>
+                                                    <span className='min-w-0 flex-1 truncate text-xs font-medium text-slate-600'>
+                                                        {candidate
+                                                            ? `${candidate.code} · ${candidate.name}`
+                                                            : match.reason}
+                                                    </span>
+                                                </div>
+                                                {match.warnings?.length > 0 && (
+                                                    <div className='mt-1 text-xs text-orange-600'>
+                                                        {match.warnings[0]}
+                                                    </div>
+                                                )}
+                                            </div>
+                                        )}
                                         <Form.Item
                                             name={[field.name, 'materialName']}
                                             label='Tên vật tư'
@@ -496,14 +749,18 @@ const FormDrawer: React.FC<{
                                             </Form.Item>
                                         </div>
                                     </div>
-                                ))}
+                                    );
+                                })}
 
                                 {fields.length > 0 && (
                                     <Button
                                         type='dashed'
                                         block
                                         icon={<PlusOutlined />}
-                                        onClick={() => add(emptyItem())}
+                                        onClick={() => {
+                                            clearScanHints();
+                                            add(emptyItem());
+                                        }}
                                         className='h-11'
                                     >
                                         Thêm vật tư

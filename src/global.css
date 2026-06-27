@@ -1362,6 +1362,17 @@ textarea {
     transform: translateX(-50%);
 }
 
+body:has(.ant-drawer-open) .mobile-bottom-nav,
+body:has(.ant-modal-root .ant-modal-wrap) .mobile-bottom-nav,
+body:has(.ant-image-preview-root) .mobile-bottom-nav,
+body:has(.ant-drawer-open) .hd-launcher,
+body:has(.ant-modal-root .ant-modal-wrap) .hd-launcher,
+body:has(.ant-image-preview-root) .hd-launcher {
+    opacity: 0;
+    pointer-events: none;
+    visibility: hidden;
+}
+
 .mobile-bottom-nav__group {
     display: grid;
     min-width: 0;

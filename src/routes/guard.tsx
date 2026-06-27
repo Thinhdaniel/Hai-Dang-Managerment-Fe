@@ -1,6 +1,6 @@
 import { useEffect, type ReactNode } from 'react';
 import { Navigate } from 'react-router-dom';
-import { App } from 'antd';
+import { App, Spin } from 'antd';
 import { useAuth } from '../core/contexts/AuthContext';
 import type { AccessCheck } from '../core/constants/navAccess';
 
@@ -27,21 +27,30 @@ type RequireAccessProps = {
 export const RequireAccess = ({ check, children }: RequireAccessProps) => {
     const { isAuthenticated, user } = useAuth();
     const { message } = App.useApp();
-    const allowed = isAuthenticated && check(user);
+    const isResolvingUser = isAuthenticated && !user;
+    const allowed = isAuthenticated && Boolean(user) && check(user);
 
     useEffect(() => {
-        if (isAuthenticated && !allowed) {
+        if (isAuthenticated && user && !allowed) {
             message.warning('Bạn không có quyền truy cập chức năng này.');
         }
-    }, [isAuthenticated, allowed, message]);
+    }, [isAuthenticated, user, allowed, message]);
 
-        if (!isAuthenticated) {
-            return <Navigate to='/login' replace />;
-        }
+    if (!isAuthenticated) {
+        return <Navigate to='/login' replace />;
+    }
 
-        if (!allowed) {
-            return <Navigate to='/dashboard' replace />;
-        }
+    if (isResolvingUser) {
+        return (
+            <div className='flex min-h-[42vh] items-center justify-center'>
+                <Spin />
+            </div>
+        );
+    }
+
+    if (!allowed) {
+        return <Navigate to='/dashboard' replace />;
+    }
 
     return children;
 };
