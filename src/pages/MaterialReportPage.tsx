@@ -1,4 +1,4 @@
-import React, { useMemo, useRef, useState } from 'react';
+import React, { useCallback, useMemo, useRef, useState } from 'react';
 import dayjs, { type Dayjs } from 'dayjs';
 import {
     Alert,
@@ -1099,10 +1099,22 @@ function OverviewTab({
         };
     }, [combinedTrend]);
 
+    // Trạng thái bật/tắt từng luồng chi phí qua legend. Khi tắt 1 luồng, biểu đồ
+    // sắp xếp lại + đổi nhãn theo phần ĐANG HIỂN THỊ để cột luôn giảm dần và số
+    // khớp với độ dài cột (tránh "rối mắt": cột ngắn nhưng nhãn ghi tổng đầy đủ).
+    const [plantSeriesOn, setPlantSeriesOn] = useState({ purchase: true, distribution: true });
+
+    const rowVisibleCost = useCallback(
+        (row: MaterialCostFlowByPlant) =>
+            (plantSeriesOn.purchase ? row.purchaseCost : 0) +
+            (plantSeriesOn.distribution ? row.distributionCost : 0),
+        [plantSeriesOn]
+    );
+
     // Sắp tăng dần để cơ sở tốn nhiều nhất nằm trên cùng (trục category vẽ từ dưới lên)
     const plantRows = useMemo(
-        () => [...costFlowByPlant].sort((a, b) => a.totalCost - b.totalCost),
-        [costFlowByPlant]
+        () => [...costFlowByPlant].sort((a, b) => rowVisibleCost(a) - rowVisibleCost(b)),
+        [costFlowByPlant, rowVisibleCost]
     );
 
     const plantOption = useMemo<EChartsCoreOption>(
@@ -1118,11 +1130,16 @@ function OverviewTab({
                     const first = points[0] as { dataIndex?: number };
                     const row = plantRows[first?.dataIndex ?? -1];
                     if (!row) return '';
+                    // Dot màu cố định theo luồng (không phụ thuộc thứ tự points — vốn lệch khi ẩn 1 luồng)
+                    const dot = (c: string) =>
+                        `<span style="display:inline-block;width:9px;height:9px;border-radius:50%;background:${c};margin-right:5px"></span>`;
+                    const off = (on: boolean) => (on ? '' : ' <span style="color:#94a3b8">(đang ẩn)</span>');
+                    const bothOn = plantSeriesOn.purchase && plantSeriesOn.distribution;
                     const lines = [
                         `<strong>${row.plantName}</strong>`,
-                        `${(points[0] as { marker?: string })?.marker ?? ''} Chi phí mua vật tư: <b>${fmtCurrency(row.purchaseCost)}</b> (${row.purchaseOrderCount} đơn, ${row.purchaseItemCount} dòng)`,
-                        `${(points[1] as { marker?: string })?.marker ?? ''} Giá trị cấp phát nhận: <b>${fmtCurrency(row.distributionCost)}</b> (${row.distributionCount} phiếu, ${row.distributionItemCount} dòng)`,
-                        `Tổng chi phí vật tư: <b>${fmtCurrency(row.totalCost)}</b>`,
+                        `${dot(CHART_SEMANTIC.purchaseLine)}Chi phí mua vật tư: <b>${fmtCurrency(row.purchaseCost)}</b> (${row.purchaseOrderCount} đơn, ${row.purchaseItemCount} dòng)${off(plantSeriesOn.purchase)}`,
+                        `${dot(CHART_SEMANTIC.material)}Giá trị cấp phát nhận: <b>${fmtCurrency(row.distributionCost)}</b> (${row.distributionCount} phiếu, ${row.distributionItemCount} dòng)${off(plantSeriesOn.distribution)}`,
+                        `${bothOn ? 'Tổng chi phí vật tư' : 'Tổng đang hiển thị'}: <b>${fmtCurrency(rowVisibleCost(row))}</b>`,
                     ];
                     if (!row.canPurchase && row.purchaseCost === 0) {
                         lines.push('<span style="color:#64748b">Cơ sở này thường nhận vật tư qua cấp phát, không trực tiếp mua.</span>');
@@ -1130,7 +1147,13 @@ function OverviewTab({
                     return lines.join('<br/>');
                 },
             },
-            legend: ECHARTS_LEGEND_TOP,
+            legend: {
+                ...ECHARTS_LEGEND_TOP,
+                selected: {
+                    'Chi phí mua vật tư': plantSeriesOn.purchase,
+                    'Giá trị cấp phát nhận': plantSeriesOn.distribution,
+                },
+            },
             grid: { left: 8, right: 72, top: 34, bottom: 4, containLabel: true },
             xAxis: {
                 type: 'value',
@@ -1157,6 +1180,17 @@ function OverviewTab({
                         shadowColor: 'rgba(30, 58, 138, 0.2)',
                         shadowOffsetY: 3,
                     },
+                    // Nhãn tổng chỉ gắn vào luồng "mua" khi luồng "cấp phát" bị ẩn
+                    // (lúc đó "mua" là phần ngoài cùng) — tránh mất nhãn khi tắt cấp phát.
+                    label: {
+                        show: !plantSeriesOn.distribution,
+                        position: 'right',
+                        formatter: (params: { dataIndex: number }) =>
+                            fmtShort(rowVisibleCost(plantRows[params.dataIndex] ?? ({} as MaterialCostFlowByPlant))),
+                        color: '#475569',
+                        fontSize: 11,
+                        fontWeight: 600,
+                    },
                     emphasis: { focus: 'series', itemStyle: { shadowBlur: 14 } },
                     animationDelay: (idx: number) => idx * 90,
                 },
@@ -1173,10 +1207,12 @@ function OverviewTab({
                         shadowColor: 'rgba(37, 99, 235, 0.22)',
                         shadowOffsetY: 3,
                     },
+                    // Nhãn tổng hiển thị phần ĐANG HIỂN THỊ (khớp độ dài cột), không phải totalCost cứng
                     label: {
-                        show: true,
+                        show: plantSeriesOn.distribution,
                         position: 'right',
-                        formatter: (params: { dataIndex: number }) => fmtShort(plantRows[params.dataIndex]?.totalCost ?? 0),
+                        formatter: (params: { dataIndex: number }) =>
+                            fmtShort(rowVisibleCost(plantRows[params.dataIndex] ?? ({} as MaterialCostFlowByPlant))),
                         color: '#475569',
                         fontSize: 11,
                         fontWeight: 600,
@@ -1186,7 +1222,7 @@ function OverviewTab({
                 },
             ],
         }),
-        [plantRows]
+        [plantRows, plantSeriesOn, rowVisibleCost]
     );
 
     const plantEvents = useMemo(
@@ -1196,6 +1232,14 @@ function OverviewTab({
                 if (info?.componentType !== 'series') return;
                 const row = plantRows[info.dataIndex ?? -1];
                 if (row) onOpenDetail({ type: 'distribution', title: row.plantName, record: row });
+            },
+            // Bật/tắt luồng qua legend -> cập nhật state để sắp xếp lại cột + đổi nhãn theo phần hiển thị
+            legendselectchanged: (params: unknown) => {
+                const sel = (params as { selected?: Record<string, boolean> }).selected ?? {};
+                setPlantSeriesOn({
+                    purchase: sel['Chi phí mua vật tư'] !== false,
+                    distribution: sel['Giá trị cấp phát nhận'] !== false,
+                });
             },
         }),
         [plantRows, onOpenDetail]
