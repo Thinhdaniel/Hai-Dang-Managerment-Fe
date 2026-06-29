@@ -617,6 +617,21 @@ export interface DistributionCostReport {
     byPeriod: DistributionCostByPeriod[];
 }
 
+export interface MaterialCostFlowByPlant {
+    plantId?: string;
+    plantName: string;
+    purchaseCost: number;
+    distributionCost: number;
+    totalCost: number;
+    purchaseOrderCount: number;
+    distributionCount: number;
+    purchaseItemCount: number;
+    distributionItemCount: number;
+    canPurchase: boolean;
+    purchaseOrderIds?: string[];
+    distributionIds?: string[];
+}
+
 export interface PriceComparisonReportRow {
     orderId: string;
     orderCode?: string;
@@ -1046,6 +1061,9 @@ export const materialReportService = {
 
     getDistributionCost: (params?: MaterialReportQueryParams): Promise<DistributionCostReport> =>
         api.get<DistributionCostReport>(`${MATERIALS_BASE}/reports/distribution-cost`, { params }),
+
+    getCostFlowByPlant: (params?: MaterialReportQueryParams): Promise<MaterialCostFlowByPlant[]> =>
+        api.get<MaterialCostFlowByPlant[]>(`${MATERIALS_BASE}/reports/cost-flow-by-plant`, { params }),
 
     exportExcel: async (params?: MaterialReportQueryParams): Promise<void> => {
         const data: any = await axiosInstance.get(`${MATERIALS_BASE}/reports/export-excel`, {

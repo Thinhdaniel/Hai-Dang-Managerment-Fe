@@ -373,14 +373,15 @@ export default function FacilityCostReportPage() {
                                         onClick={() =>
                                             setDrilldown({
                                                 kind: 'plant',
-                                                title: 'Chi phí vật tư đã cấp phát theo cơ sở',
-                                                description: 'Giá trị vật tư đã cấp phát/phân bổ theo cơ sở nhận.',
+                                                title: 'Vật tư CS1 cấp cho cơ sở',
+                                                description:
+                                                    'Giá trị vật tư được ghi nhận theo cơ sở nhận từ các phiếu cấp phát/xuất kho.',
                                                 rows: costByPlant.filter((row) => row.materialDistributionCost > 0),
                                             })
                                         }
                                     >
                                         <i style={{ background: COST_COLORS.material }} />
-                                        Vật tư <strong>{fmtShort(summary?.materialDistributionCost ?? 0)}</strong>
+                                        CS1 cấp <strong>{fmtShort(summary?.materialDistributionCost ?? 0)}</strong>
                                     </button>
                                     <button
                                         type='button'
@@ -405,18 +406,19 @@ export default function FacilityCostReportPage() {
                     <Row gutter={[12, 12]} className='facility-cost-kpi-grid'>
                         <Col xs={12} xl={6}>
                             <MetricCard
-                                title='Chi phí vật tư'
+                                title='Vật tư CS1 cấp'
                                 value={summary?.materialDistributionCost ?? 0}
                                 previousValue={prevSummary?.materialDistributionCost}
                                 loading={reportQuery.isLoading}
                                 icon={<InboxOutlined />}
                                 color={COST_COLORS.material}
-                                hint='Giá trị vật tư đã tiêu hao hoặc phân bổ cho cơ sở nhận, không phải dòng tiền mua vật tư.'
+                                hint='Giá trị vật tư CS1 đã cấp/xuất cho cơ sở nhận; không phải chi phí mua trực tiếp của cơ sở.'
                                 onClick={() =>
                                     setDrilldown({
                                         kind: 'plant',
-                                        title: 'Chi phí vật tư đã cấp phát theo cơ sở',
-                                        description: 'Giá trị vật tư đã cấp phát/phân bổ theo cơ sở nhận.',
+                                        title: 'Vật tư CS1 cấp cho cơ sở',
+                                        description:
+                                            'Giá trị vật tư được ghi nhận theo cơ sở nhận từ các phiếu cấp phát/xuất kho.',
                                         rows: costByPlant.filter((row) => row.materialDistributionCost > 0),
                                     })
                                 }
@@ -612,7 +614,7 @@ export default function FacilityCostReportPage() {
 function CostCompositionPanel({ summary }: { summary?: FacilityCostSummary }) {
     const mixData = [
         {
-            name: 'Chi phí vật tư đã cấp phát',
+            name: 'Vật tư CS1 cấp cho cơ sở',
             value: summary?.materialDistributionCost ?? 0,
             color: COST_COLORS.material,
         },
@@ -624,7 +626,7 @@ function CostCompositionPanel({ summary }: { summary?: FacilityCostSummary }) {
 
     const donutOption = useMemo<EChartsCoreOption>(() => {
         const items = [
-            { name: 'Chi phí vật tư đã cấp phát', value: materialCost, color: COST_COLORS.material },
+            { name: 'Vật tư CS1 cấp cho cơ sở', value: materialCost, color: COST_COLORS.material },
             { name: 'Chi phí sửa ngoài', value: repairCost, color: COST_COLORS.repair },
         ].filter((item) => item.value > 0);
 
@@ -818,7 +820,7 @@ function CostTrendChart({
                 : undefined,
             series: [
                 {
-                    name: 'Chi phí vật tư đã cấp phát',
+                    name: 'Vật tư CS1 cấp cho cơ sở',
                     type: 'bar',
                     stack: 'cost',
                     data: material,
@@ -926,7 +928,19 @@ function PlantCostChart({
                 trigger: 'axis',
                 axisPointer: { type: 'shadow', shadowStyle: { color: 'rgba(37, 99, 235, 0.06)' } },
                 ...ECHARTS_TOOLTIP_STYLE,
-                formatter: stackedTooltipFormatter,
+                formatter: (params: unknown) => {
+                    const points = Array.isArray(params) ? params : [params];
+                    const first = points[0] as { dataIndex?: number };
+                    const row = rows[first?.dataIndex ?? -1];
+                    if (!row) return '';
+                    return [
+                        `<strong>${row.plantName}</strong>`,
+                        `${(points[0] as { marker?: string })?.marker ?? ''} Vật tư CS1 cấp cho cơ sở: <b>${fmtCurrency(row.materialDistributionCost)}</b> (${row.distributionCount} phiếu)`,
+                        `${(points[1] as { marker?: string })?.marker ?? ''} Chi phí sửa ngoài: <b>${fmtCurrency(row.externalRepairCost)}</b> (${row.externalRepairCount} phiếu)`,
+                        `Tổng chi phí vận hành: <b>${fmtCurrency(row.totalCost)}</b>`,
+                        '<span style="color:#64748b">Chi phí vật tư được ghi nhận theo cơ sở nhận, không phải chi phí mua trực tiếp.</span>',
+                    ].join('<br/>');
+                },
             },
             legend: {
                 top: 0,
@@ -954,7 +968,7 @@ function PlantCostChart({
             },
             series: [
                 {
-                    name: 'Chi phí vật tư đã cấp phát',
+                    name: 'Vật tư CS1 cấp cho cơ sở',
                     type: 'bar',
                     stack: 'cost',
                     data: material,
@@ -1020,7 +1034,7 @@ function PlantCostChart({
             <EChart option={option} height={Math.max(220, rows.length * 46 + 70)} onEvents={events} />
             {onSelectPlant ? (
                 <Text type='secondary' className='facility-cost-chart-hint'>
-                    Nhấn vào thanh để xem chi tiết cơ sở
+                    Phần vật tư là giá trị CS1 cấp/xuất cho cơ sở nhận. Nhấn vào thanh để xem chi tiết cơ sở.
                 </Text>
             ) : null}
         </>
@@ -1133,7 +1147,7 @@ function FacilityDrilldownDrawer({
                 return query.toString();
             };
             const items = [
-                { label: 'Chi phí vật tư đã cấp phát', value: material, color: COST_COLORS.material },
+                { label: 'Vật tư CS1 cấp cho cơ sở', value: material, color: COST_COLORS.material },
                 { label: 'Chi phí sửa ngoài', value: repair, color: COST_COLORS.repair },
             ];
             return (
@@ -1183,7 +1197,7 @@ function FacilityDrilldownDrawer({
                 return query.toString();
             };
             const breakdown = [
-                { label: 'Chi phí vật tư đã cấp phát', value: material, color: COST_COLORS.material },
+                { label: 'Vật tư CS1 cấp cho cơ sở', value: material, color: COST_COLORS.material },
                 { label: 'Chi phí sửa ngoài', value: repair, color: COST_COLORS.repair },
             ];
             return (

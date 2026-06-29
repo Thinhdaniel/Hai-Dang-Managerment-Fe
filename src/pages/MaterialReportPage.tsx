@@ -69,6 +69,7 @@ import {
     type DistributionCostByPeriod,
     type DistributionCostByPlant,
     type Material,
+    type MaterialCostFlowByPlant,
     type MaterialCostByPeriodPoint,
     type MaterialReportSummary,
     type MaterialReportQueryParams,
@@ -86,7 +87,7 @@ type GroupBy = NonNullable<MaterialReportQueryParams['groupBy']>;
 type QuickRange = 'this_month' | 'quarter' | 'six_months' | 'year' | 'custom';
 type DetailPayload =
     | { type: 'purchase'; title: string; record: PriceComparisonReportRow }
-    | { type: 'distribution'; title: string; record: Distribution | DistributionCostByPlant }
+    | { type: 'distribution'; title: string; record: Distribution | DistributionCostByPlant | MaterialCostFlowByPlant }
     | { type: 'material'; title: string; record: TopConsumedMaterial }
     | { type: 'supplier'; title: string; record: SupplierReportRow };
 
@@ -285,6 +286,12 @@ export default function MaterialReportPage() {
         staleTime: 60_000,
     });
 
+    const costFlowByPlantQuery = useQuery({
+        queryKey: ['material-report-cost-flow-by-plant', params],
+        queryFn: () => materialReportService.getCostFlowByPlant(params),
+        staleTime: 60_000,
+    });
+
     const distributionDetailQuery = useQuery({
         queryKey: ['material-report-distribution-detail', params],
         queryFn: () =>
@@ -307,6 +314,7 @@ export default function MaterialReportPage() {
     const supplierRows = supplierQuery.data ?? [];
     const priceRows = priceQuery.data ?? [];
     const distributionCost = distributionQuery.data;
+    const costFlowByPlant = costFlowByPlantQuery.data ?? [];
     const distributionDetails = normalizeList<Distribution>(distributionDetailQuery.data);
 
     const isLoading =
@@ -315,7 +323,8 @@ export default function MaterialReportPage() {
         topQuery.isLoading ||
         supplierQuery.isLoading ||
         priceQuery.isLoading ||
-        distributionQuery.isLoading;
+        distributionQuery.isLoading ||
+        costFlowByPlantQuery.isLoading;
 
     const hasError =
         summaryQuery.isError ||
@@ -323,7 +332,8 @@ export default function MaterialReportPage() {
         topQuery.isError ||
         supplierQuery.isError ||
         priceQuery.isError ||
-        distributionQuery.isError;
+        distributionQuery.isError ||
+        costFlowByPlantQuery.isError;
 
     const categoryOptions = useMemo(
         () =>
@@ -365,6 +375,7 @@ export default function MaterialReportPage() {
         supplierQuery.refetch();
         priceQuery.refetch();
         distributionQuery.refetch();
+        costFlowByPlantQuery.refetch();
         distributionDetailQuery.refetch();
     };
 
@@ -840,6 +851,7 @@ export default function MaterialReportPage() {
                                     topMaterials={topMaterials}
                                     suppliers={supplierRows}
                                     distribution={distributionCost}
+                                    costFlowByPlant={costFlowByPlant}
                                     loading={isLoading}
                                     onOpenDetail={setDetail}
                                 />
@@ -975,6 +987,7 @@ function OverviewTab({
     topMaterials,
     suppliers,
     distribution,
+    costFlowByPlant,
     loading,
     onOpenDetail,
 }: {
@@ -982,6 +995,7 @@ function OverviewTab({
     topMaterials: TopConsumedMaterial[];
     suppliers: SupplierReportRow[];
     distribution?: { byPlant: DistributionCostByPlant[]; byPeriod: DistributionCostByPeriod[] };
+    costFlowByPlant: MaterialCostFlowByPlant[];
     loading: boolean;
     onOpenDetail: (detail: DetailPayload) => void;
 }) {
@@ -1085,10 +1099,10 @@ function OverviewTab({
         };
     }, [combinedTrend]);
 
-    // Sắp tăng dần để cơ sở nhận nhiều nhất nằm trên cùng (trục category vẽ từ dưới lên)
+    // Sắp tăng dần để cơ sở tốn nhiều nhất nằm trên cùng (trục category vẽ từ dưới lên)
     const plantRows = useMemo(
-        () => [...(distribution?.byPlant ?? [])].sort((a, b) => a.totalWithVat - b.totalWithVat),
-        [distribution]
+        () => [...costFlowByPlant].sort((a, b) => a.totalCost - b.totalCost),
+        [costFlowByPlant]
     );
 
     const plantOption = useMemo<EChartsCoreOption>(
@@ -1096,14 +1110,28 @@ function OverviewTab({
             animationDuration: 1000,
             animationEasing: 'cubicOut',
             tooltip: {
-                trigger: 'item',
+                trigger: 'axis',
+                axisPointer: { type: 'shadow', shadowStyle: { color: 'rgba(37, 99, 235, 0.06)' } },
                 ...ECHARTS_TOOLTIP_STYLE,
                 formatter: (params: unknown) => {
-                    const info = params as { marker?: string; name?: string; value?: number };
-                    return `${info.marker ?? ''} ${info.name ?? ''}: <b>${fmtCurrency(Number(info.value ?? 0))}</b>`;
+                    const points = Array.isArray(params) ? params : [params];
+                    const first = points[0] as { dataIndex?: number };
+                    const row = plantRows[first?.dataIndex ?? -1];
+                    if (!row) return '';
+                    const lines = [
+                        `<strong>${row.plantName}</strong>`,
+                        `${(points[0] as { marker?: string })?.marker ?? ''} Chi phí mua vật tư: <b>${fmtCurrency(row.purchaseCost)}</b> (${row.purchaseOrderCount} đơn, ${row.purchaseItemCount} dòng)`,
+                        `${(points[1] as { marker?: string })?.marker ?? ''} Giá trị cấp phát nhận: <b>${fmtCurrency(row.distributionCost)}</b> (${row.distributionCount} phiếu, ${row.distributionItemCount} dòng)`,
+                        `Tổng chi phí vật tư: <b>${fmtCurrency(row.totalCost)}</b>`,
+                    ];
+                    if (!row.canPurchase && row.purchaseCost === 0) {
+                        lines.push('<span style="color:#64748b">Cơ sở này thường nhận vật tư qua cấp phát, không trực tiếp mua.</span>');
+                    }
+                    return lines.join('<br/>');
                 },
             },
-            grid: { left: 8, right: 62, top: 8, bottom: 4, containLabel: true },
+            legend: ECHARTS_LEGEND_TOP,
+            grid: { left: 8, right: 72, top: 34, bottom: 4, containLabel: true },
             xAxis: {
                 type: 'value',
                 splitLine: { lineStyle: { color: '#eef2f7', type: 'dashed' } },
@@ -1118,30 +1146,43 @@ function OverviewTab({
             },
             series: [
                 {
-                    name: 'Giá trị cấp phát',
+                    name: 'Chi phí mua vật tư',
                     type: 'bar',
+                    stack: 'material-cost',
                     barMaxWidth: 24,
-                    data: plantRows.map((row, index) => ({
-                        value: row.totalWithVat,
-                        itemStyle: {
-                            color: barGradient(blueByRank(plantRows.length - 1 - index, plantRows.length), false),
-                            borderRadius: [0, 8, 8, 0],
-                            shadowBlur: 6,
-                            shadowColor: 'rgba(37, 99, 235, 0.22)',
-                            shadowOffsetY: 3,
-                        },
-                    })),
+                    data: plantRows.map((row) => row.purchaseCost),
+                    itemStyle: {
+                        color: barGradient(CHART_SEMANTIC.purchaseLine, false),
+                        shadowBlur: 6,
+                        shadowColor: 'rgba(30, 58, 138, 0.2)',
+                        shadowOffsetY: 3,
+                    },
+                    emphasis: { focus: 'series', itemStyle: { shadowBlur: 14 } },
+                    animationDelay: (idx: number) => idx * 90,
+                },
+                {
+                    name: 'Giá trị cấp phát nhận',
+                    type: 'bar',
+                    stack: 'material-cost',
+                    barMaxWidth: 24,
+                    data: plantRows.map((row) => row.distributionCost),
+                    itemStyle: {
+                        color: barGradient(CHART_SEMANTIC.material, false),
+                        borderRadius: [0, 8, 8, 0],
+                        shadowBlur: 6,
+                        shadowColor: 'rgba(37, 99, 235, 0.22)',
+                        shadowOffsetY: 3,
+                    },
                     label: {
                         show: true,
                         position: 'right',
-                        formatter: (params: { dataIndex: number }) =>
-                            fmtShort(plantRows[params.dataIndex]?.totalWithVat ?? 0),
+                        formatter: (params: { dataIndex: number }) => fmtShort(plantRows[params.dataIndex]?.totalCost ?? 0),
                         color: '#475569',
                         fontSize: 11,
                         fontWeight: 600,
                     },
-                    emphasis: { itemStyle: { shadowBlur: 14 } },
-                    animationDelay: (idx: number) => idx * 90,
+                    emphasis: { focus: 'series', itemStyle: { shadowBlur: 14 } },
+                    animationDelay: (idx: number) => idx * 90 + 80,
                 },
             ],
         }),
@@ -1303,7 +1344,7 @@ function OverviewTab({
                 </SectionCard>
             </Col>
             <Col xs={24} xl={14}>
-                <SectionCard title='Giá trị cấp phát vật tư theo cơ sở'>
+                <SectionCard title='Tổng chi phí vật tư theo cơ sở'>
                     {plantRows.length ? (
                         <>
                             <EChart
@@ -1312,7 +1353,8 @@ function OverviewTab({
                                 onEvents={plantEvents}
                             />
                             <Text type='secondary' className='report-chart-hint'>
-                                Nhấn vào thanh để xem chi tiết cơ sở
+                                Mua vật tư được gom theo cơ sở phát sinh nhu cầu; cấp phát được gom theo cơ sở nhận.
+                                Nhấn legend để ẩn/hiện từng luồng chi phí.
                             </Text>
                         </>
                     ) : (
