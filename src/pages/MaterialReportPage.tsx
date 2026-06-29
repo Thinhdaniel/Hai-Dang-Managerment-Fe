@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useRef, useState } from 'react';
+import React, { useMemo, useRef, useState } from 'react';
 import dayjs, { type Dayjs } from 'dayjs';
 import {
     Alert,
@@ -1099,22 +1099,13 @@ function OverviewTab({
         };
     }, [combinedTrend]);
 
-    // Trạng thái bật/tắt từng luồng chi phí qua legend. Khi tắt 1 luồng, biểu đồ
-    // sắp xếp lại + đổi nhãn theo phần ĐANG HIỂN THỊ để cột luôn giảm dần và số
-    // khớp với độ dài cột (tránh "rối mắt": cột ngắn nhưng nhãn ghi tổng đầy đủ).
-    const [plantSeriesOn, setPlantSeriesOn] = useState({ purchase: true, distribution: true });
-
-    const rowVisibleCost = useCallback(
-        (row: MaterialCostFlowByPlant) =>
-            (plantSeriesOn.purchase ? row.purchaseCost : 0) +
-            (plantSeriesOn.distribution ? row.distributionCost : 0),
-        [plantSeriesOn]
-    );
-
-    // Sắp tăng dần để cơ sở tốn nhiều nhất nằm trên cùng (trục category vẽ từ dưới lên)
+    // Chart "Chi phí mua vật tư theo cơ sở" — CHỈ phần MUA, gom theo cơ sở phát sinh nhu cầu.
+    // Phần "cấp phát nhận" đã có chart riêng ở module Báo cáo chi phí nên không gộp ở đây nữa
+    // (gộp chung dễ gây hiểu nhầm vì cấp phát chỉ là luân chuyển nội bộ, không phải mua mới).
+    // Sắp tăng dần để cơ sở mua nhiều nhất nằm trên cùng (trục category vẽ từ dưới lên).
     const plantRows = useMemo(
-        () => [...costFlowByPlant].sort((a, b) => rowVisibleCost(a) - rowVisibleCost(b)),
-        [costFlowByPlant, rowVisibleCost]
+        () => costFlowByPlant.filter((row) => row.purchaseCost > 0).sort((a, b) => a.purchaseCost - b.purchaseCost),
+        [costFlowByPlant]
     );
 
     const plantOption = useMemo<EChartsCoreOption>(
@@ -1130,31 +1121,17 @@ function OverviewTab({
                     const first = points[0] as { dataIndex?: number };
                     const row = plantRows[first?.dataIndex ?? -1];
                     if (!row) return '';
-                    // Dot màu cố định theo luồng (không phụ thuộc thứ tự points — vốn lệch khi ẩn 1 luồng)
-                    const dot = (c: string) =>
-                        `<span style="display:inline-block;width:9px;height:9px;border-radius:50%;background:${c};margin-right:5px"></span>`;
-                    const off = (on: boolean) => (on ? '' : ' <span style="color:#94a3b8">(đang ẩn)</span>');
-                    const bothOn = plantSeriesOn.purchase && plantSeriesOn.distribution;
                     const lines = [
                         `<strong>${row.plantName}</strong>`,
-                        `${dot(CHART_SEMANTIC.purchaseLine)}Chi phí mua vật tư: <b>${fmtCurrency(row.purchaseCost)}</b> (${row.purchaseOrderCount} đơn, ${row.purchaseItemCount} dòng)${off(plantSeriesOn.purchase)}`,
-                        `${dot(CHART_SEMANTIC.material)}Giá trị cấp phát nhận: <b>${fmtCurrency(row.distributionCost)}</b> (${row.distributionCount} phiếu, ${row.distributionItemCount} dòng)${off(plantSeriesOn.distribution)}`,
-                        `${bothOn ? 'Tổng chi phí vật tư' : 'Tổng đang hiển thị'}: <b>${fmtCurrency(rowVisibleCost(row))}</b>`,
+                        `Chi phí mua vật tư: <b>${fmtCurrency(row.purchaseCost)}</b> (${row.purchaseOrderCount} đơn, ${row.purchaseItemCount} dòng)`,
                     ];
-                    if (!row.canPurchase && row.purchaseCost === 0) {
-                        lines.push('<span style="color:#64748b">Cơ sở này thường nhận vật tư qua cấp phát, không trực tiếp mua.</span>');
+                    if (!row.canPurchase) {
+                        lines.push('<span style="color:#64748b">Do CS1 mua theo nhu cầu của cơ sở này (cơ sở không trực tiếp đặt mua).</span>');
                     }
                     return lines.join('<br/>');
                 },
             },
-            legend: {
-                ...ECHARTS_LEGEND_TOP,
-                selected: {
-                    'Chi phí mua vật tư': plantSeriesOn.purchase,
-                    'Giá trị cấp phát nhận': plantSeriesOn.distribution,
-                },
-            },
-            grid: { left: 8, right: 72, top: 34, bottom: 4, containLabel: true },
+            grid: { left: 8, right: 72, top: 16, bottom: 4, containLabel: true },
             xAxis: {
                 type: 'value',
                 splitLine: { lineStyle: { color: '#eef2f7', type: 'dashed' } },
@@ -1171,22 +1148,20 @@ function OverviewTab({
                 {
                     name: 'Chi phí mua vật tư',
                     type: 'bar',
-                    stack: 'material-cost',
                     barMaxWidth: 24,
                     data: plantRows.map((row) => row.purchaseCost),
                     itemStyle: {
                         color: barGradient(CHART_SEMANTIC.purchaseLine, false),
+                        borderRadius: [0, 8, 8, 0],
                         shadowBlur: 6,
                         shadowColor: 'rgba(30, 58, 138, 0.2)',
                         shadowOffsetY: 3,
                     },
-                    // Nhãn tổng chỉ gắn vào luồng "mua" khi luồng "cấp phát" bị ẩn
-                    // (lúc đó "mua" là phần ngoài cùng) — tránh mất nhãn khi tắt cấp phát.
                     label: {
-                        show: !plantSeriesOn.distribution,
+                        show: true,
                         position: 'right',
                         formatter: (params: { dataIndex: number }) =>
-                            fmtShort(rowVisibleCost(plantRows[params.dataIndex] ?? ({} as MaterialCostFlowByPlant))),
+                            fmtShort(plantRows[params.dataIndex]?.purchaseCost ?? 0),
                         color: '#475569',
                         fontSize: 11,
                         fontWeight: 600,
@@ -1194,35 +1169,9 @@ function OverviewTab({
                     emphasis: { focus: 'series', itemStyle: { shadowBlur: 14 } },
                     animationDelay: (idx: number) => idx * 90,
                 },
-                {
-                    name: 'Giá trị cấp phát nhận',
-                    type: 'bar',
-                    stack: 'material-cost',
-                    barMaxWidth: 24,
-                    data: plantRows.map((row) => row.distributionCost),
-                    itemStyle: {
-                        color: barGradient(CHART_SEMANTIC.material, false),
-                        borderRadius: [0, 8, 8, 0],
-                        shadowBlur: 6,
-                        shadowColor: 'rgba(37, 99, 235, 0.22)',
-                        shadowOffsetY: 3,
-                    },
-                    // Nhãn tổng hiển thị phần ĐANG HIỂN THỊ (khớp độ dài cột), không phải totalCost cứng
-                    label: {
-                        show: plantSeriesOn.distribution,
-                        position: 'right',
-                        formatter: (params: { dataIndex: number }) =>
-                            fmtShort(rowVisibleCost(plantRows[params.dataIndex] ?? ({} as MaterialCostFlowByPlant))),
-                        color: '#475569',
-                        fontSize: 11,
-                        fontWeight: 600,
-                    },
-                    emphasis: { focus: 'series', itemStyle: { shadowBlur: 14 } },
-                    animationDelay: (idx: number) => idx * 90 + 80,
-                },
             ],
         }),
-        [plantRows, plantSeriesOn, rowVisibleCost]
+        [plantRows]
     );
 
     const plantEvents = useMemo(
@@ -1232,14 +1181,6 @@ function OverviewTab({
                 if (info?.componentType !== 'series') return;
                 const row = plantRows[info.dataIndex ?? -1];
                 if (row) onOpenDetail({ type: 'distribution', title: row.plantName, record: row });
-            },
-            // Bật/tắt luồng qua legend -> cập nhật state để sắp xếp lại cột + đổi nhãn theo phần hiển thị
-            legendselectchanged: (params: unknown) => {
-                const sel = (params as { selected?: Record<string, boolean> }).selected ?? {};
-                setPlantSeriesOn({
-                    purchase: sel['Chi phí mua vật tư'] !== false,
-                    distribution: sel['Giá trị cấp phát nhận'] !== false,
-                });
             },
         }),
         [plantRows, onOpenDetail]
@@ -1388,7 +1329,7 @@ function OverviewTab({
                 </SectionCard>
             </Col>
             <Col xs={24} xl={14}>
-                <SectionCard title='Tổng chi phí vật tư theo cơ sở'>
+                <SectionCard title='Chi phí mua vật tư theo cơ sở'>
                     {plantRows.length ? (
                         <>
                             <EChart
@@ -1397,8 +1338,8 @@ function OverviewTab({
                                 onEvents={plantEvents}
                             />
                             <Text type='secondary' className='report-chart-hint'>
-                                Mua vật tư được gom theo cơ sở phát sinh nhu cầu; cấp phát được gom theo cơ sở nhận.
-                                Nhấn legend để ẩn/hiện từng luồng chi phí.
+                                Gom theo cơ sở phát sinh nhu cầu mua. Phần vật tư CS1 cấp phát cho cơ sở xem ở Báo cáo
+                                chi phí vận hành.
                             </Text>
                         </>
                     ) : (
