@@ -107,6 +107,7 @@ const DEFAULT_FILTERS: ReportFilters = {
 
 const COST_COLORS = {
     material: CHART_SEMANTIC.material,
+    selfPurchase: CHART_SEMANTIC.purchaseLine,
     repair: CHART_SEMANTIC.repair,
     total: '#13c2c2',
 };
@@ -363,6 +364,7 @@ export default function FacilityCostReportPage() {
                                         data={costByPeriod.map(
                                             (row) =>
                                                 Number(row.materialDistributionCost ?? 0) +
+                                                Number(row.materialSelfPurchaseCost ?? 0) +
                                                 Number(row.externalRepairCost ?? 0)
                                         )}
                                     />
@@ -373,15 +375,27 @@ export default function FacilityCostReportPage() {
                                         onClick={() =>
                                             setDrilldown({
                                                 kind: 'plant',
-                                                title: 'Vật tư CS1 cấp cho cơ sở',
+                                                title: 'Chi phí vật tư theo cơ sở',
                                                 description:
-                                                    'Giá trị vật tư được ghi nhận theo cơ sở nhận từ các phiếu cấp phát/xuất kho.',
-                                                rows: costByPlant.filter((row) => row.materialDistributionCost > 0),
+                                                    'Vật tư CS1 cấp cho cơ sở nhận, cộng phần cơ sở được phép tự mua (vd Phú Sơn).',
+                                                rows: costByPlant.filter(
+                                                    (row) =>
+                                                        Number(row.materialDistributionCost ?? 0) +
+                                                            Number(row.materialSelfPurchaseCost ?? 0) >
+                                                        0
+                                                ),
                                             })
                                         }
                                     >
                                         <i style={{ background: COST_COLORS.material }} />
-                                        CS1 cấp <strong>{fmtShort(summary?.materialDistributionCost ?? 0)}</strong>
+                                        Vật tư{' '}
+                                        <strong>
+                                            {fmtShort(
+                                                summary?.materialTotalCost ??
+                                                    (summary?.materialDistributionCost ?? 0) +
+                                                        (summary?.materialSelfPurchaseCost ?? 0)
+                                            )}
+                                        </strong>
                                     </button>
                                     <button
                                         type='button'
@@ -406,20 +420,28 @@ export default function FacilityCostReportPage() {
                     <Row gutter={[12, 12]} className='facility-cost-kpi-grid'>
                         <Col xs={12} xl={6}>
                             <MetricCard
-                                title='Vật tư CS1 cấp'
-                                value={summary?.materialDistributionCost ?? 0}
-                                previousValue={prevSummary?.materialDistributionCost}
+                                title='Chi phí vật tư'
+                                value={
+                                    summary?.materialTotalCost ??
+                                    (summary?.materialDistributionCost ?? 0) + (summary?.materialSelfPurchaseCost ?? 0)
+                                }
+                                previousValue={prevSummary?.materialTotalCost}
                                 loading={reportQuery.isLoading}
                                 icon={<InboxOutlined />}
                                 color={COST_COLORS.material}
-                                hint='Giá trị vật tư CS1 đã cấp/xuất cho cơ sở nhận; không phải chi phí mua trực tiếp của cơ sở.'
+                                hint='Vật tư CS1 cấp cho cơ sở nhận, cộng phần cơ sở được phép tự mua (vd Phú Sơn).'
                                 onClick={() =>
                                     setDrilldown({
                                         kind: 'plant',
-                                        title: 'Vật tư CS1 cấp cho cơ sở',
+                                        title: 'Chi phí vật tư theo cơ sở',
                                         description:
-                                            'Giá trị vật tư được ghi nhận theo cơ sở nhận từ các phiếu cấp phát/xuất kho.',
-                                        rows: costByPlant.filter((row) => row.materialDistributionCost > 0),
+                                            'Vật tư CS1 cấp cho cơ sở nhận, cộng phần cơ sở được phép tự mua (vd Phú Sơn).',
+                                        rows: costByPlant.filter(
+                                            (row) =>
+                                                Number(row.materialDistributionCost ?? 0) +
+                                                    Number(row.materialSelfPurchaseCost ?? 0) >
+                                                0
+                                        ),
                                     })
                                 }
                             />
@@ -612,21 +634,20 @@ export default function FacilityCostReportPage() {
 }
 
 function CostCompositionPanel({ summary }: { summary?: FacilityCostSummary }) {
+    const materialCost = summary?.materialDistributionCost ?? 0;
+    const selfPurchaseCost = summary?.materialSelfPurchaseCost ?? 0;
+    const repairCost = summary?.externalRepairCost ?? 0;
     const mixData = [
-        {
-            name: 'Vật tư CS1 cấp cho cơ sở',
-            value: summary?.materialDistributionCost ?? 0,
-            color: COST_COLORS.material,
-        },
-        { name: 'Chi phí sửa ngoài', value: summary?.externalRepairCost ?? 0, color: COST_COLORS.repair },
+        { name: 'Vật tư CS1 cấp cho cơ sở', value: materialCost, color: COST_COLORS.material },
+        { name: 'Vật tư cơ sở tự mua', value: selfPurchaseCost, color: COST_COLORS.selfPurchase },
+        { name: 'Chi phí sửa ngoài', value: repairCost, color: COST_COLORS.repair },
     ].filter((item) => item.value > 0);
     const mixTotal = mixData.reduce((sum, item) => sum + item.value, 0);
-    const materialCost = summary?.materialDistributionCost ?? 0;
-    const repairCost = summary?.externalRepairCost ?? 0;
 
     const donutOption = useMemo<EChartsCoreOption>(() => {
         const items = [
             { name: 'Vật tư CS1 cấp cho cơ sở', value: materialCost, color: COST_COLORS.material },
+            { name: 'Vật tư cơ sở tự mua', value: selfPurchaseCost, color: COST_COLORS.selfPurchase },
             { name: 'Chi phí sửa ngoài', value: repairCost, color: COST_COLORS.repair },
         ].filter((item) => item.value > 0);
 
@@ -667,7 +688,7 @@ function CostCompositionPanel({ summary }: { summary?: FacilityCostSummary }) {
                 },
             ],
         };
-    }, [materialCost, repairCost]);
+    }, [materialCost, selfPurchaseCost, repairCost]);
 
     return (
         <Card
@@ -770,8 +791,9 @@ function CostTrendChart({
     const option = useMemo<EChartsCoreOption>(() => {
         const labels = data.map((row) => getPeriodLabel(row.period));
         const material = data.map((row) => Number(row.materialDistributionCost ?? 0));
+        const selfPurchase = data.map((row) => Number(row.materialSelfPurchaseCost ?? 0));
         const repair = data.map((row) => Number(row.externalRepairCost ?? 0));
-        const totals = material.map((value, index) => value + repair[index]);
+        const totals = material.map((value, index) => value + selfPurchase[index] + repair[index]);
         const average = totals.reduce((sum, value) => sum + value, 0) / Math.max(totals.length, 1);
         const many = data.length > 18;
 
@@ -833,6 +855,21 @@ function CostTrendChart({
                     },
                     emphasis: { focus: 'series', itemStyle: { shadowBlur: 16 } },
                     animationDelay: (idx: number) => idx * 70,
+                },
+                {
+                    name: 'Vật tư cơ sở tự mua',
+                    type: 'bar',
+                    stack: 'cost',
+                    data: selfPurchase,
+                    barMaxWidth: 38,
+                    itemStyle: {
+                        color: barGradient(CHART_SEMANTIC.purchaseLine),
+                        shadowBlur: 8,
+                        shadowColor: 'rgba(30, 58, 138, 0.25)',
+                        shadowOffsetY: 4,
+                    },
+                    emphasis: { focus: 'series', itemStyle: { shadowBlur: 16 } },
+                    animationDelay: (idx: number) => idx * 70 + 80,
                 },
                 {
                     name: 'Chi phí sửa ngoài',
@@ -919,7 +956,10 @@ function PlantCostChart({
     const option = useMemo<EChartsCoreOption>(() => {
         const names = rows.map((row) => row.plantName);
         const material = rows.map((row) => Number(row.materialDistributionCost ?? 0));
+        const selfPurchase = rows.map((row) => Number(row.materialSelfPurchaseCost ?? 0));
         const repair = rows.map((row) => Number(row.externalRepairCost ?? 0));
+        const dot = (c: string) =>
+            `<span style="display:inline-block;width:9px;height:9px;border-radius:50%;background:${c};margin-right:5px"></span>`;
 
         return {
             animationDuration: 1000,
@@ -933,13 +973,21 @@ function PlantCostChart({
                     const first = points[0] as { dataIndex?: number };
                     const row = rows[first?.dataIndex ?? -1];
                     if (!row) return '';
-                    return [
+                    const lines = [
                         `<strong>${row.plantName}</strong>`,
-                        `${(points[0] as { marker?: string })?.marker ?? ''} Vật tư CS1 cấp cho cơ sở: <b>${fmtCurrency(row.materialDistributionCost)}</b> (${row.distributionCount} phiếu)`,
-                        `${(points[1] as { marker?: string })?.marker ?? ''} Chi phí sửa ngoài: <b>${fmtCurrency(row.externalRepairCost)}</b> (${row.externalRepairCount} phiếu)`,
+                        `${dot(CHART_SEMANTIC.material)}Vật tư CS1 cấp cho cơ sở: <b>${fmtCurrency(row.materialDistributionCost)}</b> (${row.distributionCount} phiếu)`,
+                    ];
+                    if (Number(row.materialSelfPurchaseCost ?? 0) > 0) {
+                        lines.push(
+                            `${dot(CHART_SEMANTIC.purchaseLine)}Vật tư cơ sở tự mua: <b>${fmtCurrency(row.materialSelfPurchaseCost)}</b> (${row.selfPurchaseOrderCount} đơn)`
+                        );
+                    }
+                    lines.push(
+                        `${dot(CHART_SEMANTIC.repair)}Chi phí sửa ngoài: <b>${fmtCurrency(row.externalRepairCost)}</b> (${row.externalRepairCount} phiếu)`,
                         `Tổng chi phí vận hành: <b>${fmtCurrency(row.totalCost)}</b>`,
-                        '<span style="color:#64748b">Chi phí vật tư được ghi nhận theo cơ sở nhận, không phải chi phí mua trực tiếp.</span>',
-                    ].join('<br/>');
+                        '<span style="color:#64748b">Vật tư tính theo cơ sở nhận cấp phát; riêng cơ sở được tự đặt còn cộng phần tự mua.</span>'
+                    );
+                    return lines.join('<br/>');
                 },
             },
             legend: {
@@ -981,6 +1029,21 @@ function PlantCostChart({
                     },
                     emphasis: { focus: 'series' },
                     animationDelay: (idx: number) => idx * 90,
+                },
+                {
+                    name: 'Vật tư cơ sở tự mua',
+                    type: 'bar',
+                    stack: 'cost',
+                    data: selfPurchase,
+                    barMaxWidth: 26,
+                    itemStyle: {
+                        color: barGradient(CHART_SEMANTIC.purchaseLine, false),
+                        shadowBlur: 6,
+                        shadowColor: 'rgba(30, 58, 138, 0.2)',
+                        shadowOffsetY: 3,
+                    },
+                    emphasis: { focus: 'series' },
+                    animationDelay: (idx: number) => idx * 90 + 60,
                 },
                 {
                     name: 'Chi phí sửa ngoài',
@@ -1103,13 +1166,20 @@ function FacilityDrilldownDrawer({
     const plantColumns: ColumnsType<FacilityCostByPlant> = [
         { title: 'Cơ sở', dataIndex: 'plantName', ellipsis: true, render: (value) => <Text strong>{value}</Text> },
         {
-            title: 'Vật tư đã cấp phát',
+            title: 'Vật tư CS1 cấp',
             dataIndex: 'materialDistributionCost',
-            width: 170,
+            width: 150,
             align: 'right',
             render: fmtCurrency,
         },
-        { title: 'Sửa ngoài', dataIndex: 'externalRepairCost', width: 150, align: 'right', render: fmtCurrency },
+        {
+            title: 'Vật tư tự mua',
+            dataIndex: 'materialSelfPurchaseCost',
+            width: 140,
+            align: 'right',
+            render: (value: number) => (Number(value ?? 0) > 0 ? fmtCurrency(value) : '—'),
+        },
+        { title: 'Sửa ngoài', dataIndex: 'externalRepairCost', width: 140, align: 'right', render: fmtCurrency },
         { title: 'Tổng', dataIndex: 'totalCost', width: 150, align: 'right', render: fmtCurrency },
     ];
     const assetColumns: ColumnsType<TopExternalRepairAsset> = [
@@ -1136,8 +1206,9 @@ function FacilityDrilldownDrawer({
         if (drilldown.kind === 'period') {
             const { row, plantId } = drilldown;
             const material = Number(row.materialDistributionCost ?? 0);
+            const selfPurchase = Number(row.materialSelfPurchaseCost ?? 0);
             const repair = Number(row.externalRepairCost ?? 0);
-            const total = material + repair;
+            const total = material + selfPurchase + repair;
             const range = getPeriodRange(row.period);
             const search = (extra: Record<string, string | undefined>) => {
                 const query = new URLSearchParams({ startDate: range.start, endDate: range.end });
@@ -1148,6 +1219,9 @@ function FacilityDrilldownDrawer({
             };
             const items = [
                 { label: 'Vật tư CS1 cấp cho cơ sở', value: material, color: COST_COLORS.material },
+                ...(selfPurchase > 0
+                    ? [{ label: 'Vật tư cơ sở tự mua', value: selfPurchase, color: COST_COLORS.selfPurchase }]
+                    : []),
                 { label: 'Chi phí sửa ngoài', value: repair, color: COST_COLORS.repair },
             ];
             return (
@@ -1187,8 +1261,9 @@ function FacilityDrilldownDrawer({
         if (drilldown.kind === 'plantDetail') {
             const { row, startDate, endDate } = drilldown;
             const material = Number(row.materialDistributionCost ?? 0);
+            const selfPurchase = Number(row.materialSelfPurchaseCost ?? 0);
             const repair = Number(row.externalRepairCost ?? 0);
-            const total = Number(row.totalCost ?? material + repair);
+            const total = Number(row.totalCost ?? material + selfPurchase + repair);
             const search = (extra: Record<string, string | undefined>) => {
                 const query = new URLSearchParams({ startDate: startDate ?? '', endDate: endDate ?? '' });
                 Object.entries(extra).forEach(([key, value]) => {
@@ -1198,6 +1273,9 @@ function FacilityDrilldownDrawer({
             };
             const breakdown = [
                 { label: 'Vật tư CS1 cấp cho cơ sở', value: material, color: COST_COLORS.material },
+                ...(selfPurchase > 0
+                    ? [{ label: 'Vật tư cơ sở tự mua', value: selfPurchase, color: COST_COLORS.selfPurchase }]
+                    : []),
                 { label: 'Chi phí sửa ngoài', value: repair, color: COST_COLORS.repair },
             ];
             return (

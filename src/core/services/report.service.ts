@@ -14,6 +14,8 @@ export interface FacilityCostQueryParams {
 
 export interface FacilityCostSummary {
     materialDistributionCost: number;
+    materialSelfPurchaseCost: number;
+    materialTotalCost: number;
     externalRepairCost: number;
     totalFacilityCost: number;
     distributionRecordCount: number;
@@ -27,9 +29,11 @@ export interface FacilityCostByPlant {
     plantId?: string;
     plantName: string;
     materialDistributionCost: number;
+    materialSelfPurchaseCost: number;
     externalRepairCost: number;
     totalCost: number;
     distributionCount: number;
+    selfPurchaseOrderCount: number;
     externalRepairCount: number;
     externalRepairAssetCount: number;
     repairSharePercent: number;
@@ -38,6 +42,7 @@ export interface FacilityCostByPlant {
 export interface FacilityCostByPeriod {
     period: string;
     materialDistributionCost: number;
+    materialSelfPurchaseCost: number;
     externalRepairCost: number;
     totalCost: number;
 }
