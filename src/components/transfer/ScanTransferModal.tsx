@@ -13,8 +13,6 @@ type ScanTransferModalProps = {
     onProceed: (assets: Asset[]) => void;
 };
 
-const areaKey = (asset: Asset) => (asset.area || '').trim().toLowerCase();
-
 const ScanTransferModal: React.FC<ScanTransferModalProps> = ({ open, onClose, onProceed }) => {
     const { message } = App.useApp();
     const [assets, setAssets] = useState<Asset[]>([]);
@@ -78,8 +76,7 @@ const ScanTransferModal: React.FC<ScanTransferModalProps> = ({ open, onClose, on
             }
             if (firstAsset) {
                 const samePlant = asset.plantId === firstAsset.plantId;
-                const sameArea = areaKey(asset) === areaKey(firstAsset);
-                if (!samePlant || !sameArea) {
+                if (!samePlant) {
                     recordQrScan({
                         ...logBase,
                         assetId: asset.id,
@@ -88,14 +85,10 @@ const ScanTransferModal: React.FC<ScanTransferModalProps> = ({ open, onClose, on
                             reason: 'different_origin',
                             firstAssetId: firstAsset.id,
                             firstPlantId: firstAsset.plantId,
-                            firstArea: firstAsset.area,
                             currentPlantId: asset.plantId,
-                            currentArea: asset.area,
                         },
                     });
-                    message.warning(
-                        `"${asset.name}" khác cơ sở/khu vực xuất phát với máy đầu tiên — không thể chung một lệnh.`
-                    );
+                    message.warning(`"${asset.name}" khác cơ sở xuất phát với máy đầu tiên — không thể chung một lệnh.`);
                     return;
                 }
             }
@@ -139,7 +132,7 @@ const ScanTransferModal: React.FC<ScanTransferModalProps> = ({ open, onClose, on
                     <div>
                         <div className='text-base font-bold text-slate-900'>Quét QR để điều chuyển</div>
                         <div className='text-xs font-normal text-slate-500'>
-                            Quét nhiều máy cùng cơ sở &amp; khu vực để gộp vào một lệnh
+                            Quét nhiều máy cùng cơ sở để gộp vào một lệnh
                         </div>
                     </div>
                 </div>

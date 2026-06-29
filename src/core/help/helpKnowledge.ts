@@ -88,7 +88,7 @@ export const HELP_TOPICS: HelpTopic[] = [
         summary:
             'Điều chuyển dùng để ghi nhận việc di chuyển máy từ cơ sở/khu vực hiện tại sang điểm đến mới. Vị trí máy chỉ cập nhật khi lệnh được hoàn tất.',
         steps: [
-            'Từ danh sách máy, chọn một máy hoặc chọn nhiều máy cùng cơ sở và cùng khu vực hiện tại.',
+            'Từ danh sách máy, chọn một máy hoặc chọn nhiều máy cùng cơ sở hiện tại.',
             'Bấm Điều chuyển, chọn cơ sở đến, khu vực đến, ngày điều chuyển, lý do và ghi chú bàn giao nếu có.',
             'Sau khi tạo, lệnh ở trạng thái Chờ duyệt. Máy sẽ hiện cờ đang có lệnh điều chuyển và không tạo thêm lệnh mới được.',
             'Quản lý hoặc admin vào Chuyển máy để duyệt lệnh. Sau khi duyệt, lệnh chuyển sang Đã duyệt và có thể xuất phiếu xuất kho.',
@@ -97,7 +97,7 @@ export const HELP_TOPICS: HelpTopic[] = [
             'Nếu lệnh sai trước khi duyệt, có thể hủy. Nếu không đồng ý nghiệp vụ, quản lý có thể từ chối để lưu lý do.',
         ],
         notes: [
-            'Một lệnh nhiều máy chỉ hợp lệ khi các máy cùng vị trí nguồn. Nếu khác cơ sở hoặc khác khu vực, hãy tách thành nhiều lệnh.',
+            'Một lệnh nhiều máy chỉ hợp lệ khi các máy cùng cơ sở nguồn. Nếu khác cơ sở, hãy tách thành nhiều lệnh.',
             'Không tạo điều chuyển nếu điểm đến giống hệt vị trí hiện tại.',
             'Nếu không bấm Hoàn tất, danh sách máy vẫn giữ vị trí cũ dù lệnh đã được duyệt.',
         ],

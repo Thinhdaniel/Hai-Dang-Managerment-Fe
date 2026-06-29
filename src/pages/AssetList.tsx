@@ -624,11 +624,11 @@ const AssetList: React.FC = () => {
 
         const [firstAsset] = selectedAssets;
         const hasDifferentSource = selectedAssets.some(
-            (asset) => asset.plantId !== firstAsset.plantId || (asset.area || '') !== (firstAsset.area || '')
+            (asset) => asset.plantId !== firstAsset.plantId
         );
 
         if (hasDifferentSource) {
-            message.warning('Chỉ có thể tạo một lệnh cho các máy cùng cơ sở và cùng khu vực hiện tại');
+            message.warning('Chỉ có thể tạo một lệnh cho các máy cùng cơ sở hiện tại');
             return;
         }
 

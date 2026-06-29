@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import { Alert, Button, DatePicker, Form, Input, Modal, Select, Tag } from 'antd';
+import { Alert, App, Button, DatePicker, Form, Input, Modal, Select, Tag } from 'antd';
 import {
     ArrowRightOutlined,
     CalendarOutlined,
@@ -32,14 +32,25 @@ type TransferModalProps = {
 };
 
 const renderArea = (value?: string) => value?.trim() || 'Chưa chỉ định khu vực';
+const normalizeArea = (value?: string) => value?.trim() || undefined;
+
+const getSourceAreaSummary = (items: Asset[]) => {
+    const areas = Array.from(new Set(items.map((item) => normalizeArea(item.area)).filter(Boolean)));
+    if (!areas.length) return 'Chưa chỉ định khu vực';
+    if (areas.length === 1) return areas[0]!;
+    return 'Nhiều khu vực';
+};
 
 const TransferModal = ({ open, asset, assets = [], plants, submitting, onClose, onSubmit }: TransferModalProps) => {
+    const { message } = App.useApp();
     const [form] = Form.useForm<TransferModalFormValues>();
     const transferAssets = assets.length ? assets : asset ? [asset] : [];
     const firstAsset = transferAssets[0] ?? null;
     const toPlantId = Form.useWatch('toPlantId', form);
     const toArea = Form.useWatch('toArea', form);
     const selectedPlant = plants.find((plant) => plant.id === toPlantId);
+    const sourceAreaSummary = getSourceAreaSummary(transferAssets);
+    const hasMultipleSourceAreas = sourceAreaSummary === 'Nhiều khu vực';
 
     useEffect(() => {
         if (!open) {
@@ -49,15 +60,26 @@ const TransferModal = ({ open, asset, assets = [], plants, submitting, onClose, 
 
         form.setFieldsValue({
             toPlantId: firstAsset?.plantId,
-            toArea: firstAsset?.area,
+            toArea: hasMultipleSourceAreas ? undefined : firstAsset?.area,
             transferDate: dayjs(),
             reason: '',
             note: '',
         });
-    }, [firstAsset, form, open]);
+    }, [firstAsset, form, hasMultipleSourceAreas, open]);
 
     const handleFinish = async (values: TransferModalFormValues) => {
         if (!transferAssets.length) return;
+
+        const targetArea = normalizeArea(values.toArea);
+        const unchangedAssets = transferAssets.filter(
+            (item) => item.plantId === values.toPlantId && normalizeArea(item.area) === targetArea
+        );
+        if (unchangedAssets.length) {
+            message.warning(
+                `Điểm đến đang trùng vị trí hiện tại của: ${unchangedAssets.map((item) => item.name).join(', ')}`
+            );
+            return;
+        }
 
         await onSubmit({
             assetId: transferAssets[0].id,
@@ -132,7 +154,7 @@ const TransferModal = ({ open, asset, assets = [], plants, submitting, onClose, 
                     showIcon
                     type='info'
                     title='Lệnh chỉ được tạo khi điểm đến khác vị trí hiện tại.'
-                    description='Các thiết bị trong cùng một lệnh phải cùng cơ sở và cùng khu vực xuất phát.'
+                    description='Các thiết bị trong cùng một lệnh phải cùng cơ sở xuất phát. Khu vực xuất phát có thể khác nhau để thao tác linh hoạt hơn.'
                     classNames={{ root: 'rounded-xl border-blue-100 bg-blue-50/80' }}
                 />
 
@@ -149,7 +171,7 @@ const TransferModal = ({ open, asset, assets = [], plants, submitting, onClose, 
                             <div className='mt-2 truncate text-base font-bold text-slate-900'>
                                 {firstAsset?.plant?.name || '-'}
                             </div>
-                            <div className='mt-1 truncate text-sm text-slate-500'>{renderArea(firstAsset?.area)}</div>
+                            <div className='mt-1 truncate text-sm text-slate-500'>{sourceAreaSummary}</div>
                         </div>
                         <div className='flex items-center justify-center'>
                             <div className='flex h-10 w-10 items-center justify-center rounded-full bg-blue-600 text-white shadow-sm'>
@@ -187,6 +209,9 @@ const TransferModal = ({ open, asset, assets = [], plants, submitting, onClose, 
                                         <div className='truncate text-sm font-semibold text-slate-900'>{item.name}</div>
                                         <div className='mt-1 truncate text-xs text-slate-500'>
                                             {item.model || item.type || '-'}
+                                        </div>
+                                        <div className='mt-1 truncate text-xs font-medium text-slate-500'>
+                                            {item.plant?.name || firstAsset?.plant?.name || '-'} · {renderArea(item.area)}
                                         </div>
                                     </div>
                                     <Tag color='blue' variant='outlined' className='shrink-0 font-mono'>

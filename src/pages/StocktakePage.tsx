@@ -6,6 +6,7 @@ import {
     Card,
     Empty,
     Grid,
+    Modal,
     Result,
     Segmented,
     Select,
@@ -40,9 +41,15 @@ import { getCurrentCoords } from '../core/lib/geolocation';
 import { evaluateScanLocation } from '../core/lib/locationMismatch';
 import { ASSET_STATUS_LABEL, isAssetClosedLifecycle } from '../core/constants';
 import { assetService } from '../core/services/asset.service';
-import { plantService } from '../core/services';
+import { plantService, stocktakeService } from '../core/services';
 import { transferService } from '../core/services/transfer.service';
-import { AssetStatus, type Asset, type CreateTransferPayload } from '../core/types';
+import {
+    AssetStatus,
+    type Asset,
+    type CreateTransferPayload,
+    type StocktakeSession,
+    type StocktakeSessionItem,
+} from '../core/types';
 
 const QrQuickUpdateModal = lazy(() => import('../components/QrQuickUpdateModal'));
 const TransferModal = lazy(() => import('../components/transfer/TransferModal'));
@@ -107,6 +114,8 @@ const StocktakePage: React.FC = () => {
     const [resolving, setResolving] = useState(false);
     const [quickAsset, setQuickAsset] = useState<Asset | null>(null);
     const [transferTarget, setTransferTarget] = useState<Asset | null>(null);
+    const [savedSessionId, setSavedSessionId] = useState<string | null>(null);
+    const [historyDetail, setHistoryDetail] = useState<StocktakeSession | null>(null);
 
     const { data: plants = [] } = useQuery({
         queryKey: ['plants'],
@@ -116,6 +125,12 @@ const StocktakePage: React.FC = () => {
     const plantAssetsQuery = useQuery({
         queryKey: ['stocktake-assets', selectedPlantId],
         queryFn: () => assetService.getAll({ plantId: selectedPlantId, page: 1, limit: 5000 }),
+        enabled: Boolean(selectedPlantId),
+    });
+
+    const stocktakeHistoryQuery = useQuery({
+        queryKey: ['stocktake-history', selectedPlantId],
+        queryFn: () => stocktakeService.getAll({ plantId: selectedPlantId, page: 1, limit: 5 }),
         enabled: Boolean(selectedPlantId),
     });
 
@@ -132,11 +147,21 @@ const StocktakePage: React.FC = () => {
         },
     });
 
+    const saveStocktakeMutation = useMutation({
+        mutationFn: stocktakeService.create,
+        onSuccess: (session) => {
+            setSavedSessionId(session.id);
+            queryClient.invalidateQueries({ queryKey: ['stocktake-history'] });
+            message.success('Đã lưu lịch sử kiểm kê');
+        },
+    });
+
     useEffect(() => {
         setSelectedArea(ALL_AREAS);
         setStarted(false);
         setExpectedAssets([]);
         setScanRecords([]);
+        setSavedSessionId(null);
     }, [selectedPlantId]);
 
     const handleAreaChange = (value: string) => {
@@ -144,6 +169,7 @@ const StocktakePage: React.FC = () => {
         setStarted(false);
         setExpectedAssets([]);
         setScanRecords([]);
+        setSavedSessionId(null);
     };
 
     const selectedPlant = useMemo(
@@ -194,6 +220,7 @@ const StocktakePage: React.FC = () => {
     };
 
     const appendRecord = (record: Omit<ScanRecord, 'key' | 'scannedAt'>) => {
+        setSavedSessionId(null);
         setScanRecords((current) => [
             {
                 ...record,
@@ -219,6 +246,7 @@ const StocktakePage: React.FC = () => {
         setScanRecords([]);
         setStarted(true);
         setStartedAt(new Date().toISOString());
+        setSavedSessionId(null);
         setActiveTab('missing');
         message.success(`Bắt đầu kiểm kê ${scopedAssets.length} máy`);
     };
@@ -398,6 +426,93 @@ const StocktakePage: React.FC = () => {
         return [...missing, ...anomalies, ...present];
     }, [anomalyRecords, missingAssets, presentRecords]);
 
+    const buildAssetSessionItem = (
+        type: StocktakeSessionItem['type'],
+        asset: Asset,
+        messageText: string,
+        scannedAt?: string,
+        gpsNote?: string,
+        rawValue?: string
+    ): StocktakeSessionItem => ({
+        type,
+        assetId: asset.id,
+        rawValue,
+        machineCode: asset.machineCode,
+        name: asset.name,
+        plantName: asset.plant?.name,
+        area: asset.area,
+        status: ASSET_STATUS_LABEL[asset.status] || asset.status,
+        message: messageText,
+        gpsNote,
+        scannedAt,
+    });
+
+    const stocktakeSessionItems = useMemo<StocktakeSessionItem[]>(() => {
+        const missing = missingAssets.map((asset) =>
+            buildAssetSessionItem('missing', asset, 'Chưa quét thấy trong phạm vi kiểm kê')
+        );
+        const anomalies = anomalyRecords.map((record) =>
+            record.asset
+                ? buildAssetSessionItem(
+                      record.type,
+                      record.asset,
+                      record.message,
+                      record.scannedAt,
+                      record.gpsNote,
+                      record.rawValue
+                  )
+                : {
+                      type: 'unknown' as const,
+                      rawValue: record.rawValue,
+                      message: record.message,
+                      gpsNote: record.gpsNote,
+                      scannedAt: record.scannedAt,
+                  }
+        );
+        const present = presentRecords.map((record) =>
+            record.asset
+                ? buildAssetSessionItem(
+                      'present',
+                      record.asset,
+                      record.message,
+                      record.scannedAt,
+                      record.gpsNote,
+                      record.rawValue
+                  )
+                : {
+                      type: 'present' as const,
+                      rawValue: record.rawValue,
+                      message: record.message,
+                      gpsNote: record.gpsNote,
+                      scannedAt: record.scannedAt,
+                  }
+        );
+
+        return [...missing, ...anomalies, ...present];
+    }, [anomalyRecords, missingAssets, presentRecords]);
+
+    const handleSaveHistory = async () => {
+        if (!started || !startedAt || !selectedPlantId) {
+            message.warning('Bắt đầu kiểm kê trước khi lưu lịch sử');
+            return;
+        }
+
+        await saveStocktakeMutation.mutateAsync({
+            plantId: selectedPlantId,
+            plantName: selectedPlant?.name,
+            area: selectedArea,
+            areaLabel: areaLabel(selectedArea),
+            startedAt,
+            finishedAt: new Date().toISOString(),
+            expectedCount: stats.expected,
+            scannedCount: stats.scanned,
+            presentCount: stats.present,
+            missingCount: stats.missing,
+            anomalyCount: stats.anomalies,
+            items: stocktakeSessionItems,
+        });
+    };
+
     const handleExportCsv = () => {
         const header = ['Nhom', 'Ma may', 'Ten may', 'Co so', 'Khu vuc', 'Trang thai', 'Ghi chu', 'Thoi gian quet'];
         const rows = exportRows.map((row) => [
@@ -568,6 +683,65 @@ const StocktakePage: React.FC = () => {
     const activeData =
         activeTab === 'missing' ? missingAssets : activeTab === 'anomalies' ? anomalyRecords : presentRecords;
 
+    const historyItemColumns: TableColumnsType<StocktakeSessionItem> = [
+        {
+            title: 'Nhóm',
+            dataIndex: 'type',
+            width: 130,
+            render: (type: StocktakeSessionItem['type']) => {
+                const labelMap: Record<StocktakeSessionItem['type'], string> = {
+                    missing: 'Thiếu',
+                    present: 'Có mặt',
+                    wrong_area: 'Sai khu vực',
+                    wrong_plant: 'Sai cơ sở',
+                    unknown: 'Không rõ',
+                };
+                const colorMap: Record<StocktakeSessionItem['type'], string> = {
+                    missing: 'red',
+                    present: 'green',
+                    wrong_area: 'orange',
+                    wrong_plant: 'volcano',
+                    unknown: 'default',
+                };
+                return <Tag color={colorMap[type]}>{labelMap[type]}</Tag>;
+            },
+        },
+        {
+            title: 'Máy',
+            render: (_value, record) => (
+                <div>
+                    <div className='font-semibold text-slate-900'>{record.name || 'Không xác định'}</div>
+                    <div className='font-mono text-xs text-slate-500'>{record.machineCode || record.rawValue || '-'}</div>
+                </div>
+            ),
+        },
+        {
+            title: 'Vị trí',
+            width: 190,
+            render: (_value, record) => (
+                <span className='text-sm text-slate-600'>
+                    {record.plantName || '-'} / {record.area || 'Chưa gắn khu vực'}
+                </span>
+            ),
+        },
+        {
+            title: 'Ghi chú',
+            dataIndex: 'message',
+            render: (value, record) => (
+                <div className='text-sm text-slate-700'>
+                    {value || '-'}
+                    {record.gpsNote ? <div className='text-xs font-semibold text-rose-600'>{record.gpsNote}</div> : null}
+                </div>
+            ),
+        },
+        {
+            title: 'Quét lúc',
+            dataIndex: 'scannedAt',
+            width: 155,
+            render: (value) => <Text type='secondary'>{formatTime(value)}</Text>,
+        },
+    ];
+
     const renderMobileList = () => {
         if (!activeData.length) {
             return <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description='Chưa có dữ liệu trong nhóm này' />;
@@ -650,6 +824,15 @@ const StocktakePage: React.FC = () => {
                 subtitle='Quét tem QR tại hiện trường để đối chiếu máy có mặt, thiếu và sai vị trí.'
                 actions={
                     <div className='flex flex-wrap gap-2'>
+                        <Button
+                            type={savedSessionId ? 'default' : 'primary'}
+                            icon={<SaveOutlined />}
+                            disabled={!started || Boolean(savedSessionId)}
+                            loading={saveStocktakeMutation.isPending}
+                            onClick={handleSaveHistory}
+                        >
+                            {savedSessionId ? 'Đã lưu lịch sử' : 'Lưu lịch sử'}
+                        </Button>
                         <Button icon={<DownloadOutlined />} disabled={!started} onClick={handleExportCsv}>
                             Xuất CSV
                         </Button>
@@ -699,7 +882,7 @@ const StocktakePage: React.FC = () => {
                     type='info'
                     showIcon
                     message='Kiểm kê đang đối chiếu trên thiết bị này'
-                    description='Kết quả hiện tính client-side trong phiên làm việc. Nếu cần lưu lịch sử kiểm kê lâu dài, nên bổ sung backend ở giai đoạn sau.'
+                    description='Sau khi quét xong, bấm Lưu lịch sử để ghi lại phiên kiểm kê gồm phạm vi, thống kê, máy thiếu, máy bất thường và máy có mặt.'
                 />
             </Card>
 
@@ -733,6 +916,60 @@ const StocktakePage: React.FC = () => {
                             </Card>
                         ))}
                     </div>
+
+                    <Card
+                        className='rounded-2xl border-slate-200 shadow-sm'
+                        title={<span className='text-sm font-bold text-slate-900'>Lịch sử gần đây</span>}
+                        styles={{ body: { padding: 12 } }}
+                    >
+                        {stocktakeHistoryQuery.isFetching ? (
+                            <Text type='secondary'>Đang tải lịch sử...</Text>
+                        ) : stocktakeHistoryQuery.data?.data?.length ? (
+                            <div className='flex flex-col gap-2'>
+                                {stocktakeHistoryQuery.data.data.map((session) => (
+                                    <div
+                                        key={session.id}
+                                        className='rounded-xl border border-slate-100 bg-slate-50 px-3 py-2'
+                                    >
+                                        <div className='flex items-center justify-between gap-2'>
+                                            <span className='truncate text-sm font-bold text-slate-900'>
+                                                {session.areaLabel || areaLabel(session.area)}
+                                            </span>
+                                            <Tag color={session.anomalyCount ? 'orange' : 'green'} className='!m-0'>
+                                                {session.anomalyCount} bất thường
+                                            </Tag>
+                                        </div>
+                                        <div className='mt-1 text-xs text-slate-500'>
+                                            {formatTime(session.createdAt)} · {session.createdByName || 'Không rõ người lưu'}
+                                        </div>
+                                        <div className='mt-2 grid grid-cols-3 gap-1 text-center text-xs'>
+                                            <div className='rounded-lg bg-white px-2 py-1'>
+                                                <b>{session.presentCount}</b>
+                                                <span className='ml-1 text-slate-500'>có</span>
+                                            </div>
+                                            <div className='rounded-lg bg-white px-2 py-1'>
+                                                <b>{session.missingCount}</b>
+                                                <span className='ml-1 text-slate-500'>thiếu</span>
+                                            </div>
+                                            <div className='rounded-lg bg-white px-2 py-1'>
+                                                <b>{session.scannedCount}</b>
+                                                <span className='ml-1 text-slate-500'>quét</span>
+                                            </div>
+                                        </div>
+                                        <Button
+                                            size='small'
+                                            className='mt-2 w-full'
+                                            onClick={() => setHistoryDetail(session)}
+                                        >
+                                            Xem chi tiết
+                                        </Button>
+                                    </div>
+                                ))}
+                            </div>
+                        ) : (
+                            <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description='Chưa có lịch sử kiểm kê' />
+                        )}
+                    </Card>
                 </div>
 
                 <Card className='rounded-2xl border-slate-200 shadow-sm'>
@@ -769,6 +1006,52 @@ const StocktakePage: React.FC = () => {
                     )}
                 </Card>
             </div>
+
+            <Modal
+                open={Boolean(historyDetail)}
+                width={960}
+                title='Chi tiết lịch sử kiểm kê'
+                footer={null}
+                destroyOnHidden
+                onCancel={() => setHistoryDetail(null)}
+            >
+                {historyDetail ? (
+                    <div className='flex flex-col gap-4'>
+                        <div className='rounded-2xl border border-slate-200 bg-slate-50 p-4'>
+                            <div className='text-base font-bold text-slate-900'>
+                                {historyDetail.plantName || historyDetail.plant?.name || '-'} ·{' '}
+                                {historyDetail.areaLabel || areaLabel(historyDetail.area)}
+                            </div>
+                            <div className='mt-1 text-sm text-slate-500'>
+                                Lưu lúc {formatTime(historyDetail.createdAt)} bởi{' '}
+                                {historyDetail.createdByName || 'Không rõ người lưu'}
+                            </div>
+                            <div className='mt-3 grid grid-cols-2 gap-2 md:grid-cols-5'>
+                                {[
+                                    ['Cần kiểm', historyDetail.expectedCount],
+                                    ['Đã quét', historyDetail.scannedCount],
+                                    ['Có mặt', historyDetail.presentCount],
+                                    ['Thiếu', historyDetail.missingCount],
+                                    ['Bất thường', historyDetail.anomalyCount],
+                                ].map(([label, value]) => (
+                                    <div key={label} className='rounded-xl bg-white px-3 py-2 text-center'>
+                                        <div className='text-lg font-black text-slate-900'>{value}</div>
+                                        <div className='text-xs font-semibold text-slate-500'>{label}</div>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                        <Table<StocktakeSessionItem>
+                            size='small'
+                            rowKey={(record, index) => `${record.assetId || record.rawValue || 'row'}-${index}`}
+                            columns={historyItemColumns}
+                            dataSource={historyDetail.items}
+                            pagination={{ pageSize: 8, showSizeChanger: false }}
+                            scroll={{ x: 760 }}
+                        />
+                    </div>
+                ) : null}
+            </Modal>
 
             {quickAsset ? (
                 <LazyBoundary mode='overlay'>

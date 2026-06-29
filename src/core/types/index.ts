@@ -304,6 +304,13 @@ export interface Transfer {
     fromPlantId: string;
     fromPlant?: Plant;
     fromArea?: string;
+    sourceSnapshots?: {
+        assetId?: string;
+        plantId?: string;
+        area?: string;
+        machineCode?: string;
+        name?: string;
+    }[];
     toPlantId: string;
     toPlant?: Plant;
     toArea?: string;
@@ -342,6 +349,59 @@ export interface TransferFilter extends PaginationParams {
     fromPlantId?: string;
     toPlantId?: string;
     status?: TransferStatus;
+}
+
+// ===== STOCKTAKE (Kiểm kê QR) =====
+export type StocktakeItemType = 'missing' | 'present' | 'wrong_area' | 'wrong_plant' | 'unknown';
+
+export interface StocktakeSessionItem {
+    type: StocktakeItemType;
+    assetId?: string;
+    rawValue?: string;
+    machineCode?: string;
+    name?: string;
+    plantName?: string;
+    area?: string;
+    status?: string;
+    message?: string;
+    gpsNote?: string;
+    scannedAt?: string;
+}
+
+export interface StocktakeSession {
+    id: string;
+    plantId: string;
+    plantName?: string;
+    plant?: Plant;
+    area?: string;
+    areaLabel?: string;
+    startedAt: string;
+    finishedAt: string;
+    expectedCount: number;
+    scannedCount: number;
+    presentCount: number;
+    missingCount: number;
+    anomalyCount: number;
+    items: StocktakeSessionItem[];
+    createdBy?: string;
+    createdByName?: string;
+    createdAt: string;
+    updatedAt: string;
+}
+
+export interface CreateStocktakeSessionPayload {
+    plantId: string;
+    plantName?: string;
+    area?: string;
+    areaLabel?: string;
+    startedAt: string;
+    finishedAt: string;
+    expectedCount: number;
+    scannedCount: number;
+    presentCount: number;
+    missingCount: number;
+    anomalyCount: number;
+    items: StocktakeSessionItem[];
 }
 
 // ===== ASSET DISPOSAL (Thanh ly may) =====

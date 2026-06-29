@@ -1,0 +1,22 @@
+User-agent: *
+Disallow: /api/
+Disallow: /dashboard
+Disallow: /chat
+Disallow: /scan
+Disallow: /assets
+Disallow: /qr-labels
+Disallow: /brands
+Disallow: /maintenances
+Disallow: /transfers
+Disallow: /borrowings
+Disallow: /storage
+Disallow: /plants
+Disallow: /users
+Disallow: /materials
+Disallow: /reports
+Disallow: /ai-analytics
+Disallow: /admin
+Disallow: /public/machines
+Disallow: /qr/
+
+# This domain hosts an internal operations PWA. Do not crawl operational data.
