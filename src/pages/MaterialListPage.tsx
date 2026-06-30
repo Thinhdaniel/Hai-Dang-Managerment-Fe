@@ -21,12 +21,14 @@ import {
     PlusOutlined,
     ReloadOutlined,
     SearchOutlined,
+    TagsOutlined,
     UploadOutlined,
     WarningOutlined,
 } from '@ant-design/icons';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import ConfirmAction from '../components/shared/ConfirmAction';
 import LazyBoundary from '../components/shared/LazyBoundary';
+import MaterialCostTypeDrawer from '../components/material/MaterialCostTypeDrawer';
 import PageHeader from '../components/shared/PageHeader';
 import { useAuth } from '../core/contexts/AuthContext';
 import { hasManagerAccess, isAdmin } from '../core/lib/permissions';
@@ -143,6 +145,7 @@ const formatNumber = (value?: number) => (value ?? 0).toLocaleString('vi-VN');
 const MaterialListPage: React.FC = () => {
     const queryClient = useQueryClient();
     const { message } = App.useApp();
+    const [costTypeOpen, setCostTypeOpen] = useState(false);
     const { role } = useAuth();
     const canManageMaterials = hasManagerAccess(role);
     const canDeleteMaterials = isAdmin(role);
@@ -551,6 +554,9 @@ const MaterialListPage: React.FC = () => {
                                 <Button icon={<UploadOutlined />} onClick={() => setImportOpen(true)}>
                                     Import Excel
                                 </Button>
+                                <Button icon={<TagsOutlined />} onClick={() => setCostTypeOpen(true)}>
+                                    Phân loại chi phí (AI)
+                                </Button>
                                 <Button
                                     type='primary'
                                     icon={<PlusOutlined />}
@@ -863,6 +869,10 @@ const MaterialListPage: React.FC = () => {
                     <Empty description='Chưa có dữ liệu vật tư' />
                 )}
             </Drawer>
+
+            {costTypeOpen ? (
+                <MaterialCostTypeDrawer open={costTypeOpen} onClose={() => setCostTypeOpen(false)} />
+            ) : null}
         </div>
     );
 };

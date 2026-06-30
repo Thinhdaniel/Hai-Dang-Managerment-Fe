@@ -38,17 +38,40 @@ export type PurchaseRequestStatus =
     | 'partially_distributed'
     | 'distributed'
     | 'cancelled';
-export type PurchaseOrderStatus = 'draft' | 'sent' | 'confirmed' | 'ordered' | 'partially_received' | 'received' | 'cancelled';
+export type PurchaseOrderStatus =
+    | 'draft'
+    | 'sent'
+    | 'confirmed'
+    | 'ordered'
+    | 'partially_received'
+    | 'received'
+    | 'cancelled';
 export type DistributionStatus = 'draft' | 'pending' | 'processing' | 'distributed' | 'confirmed';
 export type DistributionType = 'facility_transfer' | 'internal_issue';
 export type InventoryTransactionType = 'import' | 'export' | 'adjust' | 'adjustment';
 export type InventoryTransactionRelatedType = 'purchase_order' | 'distribution' | 'manual';
+
+// Phân loại bản chất chi phí: consumable+spare_part = OPEX (tính chi phí vận hành);
+// tool+asset = CAPEX (mua sắm/đầu tư, tách riêng). Rỗng = chưa phân loại.
+export type MaterialCostType = 'consumable' | 'spare_part' | 'tool' | 'asset';
+
+export const MATERIAL_COST_TYPE_LABEL: Record<MaterialCostType, string> = {
+    consumable: 'Vật tư tiêu hao',
+    spare_part: 'Linh kiện thay thế',
+    tool: 'CCDC (tái sử dụng)',
+    asset: 'Máy móc / tài sản',
+};
+
+export const MATERIAL_COST_TYPE_OPTIONS: { value: MaterialCostType; label: string }[] = (
+    Object.keys(MATERIAL_COST_TYPE_LABEL) as MaterialCostType[]
+).map((value) => ({ value, label: MATERIAL_COST_TYPE_LABEL[value] }));
 
 export interface Material {
     id: string;
     code: string;
     name: string;
     category?: string;
+    costType?: MaterialCostType;
     unit: string;
     minStockLevel?: number;
     description?: string;
@@ -665,9 +688,42 @@ const shouldFallbackToSupplierSoftDelete = (error: unknown) => {
     return [404, 405, 501].includes(Number(error.status));
 };
 
+export interface MaterialCostTypeSuggestion {
+    id: string;
+    name?: string;
+    code?: string;
+    category?: string;
+    unit?: string;
+    currentCostType?: MaterialCostType;
+    suggestedCostType?: MaterialCostType;
+    confidence?: number;
+}
+
+export interface MaterialCostTypeSuggestResponse {
+    total: number;
+    items: MaterialCostTypeSuggestion[];
+    provider?: string;
+    model?: string;
+}
+
 export const materialService = {
     getAll: (params?: MaterialQueryParams): Promise<MaterialListApiResponse> =>
         api.get<MaterialListApiResponse>(MATERIALS_BASE, { params }),
+
+    // AI đề xuất phân loại chi phí cho danh mục (không lưu — trả đề xuất để rà).
+    suggestCostTypes: (onlyUnclassified = false): Promise<MaterialCostTypeSuggestResponse> =>
+        api.post<MaterialCostTypeSuggestResponse, Record<string, never>>(
+            `${MATERIALS_BASE}/cost-type/suggest`,
+            {} as Record<string, never>,
+            { params: { onlyUnclassified }, timeout: 180000 }
+        ),
+
+    // Lưu phân loại chi phí hàng loạt sau khi người dùng rà/sửa.
+    saveCostTypes: (items: { id: string; costType?: MaterialCostType | null }[]): Promise<{ updated: number }> =>
+        api.patch<{ updated: number }, { items: { id: string; costType?: MaterialCostType | null }[] }>(
+            `${MATERIALS_BASE}/cost-type`,
+            { items }
+        ),
 
     getById: (id: string): Promise<Material> => api.get<Material>(`${MATERIALS_BASE}/${id}`),
 
@@ -685,16 +741,26 @@ export const materialService = {
 
     downloadTemplate: () => downloadFile(`${MATERIALS_BASE}/import-template`, 'mau-nhap-vat-tu.xlsx'),
 
-    previewImport: (file: File): Promise<{
+    previewImport: (
+        file: File
+    ): Promise<{
         summary: { totalRows: number; validRows: number; invalidRows: number; toCreate: number; toUpdate: number };
-        rows: Array<{ rowNumber: number; isValid: boolean; action?: string; values: { code: string; name: string; category: string; unit: string; minStockLevel: number }; errors: string[] }>;
+        rows: Array<{
+            rowNumber: number;
+            isValid: boolean;
+            action?: string;
+            values: { code: string; name: string; category: string; unit: string; minStockLevel: number };
+            errors: string[];
+        }>;
     }> => {
-        const fd = new FormData(); fd.append('file', file);
+        const fd = new FormData();
+        fd.append('file', file);
         return api.post(`${MATERIALS_BASE}/import/preview`, fd, { headers: { 'Content-Type': undefined } });
     },
 
     confirmImport: (file: File): Promise<{ created: number; updated: number; errors: number; total: number }> => {
-        const fd = new FormData(); fd.append('file', file);
+        const fd = new FormData();
+        fd.append('file', file);
         return api.post(`${MATERIALS_BASE}/import/confirm`, fd, { headers: { 'Content-Type': undefined } });
     },
 };
@@ -775,7 +841,9 @@ export const purchaseRequestService = {
         api.post<PurchaseOrder, ConsolidatePurchaseRequestsPayload>(`${PURCHASE_REQUESTS_BASE}/consolidate`, data),
 
     exportXlsx: async (id: string, code: string): Promise<void> => {
-        const data: any = await axiosInstance.get(`${PURCHASE_REQUESTS_BASE}/${id}/export-xlsx`, { responseType: 'blob' });
+        const data: any = await axiosInstance.get(`${PURCHASE_REQUESTS_BASE}/${id}/export-xlsx`, {
+            responseType: 'blob',
+        });
         const blob = data instanceof Blob ? data : new Blob([data]);
         const url = URL.createObjectURL(blob);
         const link = document.createElement('a');
@@ -800,8 +868,10 @@ export const supplyRequestService = {
     update: (id: string, data: Partial<PurchaseRequestPayload>): Promise<PurchaseRequest> =>
         api.put<PurchaseRequest, Partial<PurchaseRequestPayload>>(`${SUPPLY_REQUESTS_BASE}/${id}`, data),
 
-    approve: (id: string, payload: { items: Array<{ materialId: string; quantityApproved: number }> }): Promise<PurchaseRequest> =>
-        api.patch<PurchaseRequest, any>(`${SUPPLY_REQUESTS_BASE}/${id}/approve`, payload),
+    approve: (
+        id: string,
+        payload: { items: Array<{ materialId: string; quantityApproved: number }> }
+    ): Promise<PurchaseRequest> => api.patch<PurchaseRequest, any>(`${SUPPLY_REQUESTS_BASE}/${id}/approve`, payload),
 
     approveAndDistribute: (id: string): Promise<{ supplyRequest: PurchaseRequest; distribution: any }> =>
         api.patch<{ supplyRequest: PurchaseRequest; distribution: any }, void>(
@@ -866,8 +936,7 @@ export const purchaseOrderService = {
     getAll: (params?: PurchaseOrderQueryParams): Promise<PurchaseOrderListApiResponse> =>
         api.get<PurchaseOrderListApiResponse>(PURCHASE_ORDERS_BASE, { params }),
 
-    getById: (id: string): Promise<PurchaseOrder> =>
-        api.get<PurchaseOrder>(`${PURCHASE_ORDERS_BASE}/${id}`),
+    getById: (id: string): Promise<PurchaseOrder> => api.get<PurchaseOrder>(`${PURCHASE_ORDERS_BASE}/${id}`),
 
     create: (data: { purchaseRequestIds: string[]; note?: string }): Promise<PurchaseOrder> =>
         api.post<PurchaseOrder, any>(PURCHASE_ORDERS_BASE, data),
@@ -875,29 +944,40 @@ export const purchaseOrderService = {
     update: (id: string, data: { items?: PurchaseOrderItemUpdate[]; note?: string }): Promise<PurchaseOrder> =>
         api.put<PurchaseOrder, any>(`${PURCHASE_ORDERS_BASE}/${id}`, data),
 
-    confirm: (id: string): Promise<PurchaseOrder> =>
-        api.patch<PurchaseOrder>(`${PURCHASE_ORDERS_BASE}/${id}/confirm`),
+    confirm: (id: string): Promise<PurchaseOrder> => api.patch<PurchaseOrder>(`${PURCHASE_ORDERS_BASE}/${id}/confirm`),
 
     receive: (id: string, data: ReceivePurchaseOrderPayload): Promise<PurchaseOrder> =>
         api.patch<PurchaseOrder, ReceivePurchaseOrderPayload>(`${PURCHASE_ORDERS_BASE}/${id}/receive`, data),
 
     linkItemMaterial: (id: string, index: number, materialId: string): Promise<PurchaseOrder> =>
-        api.patch<PurchaseOrder, { materialId: string }>(`${PURCHASE_ORDERS_BASE}/${id}/items/${index}/link-material`, { materialId }),
+        api.patch<PurchaseOrder, { materialId: string }>(`${PURCHASE_ORDERS_BASE}/${id}/items/${index}/link-material`, {
+            materialId,
+        }),
 
     createItemMaterial: (id: string, index: number, data: Partial<MaterialPayload>): Promise<PurchaseOrder> =>
-        api.post<PurchaseOrder, Partial<MaterialPayload>>(`${PURCHASE_ORDERS_BASE}/${id}/items/${index}/create-material`, data),
+        api.post<PurchaseOrder, Partial<MaterialPayload>>(
+            `${PURCHASE_ORDERS_BASE}/${id}/items/${index}/create-material`,
+            data
+        ),
 
     ignoreItemInventory: (id: string, index: number, reason?: string): Promise<PurchaseOrder> =>
-        api.patch<PurchaseOrder, { reason?: string }>(`${PURCHASE_ORDERS_BASE}/${id}/items/${index}/ignore-inventory`, { reason }),
+        api.patch<PurchaseOrder, { reason?: string }>(`${PURCHASE_ORDERS_BASE}/${id}/items/${index}/ignore-inventory`, {
+            reason,
+        }),
 
-    getShortages: (params?: { status?: 'open' | string; supplierId?: string; materialId?: string; limit?: number }): Promise<PurchaseShortage[]> =>
-        api.get<PurchaseShortage[]>(`${PURCHASE_ORDERS_BASE}/shortages`, { params }),
+    getShortages: (params?: {
+        status?: 'open' | string;
+        supplierId?: string;
+        materialId?: string;
+        limit?: number;
+    }): Promise<PurchaseShortage[]> => api.get<PurchaseShortage[]>(`${PURCHASE_ORDERS_BASE}/shortages`, { params }),
 
-    remove: (id: string): Promise<void> =>
-        api.delete(`${PURCHASE_ORDERS_BASE}/${id}`),
+    remove: (id: string): Promise<void> => api.delete(`${PURCHASE_ORDERS_BASE}/${id}`),
 
     exportXlsx: async (id: string, code: string): Promise<void> => {
-        const data: any = await axiosInstance.get(`${PURCHASE_ORDERS_BASE}/${id}/export-xlsx`, { responseType: 'blob' });
+        const data: any = await axiosInstance.get(`${PURCHASE_ORDERS_BASE}/${id}/export-xlsx`, {
+            responseType: 'blob',
+        });
         const blob = data instanceof Blob ? data : new Blob([data]);
         const url = URL.createObjectURL(blob);
         const link = document.createElement('a');
@@ -932,9 +1012,21 @@ export const inventoryService = {
         reason: string;
     }) => api.post<{ success: number; failed: number; errors: any[] }, any>(`${INVENTORY_BASE}/initialize`, data),
 
-    previewImport: (file: File, plantId: string): Promise<{
+    previewImport: (
+        file: File,
+        plantId: string
+    ): Promise<{
         summary: { totalRows: number; validRows: number; invalidRows: number };
-        rows: Array<{ row: number; materialCode: string; materialName?: string; currentStock?: number; newStock: number; note: string; isValid: boolean; reason?: string }>;
+        rows: Array<{
+            row: number;
+            materialCode: string;
+            materialName?: string;
+            currentStock?: number;
+            newStock: number;
+            note: string;
+            isValid: boolean;
+            reason?: string;
+        }>;
     }> => {
         const fd = new FormData();
         fd.append('file', file);
@@ -943,11 +1035,10 @@ export const inventoryService = {
     },
 
     importExcel: (formData: FormData) =>
-        api.post<{ success: number; failed: number; errors: Array<{ row: number; materialCode: string; reason: string }> }, FormData>(
-            `${INVENTORY_BASE}/import-excel`,
-            formData,
-            { headers: { 'Content-Type': undefined } }
-        ),
+        api.post<
+            { success: number; failed: number; errors: Array<{ row: number; materialCode: string; reason: string }> },
+            FormData
+        >(`${INVENTORY_BASE}/import-excel`, formData, { headers: { 'Content-Type': undefined } }),
 
     downloadTemplate: () => downloadFile(`${INVENTORY_BASE}/import-template`, 'mau-nhap-ton-kho.xlsx'),
 
@@ -975,28 +1066,35 @@ export const distributionService = {
     create: (data: DistributionPayload): Promise<Distribution> =>
         api.post<Distribution, DistributionPayload>(DISTRIBUTIONS_BASE, data),
 
-    createCompensation: (data: { shortageIds: string[]; distributedAt?: string; items: DistributionItemPayload[]; note?: string }): Promise<Distribution> =>
-        api.post<Distribution, any>(`${DISTRIBUTIONS_BASE}/compensations`, data),
+    createCompensation: (data: {
+        shortageIds: string[];
+        distributedAt?: string;
+        items: DistributionItemPayload[];
+        note?: string;
+    }): Promise<Distribution> => api.post<Distribution, any>(`${DISTRIBUTIONS_BASE}/compensations`, data),
 
     createInternal: (data: InternalDistributionPayload): Promise<Distribution> =>
         api.post<Distribution, InternalDistributionPayload>(`${DISTRIBUTIONS_BASE}/internal`, data),
 
     appendInternalItems: (id: string, items: DistributionItemPayload[]): Promise<Distribution> =>
-        api.post<Distribution, { items: DistributionItemPayload[] }>(`${DISTRIBUTIONS_BASE}/${id}/internal/items`, { items }),
+        api.post<Distribution, { items: DistributionItemPayload[] }>(`${DISTRIBUTIONS_BASE}/${id}/internal/items`, {
+            items,
+        }),
 
     finalizeInternalDraft: (id: string): Promise<Distribution> =>
         api.patch<Distribution>(`${DISTRIBUTIONS_BASE}/${id}/internal/finalize`),
 
-    update: (id: string, data: { items?: Array<{ index: number; unitPrice?: number; vatRate?: number; note?: string }>; note?: string }): Promise<Distribution> =>
-        api.patch<Distribution, any>(`${DISTRIBUTIONS_BASE}/${id}`, data),
+    update: (
+        id: string,
+        data: { items?: Array<{ index: number; unitPrice?: number; vatRate?: number; note?: string }>; note?: string }
+    ): Promise<Distribution> => api.patch<Distribution, any>(`${DISTRIBUTIONS_BASE}/${id}`, data),
 
     // CS1 xuất kho → trừ stock
     distribute: (id: string): Promise<Distribution> =>
         api.patch<Distribution>(`${DISTRIBUTIONS_BASE}/${id}/distribute`),
 
     // CS nhận xác nhận → chỉ update status
-    confirm: (id: string): Promise<Distribution> =>
-        api.patch<Distribution>(`${DISTRIBUTIONS_BASE}/${id}/confirm`),
+    confirm: (id: string): Promise<Distribution> => api.patch<Distribution>(`${DISTRIBUTIONS_BASE}/${id}/confirm`),
 
     exportXlsx: async (id: string, code: string): Promise<void> => {
         const data: any = await axiosInstance.get(`${DISTRIBUTIONS_BASE}/${id}/export-xlsx`, { responseType: 'blob' });
@@ -1085,7 +1183,6 @@ export const materialReportService = {
     },
 };
 
-
 const EXPRESS_DISPATCH_BASE = '/express-dispatch';
 
 export interface QuickSupplier {
@@ -1170,8 +1267,12 @@ export const returnRecordService = {
     create: (data: ReturnRecordPayload): Promise<ReturnRecord> =>
         api.post<ReturnRecord, ReturnRecordPayload>('/return-records', data),
 
-    getAll: (params?: { purchaseOrderId?: string; supplierId?: string; page?: number; limit?: number }): Promise<PaginatedResponse<ReturnRecord> | ReturnRecord[]> =>
-        api.get('/return-records', { params }),
+    getAll: (params?: {
+        purchaseOrderId?: string;
+        supplierId?: string;
+        page?: number;
+        limit?: number;
+    }): Promise<PaginatedResponse<ReturnRecord> | ReturnRecord[]> => api.get('/return-records', { params }),
 
     getByPurchaseOrder: (purchaseOrderId: string): Promise<ReturnRecord[]> =>
         api.get<ReturnRecord[]>(`/return-records/by-po/${purchaseOrderId}`),
