@@ -8,4 +8,6 @@ export {
     barGradient,
     makeAxisTooltipFormatter,
     stackedTooltipFormatter,
+    horizontalBarValueLabel,
+    horizontalGridRight,
 } from './echartsStyle';

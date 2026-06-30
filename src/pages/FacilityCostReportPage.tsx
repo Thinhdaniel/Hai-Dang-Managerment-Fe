@@ -8,6 +8,7 @@ import {
     DatePicker,
     Drawer,
     Empty,
+    Grid,
     Row,
     Segmented,
     Select,
@@ -40,6 +41,8 @@ import {
     ECHARTS_TOOLTIP_STYLE,
     Sparkline,
     barGradient,
+    horizontalBarValueLabel,
+    horizontalGridRight,
     stackedTooltipFormatter,
 } from '../components/charts';
 import { useAuth } from '../core/contexts/AuthContext';
@@ -57,6 +60,7 @@ import {
 
 const { RangePicker } = DatePicker;
 const { Text } = Typography;
+const { useBreakpoint } = Grid;
 
 type QuickRange = 'this_month' | 'quarter' | 'six_months' | 'year' | 'custom';
 
@@ -950,6 +954,8 @@ function PlantCostChart({
     data: FacilityCostByPlant[];
     onSelectPlant?: (row: FacilityCostByPlant) => void;
 }) {
+    const screens = useBreakpoint();
+    const isMobile = !screens.md;
     // Sắp tăng dần để cơ sở chi nhiều nhất nằm trên cùng (trục category vẽ từ dưới lên)
     const rows = useMemo(() => [...data].sort((a, b) => a.totalCost - b.totalCost), [data]);
 
@@ -998,7 +1004,7 @@ function PlantCostChart({
                 itemGap: 16,
                 textStyle: { color: '#334155', fontSize: 12, fontWeight: 600 },
             },
-            grid: { left: 8, right: 66, top: 32, bottom: 4, containLabel: true },
+            grid: { left: 8, right: horizontalGridRight(isMobile, 66), top: 32, bottom: 4, containLabel: true },
             xAxis: {
                 type: 'value',
                 splitLine: { lineStyle: { color: '#eef2f7', type: 'dashed' } },
@@ -1060,18 +1066,13 @@ function PlantCostChart({
                     },
                     emphasis: { focus: 'series' },
                     animationDelay: (idx: number) => idx * 90 + 120,
-                    label: {
-                        show: true,
-                        position: 'right',
-                        formatter: (params: { dataIndex: number }) => fmtShort(rows[params.dataIndex]?.totalCost ?? 0),
-                        color: '#475569',
-                        fontSize: 11,
-                        fontWeight: 600,
-                    },
+                    label: horizontalBarValueLabel(isMobile, (params) =>
+                        fmtShort(rows[params.dataIndex]?.totalCost ?? 0)
+                    ),
                 },
             ],
         };
-    }, [rows]);
+    }, [rows, isMobile]);
 
     const events = useMemo(
         () =>

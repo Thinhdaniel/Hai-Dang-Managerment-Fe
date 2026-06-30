@@ -55,6 +55,8 @@ import {
     Sparkline,
     barGradient,
     blueByRank,
+    horizontalBarValueLabel,
+    horizontalGridRight,
     makeAxisTooltipFormatter,
 } from '../components/charts';
 import { useAuth } from '../core/contexts/AuthContext';
@@ -999,6 +1001,8 @@ function OverviewTab({
     loading: boolean;
     onOpenDetail: (detail: DetailPayload) => void;
 }) {
+    const screens = useBreakpoint();
+    const isMobile = !screens.md;
     const combinedTrend = useMemo(() => {
         const rows = new Map<string, { period: string; purchaseCost: number; distributionValue: number }>();
         costTrend.forEach((point) => {
@@ -1131,7 +1135,7 @@ function OverviewTab({
                     return lines.join('<br/>');
                 },
             },
-            grid: { left: 8, right: 72, top: 16, bottom: 4, containLabel: true },
+            grid: { left: 8, right: horizontalGridRight(isMobile, 72), top: 16, bottom: 4, containLabel: true },
             xAxis: {
                 type: 'value',
                 splitLine: { lineStyle: { color: '#eef2f7', type: 'dashed' } },
@@ -1157,21 +1161,15 @@ function OverviewTab({
                         shadowColor: 'rgba(30, 58, 138, 0.2)',
                         shadowOffsetY: 3,
                     },
-                    label: {
-                        show: true,
-                        position: 'right',
-                        formatter: (params: { dataIndex: number }) =>
-                            fmtShort(plantRows[params.dataIndex]?.purchaseCost ?? 0),
-                        color: '#475569',
-                        fontSize: 11,
-                        fontWeight: 600,
-                    },
+                    label: horizontalBarValueLabel(isMobile, (params) =>
+                        fmtShort(plantRows[params.dataIndex]?.purchaseCost ?? 0)
+                    ),
                     emphasis: { focus: 'series', itemStyle: { shadowBlur: 14 } },
                     animationDelay: (idx: number) => idx * 90,
                 },
             ],
         }),
-        [plantRows]
+        [plantRows, isMobile]
     );
 
     const plantEvents = useMemo(
@@ -1417,7 +1415,7 @@ function ConsumptionTab({
                 },
             },
             grid: horizontal
-                ? { left: 8, right: 52, top: 8, bottom: 4, containLabel: true }
+                ? { left: 8, right: horizontalGridRight(isMobile, 52), top: 8, bottom: 4, containLabel: true }
                 : { left: 8, right: 16, top: 16, bottom: 8, containLabel: true },
             xAxis: horizontal ? valueAxis : categoryAxis,
             yAxis: horizontal ? categoryAxis : valueAxis,
@@ -1428,15 +1426,9 @@ function ConsumptionTab({
                     data: seriesData,
                     barMaxWidth: 26,
                     label: horizontal
-                        ? {
-                              show: true,
-                              position: 'right',
-                              formatter: (params: { dataIndex: number }) =>
-                                  fmtShort(source[params.dataIndex]?.totalQuantityOut ?? 0),
-                              color: '#475569',
-                              fontSize: 11,
-                              fontWeight: 600,
-                          }
+                        ? horizontalBarValueLabel(isMobile, (params) =>
+                              fmtShort(source[params.dataIndex]?.totalQuantityOut ?? 0)
+                          )
                         : undefined,
                     emphasis: { itemStyle: { shadowBlur: 14 } },
                     animationDelay: (idx: number) => idx * 60,

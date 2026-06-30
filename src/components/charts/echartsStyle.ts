@@ -69,3 +69,33 @@ export const makeAxisTooltipFormatter =
     };
 
 export const stackedTooltipFormatter = makeAxisTooltipFormatter({ showTotal: true });
+
+// Nhãn giá trị cho bar NGANG. Desktop: để ngoài bên phải cột. Mobile: dồn vào
+// trong đầu cột (chữ trắng có viền) để không bị mép chart cắt và để bar rộng hơn.
+export const horizontalBarValueLabel = (
+    isMobile: boolean,
+    formatter: (params: { dataIndex: number }) => string
+) =>
+    isMobile
+        ? {
+              show: true,
+              position: 'insideRight' as const,
+              formatter,
+              color: '#ffffff',
+              fontSize: 10,
+              fontWeight: 700 as const,
+              textBorderColor: 'rgba(15, 23, 42, 0.55)',
+              textBorderWidth: 2,
+          }
+        : {
+              show: true,
+              position: 'right' as const,
+              formatter,
+              color: '#475569',
+              fontSize: 11,
+              fontWeight: 600 as const,
+          };
+
+// grid.right cho bar ngang: mobile thu nhỏ (nhãn đã nằm trong cột) để bar rộng hơn.
+export const horizontalGridRight = (isMobile: boolean, desktopRight: number) =>
+    isMobile ? 12 : desktopRight;
