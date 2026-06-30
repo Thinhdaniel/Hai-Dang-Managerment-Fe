@@ -278,7 +278,20 @@ const AssetDisposalPage: React.FC = () => {
         onSuccess: (result) => {
             refreshDetail();
             if (result.result === 'duplicate') {
-                message.info('QR/máy này đã có trong đợt thanh lý');
+                // Máy đã có trong đợt: mở luôn form để cập nhật tình trạng & định giá
+                // (vd bên thu mua tới định giá lại) thay vì chỉ báo trùng rồi dừng.
+                if (result.item) {
+                    message.info('Máy đã có trong đợt — mở form để cập nhật tình trạng & định giá');
+                    setEditingItem(result.item);
+                    itemForm.resetFields();
+                    itemForm.setFieldsValue({
+                        ...result.item,
+                        mode: result.item.sourceType === AssetDisposalSourceType.ASSET ? 'asset' : 'external',
+                    });
+                    setItemModalOpen(true);
+                } else {
+                    message.info('Máy này đã có trong đợt thanh lý');
+                }
             } else if (result.canEditExternalInfo) {
                 message.warning('QR chưa có hồ sơ máy, hãy bổ sung thông tin trước khi gửi duyệt');
                 setEditingItem(result.item);
