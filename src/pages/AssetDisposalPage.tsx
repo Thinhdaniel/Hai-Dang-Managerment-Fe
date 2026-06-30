@@ -442,6 +442,15 @@ const AssetDisposalPage: React.FC = () => {
         }
     };
 
+    // Bỏ máy đang mở trong form ra khỏi lô (đỡ phải đóng modal rồi dò lại từng dòng).
+    const handleRemoveFromModal = async () => {
+        if (!editingItem) return;
+        await deleteItemMutation.mutateAsync(editingItem.id);
+        setItemModalOpen(false);
+        setEditingItem(null);
+        itemForm.resetFields();
+    };
+
     const handleScan = async (rawValue?: string) => {
         const value = (rawValue ?? manualQr).trim();
         if (!value || scanMutation.isPending) return;
@@ -1088,6 +1097,32 @@ const AssetDisposalPage: React.FC = () => {
                     setEditingItem(null);
                 }}
                 onOk={handleSaveItem}
+                footer={(_, { OkBtn, CancelBtn }) => (
+                    <div className='flex items-center justify-between gap-2'>
+                        <div>
+                            {editingItem && canEditBatch ? (
+                                <Popconfirm
+                                    title='Bỏ máy khỏi lô thanh lý?'
+                                    description='Chỉ gỡ khỏi lô, không xóa hồ sơ máy. Máy trong hệ thống sẽ được trả về trạng thái trước khi quét.'
+                                    okText='Bỏ khỏi lô'
+                                    cancelText='Giữ lại'
+                                    okButtonProps={{ danger: true, loading: deleteItemMutation.isPending }}
+                                    onConfirm={handleRemoveFromModal}
+                                >
+                                    <Button danger icon={<DeleteOutlined />} loading={deleteItemMutation.isPending}>
+                                        Bỏ khỏi lô
+                                    </Button>
+                                </Popconfirm>
+                            ) : (
+                                <span />
+                            )}
+                        </div>
+                        <div className='flex items-center gap-2'>
+                            <CancelBtn />
+                            <OkBtn />
+                        </div>
+                    </div>
+                )}
             >
                 <Form<ItemFormValues>
                     form={itemForm}
