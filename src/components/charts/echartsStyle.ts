@@ -4,12 +4,16 @@ import { fmtChartCurrency } from './chartTheme';
 // gradient nổi khối và formatter tooltip dạng nhiều dòng.
 
 export const ECHARTS_TOOLTIP_STYLE = {
+    // confine: giữ tooltip nằm trong khung chart, không tràn/màn hình cắt — quan trọng trên mobile
+    confine: true,
     backgroundColor: 'rgba(255, 255, 255, 0.97)',
     borderColor: '#e2e8f0',
     borderWidth: 1,
     padding: [10, 12] as [number, number],
     textStyle: { color: '#0f172a', fontSize: 12 },
-    extraCssText: 'border-radius:10px;box-shadow:0 12px 32px rgba(15,23,42,0.14);',
+    // max-width co theo bề rộng màn hình + cho xuống dòng để box không kéo dài quá khổ trên mobile
+    extraCssText:
+        'border-radius:10px;box-shadow:0 12px 32px rgba(15,23,42,0.14);max-width:min(300px,84vw);white-space:normal;word-break:break-word;',
 };
 
 export const ECHARTS_AXIS_LABEL = { color: '#64748b', fontSize: 11 };
@@ -61,7 +65,7 @@ export const makeAxisTooltipFormatter =
             options?.showTotal && list.length > 1
                 ? `<div style="margin-top:4px;padding-top:6px;border-top:1px dashed #e2e8f0;display:flex;justify-content:space-between;gap:16px"><span style="color:#475569;font-weight:700">Tổng cộng</span><b style="font-variant-numeric:tabular-nums">${fmt(total)}</b></div>`
                 : '';
-        return `<div style="min-width:200px"><div style="font-weight:700;margin-bottom:6px">${title}</div>${rows}${totalRow}</div>`;
+        return `<div style="min-width:min(200px,64vw)"><div style="font-weight:700;margin-bottom:6px">${title}</div>${rows}${totalRow}</div>`;
     };
 
 export const stackedTooltipFormatter = makeAxisTooltipFormatter({ showTotal: true });
