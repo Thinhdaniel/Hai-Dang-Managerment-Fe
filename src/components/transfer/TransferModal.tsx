@@ -27,6 +27,10 @@ type TransferModalProps = {
     assets?: Asset[];
     plants: Plant[];
     submitting?: boolean;
+    /** Chọn sẵn cơ sở đích (vd trợ lý soạn lệnh điều chuyển). */
+    defaultToPlantId?: string;
+    /** Nâng zIndex khi mở trên 1 lớp nổi khác (vd panel trợ lý). */
+    zIndex?: number;
     onClose: () => void;
     onSubmit: (payload: CreateTransferPayload) => Promise<void> | void;
 };
@@ -41,7 +45,17 @@ const getSourceAreaSummary = (items: Asset[]) => {
     return 'Nhiều khu vực';
 };
 
-const TransferModal = ({ open, asset, assets = [], plants, submitting, onClose, onSubmit }: TransferModalProps) => {
+const TransferModal = ({
+    open,
+    asset,
+    assets = [],
+    plants,
+    submitting,
+    defaultToPlantId,
+    zIndex,
+    onClose,
+    onSubmit,
+}: TransferModalProps) => {
     const { message } = App.useApp();
     const [form] = Form.useForm<TransferModalFormValues>();
     const transferAssets = assets.length ? assets : asset ? [asset] : [];
@@ -59,13 +73,13 @@ const TransferModal = ({ open, asset, assets = [], plants, submitting, onClose, 
         }
 
         form.setFieldsValue({
-            toPlantId: firstAsset?.plantId,
+            toPlantId: defaultToPlantId ?? firstAsset?.plantId,
             toArea: hasMultipleSourceAreas ? undefined : firstAsset?.area,
             transferDate: dayjs(),
             reason: '',
             note: '',
         });
-    }, [firstAsset, form, hasMultipleSourceAreas, open]);
+    }, [firstAsset, form, hasMultipleSourceAreas, open, defaultToPlantId]);
 
     const handleFinish = async (values: TransferModalFormValues) => {
         if (!transferAssets.length) return;
@@ -99,6 +113,7 @@ const TransferModal = ({ open, asset, assets = [], plants, submitting, onClose, 
             open={open}
             centered
             width={980}
+            zIndex={zIndex}
             destroyOnHidden
             focusable={{ trap: true }}
             mask={{ closable: false, blur: true }}
@@ -211,7 +226,8 @@ const TransferModal = ({ open, asset, assets = [], plants, submitting, onClose, 
                                             {item.model || item.type || '-'}
                                         </div>
                                         <div className='mt-1 truncate text-xs font-medium text-slate-500'>
-                                            {item.plant?.name || firstAsset?.plant?.name || '-'} · {renderArea(item.area)}
+                                            {item.plant?.name || firstAsset?.plant?.name || '-'} ·{' '}
+                                            {renderArea(item.area)}
                                         </div>
                                     </div>
                                     <Tag color='blue' variant='outlined' className='shrink-0 font-mono'>

@@ -1,6 +1,7 @@
 import api from '../lib/api';
 import { getStoredAccessToken } from '../lib/auth-session';
 import type { HelpTopic } from '../help/helpKnowledge';
+import type { Asset } from '../types';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000/api';
 
@@ -271,7 +272,12 @@ export type AssistantRequestLifecycleAggregate = {
     found: number;
     message?: string;
     request: AssistantMaterialRequestRow | null;
-    timeline?: { label: string; at?: string; by?: string; status: 'done' | 'current' | 'pending' | 'warning' | 'blocked' | string }[];
+    timeline?: {
+        label: string;
+        at?: string;
+        by?: string;
+        status: 'done' | 'current' | 'pending' | 'warning' | 'blocked' | string;
+    }[];
 };
 
 export type AssistantRequestBacklogAggregate = {
@@ -521,6 +527,15 @@ export type AssistantSource = {
     records?: number;
 };
 
+// Nháp lệnh điều chuyển do trợ lý soạn (AI soạn → người mở form chốt).
+export type AssistantTransferDraft = {
+    assets: Asset[];
+    toPlantId?: string;
+    toPlantName?: string;
+    unresolved: string[];
+    warnings: string[];
+};
+
 export type AssetAssistantResponse = {
     domain?: 'asset' | 'material' | 'cost';
     answer: string;
@@ -528,6 +543,7 @@ export type AssetAssistantResponse = {
     count: number;
     items: AssistantItem[];
     aggregates: AssistantAggregates;
+    transferDraft?: AssistantTransferDraft;
     appliedFilters?: AssistantAppliedFilters;
     followups: string[];
     sources?: AssistantSource[];

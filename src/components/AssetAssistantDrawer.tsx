@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { Button, Grid, Input, Popover, Select, Switch, Tag, Tooltip } from 'antd';
+import { App, Button, Grid, Input, Popover, Select, Switch, Tag, Tooltip } from 'antd';
 import {
     AppstoreOutlined,
     AudioOutlined,
@@ -16,6 +16,7 @@ import {
     SendOutlined,
     ShoppingOutlined,
     SoundOutlined,
+    SwapOutlined,
     ThunderboltOutlined,
     ToolOutlined,
     TrophyOutlined,
@@ -28,6 +29,7 @@ import {
     type AssetAssistantResponse,
     type AssistantAppliedFilters,
     type AssistantStreamStep,
+    type AssistantTransferDraft,
 } from '../core/services/ai-help.service';
 import { getAssetStatusColor } from '../core/constants/assetStatusColor';
 import {
@@ -38,7 +40,11 @@ import {
     normalizeVoiceStyle,
     type VoiceStyleKey,
 } from '../core/hooks/useVoiceChat';
-import type { AssetStatus } from '../core/types';
+import type { AssetStatus, CreateTransferPayload } from '../core/types';
+import { useMutation, useQuery } from '@tanstack/react-query';
+import { plantService } from '../core/services/plant.service';
+import { transferService } from '../core/services/transfer.service';
+import TransferModal from './transfer/TransferModal';
 
 type ChatMessage = { role: 'user' | 'assistant'; content: string; data?: AssetAssistantResponse; animate?: boolean };
 
@@ -207,6 +213,25 @@ const AssetAssistantDrawer: React.FC<Props> = ({ open, onClose }) => {
     const isMobile = !screens.md;
     const [messages, setMessages] = useState<ChatMessage[]>(() => loadChat());
     const [input, setInput] = useState('');
+    const { message } = App.useApp();
+    // Nháp lệnh điều chuyển do trợ lý soạn -> mở TransferModal để người dùng chốt.
+    const [transferDraft, setTransferDraft] = useState<AssistantTransferDraft | null>(null);
+    const plantsQuery = useQuery({
+        queryKey: ['assistant-transfer-plants'],
+        queryFn: () => plantService.getAll(),
+        enabled: !!transferDraft,
+        staleTime: 5 * 60 * 1000,
+    });
+    const createTransfer = useMutation({
+        mutationFn: (payload: CreateTransferPayload) => transferService.create(payload),
+        onSuccess: (created) => {
+            message.success('Đã tạo lệnh điều chuyển');
+            setTransferDraft(null);
+            onClose();
+            navigate(`/transfers/${created.id}`);
+        },
+        onError: () => message.error('Không tạo được lệnh điều chuyển. Vui lòng thử lại.'),
+    });
     const [loading, setLoading] = useState(false);
     const [liveStep, setLiveStep] = useState<string>('');
     const [readAloud, setReadAloud] = useState<boolean>(() => {
@@ -240,7 +265,11 @@ const AssetAssistantDrawer: React.FC<Props> = ({ open, onClose }) => {
         const vh = typeof window !== 'undefined' ? window.innerHeight : 800;
         return { x: vw - w - 28, y: vh - h - 96, w, h };
     };
-    const { rect, dragging, startDrag, startResize } = useFloatingWindow(WINDOW_RECT_KEY, defaultRect, open && !isMobile);
+    const { rect, dragging, startDrag, startResize } = useFloatingWindow(
+        WINDOW_RECT_KEY,
+        defaultRect,
+        open && !isMobile
+    );
 
     const {
         recognitionSupported,
@@ -447,254 +476,283 @@ const AssetAssistantDrawer: React.FC<Props> = ({ open, onClose }) => {
                         </div>
                     </div>
                     <div className='flex items-center gap-0.5' onPointerDown={(e) => e.stopPropagation()}>
-                {ttsSupported ? (
-                    <Popover
-                        trigger='click'
-                        placement='bottomRight'
-                        content={
-                            <div className='w-[268px] space-y-2.5'>
-                                <div className='flex items-center justify-between'>
-                                    <span className='text-[13px] font-semibold text-slate-700'>Đọc câu trả lời</span>
-                                    <Switch size='small' checked={readAloud} onChange={toggleReadAloud} />
-                                </div>
-                                <div>
-                                    <div className='mb-1 text-[11px] font-medium text-slate-400'>Giọng đọc (neural)</div>
-                                    <Select
-                                        size='small'
-                                        className='w-full'
-                                        value={voiceURI}
-                                        onChange={changeVoice}
-                                        options={NEURAL_VOICES.map((v) => ({ value: v.id, label: v.label }))}
-                                    />
-                                </div>
-                                <div>
-                                    <div className='mb-1 text-[11px] font-medium text-slate-400'>Phong cách</div>
-                                    <Select
-                                        size='small'
-                                        className='w-full'
-                                        value={voiceStyle}
-                                        onChange={changeStyle}
-                                        options={Object.entries(VOICE_STYLES).map(([k, v]) => ({ value: k, label: v.label }))}
-                                    />
-                                </div>
-                                <Button
-                                    block
-                                    size='small'
-                                    icon={<SoundOutlined />}
-                                    loading={speaking}
-                                    onClick={previewVoice}
-                                    className='!rounded-lg'
-                                >
-                                    Nghe thử
-                                </Button>
-                                <div className='text-[10.5px] leading-4 text-slate-400'>
-                                    Giọng neural (Microsoft Edge) — tự nhiên như CapCut, miễn phí.
-                                </div>
-                            </div>
-                        }
-                    >
-                        <span>
-                            <Tooltip title='Cài đặt giọng đọc'>
+                        {ttsSupported ? (
+                            <Popover
+                                trigger='click'
+                                placement='bottomRight'
+                                content={
+                                    <div className='w-[268px] space-y-2.5'>
+                                        <div className='flex items-center justify-between'>
+                                            <span className='text-[13px] font-semibold text-slate-700'>
+                                                Đọc câu trả lời
+                                            </span>
+                                            <Switch size='small' checked={readAloud} onChange={toggleReadAloud} />
+                                        </div>
+                                        <div>
+                                            <div className='mb-1 text-[11px] font-medium text-slate-400'>
+                                                Giọng đọc (neural)
+                                            </div>
+                                            <Select
+                                                size='small'
+                                                className='w-full'
+                                                value={voiceURI}
+                                                onChange={changeVoice}
+                                                options={NEURAL_VOICES.map((v) => ({ value: v.id, label: v.label }))}
+                                            />
+                                        </div>
+                                        <div>
+                                            <div className='mb-1 text-[11px] font-medium text-slate-400'>
+                                                Phong cách
+                                            </div>
+                                            <Select
+                                                size='small'
+                                                className='w-full'
+                                                value={voiceStyle}
+                                                onChange={changeStyle}
+                                                options={Object.entries(VOICE_STYLES).map(([k, v]) => ({
+                                                    value: k,
+                                                    label: v.label,
+                                                }))}
+                                            />
+                                        </div>
+                                        <Button
+                                            block
+                                            size='small'
+                                            icon={<SoundOutlined />}
+                                            loading={speaking}
+                                            onClick={previewVoice}
+                                            className='!rounded-lg'
+                                        >
+                                            Nghe thử
+                                        </Button>
+                                        <div className='text-[10.5px] leading-4 text-slate-400'>
+                                            Giọng neural (Microsoft Edge) — tự nhiên như CapCut, miễn phí.
+                                        </div>
+                                    </div>
+                                }
+                            >
+                                <span>
+                                    <Tooltip title='Cài đặt giọng đọc'>
+                                        <Button
+                                            type='text'
+                                            shape='circle'
+                                            icon={<SoundOutlined />}
+                                            style={readAloud ? { color: ACCENT } : undefined}
+                                            className={readAloud ? '' : 'text-slate-400 hover:!text-[#2f51d9]'}
+                                        />
+                                    </Tooltip>
+                                </span>
+                            </Popover>
+                        ) : null}
+                        {messages.length ? (
+                            <Tooltip title='Trò chuyện mới'>
                                 <Button
                                     type='text'
                                     shape='circle'
-                                    icon={<SoundOutlined />}
-                                    style={readAloud ? { color: ACCENT } : undefined}
-                                    className={readAloud ? '' : 'text-slate-400 hover:!text-[#2f51d9]'}
+                                    icon={<FormOutlined />}
+                                    onClick={startNewChat}
+                                    className='text-slate-400 hover:!text-[#2f51d9]'
                                 />
                             </Tooltip>
-                        </span>
-                    </Popover>
-                ) : null}
-                {messages.length ? (
-                    <Tooltip title='Trò chuyện mới'>
+                        ) : null}
                         <Button
                             type='text'
                             shape='circle'
-                            icon={<FormOutlined />}
-                            onClick={startNewChat}
-                            className='text-slate-400 hover:!text-[#2f51d9]'
+                            icon={<CloseOutlined />}
+                            onClick={handleClose}
+                            className='text-slate-400'
                         />
-                    </Tooltip>
-                ) : null}
-                <Button
-                    type='text'
-                    shape='circle'
-                    icon={<CloseOutlined />}
-                    onClick={handleClose}
-                    className='text-slate-400'
-                />
                     </div>
-            </div>
+                </div>
 
-            {/* Messages */}
-            <div className='hd-scroll flex-1 space-y-4 overflow-y-auto px-3.5 py-4 sm:px-4'>
-                {messages.length === 0 ? (
-                    <div className='hd-msg mt-2'>
-                        <div className='flex flex-col items-center text-center'>
-                            <span
-                                className='flex h-14 w-14 items-center justify-center rounded-3xl text-2xl text-white shadow-[0_8px_20px_rgba(47,81,217,0.28)]'
-                                style={{ background: ACCENT }}
-                            >
-                                <RobotOutlined />
-                            </span>
-                            <div className='mt-3 text-[15px] font-bold text-slate-800'>Chào bạn 👋</div>
-                            <div className='mt-1 max-w-[290px] text-[13px] leading-5 text-slate-500'>
-                                Hỏi mình về máy móc, vật tư hay chi phí — mình truy vấn dữ liệu thật rồi trả lời.
-                            </div>
-                        </div>
-                        <div className='mt-5 space-y-3.5'>
-                            {STARTER_GROUPS.map((g) => (
-                                <div key={g.label}>
-                                    <div className='mb-1.5 flex items-center gap-1.5 px-1'>
-                                        <span className='h-1.5 w-1.5 rounded-full' style={{ background: g.color }} />
-                                        <span className='text-[11px] font-semibold tracking-wide text-slate-400 uppercase'>
-                                            {g.label}
-                                        </span>
-                                    </div>
-                                    <div className='hd-stagger grid grid-cols-1 gap-2'>
-                                        {g.items.map((s) => (
-                                            <button
-                                                key={s.text}
-                                                type='button'
-                                                onClick={() => send(s.text)}
-                                                className='flex items-center gap-2.5 rounded-2xl border border-slate-200 bg-white px-3 py-2.5 text-left text-[12.5px] font-medium text-slate-600 shadow-sm transition-all hover:-translate-y-0.5 hover:border-blue-300 hover:text-slate-900 hover:shadow-md'
-                                            >
-                                                <span
-                                                    className='flex h-7 w-7 shrink-0 items-center justify-center rounded-xl'
-                                                    style={{ background: `${g.color}1a`, color: g.color }}
-                                                >
-                                                    {s.icon}
-                                                </span>
-                                                <span className='min-w-0'>{s.text}</span>
-                                            </button>
-                                        ))}
-                                    </div>
+                {/* Messages */}
+                <div className='hd-scroll flex-1 space-y-4 overflow-y-auto px-3.5 py-4 sm:px-4'>
+                    {messages.length === 0 ? (
+                        <div className='hd-msg mt-2'>
+                            <div className='flex flex-col items-center text-center'>
+                                <span
+                                    className='flex h-14 w-14 items-center justify-center rounded-3xl text-2xl text-white shadow-[0_8px_20px_rgba(47,81,217,0.28)]'
+                                    style={{ background: ACCENT }}
+                                >
+                                    <RobotOutlined />
+                                </span>
+                                <div className='mt-3 text-[15px] font-bold text-slate-800'>Chào bạn 👋</div>
+                                <div className='mt-1 max-w-[290px] text-[13px] leading-5 text-slate-500'>
+                                    Hỏi mình về máy móc, vật tư hay chi phí — mình truy vấn dữ liệu thật rồi trả lời.
                                 </div>
-                            ))}
-                        </div>
-                    </div>
-                ) : null}
-
-                {messages.map((m, i) =>
-                    m.role === 'user' ? (
-                        <div key={i} className='hd-msg flex justify-end'>
-                            <div
-                                className='hd-pop max-w-[82%] rounded-3xl rounded-br-md px-4 py-2.5 text-[13.5px] leading-relaxed text-white shadow-[0_3px_10px_rgba(47,81,217,0.22)]'
-                                style={{ background: ACCENT }}
-                            >
-                                {m.content}
+                            </div>
+                            <div className='mt-5 space-y-3.5'>
+                                {STARTER_GROUPS.map((g) => (
+                                    <div key={g.label}>
+                                        <div className='mb-1.5 flex items-center gap-1.5 px-1'>
+                                            <span
+                                                className='h-1.5 w-1.5 rounded-full'
+                                                style={{ background: g.color }}
+                                            />
+                                            <span className='text-[11px] font-semibold tracking-wide text-slate-400 uppercase'>
+                                                {g.label}
+                                            </span>
+                                        </div>
+                                        <div className='hd-stagger grid grid-cols-1 gap-2'>
+                                            {g.items.map((s) => (
+                                                <button
+                                                    key={s.text}
+                                                    type='button'
+                                                    onClick={() => send(s.text)}
+                                                    className='flex items-center gap-2.5 rounded-2xl border border-slate-200 bg-white px-3 py-2.5 text-left text-[12.5px] font-medium text-slate-600 shadow-sm transition-all hover:-translate-y-0.5 hover:border-blue-300 hover:text-slate-900 hover:shadow-md'
+                                                >
+                                                    <span
+                                                        className='flex h-7 w-7 shrink-0 items-center justify-center rounded-xl'
+                                                        style={{ background: `${g.color}1a`, color: g.color }}
+                                                    >
+                                                        {s.icon}
+                                                    </span>
+                                                    <span className='min-w-0'>{s.text}</span>
+                                                </button>
+                                            ))}
+                                        </div>
+                                    </div>
+                                ))}
                             </div>
                         </div>
-                    ) : (
-                        <div key={i} className='hd-msg flex gap-2.5'>
+                    ) : null}
+
+                    {messages.map((m, i) =>
+                        m.role === 'user' ? (
+                            <div key={i} className='hd-msg flex justify-end'>
+                                <div
+                                    className='hd-pop max-w-[82%] rounded-3xl rounded-br-md px-4 py-2.5 text-[13.5px] leading-relaxed text-white shadow-[0_3px_10px_rgba(47,81,217,0.22)]'
+                                    style={{ background: ACCENT }}
+                                >
+                                    {m.content}
+                                </div>
+                            </div>
+                        ) : (
+                            <div key={i} className='hd-msg flex gap-2.5'>
+                                <span
+                                    className='flex h-8 w-8 shrink-0 items-center justify-center rounded-2xl bg-white shadow-sm ring-1 ring-slate-200'
+                                    style={{ color: ACCENT }}
+                                >
+                                    <RobotOutlined className='text-sm' />
+                                </span>
+                                <div className='min-w-0 flex-1 space-y-2'>
+                                    <div className='rounded-3xl rounded-tl-md border border-slate-200/70 bg-white px-4 py-2.5 text-[13.5px] leading-relaxed whitespace-pre-wrap text-slate-700 shadow-sm'>
+                                        <TypewriterText text={m.content} animate={m.animate} />
+                                    </div>
+                                    {m.data ? (
+                                        <AssistantResult
+                                            data={m.data}
+                                            onOpen={openAsset}
+                                            onApply={applyToList}
+                                            onAsk={send}
+                                            onCreateTransfer={setTransferDraft}
+                                        />
+                                    ) : null}
+                                </div>
+                            </div>
+                        )
+                    )}
+
+                    {loading ? (
+                        <div className='hd-msg flex gap-2.5'>
                             <span
                                 className='flex h-8 w-8 shrink-0 items-center justify-center rounded-2xl bg-white shadow-sm ring-1 ring-slate-200'
                                 style={{ color: ACCENT }}
                             >
                                 <RobotOutlined className='text-sm' />
                             </span>
-                            <div className='min-w-0 flex-1 space-y-2'>
-                                <div className='rounded-3xl rounded-tl-md border border-slate-200/70 bg-white px-4 py-2.5 text-[13.5px] leading-relaxed whitespace-pre-wrap text-slate-700 shadow-sm'>
-                                    <TypewriterText text={m.content} animate={m.animate} />
-                                </div>
-                                {m.data ? (
-                                    <AssistantResult
-                                        data={m.data}
-                                        onOpen={openAsset}
-                                        onApply={applyToList}
-                                        onAsk={send}
-                                    />
-                                ) : null}
-                            </div>
+                            <ThinkingIndicator label={liveStep || undefined} />
                         </div>
-                    )
-                )}
-
-                {loading ? (
-                    <div className='hd-msg flex gap-2.5'>
-                        <span
-                            className='flex h-8 w-8 shrink-0 items-center justify-center rounded-2xl bg-white shadow-sm ring-1 ring-slate-200'
-                            style={{ color: ACCENT }}
-                        >
-                            <RobotOutlined className='text-sm' />
-                        </span>
-                        <ThinkingIndicator label={liveStep || undefined} />
-                    </div>
-                ) : null}
-                <div ref={endRef} />
-            </div>
-
-            {/* Composer */}
-            <div
-                className='border-t border-slate-200/70 bg-white px-3 py-3'
-                style={{ paddingBottom: isMobile ? 'calc(0.75rem + env(safe-area-inset-bottom))' : undefined }}
-            >
-                <div className='flex items-end gap-2 rounded-3xl border border-slate-200 bg-slate-50 px-3 py-1.5 shadow-sm transition-all focus-within:border-[#2f51d9] focus-within:bg-white focus-within:shadow-[0_0_0_4px_rgba(47,81,217,0.12)]'>
-                    <Input.TextArea
-                        value={input}
-                        onChange={(e) => setInput(e.target.value)}
-                        autoSize={{ minRows: 1, maxRows: 5 }}
-                        variant='borderless'
-                        className='!bg-transparent !px-0 !py-1.5 text-[13.5px]'
-                        placeholder={listening ? 'Đang nghe… cứ nói đi' : 'Hỏi về máy móc...'}
-                        onPressEnter={(e) => {
-                            if (!e.shiftKey) {
-                                e.preventDefault();
-                                send(input);
-                            }
-                        }}
-                    />
-                    {recognitionSupported ? (
-                        <Tooltip title={listening ? 'Đang nghe — nhấn để dừng' : 'Nói để hỏi'}>
-                            <Button
-                                type='text'
-                                shape='circle'
-                                aria-label='Nhập bằng giọng nói'
-                                icon={listening ? <LoadingOutlined /> : <AudioOutlined />}
-                                onClick={toggleMic}
-                                disabled={loading}
-                                className={
-                                    listening
-                                        ? 'mb-1 shrink-0 !bg-rose-500 !text-white'
-                                        : 'mb-1 shrink-0 text-slate-400 hover:!text-[#2f51d9]'
-                                }
-                            />
-                        </Tooltip>
                     ) : null}
-                    <Button
-                        type='primary'
-                        shape='circle'
-                        icon={<SendOutlined />}
-                        loading={loading}
-                        disabled={!input.trim()}
-                        onClick={() => send(input)}
-                        style={{ background: input.trim() ? ACCENT : undefined }}
-                        className='mb-1 shrink-0 transition-transform hover:scale-105 active:scale-95'
-                    />
+                    <div ref={endRef} />
                 </div>
-                <div className='mt-1.5 text-center text-[10.5px] text-slate-400'>
-                    {listening
-                        ? '🎤 Đang nghe — nói xong sẽ tự gửi'
-                        : recognitionSupported
-                          ? 'Trợ lý truy vấn dữ liệu thật · Enter gửi · 🎤 nói để hỏi'
-                          : 'Trợ lý truy vấn dữ liệu thật · Enter để gửi, Shift+Enter xuống dòng'}
+
+                {/* Composer */}
+                <div
+                    className='border-t border-slate-200/70 bg-white px-3 py-3'
+                    style={{ paddingBottom: isMobile ? 'calc(0.75rem + env(safe-area-inset-bottom))' : undefined }}
+                >
+                    <div className='flex items-end gap-2 rounded-3xl border border-slate-200 bg-slate-50 px-3 py-1.5 shadow-sm transition-all focus-within:border-[#2f51d9] focus-within:bg-white focus-within:shadow-[0_0_0_4px_rgba(47,81,217,0.12)]'>
+                        <Input.TextArea
+                            value={input}
+                            onChange={(e) => setInput(e.target.value)}
+                            autoSize={{ minRows: 1, maxRows: 5 }}
+                            variant='borderless'
+                            className='!bg-transparent !px-0 !py-1.5 text-[13.5px]'
+                            placeholder={listening ? 'Đang nghe… cứ nói đi' : 'Hỏi về máy móc...'}
+                            onPressEnter={(e) => {
+                                if (!e.shiftKey) {
+                                    e.preventDefault();
+                                    send(input);
+                                }
+                            }}
+                        />
+                        {recognitionSupported ? (
+                            <Tooltip title={listening ? 'Đang nghe — nhấn để dừng' : 'Nói để hỏi'}>
+                                <Button
+                                    type='text'
+                                    shape='circle'
+                                    aria-label='Nhập bằng giọng nói'
+                                    icon={listening ? <LoadingOutlined /> : <AudioOutlined />}
+                                    onClick={toggleMic}
+                                    disabled={loading}
+                                    className={
+                                        listening
+                                            ? 'mb-1 shrink-0 !bg-rose-500 !text-white'
+                                            : 'mb-1 shrink-0 text-slate-400 hover:!text-[#2f51d9]'
+                                    }
+                                />
+                            </Tooltip>
+                        ) : null}
+                        <Button
+                            type='primary'
+                            shape='circle'
+                            icon={<SendOutlined />}
+                            loading={loading}
+                            disabled={!input.trim()}
+                            onClick={() => send(input)}
+                            style={{ background: input.trim() ? ACCENT : undefined }}
+                            className='mb-1 shrink-0 transition-transform hover:scale-105 active:scale-95'
+                        />
+                    </div>
+                    <div className='mt-1.5 text-center text-[10.5px] text-slate-400'>
+                        {listening
+                            ? '🎤 Đang nghe — nói xong sẽ tự gửi'
+                            : recognitionSupported
+                              ? 'Trợ lý truy vấn dữ liệu thật · Enter gửi · 🎤 nói để hỏi'
+                              : 'Trợ lý truy vấn dữ liệu thật · Enter để gửi, Shift+Enter xuống dòng'}
+                    </div>
                 </div>
+
+                {/* Tay nắm đổi cỡ (chỉ desktop) — kéo góc dưới–phải */}
+                {isMobile ? null : (
+                    <div
+                        onPointerDown={startResize}
+                        className='absolute right-0.5 bottom-0.5 flex h-4 w-4 cursor-nwse-resize items-end justify-end text-slate-300 hover:text-slate-400'
+                        title='Kéo để đổi cỡ'
+                    >
+                        <svg width='10' height='10' viewBox='0 0 10 10' fill='none'>
+                            <path d='M9 1v8H1' stroke='currentColor' strokeWidth='1.2' strokeLinecap='round' />
+                        </svg>
+                    </div>
+                )}
             </div>
 
-            {/* Tay nắm đổi cỡ (chỉ desktop) — kéo góc dưới–phải */}
-            {isMobile ? null : (
-                <div
-                    onPointerDown={startResize}
-                    className='absolute right-0.5 bottom-0.5 flex h-4 w-4 cursor-nwse-resize items-end justify-end text-slate-300 hover:text-slate-400'
-                    title='Kéo để đổi cỡ'
-                >
-                    <svg width='10' height='10' viewBox='0 0 10 10' fill='none'>
-                        <path d='M9 1v8H1' stroke='currentColor' strokeWidth='1.2' strokeLinecap='round' />
-                    </svg>
-                </div>
-            )}
-            </div>
+            {transferDraft ? (
+                <TransferModal
+                    open
+                    asset={null}
+                    assets={transferDraft.assets}
+                    plants={plantsQuery.data ?? []}
+                    defaultToPlantId={transferDraft.toPlantId}
+                    zIndex={1200}
+                    submitting={createTransfer.isPending}
+                    onClose={() => setTransferDraft(null)}
+                    onSubmit={async (payload) => {
+                        await createTransfer.mutateAsync(payload);
+                    }}
+                />
+            ) : null}
         </>,
         document.body
     );
@@ -733,7 +791,8 @@ const AssistantResult: React.FC<{
     onOpen: (id: string) => void;
     onApply: (f: AssistantAppliedFilters) => void;
     onAsk: (q: string) => void;
-}> = ({ data, onOpen, onApply, onAsk }) => {
+    onCreateTransfer?: (draft: AssistantTransferDraft) => void;
+}> = ({ data, onOpen, onApply, onAsk, onCreateTransfer }) => {
     // Phòng vệ: tin nhắn cũ lưu trong localStorage có thể thiếu trường -> luôn dùng mảng/đối tượng mặc định.
     const aggregates = data.aggregates ?? {};
     const items = data.items ?? [];
@@ -793,6 +852,7 @@ const AssistantResult: React.FC<{
         !!transferOrders?.orders?.length ||
         !!aggregates.topBroken?.length ||
         !!aggregates.breakdown?.length ||
+        !!data.transferDraft?.assets?.length ||
         items.length > 0;
     const badge = data.domain ? DOMAIN_BADGE[data.domain] : undefined;
 
@@ -807,6 +867,58 @@ const AssistantResult: React.FC<{
                         <span className='h-1.5 w-1.5 rounded-full' style={{ background: badge.color }} />
                         {badge.label}
                     </span>
+                </div>
+            ) : null}
+
+            {data.transferDraft?.assets?.length ? (
+                <div className='overflow-hidden rounded-2xl border border-slate-200/70 bg-white shadow-sm'>
+                    <div className='flex items-center gap-2 border-b border-slate-100 px-3 py-2.5'>
+                        <span className='flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-indigo-50 text-indigo-600'>
+                            <SwapOutlined />
+                        </span>
+                        <div className='min-w-0 flex-1'>
+                            <div className='text-[13px] font-bold text-slate-800'>Lệnh điều chuyển (nháp)</div>
+                            <div className='text-[11px] text-slate-500'>
+                                {data.transferDraft.assets.length} máy
+                                {data.transferDraft.toPlantName
+                                    ? ` → ${data.transferDraft.toPlantName}`
+                                    : ' → (chưa rõ cơ sở đích)'}
+                            </div>
+                        </div>
+                    </div>
+                    <div className='space-y-1 px-3 py-2'>
+                        {data.transferDraft.assets.slice(0, 6).map((a) => (
+                            <div key={a.id} className='flex items-center justify-between gap-2 text-[12px]'>
+                                <span className='truncate font-mono text-slate-700'>{a.machineCode || a.name}</span>
+                                <span className='shrink-0 text-slate-400'>{a.plant?.name || ''}</span>
+                            </div>
+                        ))}
+                        {data.transferDraft.assets.length > 6 ? (
+                            <div className='text-[11px] text-slate-400'>
+                                +{data.transferDraft.assets.length - 6} máy nữa
+                            </div>
+                        ) : null}
+                        {data.transferDraft.unresolved?.length ? (
+                            <div className='text-[11px] text-amber-600'>
+                                Chưa khớp: {data.transferDraft.unresolved.join(', ')}
+                            </div>
+                        ) : null}
+                        {data.transferDraft.warnings?.length ? (
+                            <div className='text-[11px] text-amber-600'>
+                                ⚠ {data.transferDraft.warnings.join(' · ')}
+                            </div>
+                        ) : null}
+                    </div>
+                    <div className='border-t border-slate-100 px-3 py-2'>
+                        <button
+                            type='button'
+                            onClick={() => onCreateTransfer?.(data.transferDraft!)}
+                            className='w-full rounded-xl px-3 py-2 text-[12.5px] font-semibold text-white transition-opacity hover:opacity-90'
+                            style={{ background: ACCENT }}
+                        >
+                            Mở form điều chuyển
+                        </button>
+                    </div>
                 </div>
             ) : null}
 
@@ -959,7 +1071,9 @@ const AssistantResult: React.FC<{
                                 <div key={`${step.label}-${idx}`} className='flex gap-2 text-[12px]'>
                                     <div className='flex w-4 shrink-0 flex-col items-center'>
                                         <span className={`mt-1 h-2.5 w-2.5 rounded-full ${tone.dot}`} />
-                                        {idx < arr.length - 1 ? <span className={`mt-1 h-7 w-px ${tone.line}`} /> : null}
+                                        {idx < arr.length - 1 ? (
+                                            <span className={`mt-1 h-7 w-px ${tone.line}`} />
+                                        ) : null}
                                     </div>
                                     <div className='min-w-0 flex-1 pb-2'>
                                         <div className={`font-semibold ${tone.text}`}>{step.label}</div>
@@ -981,7 +1095,9 @@ const AssistantResult: React.FC<{
                         <div className='flex items-center justify-between gap-2'>
                             <div className='min-w-0'>
                                 <div className='flex items-center gap-1.5 text-[11px] font-semibold text-slate-500'>
-                                    <FileTextOutlined style={{ color: materialRequests.kind === 'supply' ? '#10b981' : '#f59e0b' }} />
+                                    <FileTextOutlined
+                                        style={{ color: materialRequests.kind === 'supply' ? '#10b981' : '#f59e0b' }}
+                                    />
                                     <span className='truncate'>
                                         {materialRequests.title} · {materialRequests.periodLabel}
                                     </span>
@@ -1010,7 +1126,10 @@ const AssistantResult: React.FC<{
                     {materialRequests.rows.slice(0, 8).map((r) => {
                         const tone = REQUEST_STATUS_TONE[r.status] || 'bg-slate-100 text-slate-600 ring-slate-200';
                         const plant =
-                            r.fromPlantName || r.toPlantName || r.plantName || (materialRequests.kind === 'supply' ? 'Chưa rõ nơi cấp' : 'Chưa rõ cơ sở');
+                            r.fromPlantName ||
+                            r.toPlantName ||
+                            r.plantName ||
+                            (materialRequests.kind === 'supply' ? 'Chưa rõ nơi cấp' : 'Chưa rõ cơ sở');
                         const linkCodes =
                             materialRequests.kind === 'supply'
                                 ? r.distribution?.distributionCodes || []
@@ -1020,14 +1139,19 @@ const AssistantResult: React.FC<{
                                 ? Number(r.distribution?.outstandingQty || 0)
                                 : Number(r.orders?.missingQty || 0);
                         return (
-                            <div key={r.id || r.requestCode} className='border-b border-slate-100 px-3 py-2 last:border-0'>
+                            <div
+                                key={r.id || r.requestCode}
+                                className='border-b border-slate-100 px-3 py-2 last:border-0'
+                            >
                                 <div className='flex items-start gap-2'>
                                     <div className='min-w-0 flex-1'>
                                         <div className='flex flex-wrap items-center gap-1.5'>
                                             <span className='font-mono text-[12.5px] font-bold text-slate-800'>
                                                 {r.requestCode}
                                             </span>
-                                            <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ring-1 ${tone}`}>
+                                            <span
+                                                className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ring-1 ${tone}`}
+                                            >
                                                 {r.statusLabel}
                                             </span>
                                         </div>
@@ -1038,7 +1162,9 @@ const AssistantResult: React.FC<{
                                         </div>
                                     </div>
                                     <div className='shrink-0 text-right'>
-                                        <div className='text-[12px] font-bold text-slate-800'>{fmtD(Number(r.totalWithVat || 0))}</div>
+                                        <div className='text-[12px] font-bold text-slate-800'>
+                                            {fmtD(Number(r.totalWithVat || 0))}
+                                        </div>
                                         <div className='text-[10.5px] text-slate-400'>{r.itemCount || 0} dòng</div>
                                     </div>
                                 </div>
@@ -1091,7 +1217,9 @@ const AssistantResult: React.FC<{
                     <div className='mb-2 flex items-center justify-between gap-2'>
                         <div className='min-w-0'>
                             <div className='flex items-center gap-1.5 text-[11px] font-semibold text-slate-500'>
-                                <DatabaseOutlined style={{ color: requestAnalysis.kind === 'supply' ? '#10b981' : '#f59e0b' }} />
+                                <DatabaseOutlined
+                                    style={{ color: requestAnalysis.kind === 'supply' ? '#10b981' : '#f59e0b' }}
+                                />
                                 <span className='truncate'>
                                     {requestAnalysis.title} · {requestAnalysis.periodLabel}
                                 </span>
@@ -1123,7 +1251,9 @@ const AssistantResult: React.FC<{
                                 return (
                                     <div key={`${m.materialName}-${idx}`} className='text-[12px]'>
                                         <div className='flex items-center gap-2'>
-                                            <span className='min-w-0 flex-1 truncate text-slate-600'>{m.materialName}</span>
+                                            <span className='min-w-0 flex-1 truncate text-slate-600'>
+                                                {m.materialName}
+                                            </span>
                                             <span className='shrink-0 text-[11px] font-semibold text-slate-700'>
                                                 {fmtN(qty)} {m.unit}
                                             </span>
@@ -1166,7 +1296,9 @@ const AssistantResult: React.FC<{
                                 <div className='truncate text-[10.5px] text-slate-400'>{c.label}</div>
                                 <div className='flex items-baseline gap-1'>
                                     <span className='text-base font-bold text-slate-800'>{fmtN(c.count)}</span>
-                                    {c.quantity ? <span className='text-[10px] text-rose-500'>thiếu {fmtN(c.quantity)}</span> : null}
+                                    {c.quantity ? (
+                                        <span className='text-[10px] text-rose-500'>thiếu {fmtN(c.quantity)}</span>
+                                    ) : null}
                                 </div>
                             </div>
                         ))}
@@ -1183,7 +1315,10 @@ const AssistantResult: React.FC<{
                         <span>{requestRiskAnalysis.riskCount}</span>
                     </div>
                     {requestRiskAnalysis.risks.slice(0, 8).map((risk, idx) => (
-                        <div key={`${risk.requestCode || risk.title}-${idx}`} className='border-b border-rose-100/70 px-3 py-2 text-[12px] last:border-0'>
+                        <div
+                            key={`${risk.requestCode || risk.title}-${idx}`}
+                            className='border-b border-rose-100/70 px-3 py-2 text-[12px] last:border-0'
+                        >
                             <div className='flex items-start gap-2'>
                                 <span
                                     className={`mt-0.5 h-2 w-2 shrink-0 rounded-full ${
@@ -1193,9 +1328,12 @@ const AssistantResult: React.FC<{
                                 <div className='min-w-0 flex-1'>
                                     <div className='font-semibold text-slate-800'>{risk.title}</div>
                                     <div className='mt-0.5 text-[11px] text-slate-500'>
-                                        {risk.module || 'Phiếu'}{risk.plantName ? ` · ${risk.plantName}` : ''}
+                                        {risk.module || 'Phiếu'}
+                                        {risk.plantName ? ` · ${risk.plantName}` : ''}
                                     </div>
-                                    {risk.action ? <div className='mt-1 text-[11px] text-rose-700'>{risk.action}</div> : null}
+                                    {risk.action ? (
+                                        <div className='mt-1 text-[11px] text-rose-700'>{risk.action}</div>
+                                    ) : null}
                                 </div>
                             </div>
                         </div>
@@ -1574,7 +1712,9 @@ const AssistantResult: React.FC<{
                     ).map((r) => (
                         <div key={r.label} className='mt-1 flex items-center gap-2 text-[12.5px]'>
                             <span className='w-20 shrink-0 text-slate-500'>{r.label}</span>
-                            <span className='min-w-0 flex-1 truncate font-semibold text-slate-800'>{fmtD(r.v.current)}</span>
+                            <span className='min-w-0 flex-1 truncate font-semibold text-slate-800'>
+                                {fmtD(r.v.current)}
+                            </span>
                             <span className='shrink-0 text-[10px] text-slate-400'>{r.hint}</span>
                             <span
                                 className={`w-12 shrink-0 text-right text-[11px] font-medium ${r.v.deltaPct >= 0 ? 'text-rose-500' : 'text-emerald-500'}`}
@@ -1586,7 +1726,9 @@ const AssistantResult: React.FC<{
                     ))}
                     <div className='mt-2 flex items-center gap-2 border-t border-slate-100 pt-2 text-[12.5px]'>
                         <span className='w-20 shrink-0 font-semibold text-slate-600'>Tổng cộng</span>
-                        <span className='min-w-0 flex-1 truncate font-bold text-slate-900'>{fmtD(costOverview.total.current)}</span>
+                        <span className='min-w-0 flex-1 truncate font-bold text-slate-900'>
+                            {fmtD(costOverview.total.current)}
+                        </span>
                         <span
                             className={`shrink-0 rounded-full px-2 py-0.5 text-[11px] font-semibold ${costOverview.total.deltaPct >= 0 ? 'bg-rose-50 text-rose-600' : 'bg-emerald-50 text-emerald-600'}`}
                         >
@@ -1595,7 +1737,8 @@ const AssistantResult: React.FC<{
                         </span>
                     </div>
                     <div className='mt-1.5 text-[10.5px] leading-4 text-slate-400'>
-                        Mua = nhập kho, cấp phát = xuất dùng — 2 dòng tiền khác bản chất, không cộng để đánh giá hiệu quả.
+                        Mua = nhập kho, cấp phát = xuất dùng — 2 dòng tiền khác bản chất, không cộng để đánh giá hiệu
+                        quả.
                     </div>
                 </div>
             ) : null}
@@ -1608,8 +1751,18 @@ const AssistantResult: React.FC<{
                     </div>
                     {(
                         [
-                            { label: 'Mua', v: compareCost.purchase.current, color: '#3b82f6', key: 'purchase' as const },
-                            { label: 'Cấp phát', v: compareCost.distribution.current, color: '#10b981', key: 'distribution' as const },
+                            {
+                                label: 'Mua',
+                                v: compareCost.purchase.current,
+                                color: '#3b82f6',
+                                key: 'purchase' as const,
+                            },
+                            {
+                                label: 'Cấp phát',
+                                v: compareCost.distribution.current,
+                                color: '#10b981',
+                                key: 'distribution' as const,
+                            },
                         ] as const
                     ).map((r) => {
                         const max = Math.max(1, compareCost.purchase.current, compareCost.distribution.current);
@@ -1617,7 +1770,9 @@ const AssistantResult: React.FC<{
                             <div key={r.label} className='mt-1 text-[12.5px]'>
                                 <div className='flex items-center gap-2'>
                                     <span className='w-16 shrink-0 text-slate-500'>{r.label}</span>
-                                    <span className='min-w-0 flex-1 truncate font-semibold text-slate-800'>{fmtD(r.v)}</span>
+                                    <span className='min-w-0 flex-1 truncate font-semibold text-slate-800'>
+                                        {fmtD(r.v)}
+                                    </span>
                                     {compareCost.higher === r.key ? (
                                         <Tag color='blue' className='!m-0 !rounded-full !text-[10px]'>
                                             cao hơn
@@ -1625,7 +1780,10 @@ const AssistantResult: React.FC<{
                                     ) : null}
                                 </div>
                                 <div className='mt-0.5 h-1.5 rounded-full bg-slate-100'>
-                                    <div className='h-1.5 rounded-full' style={{ width: `${(r.v / max) * 100}%`, background: r.color }} />
+                                    <div
+                                        className='h-1.5 rounded-full'
+                                        style={{ width: `${(r.v / max) * 100}%`, background: r.color }}
+                                    />
                                 </div>
                             </div>
                         );
@@ -1775,7 +1933,10 @@ const AssistantResult: React.FC<{
                         {data.confidence ? (
                             <span
                                 className='ml-auto rounded-full px-1.5 py-0.5 text-[9.5px] font-bold'
-                                style={{ background: `${CONFIDENCE[data.confidence].color}1a`, color: CONFIDENCE[data.confidence].color }}
+                                style={{
+                                    background: `${CONFIDENCE[data.confidence].color}1a`,
+                                    color: CONFIDENCE[data.confidence].color,
+                                }}
                             >
                                 {CONFIDENCE[data.confidence].label}
                             </span>
@@ -1808,7 +1969,9 @@ const AssistantResult: React.FC<{
                         · {data.model}
                     </span>
                     {data.confidence && !data.sources?.length ? (
-                        <span style={{ color: CONFIDENCE[data.confidence].color }}>· {CONFIDENCE[data.confidence].label}</span>
+                        <span style={{ color: CONFIDENCE[data.confidence].color }}>
+                            · {CONFIDENCE[data.confidence].label}
+                        </span>
                     ) : null}
                     {data.tookMs ? <span className='ml-auto'>{(data.tookMs / 1000).toFixed(1)}s</span> : null}
                 </div>
