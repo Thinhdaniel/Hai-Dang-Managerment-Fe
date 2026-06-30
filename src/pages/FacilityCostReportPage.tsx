@@ -433,19 +433,38 @@ export default function FacilityCostReportPage() {
                                 loading={reportQuery.isLoading}
                                 icon={<InboxOutlined />}
                                 color={COST_COLORS.material}
-                                hint='Vật tư CS1 cấp cho cơ sở nhận, cộng phần cơ sở được phép tự mua (vd Phú Sơn).'
+                                hint='Chỉ vật tư vận hành (tiêu hao + linh kiện). Máy móc/CCDC xem ô "Mua sắm & đầu tư".'
                                 onClick={() =>
                                     setDrilldown({
                                         kind: 'plant',
-                                        title: 'Chi phí vật tư theo cơ sở',
+                                        title: 'Chi phí vật tư vận hành theo cơ sở',
                                         description:
-                                            'Vật tư CS1 cấp cho cơ sở nhận, cộng phần cơ sở được phép tự mua (vd Phú Sơn).',
+                                            'Vật tư vận hành (tiêu hao + linh kiện) CS1 cấp + phần cơ sở tự mua.',
                                         rows: costByPlant.filter(
                                             (row) =>
                                                 Number(row.materialDistributionCost ?? 0) +
                                                     Number(row.materialSelfPurchaseCost ?? 0) >
                                                 0
                                         ),
+                                    })
+                                }
+                            />
+                        </Col>
+                        <Col xs={12} xl={6}>
+                            <MetricCard
+                                title='Mua sắm & đầu tư'
+                                value={summary?.materialCapexCost ?? 0}
+                                previousValue={prevSummary?.materialCapexCost}
+                                loading={reportQuery.isLoading}
+                                icon={<ShopOutlined />}
+                                color='#7c3aed'
+                                hint='CAPEX: máy móc + công cụ dụng cụ (CCDC) — tách riêng, KHÔNG tính vào chi phí vận hành.'
+                                onClick={() =>
+                                    setDrilldown({
+                                        kind: 'plant',
+                                        title: 'Mua sắm & đầu tư (CAPEX) theo cơ sở',
+                                        description: 'Máy móc + CCDC mua/cấp trong kỳ, tách khỏi chi phí vận hành.',
+                                        rows: costByPlant.filter((row) => Number(row.materialCapexCost ?? 0) > 0),
                                     })
                                 }
                             />

@@ -16,6 +16,8 @@ export interface FacilityCostSummary {
     materialDistributionCost: number;
     materialSelfPurchaseCost: number;
     materialTotalCost: number;
+    // CAPEX (CCDC + máy móc) tách riêng, KHÔNG nằm trong chi phí vận hành.
+    materialCapexCost: number;
     externalRepairCost: number;
     totalFacilityCost: number;
     distributionRecordCount: number;
@@ -30,6 +32,7 @@ export interface FacilityCostByPlant {
     plantName: string;
     materialDistributionCost: number;
     materialSelfPurchaseCost: number;
+    materialCapexCost: number;
     externalRepairCost: number;
     totalCost: number;
     distributionCount: number;
@@ -43,6 +46,7 @@ export interface FacilityCostByPeriod {
     period: string;
     materialDistributionCost: number;
     materialSelfPurchaseCost: number;
+    materialCapexCost: number;
     externalRepairCost: number;
     totalCost: number;
 }
