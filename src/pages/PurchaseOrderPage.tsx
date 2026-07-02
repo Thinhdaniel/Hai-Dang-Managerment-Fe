@@ -366,6 +366,30 @@ const DetailDrawer: React.FC<DrawerProps> = ({
         onError: (e: any) => message.error(e?.message || 'Không thể quét phiếu nhận hàng'),
     });
 
+    const addReceiptScanFiles = (incoming: File[]) => {
+        if (!incoming.length) return;
+        setReceiptScanFiles((prev) => [...prev, ...incoming].slice(0, 5));
+        setReceiptScanPreview(null);
+    };
+
+    // Dán ảnh (Ctrl+V) từ clipboard khi đang mở form nhận hàng — chụp màn hình Zalo/ảnh copy đều dán được
+    React.useEffect(() => {
+        if (!receiveOpen) return;
+        const onPaste = (event: ClipboardEvent) => {
+            const files = Array.from(event.clipboardData?.items ?? [])
+                .filter((item) => item.kind === 'file' && item.type.startsWith('image/'))
+                .map((item) => item.getAsFile())
+                .filter((file): file is File => Boolean(file));
+            if (!files.length) return;
+            event.preventDefault();
+            addReceiptScanFiles(files);
+            message.success(`Đã dán ${files.length} ảnh từ clipboard`);
+        };
+        window.addEventListener('paste', onPaste);
+        return () => window.removeEventListener('paste', onPaste);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [receiveOpen]);
+
     // Lấy danh sách phiếu trả của PO này
     const linkMaterialMut = useMutation({
         mutationFn: ({ index, materialId }: { index: number; materialId: string }) =>
@@ -1113,9 +1137,8 @@ const DetailDrawer: React.FC<DrawerProps> = ({
                                     accept='image/*'
                                     multiple
                                     showUploadList={false}
-                                    beforeUpload={(_, fileList) => {
-                                        setReceiptScanFiles(fileList.slice(0, 5));
-                                        setReceiptScanPreview(null);
+                                    beforeUpload={(file, fileList) => {
+                                        if (file === fileList[0]) addReceiptScanFiles(fileList.slice(0, 5));
                                         return false;
                                     }}
                                 >
@@ -1130,10 +1153,23 @@ const DetailDrawer: React.FC<DrawerProps> = ({
                                 >
                                     Quét và đối soát
                                 </Button>
+                                {receiptScanFiles.length > 0 && (
+                                    <Button
+                                        size='small'
+                                        type='text'
+                                        danger
+                                        onClick={() => {
+                                            setReceiptScanFiles([]);
+                                            setReceiptScanPreview(null);
+                                        }}
+                                    >
+                                        Bỏ ảnh
+                                    </Button>
+                                )}
                                 <Text type='secondary' className='text-xs'>
                                     {receiptScanFiles.length
                                         ? `${receiptScanFiles.length} ảnh đã chọn`
-                                        : 'Hỗ trợ tối đa 5 ảnh cùng phiếu'}
+                                        : 'Tối đa 5 ảnh cùng phiếu · dán ảnh chụp màn hình bằng Ctrl+V cũng được'}
                                 </Text>
                             </div>
 
