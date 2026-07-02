@@ -258,6 +258,20 @@ export interface ConsolidatePurchaseRequestsPayload {
 export interface PurchaseOrderItem {
     purchaseRequestId?: string;
     purchaseRequestCode?: string;
+    sourceLines?: Array<{
+        purchaseRequestId?: string;
+        purchaseRequestCode?: string;
+        requestItemIndex?: number;
+        materialId?: string;
+        materialName?: string;
+        unit?: string;
+        plantId?: string;
+        plantName?: string;
+        proposedBy?: string;
+        purpose?: string;
+        quantityRequested?: number;
+        quantityOrdered?: number;
+    }>;
     materialId?: string;
     material?: Material; // backward compat
     materialName?: string;
@@ -349,10 +363,98 @@ export interface PurchaseOrderQueryParams {
 
 export interface ReceivePurchaseOrderPayload {
     plantId?: string;
+    receiptScanId?: string;
     items?: Array<{ index: number; quantityReceived: number; markShortage?: boolean; note?: string }>;
     shortageAllocations?: Array<{ shortageId: string; quantityReceived: number; note?: string }>;
     receivedAt?: string;
     note?: string;
+}
+
+export interface PurchaseReceiptScanLine {
+    pageIndex?: number;
+    lineNo?: number;
+    materialName: string;
+    unit?: string;
+    quantity?: number;
+    unitPrice?: number;
+    vatRate?: number;
+    supplierName?: string;
+    note?: string;
+    rawText?: string;
+    confidence?: number;
+}
+
+export interface PurchaseReceiptScanPreview {
+    scanId?: string;
+    available: boolean;
+    provider?: string;
+    model?: string;
+    latencyMs?: number;
+    header?: {
+        supplierName?: string;
+        invoiceNo?: string;
+        deliveryCode?: string;
+        invoiceDate?: string;
+        receivedDate?: string;
+    };
+    extractedLines: PurchaseReceiptScanLine[];
+    currentAllocations: Array<{
+        sourceLine: PurchaseReceiptScanLine;
+        poItemIndex: number;
+        materialName: string;
+        unit?: string;
+        quantity: number;
+        confidence?: number;
+        reason?: string;
+    }>;
+    shortageAllocations: Array<{
+        sourceLine: PurchaseReceiptScanLine;
+        shortageId: string;
+        originalPurchaseOrderCode?: string;
+        materialName: string;
+        unit?: string;
+        quantity: number;
+        confidence?: number;
+        reason?: string;
+    }>;
+    reviewLines: Array<{
+        sourceLine: PurchaseReceiptScanLine;
+        quantity: number;
+        reason: string;
+    }>;
+    shortageMarks: Array<{
+        index: number;
+        materialName: string;
+        remainingAfterReceipt: number;
+        reason: string;
+    }>;
+    proposedPayload: ReceivePurchaseOrderPayload;
+    summary: {
+        extractedLineCount: number;
+        currentOrderQuantity: number;
+        shortageResolvedQuantity: number;
+        reviewQuantity: number;
+        reviewLineCount: number;
+        shortageMarkCount: number;
+    };
+}
+
+export interface PurchaseReceiptScanHistoryItem {
+    id: string;
+    purchaseOrderId: string;
+    purchaseOrderCode?: string;
+    status: 'preview' | 'applied' | 'discarded';
+    fileCount?: number;
+    header?: PurchaseReceiptScanPreview['header'];
+    summary?: Partial<PurchaseReceiptScanPreview['summary']>;
+    provider?: string;
+    model?: string;
+    latencyMs?: number;
+    createdBy?: string;
+    appliedBy?: string;
+    appliedAt?: string;
+    createdAt?: string;
+    updatedAt?: string;
 }
 
 export interface PurchaseShortage {
@@ -949,6 +1051,16 @@ export const purchaseOrderService = {
     receive: (id: string, data: ReceivePurchaseOrderPayload): Promise<PurchaseOrder> =>
         api.patch<PurchaseOrder, ReceivePurchaseOrderPayload>(`${PURCHASE_ORDERS_BASE}/${id}/receive`, data),
 
+    previewReceiptScan: (id: string, files: File[]): Promise<PurchaseReceiptScanPreview> => {
+        const formData = new FormData();
+        files.forEach((file) => formData.append('images', file));
+        return api.post<PurchaseReceiptScanPreview, FormData>(
+            `${PURCHASE_ORDERS_BASE}/${id}/receipt-scan/preview`,
+            formData,
+            { timeout: 120000 }
+        );
+    },
+
     linkItemMaterial: (id: string, index: number, materialId: string): Promise<PurchaseOrder> =>
         api.patch<PurchaseOrder, { materialId: string }>(`${PURCHASE_ORDERS_BASE}/${id}/items/${index}/link-material`, {
             materialId,
@@ -971,6 +1083,11 @@ export const purchaseOrderService = {
         materialId?: string;
         limit?: number;
     }): Promise<PurchaseShortage[]> => api.get<PurchaseShortage[]>(`${PURCHASE_ORDERS_BASE}/shortages`, { params }),
+
+    getReceiptScans: (id: string, limit = 20): Promise<PurchaseReceiptScanHistoryItem[]> =>
+        api.get<PurchaseReceiptScanHistoryItem[]>(`${PURCHASE_ORDERS_BASE}/${id}/receipt-scans`, {
+            params: { limit },
+        }),
 
     remove: (id: string): Promise<void> => api.delete(`${PURCHASE_ORDERS_BASE}/${id}`),
 

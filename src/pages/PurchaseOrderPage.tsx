@@ -20,6 +20,7 @@ import {
     Tag,
     Tooltip,
     Typography,
+    Upload,
     type TableColumnsType,
 } from 'antd';
 import {
@@ -33,6 +34,8 @@ import {
     InboxOutlined,
     PlusOutlined,
     RollbackOutlined,
+    ScanOutlined,
+    UploadOutlined,
     ShoppingOutlined,
 } from '@ant-design/icons';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -52,6 +55,7 @@ import {
     type PurchaseOrderQueryParams,
     type PurchaseOrderStatus,
     type PurchaseShortage,
+    type PurchaseReceiptScanPreview,
     type PurchaseRequest,
     type ReceivePurchaseOrderPayload,
     type MaterialPayload,
@@ -325,6 +329,9 @@ const DetailDrawer: React.FC<DrawerProps> = ({
     const [receiveItems, setReceiveItems] = useState<Record<number, number>>({});
     const [receiveShortageMarks, setReceiveShortageMarks] = useState<Record<number, boolean>>({});
     const [shortageAllocations, setShortageAllocations] = useState<Record<string, number>>({});
+    const [receiptScanFiles, setReceiptScanFiles] = useState<File[]>([]);
+    const [receiptScanPreview, setReceiptScanPreview] = useState<PurchaseReceiptScanPreview | null>(null);
+    const [appliedReceiptScanId, setAppliedReceiptScanId] = useState<string>();
     const [catalogTarget, setCatalogTarget] = useState<{ index: number; item: PurchaseOrderItem } | null>(null);
     const [catalogMode, setCatalogMode] = useState<'link' | 'create'>('link');
     const [materialSearch, setMaterialSearch] = useState('');
@@ -342,6 +349,21 @@ const DetailDrawer: React.FC<DrawerProps> = ({
             setReturnNote('');
         },
         onError: (e: any) => message.error(e?.message || 'Không thể tạo phiếu trả hàng'),
+    });
+
+    const receiptScanMut = useMutation({
+        mutationFn: ({ id, files }: { id: string; files: File[] }) => purchaseOrderService.previewReceiptScan(id, files),
+        onSuccess: (preview) => {
+            setReceiptScanPreview(preview);
+            setAppliedReceiptScanId(undefined);
+            if (record?.id) queryClient.invalidateQueries({ queryKey: ['purchase-receipt-scans', record.id] });
+            if ((preview.extractedLines?.length ?? 0) <= 0) {
+                message.warning('AI chưa đọc được dòng vật tư nào. Hãy chụp rõ hơn hoặc nhập thủ công.');
+                return;
+            }
+            message.success(`Đã quét ${preview.summary?.extractedLineCount ?? preview.extractedLines.length} dòng`);
+        },
+        onError: (e: any) => message.error(e?.message || 'Không thể quét phiếu nhận hàng'),
     });
 
     // Lấy danh sách phiếu trả của PO này
@@ -390,6 +412,12 @@ const DetailDrawer: React.FC<DrawerProps> = ({
     const { data: shortageResp = [] } = useQuery({
         queryKey: ['purchase-shortages', 'open', record?.id],
         queryFn: () => purchaseOrderService.getShortages({ status: 'open', limit: 200 }),
+        enabled: Boolean(record?.id && receiveOpen),
+    });
+
+    const { data: receiptScanHistory = [] } = useQuery({
+        queryKey: ['purchase-receipt-scans', record?.id],
+        queryFn: () => purchaseOrderService.getReceiptScans(record!.id, 8),
         enabled: Boolean(record?.id && receiveOpen),
     });
 
@@ -444,13 +472,17 @@ const DetailDrawer: React.FC<DrawerProps> = ({
         if (!record) return [];
         const supplierIds = new Set(record.items.map((item) => item.supplierId).filter(Boolean));
         const materialNames = new Set(record.items.map((item) => item.materialName).filter(Boolean));
+        const aiShortageIds = new Set(
+            (receiptScanPreview?.proposedPayload.shortageAllocations ?? []).map((item) => item.shortageId)
+        );
         return (shortageResp as PurchaseShortage[]).filter((shortage) => {
             if (shortage.originalPurchaseOrderId === record.id) return false;
             const sameSupplier = shortage.supplierId ? supplierIds.has(shortage.supplierId) : true;
             const sameMaterial = materialNames.has(shortage.materialName);
-            return sameSupplier && sameMaterial && (shortage.quantityOutstanding ?? 0) > 0;
+            const aiSuggested = aiShortageIds.has(shortage.id);
+            return (aiSuggested || (sameSupplier && sameMaterial)) && (shortage.quantityOutstanding ?? 0) > 0;
         });
-    }, [record, shortageResp]);
+    }, [record, shortageResp, receiptScanPreview]);
 
     const receiveRows = useMemo(() => {
         if (!record) return [];
@@ -466,6 +498,42 @@ const DetailDrawer: React.FC<DrawerProps> = ({
         setReceiveItems({});
         setReceiveShortageMarks({});
         setShortageAllocations({});
+        setReceiptScanFiles([]);
+        setReceiptScanPreview(null);
+        setAppliedReceiptScanId(undefined);
+        receiptScanMut.reset();
+    };
+
+    const handleReceiptScan = () => {
+        if (!record) return;
+        if (!receiptScanFiles.length) {
+            message.warning('Chọn hoặc chụp ít nhất 1 ảnh phiếu giao hàng');
+            return;
+        }
+        receiptScanMut.mutate({ id: record.id, files: receiptScanFiles });
+    };
+
+    const applyReceiptScanPreview = () => {
+        const payload = receiptScanPreview?.proposedPayload;
+        if (!payload) return;
+
+        const nextReceiveItems: Record<number, number> = {};
+        const nextShortageMarks: Record<number, boolean> = {};
+        const nextShortageAllocations: Record<string, number> = {};
+
+        (payload.items ?? []).forEach((item) => {
+            nextReceiveItems[item.index] = Number(item.quantityReceived ?? 0);
+            if (item.markShortage) nextShortageMarks[item.index] = true;
+        });
+        (payload.shortageAllocations ?? []).forEach((item) => {
+            nextShortageAllocations[item.shortageId] = Number(item.quantityReceived ?? 0);
+        });
+
+        setReceiveItems(nextReceiveItems);
+        setReceiveShortageMarks(nextShortageMarks);
+        setShortageAllocations(nextShortageAllocations);
+        setAppliedReceiptScanId(receiptScanPreview.scanId);
+        message.success('Đã áp dụng đề xuất AI vào form nhận hàng. Hãy rà lại trước khi cập nhật.');
     };
 
     const handleReceiveSubmit = async () => {
@@ -492,6 +560,7 @@ const DetailDrawer: React.FC<DrawerProps> = ({
         }
 
         await onReceive(record.id, {
+            receiptScanId: appliedReceiptScanId,
             items,
             shortageAllocations: allocations,
         });
@@ -608,10 +677,26 @@ const DetailDrawer: React.FC<DrawerProps> = ({
             render: (_: any, r: any) => {
                 const key = String(r.materialId ?? r.materialName);
                 const ret = returnedMap.get(key);
+                const sourceLines = Array.isArray(r.sourceLines) ? r.sourceLines : [];
+                const sourceTitle = sourceLines.length
+                    ? sourceLines
+                          .map(
+                              (source: any) =>
+                                  `${source.purchaseRequestCode || r.purchaseRequestCode || 'Phiếu ĐX'}: ${fmtNum(
+                                      source.quantityOrdered ?? source.quantityRequested ?? 0
+                                  )} ${source.unit || r.unit || ''}${source.proposedBy ? ` - ${source.proposedBy}` : ''}`
+                          )
+                          .join('\n')
+                    : r.purchaseRequestCode;
                 return (
                     <div>
                         <div style={{ fontWeight: 600 }}>{r.materialName}</div>
-                        <div style={{ fontSize: 11, color: '#888' }}>{r.purchaseRequestCode}</div>
+                        <Tooltip title={<span style={{ whiteSpace: 'pre-line' }}>{sourceTitle}</span>}>
+                            <div style={{ fontSize: 11, color: '#888', cursor: sourceTitle ? 'help' : 'default' }}>
+                                {r.purchaseRequestCode}
+                                {sourceLines.length > 1 ? ` · ${sourceLines.length} nguồn` : ''}
+                            </div>
+                        </Tooltip>
                         {r.catalogStatus === 'unmatched' && (
                             <Tag color='orange' style={{ fontSize: 10, marginTop: 2 }}>
                                 Chua co danh muc
@@ -1004,6 +1089,178 @@ const DetailDrawer: React.FC<DrawerProps> = ({
                         showIcon
                         title='Chỉ nhập số lượng thực nhận trong lần giao này. Dòng nhận thiếu sẽ được ghi vào sổ nợ hàng NCC.'
                     />
+                    <Card
+                        size='small'
+                        className='border-sky-100 bg-sky-50/60'
+                        title={
+                            <Space>
+                                <ScanOutlined className='text-sky-600' />
+                                <span>Quét phiếu giao hàng bằng AI</span>
+                            </Space>
+                        }
+                        extra={
+                            receiptScanPreview?.provider ? (
+                                <Tag color='blue'>
+                                    {receiptScanPreview.provider}
+                                    {receiptScanPreview.model ? ` · ${receiptScanPreview.model}` : ''}
+                                </Tag>
+                            ) : null
+                        }
+                    >
+                        <div className='flex flex-col gap-3'>
+                            <div className='flex flex-wrap items-center gap-2'>
+                                <Upload
+                                    accept='image/*'
+                                    multiple
+                                    showUploadList={false}
+                                    beforeUpload={(_, fileList) => {
+                                        setReceiptScanFiles(fileList.slice(0, 5));
+                                        setReceiptScanPreview(null);
+                                        return false;
+                                    }}
+                                >
+                                    <Button icon={<UploadOutlined />}>Chọn/chụp ảnh</Button>
+                                </Upload>
+                                <Button
+                                    type='primary'
+                                    icon={<ScanOutlined />}
+                                    loading={receiptScanMut.isPending}
+                                    disabled={!receiptScanFiles.length}
+                                    onClick={handleReceiptScan}
+                                >
+                                    Quét và đối soát
+                                </Button>
+                                <Text type='secondary' className='text-xs'>
+                                    {receiptScanFiles.length
+                                        ? `${receiptScanFiles.length} ảnh đã chọn`
+                                        : 'Hỗ trợ tối đa 5 ảnh cùng phiếu'}
+                                </Text>
+                            </div>
+
+                            {receiptScanPreview && (
+                                <div className='grid gap-3 lg:grid-cols-[1fr_1.2fr]'>
+                                    <div className='rounded-lg border border-sky-100 bg-white p-3'>
+                                        <div className='mb-2 flex flex-wrap gap-2'>
+                                            <Tag color='processing'>
+                                                Đọc được {receiptScanPreview.summary.extractedLineCount} dòng
+                                            </Tag>
+                                            <Tag color='green'>
+                                                Đơn này {fmtNum(receiptScanPreview.summary.currentOrderQuantity)}
+                                            </Tag>
+                                            <Tag color='gold'>
+                                                Bù nợ {fmtNum(receiptScanPreview.summary.shortageResolvedQuantity)}
+                                            </Tag>
+                                            {receiptScanPreview.summary.reviewLineCount > 0 && (
+                                                <Tag color='red'>
+                                                    Cần rà {receiptScanPreview.summary.reviewLineCount} dòng
+                                                </Tag>
+                                            )}
+                                        </div>
+                                        <div className='space-y-1 text-xs text-slate-600'>
+                                            <div>
+                                                NCC:{' '}
+                                                <Text strong>
+                                                    {receiptScanPreview.header?.supplierName || record?.supplierName || '-'}
+                                                </Text>
+                                            </div>
+                                            <div>
+                                                Số phiếu:{' '}
+                                                <Text strong>
+                                                    {receiptScanPreview.header?.deliveryCode ||
+                                                        receiptScanPreview.header?.invoiceNo ||
+                                                        '-'}
+                                                </Text>
+                                            </div>
+                                            <div>
+                                                Ngày:{' '}
+                                                <Text strong>
+                                                    {fmtDate(
+                                                        receiptScanPreview.header?.receivedDate ||
+                                                            receiptScanPreview.header?.invoiceDate
+                                                    )}
+                                                </Text>
+                                            </div>
+                                        </div>
+                                        <Button
+                                            className='mt-3'
+                                            type='primary'
+                                            ghost
+                                            disabled={
+                                                !receiptScanPreview.proposedPayload.items?.length &&
+                                                !receiptScanPreview.proposedPayload.shortageAllocations?.length
+                                            }
+                                            onClick={applyReceiptScanPreview}
+                                        >
+                                            Áp dụng đề xuất vào form
+                                        </Button>
+                                    </div>
+
+                                    <Table
+                                        size='small'
+                                        rowKey={(_, index) => String(index)}
+                                        pagination={false}
+                                        dataSource={receiptScanPreview.reviewLines}
+                                        locale={{
+                                            emptyText: (
+                                                <Empty
+                                                    image={Empty.PRESENTED_IMAGE_SIMPLE}
+                                                    description='Không có dòng cần rà riêng'
+                                                />
+                                            ),
+                                        }}
+                                        columns={[
+                                            {
+                                                title: 'Dòng cần rà',
+                                                key: 'line',
+                                                render: (_: any, row: any) => (
+                                                    <div>
+                                                        <Text strong>{row.sourceLine?.materialName}</Text>
+                                                        <div className='text-xs text-slate-500'>
+                                                            {row.reason} · SL {fmtNum(row.quantity)}{' '}
+                                                            {row.sourceLine?.unit || ''}
+                                                        </div>
+                                                    </div>
+                                                ),
+                                            },
+                                        ]}
+                                    />
+                                </div>
+                            )}
+                        </div>
+                    </Card>
+                    {receiptScanHistory.length > 0 && (
+                        <div className='rounded-lg border border-slate-100 bg-white p-3'>
+                            <div className='mb-2 flex items-center justify-between gap-2'>
+                                <Text strong className='text-sm text-slate-700'>
+                                    Lịch sử quét phiếu nhận hàng
+                                </Text>
+                                <Tag color='default'>{receiptScanHistory.length} lần gần nhất</Tag>
+                            </div>
+                            <div className='flex flex-wrap gap-2'>
+                                {receiptScanHistory.slice(0, 6).map((scan) => (
+                                    <div
+                                        key={scan.id}
+                                        className='rounded-lg border border-slate-100 bg-slate-50 px-3 py-2 text-xs'
+                                    >
+                                        <div className='flex items-center gap-2'>
+                                            <Tag color={scan.status === 'applied' ? 'green' : 'blue'}>
+                                                {scan.status === 'applied' ? 'Đã áp dụng' : 'Preview'}
+                                            </Tag>
+                                            <Text type='secondary'>{fmtDate(scan.createdAt)}</Text>
+                                        </div>
+                                        <div className='mt-1 font-medium text-slate-700'>
+                                            {scan.header?.deliveryCode || scan.header?.invoiceNo || 'Phiếu chưa rõ số'}
+                                        </div>
+                                        <div className='mt-0.5 text-slate-500'>
+                                            Đọc {scan.summary?.extractedLineCount ?? 0} dòng · Đơn này{' '}
+                                            {fmtNum(scan.summary?.currentOrderQuantity ?? 0)} · Bù{' '}
+                                            {fmtNum(scan.summary?.shortageResolvedQuantity ?? 0)}
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    )}
                     <Table
                         dataSource={receiveRows}
                         rowKey='index'
