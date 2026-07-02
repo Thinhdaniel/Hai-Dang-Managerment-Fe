@@ -1410,60 +1410,57 @@ const DetailDrawer: React.FC<DrawerProps> = ({
                                                 render: (_: any, row: any) => {
                                                     if (row.unreadable) {
                                                         return (
-                                                            <div className='text-xs'>
-                                                                <Tag color='magenta'>Không đọc được</Tag>
-                                                                <span className='text-slate-600'>
-                                                                    {row.unreadable.reason} — đối chiếu ảnh và nhập tay
-                                                                </span>
-                                                            </div>
+                                                            <Tooltip title={row.unreadable.reason}>
+                                                                <Tag color='magenta' className='m-0'>
+                                                                    Không đọc được — nhập tay
+                                                                </Tag>
+                                                            </Tooltip>
                                                         );
                                                     }
                                                     return (
                                                         <div className='flex flex-col gap-1 text-xs'>
                                                             {row.autos.map((allocation: any, i: number) => (
-                                                                <div key={i} className='flex flex-wrap items-center gap-1'>
+                                                                <div key={i} className='flex items-center gap-1.5'>
                                                                     <Tag color='green' className='m-0'>
-                                                                        ✓ Tự khớp
-                                                                    </Tag>
-                                                                    <span className='text-slate-700'>
                                                                         {allocation.kind === 'po'
-                                                                            ? `Nhận ${fmtNum(allocation.quantity)} vào “${allocation.materialName}”`
-                                                                            : `Bù ${fmtNum(allocation.quantity)} cho nợ “${allocation.materialName}” (${allocation.originalPurchaseOrderCode || 'đơn cũ'})`}
+                                                                            ? `✓ Nhận ${fmtNum(allocation.quantity)}`
+                                                                            : `↩ Bù ${fmtNum(allocation.quantity)}`}
+                                                                    </Tag>
+                                                                    <span className='max-w-[340px] truncate text-slate-700'>
+                                                                        → {allocation.materialName}
+                                                                        {allocation.kind === 'shortage' &&
+                                                                            ` · ${allocation.originalPurchaseOrderCode || 'đơn cũ'}`}
                                                                     </span>
                                                                 </div>
                                                             ))}
                                                             {row.review?.suggestion && (
-                                                                <Checkbox
-                                                                    checked={Boolean(reviewTicks[row.reviewIndex])}
-                                                                    onChange={(e) =>
-                                                                        setReviewTicks((prev) => ({
-                                                                            ...prev,
-                                                                            [row.reviewIndex]: e.target.checked,
-                                                                        }))
-                                                                    }
-                                                                >
-                                                                    <span className='text-xs text-amber-800'>
-                                                                        {row.review.suggestion.type === 'po_item'
-                                                                            ? `Nhận ${fmtNum(row.review.suggestion.quantity)} vào “${row.review.suggestion.materialName}”`
-                                                                            : `Bù ${fmtNum(row.review.suggestion.quantity)} cho nợ “${row.review.suggestion.materialName}” (${row.review.suggestion.originalPurchaseOrderCode || 'đơn cũ'})`}
-                                                                        <span className='text-slate-500'>
-                                                                            {' '}
-                                                                            — {row.review.reason}
+                                                                <Tooltip title={row.review.reason}>
+                                                                    <Checkbox
+                                                                        checked={Boolean(reviewTicks[row.reviewIndex])}
+                                                                        onChange={(e) =>
+                                                                            setReviewTicks((prev) => ({
+                                                                                ...prev,
+                                                                                [row.reviewIndex]: e.target.checked,
+                                                                            }))
+                                                                        }
+                                                                    >
+                                                                        <span className='inline-block max-w-[360px] truncate align-bottom text-xs text-amber-800'>
+                                                                            {row.review.suggestion.type === 'po_item'
+                                                                                ? `Nhận ${fmtNum(row.review.suggestion.quantity)}`
+                                                                                : `Bù ${fmtNum(row.review.suggestion.quantity)}`}{' '}
+                                                                            → {row.review.suggestion.materialName}
+                                                                            {row.review.suggestion.type === 'shortage' &&
+                                                                                ` · ${row.review.suggestion.originalPurchaseOrderCode || 'đơn cũ'}`}
                                                                         </span>
-                                                                    </span>
-                                                                </Checkbox>
+                                                                    </Checkbox>
+                                                                </Tooltip>
                                                             )}
                                                             {row.review && !row.review.suggestion && (
-                                                                <div className='flex flex-wrap items-center gap-1'>
-                                                                    <Tag color='red' className='m-0'>
-                                                                        Không khớp
+                                                                <Tooltip title={row.review.reason}>
+                                                                    <Tag color='red' className='m-0 w-fit'>
+                                                                        Không khớp đơn/nợ nào
                                                                     </Tag>
-                                                                    <span className='text-slate-600'>
-                                                                        {row.review.reason} · SL{' '}
-                                                                        {fmtNum(row.review.quantity)}{' '}
-                                                                        {row.line?.unit || ''}
-                                                                    </span>
-                                                                </div>
+                                                                </Tooltip>
                                                             )}
                                                             {!row.autos.length && !row.review && (
                                                                 <Text type='secondary'>—</Text>
@@ -1475,11 +1472,7 @@ const DetailDrawer: React.FC<DrawerProps> = ({
                                         ]}
                                     />
 
-                                    <div className='flex flex-wrap items-center justify-between gap-2'>
-                                        <Text type='secondary' className='text-xs'>
-                                            AI chỉ tự điền dòng chắc chắn; dòng vàng cần bạn tick xác nhận, dòng nhận
-                                            thiếu sẽ tự ghi vào sổ nợ NCC.
-                                        </Text>
+                                    <div className='flex flex-wrap items-center justify-end gap-2'>
                                         <Button
                                             type='primary'
                                             disabled={
