@@ -393,6 +393,7 @@ export interface PurchaseReceiptScanSuggestion {
     originalPurchaseOrderCode?: string;
     materialName: string;
     unit?: string;
+    unitMismatch?: string;
     quantity: number;
     nameSimilarity?: number;
 }

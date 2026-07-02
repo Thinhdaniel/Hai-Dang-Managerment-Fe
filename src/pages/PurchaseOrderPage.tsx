@@ -529,6 +529,34 @@ const DetailDrawer: React.FC<DrawerProps> = ({
         });
     }, [record]);
 
+    // Gộp kết quả đối soát về 1 dòng/1 dòng-phiếu để hiển thị bảng thống nhất
+    const scanRows = useMemo(() => {
+        if (!receiptScanPreview) return [] as any[];
+        const keyOf = (line: any) => `${line?.pageIndex ?? 0}|${line?.lineNo ?? ''}|${line?.materialName ?? ''}`;
+        const map = new Map<string, any>();
+        receiptScanPreview.extractedLines.forEach((line, order) =>
+            map.set(keyOf(line), { line, order, autos: [] as any[], review: null as any, reviewIndex: -1, unreadable: null as any })
+        );
+        receiptScanPreview.currentAllocations.forEach((allocation) =>
+            map.get(keyOf(allocation.sourceLine))?.autos.push({ ...allocation, kind: 'po' })
+        );
+        receiptScanPreview.shortageAllocations.forEach((allocation) =>
+            map.get(keyOf(allocation.sourceLine))?.autos.push({ ...allocation, kind: 'shortage' })
+        );
+        receiptScanPreview.reviewLines.forEach((review, index) => {
+            const row = map.get(keyOf(review.sourceLine));
+            if (row) {
+                row.review = review;
+                row.reviewIndex = index;
+            }
+        });
+        (receiptScanPreview.unreadableLines ?? []).forEach((unreadable) => {
+            const row = map.get(keyOf(unreadable.sourceLine));
+            if (row) row.unreadable = unreadable;
+        });
+        return [...map.values()].sort((a, b) => a.order - b.order);
+    }, [receiptScanPreview]);
+
     const resetReceiveForm = () => {
         setReceiveItems({});
         setReceiveShortageMarks({});
@@ -577,6 +605,14 @@ const DetailDrawer: React.FC<DrawerProps> = ({
             } else if (suggestion.type === 'shortage' && suggestion.shortageId) {
                 nextShortageAllocations[suggestion.shortageId] =
                     (nextShortageAllocations[suggestion.shortageId] ?? 0) + suggestion.quantity;
+            }
+        });
+
+        // Dòng nào nhận CHƯA đủ số còn chờ -> tự tick "Ghi thiếu" để vào sổ nợ NCC luôn
+        receiveRows.forEach((row) => {
+            const receiving = nextReceiveItems[row.index];
+            if (receiving != null && receiving > 0 && receiving < row.remaining) {
+                nextShortageMarks[row.index] = true;
             }
         });
 
@@ -1132,7 +1168,7 @@ const DetailDrawer: React.FC<DrawerProps> = ({
                     resetReceiveForm();
                 }}
                 title='Nhập số lượng thực nhận'
-                width={980}
+                width={1080}
                 okText='Cập nhật nhận hàng'
                 confirmLoading={receivingId === record?.id}
                 onOk={handleReceiveSubmit}
@@ -1262,69 +1298,190 @@ const DetailDrawer: React.FC<DrawerProps> = ({
                             )}
 
                             {receiptScanPreview && (
-                                <div className='grid gap-3 lg:grid-cols-[1fr_1.2fr]'>
-                                    <div className='rounded-lg border border-sky-100 bg-white p-3'>
-                                        <div className='mb-2 flex flex-wrap gap-2'>
-                                            <Tag color='processing'>
-                                                Đọc được {receiptScanPreview.summary.extractedLineCount} dòng
-                                            </Tag>
+                                <div className='flex flex-col gap-2'>
+                                    <div className='flex flex-wrap items-center gap-x-4 gap-y-1 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs text-slate-600'>
+                                        <span>
+                                            NCC:{' '}
+                                            <Text strong>
+                                                {receiptScanPreview.header?.supplierName || record?.supplierName || '-'}
+                                            </Text>
+                                        </span>
+                                        <span>
+                                            Số phiếu:{' '}
+                                            <Text strong>
+                                                {receiptScanPreview.header?.deliveryCode ||
+                                                    receiptScanPreview.header?.invoiceNo ||
+                                                    '-'}
+                                            </Text>
+                                        </span>
+                                        <span>
+                                            Ngày:{' '}
+                                            <Text strong>
+                                                {fmtDate(
+                                                    receiptScanPreview.header?.receivedDate ||
+                                                        receiptScanPreview.header?.invoiceDate
+                                                )}
+                                            </Text>
+                                        </span>
+                                        <span className='ml-auto flex flex-wrap gap-1'>
                                             {receiptScanPreview.verification?.status === 'verified' ? (
-                                                <Tag color='cyan'>
-                                                    Đã đối chiếu 2 lần đọc ·{' '}
-                                                    {receiptScanPreview.summary.verifiedLineCount ?? 0} dòng khớp
+                                                <Tag color='cyan' className='m-0'>
+                                                    Đối chiếu 2 lần đọc ·{' '}
+                                                    {receiptScanPreview.summary.verifiedLineCount ?? 0}/
+                                                    {receiptScanPreview.summary.extractedLineCount} khớp
                                                 </Tag>
                                             ) : (
                                                 <Tooltip title={receiptScanPreview.verification?.note}>
-                                                    <Tag color='orange'>Chưa đối chiếu chéo — rà kỹ</Tag>
+                                                    <Tag color='orange' className='m-0'>
+                                                        Chưa đối chiếu chéo — rà kỹ
+                                                    </Tag>
                                                 </Tooltip>
                                             )}
-                                            <Tag color='green'>
-                                                Đơn này {fmtNum(receiptScanPreview.summary.currentOrderQuantity)}
-                                            </Tag>
-                                            <Tag color='gold'>
-                                                Bù nợ {fmtNum(receiptScanPreview.summary.shortageResolvedQuantity)}
-                                            </Tag>
-                                            {receiptScanPreview.summary.reviewLineCount > 0 && (
-                                                <Tag color='red'>
-                                                    Cần xác nhận {receiptScanPreview.summary.reviewLineCount} dòng
-                                                </Tag>
-                                            )}
-                                            {(receiptScanPreview.summary.unreadableLineCount ?? 0) > 0 && (
-                                                <Tag color='magenta'>
-                                                    Không đọc được{' '}
-                                                    {receiptScanPreview.summary.unreadableLineCount} dòng
-                                                </Tag>
-                                            )}
-                                        </div>
-                                        <div className='space-y-1 text-xs text-slate-600'>
-                                            <div>
-                                                NCC:{' '}
-                                                <Text strong>
-                                                    {receiptScanPreview.header?.supplierName || record?.supplierName || '-'}
-                                                </Text>
-                                            </div>
-                                            <div>
-                                                Số phiếu:{' '}
-                                                <Text strong>
-                                                    {receiptScanPreview.header?.deliveryCode ||
-                                                        receiptScanPreview.header?.invoiceNo ||
-                                                        '-'}
-                                                </Text>
-                                            </div>
-                                            <div>
-                                                Ngày:{' '}
-                                                <Text strong>
-                                                    {fmtDate(
-                                                        receiptScanPreview.header?.receivedDate ||
-                                                            receiptScanPreview.header?.invoiceDate
-                                                    )}
-                                                </Text>
-                                            </div>
-                                        </div>
+                                        </span>
+                                    </div>
+
+                                    <Table
+                                        size='small'
+                                        rowKey={(_, index) => String(index)}
+                                        pagination={false}
+                                        dataSource={scanRows}
+                                        scroll={{ x: 'max-content' }}
+                                        rowClassName={(row: any) =>
+                                            row.unreadable
+                                                ? 'bg-pink-50/60'
+                                                : row.review?.suggestion
+                                                  ? 'bg-amber-50/60'
+                                                  : row.review
+                                                    ? 'bg-red-50/50'
+                                                    : ''
+                                        }
+                                        columns={[
+                                            {
+                                                title: '#',
+                                                key: 'no',
+                                                width: 40,
+                                                render: (_: any, row: any) => (
+                                                    <Text type='secondary'>{row.line?.lineNo ?? row.order + 1}</Text>
+                                                ),
+                                            },
+                                            {
+                                                title: 'Dòng trên phiếu',
+                                                key: 'line',
+                                                width: 320,
+                                                render: (_: any, row: any) => (
+                                                    <div>
+                                                        <Tooltip
+                                                            title={
+                                                                row.line?.rawText
+                                                                    ? `Nguyên văn trên ảnh: “${row.line.rawText}”`
+                                                                    : undefined
+                                                            }
+                                                        >
+                                                            <Text strong>{row.line?.materialName || '(không rõ tên)'}</Text>
+                                                        </Tooltip>
+                                                        <div className='text-xs text-slate-500'>
+                                                            {row.line?.quantity != null && (
+                                                                <>
+                                                                    SL <Text strong>{fmtNum(row.line.quantity)}</Text>{' '}
+                                                                    {row.line?.unit || ''}
+                                                                </>
+                                                            )}
+                                                            {row.line?.confidence != null && (
+                                                                <Tag
+                                                                    className='ml-2'
+                                                                    color={
+                                                                        row.line.confidence >= 0.9
+                                                                            ? 'green'
+                                                                            : row.line.confidence >= 0.75
+                                                                              ? 'gold'
+                                                                              : 'red'
+                                                                    }
+                                                                >
+                                                                    {Math.round(row.line.confidence * 100)}%
+                                                                </Tag>
+                                                            )}
+                                                        </div>
+                                                    </div>
+                                                ),
+                                            },
+                                            {
+                                                title: 'Kết quả đối soát',
+                                                key: 'result',
+                                                render: (_: any, row: any) => {
+                                                    if (row.unreadable) {
+                                                        return (
+                                                            <div className='text-xs'>
+                                                                <Tag color='magenta'>Không đọc được</Tag>
+                                                                <span className='text-slate-600'>
+                                                                    {row.unreadable.reason} — đối chiếu ảnh và nhập tay
+                                                                </span>
+                                                            </div>
+                                                        );
+                                                    }
+                                                    return (
+                                                        <div className='flex flex-col gap-1 text-xs'>
+                                                            {row.autos.map((allocation: any, i: number) => (
+                                                                <div key={i} className='flex flex-wrap items-center gap-1'>
+                                                                    <Tag color='green' className='m-0'>
+                                                                        ✓ Tự khớp
+                                                                    </Tag>
+                                                                    <span className='text-slate-700'>
+                                                                        {allocation.kind === 'po'
+                                                                            ? `Nhận ${fmtNum(allocation.quantity)} vào “${allocation.materialName}”`
+                                                                            : `Bù ${fmtNum(allocation.quantity)} cho nợ “${allocation.materialName}” (${allocation.originalPurchaseOrderCode || 'đơn cũ'})`}
+                                                                    </span>
+                                                                </div>
+                                                            ))}
+                                                            {row.review?.suggestion && (
+                                                                <Checkbox
+                                                                    checked={Boolean(reviewTicks[row.reviewIndex])}
+                                                                    onChange={(e) =>
+                                                                        setReviewTicks((prev) => ({
+                                                                            ...prev,
+                                                                            [row.reviewIndex]: e.target.checked,
+                                                                        }))
+                                                                    }
+                                                                >
+                                                                    <span className='text-xs text-amber-800'>
+                                                                        {row.review.suggestion.type === 'po_item'
+                                                                            ? `Nhận ${fmtNum(row.review.suggestion.quantity)} vào “${row.review.suggestion.materialName}”`
+                                                                            : `Bù ${fmtNum(row.review.suggestion.quantity)} cho nợ “${row.review.suggestion.materialName}” (${row.review.suggestion.originalPurchaseOrderCode || 'đơn cũ'})`}
+                                                                        <span className='text-slate-500'>
+                                                                            {' '}
+                                                                            — {row.review.reason}
+                                                                        </span>
+                                                                    </span>
+                                                                </Checkbox>
+                                                            )}
+                                                            {row.review && !row.review.suggestion && (
+                                                                <div className='flex flex-wrap items-center gap-1'>
+                                                                    <Tag color='red' className='m-0'>
+                                                                        Không khớp
+                                                                    </Tag>
+                                                                    <span className='text-slate-600'>
+                                                                        {row.review.reason} · SL{' '}
+                                                                        {fmtNum(row.review.quantity)}{' '}
+                                                                        {row.line?.unit || ''}
+                                                                    </span>
+                                                                </div>
+                                                            )}
+                                                            {!row.autos.length && !row.review && (
+                                                                <Text type='secondary'>—</Text>
+                                                            )}
+                                                        </div>
+                                                    );
+                                                },
+                                            },
+                                        ]}
+                                    />
+
+                                    <div className='flex flex-wrap items-center justify-between gap-2'>
+                                        <Text type='secondary' className='text-xs'>
+                                            AI chỉ tự điền dòng chắc chắn; dòng vàng cần bạn tick xác nhận, dòng nhận
+                                            thiếu sẽ tự ghi vào sổ nợ NCC.
+                                        </Text>
                                         <Button
-                                            className='mt-3'
                                             type='primary'
-                                            ghost
                                             disabled={
                                                 !receiptScanPreview.proposedPayload.items?.length &&
                                                 !receiptScanPreview.proposedPayload.shortageAllocations?.length &&
@@ -1332,96 +1489,15 @@ const DetailDrawer: React.FC<DrawerProps> = ({
                                             }
                                             onClick={applyReceiptScanPreview}
                                         >
-                                            Áp dụng đề xuất vào form
+                                            Áp dụng vào form (
+                                            {(receiptScanPreview.currentAllocations?.length ?? 0) +
+                                                (receiptScanPreview.shortageAllocations?.length ?? 0)}{' '}
+                                            tự khớp
+                                            {Object.values(reviewTicks).filter(Boolean).length
+                                                ? ` + ${Object.values(reviewTicks).filter(Boolean).length} đã tick`
+                                                : ''}
+                                            )
                                         </Button>
-                                    </div>
-
-                                    <div className='flex flex-col gap-3'>
-                                        <Table
-                                            size='small'
-                                            rowKey={(_, index) => String(index)}
-                                            pagination={false}
-                                            dataSource={receiptScanPreview.reviewLines}
-                                            locale={{
-                                                emptyText: (
-                                                    <Empty
-                                                        image={Empty.PRESENTED_IMAGE_SIMPLE}
-                                                        description='Không có dòng cần xác nhận riêng'
-                                                    />
-                                                ),
-                                            }}
-                                            columns={[
-                                                {
-                                                    title: 'Dòng AI không tự điền — bạn quyết định',
-                                                    key: 'line',
-                                                    render: (_: any, row: any) => (
-                                                        <div>
-                                                            <Text strong>{row.sourceLine?.materialName}</Text>
-                                                            <Text type='secondary' className='ml-2 text-xs'>
-                                                                SL {fmtNum(row.quantity)} {row.sourceLine?.unit || ''}
-                                                                {row.sourceLine?.confidence != null &&
-                                                                    ` · tin cậy ${Math.round(row.sourceLine.confidence * 100)}%`}
-                                                            </Text>
-                                                            <div className='text-xs text-amber-700'>{row.reason}</div>
-                                                            {row.sourceLine?.rawText && (
-                                                                <div className='text-[11px] italic text-slate-400'>
-                                                                    Ảnh gốc: “{row.sourceLine.rawText}”
-                                                                </div>
-                                                            )}
-                                                        </div>
-                                                    ),
-                                                },
-                                                {
-                                                    title: 'Xác nhận',
-                                                    key: 'confirm',
-                                                    width: 220,
-                                                    render: (_: any, row: any, index: number) =>
-                                                        row.suggestion ? (
-                                                            <Checkbox
-                                                                checked={Boolean(reviewTicks[index])}
-                                                                onChange={(e) =>
-                                                                    setReviewTicks((prev) => ({
-                                                                        ...prev,
-                                                                        [index]: e.target.checked,
-                                                                    }))
-                                                                }
-                                                            >
-                                                                <span className='text-xs'>
-                                                                    {row.suggestion.type === 'po_item'
-                                                                        ? `Nhận ${fmtNum(row.suggestion.quantity)} vào "${row.suggestion.materialName}"`
-                                                                        : `Bù ${fmtNum(row.suggestion.quantity)} cho nợ "${row.suggestion.materialName}" (${row.suggestion.originalPurchaseOrderCode || 'đơn cũ'})`}
-                                                                </span>
-                                                            </Checkbox>
-                                                        ) : (
-                                                            <Text type='secondary' className='text-xs'>
-                                                                Không có gợi ý — xử lý tay nếu cần
-                                                            </Text>
-                                                        ),
-                                                },
-                                            ]}
-                                        />
-                                        {(receiptScanPreview.unreadableLines?.length ?? 0) > 0 && (
-                                            <div className='rounded-lg border border-pink-200 bg-pink-50/60 p-3'>
-                                                <Text strong className='text-xs text-pink-700'>
-                                                    AI không đọc được {receiptScanPreview.unreadableLines!.length} dòng
-                                                    — đối chiếu ảnh gốc và nhập tay:
-                                                </Text>
-                                                <ul className='mt-1 list-disc pl-5 text-xs text-slate-600'>
-                                                    {receiptScanPreview.unreadableLines!.map((row, index) => (
-                                                        <li key={index}>
-                                                            {row.sourceLine?.materialName || '(không rõ tên)'} —{' '}
-                                                            {row.reason}
-                                                            {row.sourceLine?.rawText && (
-                                                                <span className='italic text-slate-400'>
-                                                                    {' '}
-                                                                    · “{row.sourceLine.rawText}”
-                                                                </span>
-                                                            )}
-                                                        </li>
-                                                    ))}
-                                                </ul>
-                                            </div>
-                                        )}
                                     </div>
                                 </div>
                             )}
