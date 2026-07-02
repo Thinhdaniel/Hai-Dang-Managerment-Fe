@@ -126,7 +126,8 @@ const typeMetaCache = new Map<string, TypeMeta>();
 const getTypeMeta = (asset?: Pick<AssetLocationPoint, 'type' | 'model' | 'name'>): TypeMeta => {
     const rawName = (asset?.name ?? '').trim();
     if (!rawName) return FALLBACK_TYPE;
-    const key = normalizeText(rawName);
+    // Bỏ hết khoảng trắng khi làm khóa nhóm để "Máy 1kim" và "Máy 1 kim" về CÙNG một nhóm
+    const key = normalizeText(rawName).replace(/\s+/g, '');
     let meta = typeMetaCache.get(key);
     if (!meta) {
         const palette = GROUP_PALETTE[hashString(key) % GROUP_PALETTE.length];
@@ -138,6 +139,10 @@ const getTypeMeta = (asset?: Pick<AssetLocationPoint, 'type' | 'model' | 'name'>
             textColor: palette.textColor,
         };
         typeMetaCache.set(key, meta);
+    } else if (rawName.length > meta.label.length) {
+        // Ưu tiên biến thể tên dài/đầy đủ hơn làm nhãn hiển thị ("Máy 1 kim" thắng "Máy 1kim")
+        meta.label = rawName;
+        meta.shortLabel = buildShortLabel(rawName);
     }
     return meta;
 };
@@ -166,15 +171,6 @@ const buildTypeGroups = (assets: AssetLocationPoint[]) => {
     );
 };
 
-const buildCompositionSegments = (groups: TypeGroup[], total: number) =>
-    groups
-        .slice(0, 4)
-        .map((group) => {
-            const width = Math.max(8, Math.round((group.assets.length / Math.max(total, 1)) * 100));
-            return `<i style="width:${width}%;background:${group.meta.color}"></i>`;
-        })
-        .join('');
-
 const getDominantType = (assets: AssetLocationPoint[]) => buildTypeGroups(assets)[0]?.meta ?? FALLBACK_TYPE;
 
 const machineIcon = (asset: AssetLocationPoint) => {
@@ -198,7 +194,8 @@ const machineIcon = (asset: AssetLocationPoint) => {
 
 const facilityIcon = L.divIcon({
     className: 'hd-facility-marker',
-    html: `<span class="hd-facility-marker__body">
+    html: `<span class="hd-facility-radar"><i></i><i></i><i></i></span>
+           <span class="hd-facility-marker__body">
                <span class="hd-facility-marker__roof"></span>
                <span class="hd-facility-marker__blocks"><i></i><i></i><i></i></span>
            </span>`,
@@ -207,6 +204,7 @@ const facilityIcon = L.divIcon({
     popupAnchor: [0, -22],
 });
 
+/** Cụm máy = vòng donut conic-gradient: mỗi lát màu là tỉ lệ 1 tên máy trong cụm. */
 const createClusterIcon = (cluster: MachineCluster) => {
     const children = cluster.getAllChildMarkers();
     const assets = children.map((marker) => marker.options.assetPoint).filter(Boolean) as AssetLocationPoint[];
@@ -214,18 +212,28 @@ const createClusterIcon = (cluster: MachineCluster) => {
     const groups = buildTypeGroups(assets);
     const dominant = groups[0]?.meta ?? FALLBACK_TYPE;
     const hasMismatch = assets.some((asset) => asset.mismatch);
-    const sizeClass = count >= 100 ? ' hd-map-type-cluster--large' : count >= 20 ? ' hd-map-type-cluster--medium' : '';
+    const size = count >= 100 ? 74 : count >= 20 ? 64 : 54;
+
+    let acc = 0;
+    const ringStops = groups
+        .map((group) => {
+            const start = acc;
+            acc += (group.assets.length / Math.max(count, 1)) * 100;
+            return `${group.meta.color} ${start.toFixed(2)}% ${acc.toFixed(2)}%`;
+        })
+        .join(', ');
 
     return L.divIcon({
-        className: `hd-map-type-cluster${sizeClass}${hasMismatch ? ' hd-map-type-cluster--mismatch' : ''}`,
-        html: `<span class="hd-map-type-cluster__card" style="--type-color:${dominant.color}">
-                    <span class="hd-map-type-cluster__count">${count > 999 ? '999+' : count}</span>
-                    <span class="hd-map-type-cluster__main">${escapeHtml(dominant.label)}</span>
-                    <span class="hd-map-type-cluster__mix">${buildCompositionSegments(groups, count)}</span>
-                    ${hasMismatch ? '<span class="hd-map-type-cluster__warn">!</span>' : ''}
+        className: `hd-cluster${hasMismatch ? ' hd-cluster--mismatch' : ''}`,
+        html: `<span class="hd-cluster__ring" style="--ring:conic-gradient(${ringStops});--type-color:${dominant.color}">
+                    <span class="hd-cluster__core">
+                        <b>${count > 999 ? '999+' : count}</b>
+                        <small>${escapeHtml(dominant.shortLabel)}</small>
+                    </span>
+                    ${hasMismatch ? '<i class="hd-cluster__warn">!</i>' : ''}
                </span>`,
-        iconSize: [104, 58],
-        iconAnchor: [52, 29],
+        iconSize: [size, size],
+        iconAnchor: [size / 2, size / 2],
     });
 };
 
@@ -318,6 +326,7 @@ const ClusterMarkers = ({
             spiderfyOnMaxZoom: false,
             chunkedLoading: true,
             animate: true,
+            iconCreateFunction: createClusterIcon,
         });
 
         group.on('clusterclick', (event) => {
@@ -690,8 +699,8 @@ const MapPage: React.FC = () => {
                                 scrollWheelZoom
                             >
                                 <TileLayer
-                                    attribution='&copy; OpenStreetMap'
-                                    url='https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png'
+                                    attribution='&copy; OpenStreetMap &copy; CARTO'
+                                    url='https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png'
                                 />
                                 <FitBounds points={points} signal={fitSignal} />
                                 {facilities.map((facility) => (
