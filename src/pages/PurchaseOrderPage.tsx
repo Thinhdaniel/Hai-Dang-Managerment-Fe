@@ -374,6 +374,15 @@ const DetailDrawer: React.FC<DrawerProps> = ({
         setReceiptScanPreview(null);
     };
 
+    // Thumbnail ảnh phiếu để chạy hiệu ứng quét; thu hồi objectURL khi đổi ảnh
+    const receiptScanUrls = useMemo(() => receiptScanFiles.map((file) => URL.createObjectURL(file)), [receiptScanFiles]);
+    React.useEffect(
+        () => () => {
+            receiptScanUrls.forEach((url) => URL.revokeObjectURL(url));
+        },
+        [receiptScanUrls]
+    );
+
     // Dán ảnh (Ctrl+V) từ clipboard khi đang mở form nhận hàng — chụp màn hình Zalo/ảnh copy đều dán được
     React.useEffect(() => {
         if (!receiveOpen) return;
@@ -1194,6 +1203,63 @@ const DetailDrawer: React.FC<DrawerProps> = ({
                                         : 'Tối đa 5 ảnh cùng phiếu · dán ảnh chụp màn hình bằng Ctrl+V cũng được'}
                                 </Text>
                             </div>
+
+                            {receiptScanUrls.length > 0 && (
+                                <div className='flex flex-wrap items-center gap-3'>
+                                    <style>{`
+                                        .hd-scan-frame { position: relative; width: 148px; height: 108px; border-radius: 10px; overflow: hidden; border: 1px solid #dbeafe; background: #f8fafc; box-shadow: 0 1px 4px rgba(15,23,42,.08); }
+                                        .hd-scan-frame img { width: 100%; height: 100%; object-fit: cover; display: block; }
+                                        .hd-scan-frame.hd-scanning img { filter: saturate(.8) brightness(.94); }
+                                        .hd-scan-corner { position: absolute; width: 16px; height: 16px; border: 0 solid #2f51d9; pointer-events: none; z-index: 3; }
+                                        .hd-scan-corner.tl { top: 5px; left: 5px; border-top-width: 2.5px; border-left-width: 2.5px; border-top-left-radius: 6px; }
+                                        .hd-scan-corner.tr { top: 5px; right: 5px; border-top-width: 2.5px; border-right-width: 2.5px; border-top-right-radius: 6px; }
+                                        .hd-scan-corner.bl { bottom: 5px; left: 5px; border-bottom-width: 2.5px; border-left-width: 2.5px; border-bottom-left-radius: 6px; }
+                                        .hd-scan-corner.br { bottom: 5px; right: 5px; border-bottom-width: 2.5px; border-right-width: 2.5px; border-bottom-right-radius: 6px; }
+                                        .hd-scan-beam { position: absolute; left: 0; right: 0; height: 38%; pointer-events: none; z-index: 2;
+                                            background: linear-gradient(180deg, rgba(56,189,248,0) 0%, rgba(56,189,248,.22) 60%, rgba(47,81,217,.42) 100%);
+                                            border-bottom: 2px solid rgba(56,189,248,.95);
+                                            box-shadow: 0 3px 14px rgba(56,189,248,.7);
+                                            animation: hdScanSweep 1.5s linear infinite; }
+                                        .hd-scan-lines { position: absolute; inset: 0; pointer-events: none; z-index: 1; mix-blend-mode: screen;
+                                            background: repeating-linear-gradient(180deg, rgba(56,189,248,.09) 0 2px, transparent 2px 6px);
+                                            animation: hdScanFlicker 1.1s steps(2) infinite; }
+                                        .hd-scan-done { position: absolute; top: 5px; right: 5px; z-index: 4; background: #16a34a; color: #fff; font-size: 10px; font-weight: 700; padding: 1px 7px; border-radius: 999px; box-shadow: 0 1px 4px rgba(22,163,74,.45); }
+                                        .hd-scan-status { display: inline-flex; align-items: center; gap: 8px; font-size: 12px; font-weight: 600; color: #2f51d9; }
+                                        .hd-scan-status .hd-scan-dot { width: 8px; height: 8px; border-radius: 999px; background: #2f51d9; animation: hdScanPulse 1s ease-in-out infinite; }
+                                        @keyframes hdScanSweep { 0% { top: -40%; } 100% { top: 102%; } }
+                                        @keyframes hdScanFlicker { 0% { opacity: .55; } 100% { opacity: 1; } }
+                                        @keyframes hdScanPulse { 0%, 100% { transform: scale(.7); opacity: .5; } 50% { transform: scale(1.15); opacity: 1; } }
+                                        @media (prefers-reduced-motion: reduce) { .hd-scan-beam, .hd-scan-lines, .hd-scan-status .hd-scan-dot { animation: none; } .hd-scan-beam { display: none; } }
+                                    `}</style>
+                                    {receiptScanUrls.map((url, index) => (
+                                        <div
+                                            key={url}
+                                            className={`hd-scan-frame ${receiptScanMut.isPending ? 'hd-scanning' : ''}`}
+                                        >
+                                            <img src={url} alt={`Ảnh phiếu ${index + 1}`} />
+                                            {receiptScanMut.isPending && (
+                                                <>
+                                                    <span className='hd-scan-beam' />
+                                                    <span className='hd-scan-lines' />
+                                                </>
+                                            )}
+                                            {!receiptScanMut.isPending && receiptScanPreview && (
+                                                <span className='hd-scan-done'>✓ Đã quét</span>
+                                            )}
+                                            <i className='hd-scan-corner tl' />
+                                            <i className='hd-scan-corner tr' />
+                                            <i className='hd-scan-corner bl' />
+                                            <i className='hd-scan-corner br' />
+                                        </div>
+                                    ))}
+                                    {receiptScanMut.isPending && (
+                                        <span className='hd-scan-status'>
+                                            <span className='hd-scan-dot' />
+                                            AI đang quét & đối chiếu 2 lần đọc…
+                                        </span>
+                                    )}
+                                </div>
+                            )}
 
                             {receiptScanPreview && (
                                 <div className='grid gap-3 lg:grid-cols-[1fr_1.2fr]'>
