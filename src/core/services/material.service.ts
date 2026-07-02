@@ -382,6 +382,19 @@ export interface PurchaseReceiptScanLine {
     note?: string;
     rawText?: string;
     confidence?: number;
+    verify?: 'agreed' | 'quantity_mismatch' | 'only_first' | 'only_second';
+    verifyNote?: string;
+}
+
+export interface PurchaseReceiptScanSuggestion {
+    type: 'po_item' | 'shortage';
+    poItemIndex?: number;
+    shortageId?: string;
+    originalPurchaseOrderCode?: string;
+    materialName: string;
+    unit?: string;
+    quantity: number;
+    nameSimilarity?: number;
 }
 
 export interface PurchaseReceiptScanPreview {
@@ -421,6 +434,12 @@ export interface PurchaseReceiptScanPreview {
         sourceLine: PurchaseReceiptScanLine;
         quantity: number;
         reason: string;
+        suggestion?: PurchaseReceiptScanSuggestion;
+    }>;
+    unreadableLines?: Array<{
+        sourceLine: PurchaseReceiptScanLine;
+        reason: string;
+        note?: string;
     }>;
     shortageMarks: Array<{
         index: number;
@@ -428,6 +447,11 @@ export interface PurchaseReceiptScanPreview {
         remainingAfterReceipt: number;
         reason: string;
     }>;
+    verification?: {
+        status: 'verified' | 'skipped';
+        model?: string;
+        note?: string;
+    };
     proposedPayload: ReceivePurchaseOrderPayload;
     summary: {
         extractedLineCount: number;
@@ -435,7 +459,9 @@ export interface PurchaseReceiptScanPreview {
         shortageResolvedQuantity: number;
         reviewQuantity: number;
         reviewLineCount: number;
+        unreadableLineCount?: number;
         shortageMarkCount: number;
+        verifiedLineCount?: number;
     };
 }
 
