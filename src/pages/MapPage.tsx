@@ -186,9 +186,9 @@ const machineIcon = (asset: AssetLocationPoint) => {
                     <small>${escapeHtml(typeMeta.label)}</small>
                </span>
                <span class="hd-type-marker__status" style="--status-color:${statusMeta.color}"></span>`,
-        iconSize: [118, 36],
-        iconAnchor: [18, 18],
-        popupAnchor: [0, -18],
+        iconSize: [116, 52],
+        iconAnchor: [58, 14],
+        popupAnchor: [0, -16],
     });
 };
 
@@ -597,7 +597,7 @@ const MapPage: React.FC = () => {
                                             setClusterAssets([]);
                                         }}
                                     >
-                                        <i>{group.meta.shortLabel}</i>
+                                        <i aria-hidden='true' />
                                         <span>{group.meta.label}</span>
                                         <b>{group.assets.length}</b>
                                     </button>
@@ -700,7 +700,7 @@ const MapPage: React.FC = () => {
                             >
                                 <TileLayer
                                     attribution='&copy; OpenStreetMap &copy; CARTO'
-                                    url='https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png'
+                                    url='https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png'
                                 />
                                 <FitBounds points={points} signal={fitSignal} />
                                 {facilities.map((facility) => (
