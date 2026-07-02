@@ -1057,7 +1057,7 @@ export const purchaseOrderService = {
         return api.post<PurchaseReceiptScanPreview, FormData>(
             `${PURCHASE_ORDERS_BASE}/${id}/receipt-scan/preview`,
             formData,
-            { timeout: 120000 }
+            { headers: { 'Content-Type': 'multipart/form-data' }, timeout: 120000 }
         );
     },
 
