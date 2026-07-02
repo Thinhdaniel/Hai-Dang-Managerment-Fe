@@ -453,6 +453,7 @@ export interface PurchaseReceiptScanPreview {
         model?: string;
         note?: string;
     };
+    openShortages?: PurchaseShortage[];
     proposedPayload: ReceivePurchaseOrderPayload;
     summary: {
         extractedLineCount: number;

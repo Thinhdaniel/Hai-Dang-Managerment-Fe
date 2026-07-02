@@ -69,6 +69,81 @@ const fmtVND = (v?: number) =>
     new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND', maximumFractionDigits: 0 }).format(v ?? 0);
 const fmtNum = (v?: number) => (v ?? 0).toLocaleString('vi-VN');
 const fmtDate = (v?: string | null) => (v ? dayjs(v).format('DD/MM/YYYY') : '-');
+
+// Một dòng đối soát phiếu quét: người dùng sửa được đích nhận + số lượng, AI chỉ điền sẵn
+type ScanMapRow = {
+    key: string;
+    line: PurchaseReceiptScanPreview['extractedLines'][number];
+    status: 'auto' | 'suggest' | 'manual' | 'unmatched' | 'unreadable';
+    target?: string; // 'po:<itemIndex>' | 'shortage:<shortageId>'
+    quantity: number;
+    reason?: string;
+};
+
+const scanLineKey = (line: any) => `${line?.pageIndex ?? 0}|${line?.lineNo ?? ''}|${line?.materialName ?? ''}`;
+
+const SCAN_ROW_STATUS: Record<ScanMapRow['status'], { label: string; color: string }> = {
+    auto: { label: 'AI khớp', color: 'green' },
+    suggest: { label: 'AI gợi ý', color: 'gold' },
+    manual: { label: 'Bạn chọn', color: 'blue' },
+    unmatched: { label: 'Chưa xử lý', color: 'default' },
+    unreadable: { label: 'Không đọc được', color: 'magenta' },
+};
+
+const buildScanMapRows = (preview: PurchaseReceiptScanPreview): ScanMapRow[] => {
+    const autosByKey = new Map<string, any>();
+    (preview.currentAllocations ?? []).forEach((allocation) => {
+        const key = scanLineKey(allocation.sourceLine);
+        const current = autosByKey.get(key);
+        if (!current || allocation.quantity > current.quantity) autosByKey.set(key, { ...allocation, kind: 'po' });
+    });
+    (preview.shortageAllocations ?? []).forEach((allocation) => {
+        const key = scanLineKey(allocation.sourceLine);
+        const current = autosByKey.get(key);
+        if (!current || allocation.quantity > current.quantity)
+            autosByKey.set(key, { ...allocation, kind: 'shortage' });
+    });
+    const reviewByKey = new Map((preview.reviewLines ?? []).map((review) => [scanLineKey(review.sourceLine), review]));
+    const unreadableByKey = new Map(
+        (preview.unreadableLines ?? []).map((row) => [scanLineKey(row.sourceLine), row])
+    );
+
+    return (preview.extractedLines ?? []).map((line, index) => {
+        const key = `${scanLineKey(line)}#${index}`;
+        const lineKey = scanLineKey(line);
+        const unreadable = unreadableByKey.get(lineKey);
+        if (unreadable) {
+            return { key, line, status: 'unreadable', quantity: line.quantity ?? 0, reason: unreadable.reason };
+        }
+        const auto = autosByKey.get(lineKey);
+        const review = reviewByKey.get(lineKey);
+        if (auto) {
+            return {
+                key,
+                line,
+                status: 'auto',
+                target: auto.kind === 'po' ? `po:${auto.poItemIndex}` : `shortage:${auto.shortageId}`,
+                quantity: auto.quantity,
+                reason: review?.reason,
+            };
+        }
+        if (review?.suggestion) {
+            const suggestion = review.suggestion;
+            return {
+                key,
+                line,
+                status: 'suggest',
+                target:
+                    suggestion.type === 'po_item'
+                        ? `po:${suggestion.poItemIndex}`
+                        : `shortage:${suggestion.shortageId}`,
+                quantity: suggestion.quantity,
+                reason: review.reason,
+            };
+        }
+        return { key, line, status: 'unmatched', quantity: line.quantity ?? 0, reason: review?.reason };
+    });
+};
 const resolveUserLabel = (v?: string | User) => {
     if (!v) return '-';
     if (typeof v === 'string') return v;
@@ -331,7 +406,7 @@ const DetailDrawer: React.FC<DrawerProps> = ({
     const [shortageAllocations, setShortageAllocations] = useState<Record<string, number>>({});
     const [receiptScanFiles, setReceiptScanFiles] = useState<File[]>([]);
     const [receiptScanPreview, setReceiptScanPreview] = useState<PurchaseReceiptScanPreview | null>(null);
-    const [reviewTicks, setReviewTicks] = useState<Record<number, boolean>>({});
+    const [scanMapRows, setScanMapRows] = useState<ScanMapRow[]>([]);
     const [appliedReceiptScanId, setAppliedReceiptScanId] = useState<string>();
     const [catalogTarget, setCatalogTarget] = useState<{ index: number; item: PurchaseOrderItem } | null>(null);
     const [catalogMode, setCatalogMode] = useState<'link' | 'create'>('link');
@@ -356,7 +431,7 @@ const DetailDrawer: React.FC<DrawerProps> = ({
         mutationFn: ({ id, files }: { id: string; files: File[] }) => purchaseOrderService.previewReceiptScan(id, files),
         onSuccess: (preview) => {
             setReceiptScanPreview(preview);
-            setReviewTicks({});
+            setScanMapRows(buildScanMapRows(preview));
             setAppliedReceiptScanId(undefined);
             if (record?.id) queryClient.invalidateQueries({ queryKey: ['purchase-receipt-scans', record.id] });
             if ((preview.extractedLines?.length ?? 0) <= 0) {
@@ -529,33 +604,38 @@ const DetailDrawer: React.FC<DrawerProps> = ({
         });
     }, [record]);
 
-    // Gộp kết quả đối soát về 1 dòng/1 dòng-phiếu để hiển thị bảng thống nhất
-    const scanRows = useMemo(() => {
-        if (!receiptScanPreview) return [] as any[];
-        const keyOf = (line: any) => `${line?.pageIndex ?? 0}|${line?.lineNo ?? ''}|${line?.materialName ?? ''}`;
-        const map = new Map<string, any>();
-        receiptScanPreview.extractedLines.forEach((line, order) =>
-            map.set(keyOf(line), { line, order, autos: [] as any[], review: null as any, reviewIndex: -1, unreadable: null as any })
+    // Ứng viên đích để nhận từng dòng phiếu: dòng của đơn này + nợ NCC còn thiếu
+    const scanTargetOptions = useMemo(() => {
+        const poGroup = {
+            label: 'Dòng trong đơn này',
+            options: receiveRows.map((row: any) => ({
+                value: `po:${row.index}`,
+                label: `${row.materialName} · còn ${fmtNum(row.remaining)} ${row.unit || ''}`,
+            })),
+        };
+        const shortages = receiptScanPreview?.openShortages ?? [];
+        const shortageGroup = {
+            label: 'Nợ NCC từ đơn cũ',
+            options: shortages.map((shortage) => ({
+                value: `shortage:${shortage.id}`,
+                label: `${shortage.materialName} · ${shortage.originalPurchaseOrderCode || 'đơn cũ'} · nợ ${fmtNum(shortage.quantityOutstanding ?? 0)} ${shortage.unit || ''}`,
+            })),
+        };
+        return shortageGroup.options.length ? [poGroup, shortageGroup] : [poGroup];
+    }, [receiveRows, receiptScanPreview]);
+
+    const updateScanRow = (key: string, patch: Partial<ScanMapRow>) => {
+        setScanMapRows((prev) =>
+            prev.map((row) => {
+                if (row.key !== key) return row;
+                const next = { ...row, ...patch };
+                if ('target' in patch) {
+                    next.status = patch.target ? 'manual' : row.status === 'unreadable' ? 'unreadable' : 'unmatched';
+                }
+                return next;
+            })
         );
-        receiptScanPreview.currentAllocations.forEach((allocation) =>
-            map.get(keyOf(allocation.sourceLine))?.autos.push({ ...allocation, kind: 'po' })
-        );
-        receiptScanPreview.shortageAllocations.forEach((allocation) =>
-            map.get(keyOf(allocation.sourceLine))?.autos.push({ ...allocation, kind: 'shortage' })
-        );
-        receiptScanPreview.reviewLines.forEach((review, index) => {
-            const row = map.get(keyOf(review.sourceLine));
-            if (row) {
-                row.review = review;
-                row.reviewIndex = index;
-            }
-        });
-        (receiptScanPreview.unreadableLines ?? []).forEach((unreadable) => {
-            const row = map.get(keyOf(unreadable.sourceLine));
-            if (row) row.unreadable = unreadable;
-        });
-        return [...map.values()].sort((a, b) => a.order - b.order);
-    }, [receiptScanPreview]);
+    };
 
     const resetReceiveForm = () => {
         setReceiveItems({});
@@ -563,7 +643,7 @@ const DetailDrawer: React.FC<DrawerProps> = ({
         setShortageAllocations({});
         setReceiptScanFiles([]);
         setReceiptScanPreview(null);
-        setReviewTicks({});
+        setScanMapRows([]);
         setAppliedReceiptScanId(undefined);
         receiptScanMut.reset();
     };
@@ -578,53 +658,49 @@ const DetailDrawer: React.FC<DrawerProps> = ({
     };
 
     const applyReceiptScanPreview = () => {
-        const payload = receiptScanPreview?.proposedPayload;
-        if (!payload) return;
+        if (!receiptScanPreview) return;
 
         const nextReceiveItems: Record<number, number> = {};
         const nextShortageMarks: Record<number, boolean> = {};
         const nextShortageAllocations: Record<string, number> = {};
+        let appliedCount = 0;
 
-        (payload.items ?? []).forEach((item) => {
-            nextReceiveItems[item.index] = Number(item.quantityReceived ?? 0);
-            if (item.markShortage) nextShortageMarks[item.index] = true;
-        });
-        (payload.shortageAllocations ?? []).forEach((item) => {
-            nextShortageAllocations[item.shortageId] = Number(item.quantityReceived ?? 0);
-        });
-
-        // Cộng thêm các dòng "cần xác nhận" mà người dùng đã tick đồng ý với gợi ý của AI
-        let tickedCount = 0;
-        (receiptScanPreview?.reviewLines ?? []).forEach((row, index) => {
-            const suggestion = row.suggestion;
-            if (!suggestion || !reviewTicks[index] || suggestion.quantity <= 0) return;
-            tickedCount += 1;
-            if (suggestion.type === 'po_item' && suggestion.poItemIndex != null) {
-                nextReceiveItems[suggestion.poItemIndex] =
-                    (nextReceiveItems[suggestion.poItemIndex] ?? 0) + suggestion.quantity;
-            } else if (suggestion.type === 'shortage' && suggestion.shortageId) {
-                nextShortageAllocations[suggestion.shortageId] =
-                    (nextShortageAllocations[suggestion.shortageId] ?? 0) + suggestion.quantity;
+        scanMapRows.forEach((row) => {
+            if (!row.target || !(row.quantity > 0)) return;
+            appliedCount += 1;
+            if (row.target.startsWith('po:')) {
+                const index = Number(row.target.slice(3));
+                nextReceiveItems[index] = (nextReceiveItems[index] ?? 0) + row.quantity;
+            } else if (row.target.startsWith('shortage:')) {
+                const shortageId = row.target.slice('shortage:'.length);
+                nextShortageAllocations[shortageId] = (nextShortageAllocations[shortageId] ?? 0) + row.quantity;
             }
         });
 
-        // Dòng nào nhận CHƯA đủ số còn chờ -> tự tick "Ghi thiếu" để vào sổ nợ NCC luôn
+        // Kẹp theo số còn chờ; dòng nhận CHƯA đủ -> tự tick "Ghi thiếu" để vào sổ nợ NCC
         receiveRows.forEach((row) => {
             const receiving = nextReceiveItems[row.index];
-            if (receiving != null && receiving > 0 && receiving < row.remaining) {
-                nextShortageMarks[row.index] = true;
-            }
+            if (receiving == null) return;
+            const capped = Math.min(receiving, row.remaining);
+            nextReceiveItems[row.index] = capped;
+            if (capped > 0 && capped < row.remaining) nextShortageMarks[row.index] = true;
         });
+        (receiptScanPreview.openShortages ?? []).forEach((shortage) => {
+            const allocating = nextShortageAllocations[shortage.id];
+            if (allocating == null) return;
+            nextShortageAllocations[shortage.id] = Math.min(allocating, shortage.quantityOutstanding ?? allocating);
+        });
+
+        if (!appliedCount) {
+            message.warning('Chưa có dòng nào chọn nơi nhận — chọn ở cột "Nhận vào" trước');
+            return;
+        }
 
         setReceiveItems(nextReceiveItems);
         setReceiveShortageMarks(nextShortageMarks);
         setShortageAllocations(nextShortageAllocations);
         setAppliedReceiptScanId(receiptScanPreview.scanId);
-        message.success(
-            tickedCount
-                ? `Đã áp dụng đề xuất AI + ${tickedCount} dòng bạn xác nhận vào form. Hãy rà lại trước khi cập nhật.`
-                : 'Đã áp dụng đề xuất AI vào form nhận hàng. Hãy rà lại trước khi cập nhật.'
-        );
+        message.success(`Đã điền ${appliedCount} dòng vào form nhận hàng. Rà lại rồi bấm "Cập nhật nhận hàng".`);
     };
 
     const handleReceiveSubmit = async () => {
@@ -1342,154 +1418,113 @@ const DetailDrawer: React.FC<DrawerProps> = ({
 
                                     <Table
                                         size='small'
-                                        rowKey={(_, index) => String(index)}
+                                        rowKey='key'
                                         pagination={false}
-                                        dataSource={scanRows}
+                                        dataSource={scanMapRows}
                                         scroll={{ x: 'max-content' }}
-                                        rowClassName={(row: any) =>
-                                            row.unreadable
-                                                ? 'bg-pink-50/60'
-                                                : row.review?.suggestion
-                                                  ? 'bg-amber-50/60'
-                                                  : row.review
-                                                    ? 'bg-red-50/50'
-                                                    : ''
-                                        }
                                         columns={[
                                             {
                                                 title: '#',
                                                 key: 'no',
                                                 width: 40,
-                                                render: (_: any, row: any) => (
-                                                    <Text type='secondary'>{row.line?.lineNo ?? row.order + 1}</Text>
+                                                render: (_: any, row: ScanMapRow, index: number) => (
+                                                    <Text type='secondary'>{row.line?.lineNo ?? index + 1}</Text>
                                                 ),
                                             },
                                             {
                                                 title: 'Dòng trên phiếu',
                                                 key: 'line',
-                                                width: 320,
-                                                render: (_: any, row: any) => (
-                                                    <div>
-                                                        <Tooltip
-                                                            title={
-                                                                row.line?.rawText
-                                                                    ? `Nguyên văn trên ảnh: “${row.line.rawText}”`
-                                                                    : undefined
-                                                            }
-                                                        >
-                                                            <Text strong>{row.line?.materialName || '(không rõ tên)'}</Text>
-                                                        </Tooltip>
-                                                        <div className='text-xs text-slate-500'>
-                                                            {row.line?.quantity != null && (
-                                                                <>
-                                                                    SL <Text strong>{fmtNum(row.line.quantity)}</Text>{' '}
-                                                                    {row.line?.unit || ''}
-                                                                </>
-                                                            )}
-                                                            {row.line?.confidence != null && (
-                                                                <Tag
-                                                                    className='ml-2'
-                                                                    color={
-                                                                        row.line.confidence >= 0.9
-                                                                            ? 'green'
-                                                                            : row.line.confidence >= 0.75
-                                                                              ? 'gold'
-                                                                              : 'red'
-                                                                    }
-                                                                >
-                                                                    {Math.round(row.line.confidence * 100)}%
-                                                                </Tag>
-                                                            )}
+                                                width: 300,
+                                                render: (_: any, row: ScanMapRow) => (
+                                                    <Tooltip
+                                                        title={
+                                                            row.line?.rawText
+                                                                ? `Nguyên văn: “${row.line.rawText}”`
+                                                                : undefined
+                                                        }
+                                                    >
+                                                        <div>
+                                                            <Text strong>
+                                                                {row.line?.materialName || '(không rõ tên)'}
+                                                            </Text>
+                                                            <div className='text-xs text-slate-500'>
+                                                                {row.line?.quantity != null &&
+                                                                    `SL ${fmtNum(row.line.quantity)} ${row.line?.unit || ''}`}
+                                                                {row.line?.confidence != null &&
+                                                                    ` · đọc ${Math.round(row.line.confidence * 100)}%`}
+                                                            </div>
                                                         </div>
-                                                    </div>
+                                                    </Tooltip>
                                                 ),
                                             },
                                             {
-                                                title: 'Kết quả đối soát',
-                                                key: 'result',
-                                                render: (_: any, row: any) => {
-                                                    if (row.unreadable) {
-                                                        return (
-                                                            <Tooltip title={row.unreadable.reason}>
-                                                                <Tag color='magenta' className='m-0'>
-                                                                    Không đọc được — nhập tay
-                                                                </Tag>
-                                                            </Tooltip>
-                                                        );
-                                                    }
+                                                title: 'Nhận vào',
+                                                key: 'target',
+                                                width: 330,
+                                                render: (_: any, row: ScanMapRow) => (
+                                                    <Select
+                                                        size='small'
+                                                        className='w-full'
+                                                        placeholder='Chọn dòng đơn / nợ NCC…'
+                                                        value={row.target}
+                                                        allowClear
+                                                        showSearch
+                                                        optionFilterProp='label'
+                                                        options={scanTargetOptions}
+                                                        onChange={(value) =>
+                                                            updateScanRow(row.key, { target: value })
+                                                        }
+                                                    />
+                                                ),
+                                            },
+                                            {
+                                                title: 'SL nhận',
+                                                key: 'quantity',
+                                                width: 110,
+                                                render: (_: any, row: ScanMapRow) => (
+                                                    <InputNumber
+                                                        size='small'
+                                                        min={0}
+                                                        className='w-full'
+                                                        value={row.quantity}
+                                                        disabled={!row.target}
+                                                        onChange={(value) =>
+                                                            updateScanRow(row.key, { quantity: Number(value ?? 0) })
+                                                        }
+                                                    />
+                                                ),
+                                            },
+                                            {
+                                                title: 'Trạng thái',
+                                                key: 'status',
+                                                width: 120,
+                                                render: (_: any, row: ScanMapRow) => {
+                                                    const status = SCAN_ROW_STATUS[row.status];
                                                     return (
-                                                        <div className='flex flex-col gap-1 text-xs'>
-                                                            {row.autos.map((allocation: any, i: number) => (
-                                                                <div key={i} className='flex items-center gap-1.5'>
-                                                                    <Tag color='green' className='m-0'>
-                                                                        {allocation.kind === 'po'
-                                                                            ? `✓ Nhận ${fmtNum(allocation.quantity)}`
-                                                                            : `↩ Bù ${fmtNum(allocation.quantity)}`}
-                                                                    </Tag>
-                                                                    <span className='max-w-[340px] truncate text-slate-700'>
-                                                                        → {allocation.materialName}
-                                                                        {allocation.kind === 'shortage' &&
-                                                                            ` · ${allocation.originalPurchaseOrderCode || 'đơn cũ'}`}
-                                                                    </span>
-                                                                </div>
-                                                            ))}
-                                                            {row.review?.suggestion && (
-                                                                <Tooltip title={row.review.reason}>
-                                                                    <Checkbox
-                                                                        checked={Boolean(reviewTicks[row.reviewIndex])}
-                                                                        onChange={(e) =>
-                                                                            setReviewTicks((prev) => ({
-                                                                                ...prev,
-                                                                                [row.reviewIndex]: e.target.checked,
-                                                                            }))
-                                                                        }
-                                                                    >
-                                                                        <span className='inline-block max-w-[360px] truncate align-bottom text-xs text-amber-800'>
-                                                                            {row.review.suggestion.type === 'po_item'
-                                                                                ? `Nhận ${fmtNum(row.review.suggestion.quantity)}`
-                                                                                : `Bù ${fmtNum(row.review.suggestion.quantity)}`}{' '}
-                                                                            → {row.review.suggestion.materialName}
-                                                                            {row.review.suggestion.type === 'shortage' &&
-                                                                                ` · ${row.review.suggestion.originalPurchaseOrderCode || 'đơn cũ'}`}
-                                                                        </span>
-                                                                    </Checkbox>
-                                                                </Tooltip>
-                                                            )}
-                                                            {row.review && !row.review.suggestion && (
-                                                                <Tooltip title={row.review.reason}>
-                                                                    <Tag color='red' className='m-0 w-fit'>
-                                                                        Không khớp đơn/nợ nào
-                                                                    </Tag>
-                                                                </Tooltip>
-                                                            )}
-                                                            {!row.autos.length && !row.review && (
-                                                                <Text type='secondary'>—</Text>
-                                                            )}
-                                                        </div>
+                                                        <Tooltip title={row.reason}>
+                                                            <Tag color={status.color} className='m-0'>
+                                                                {status.label}
+                                                            </Tag>
+                                                        </Tooltip>
                                                     );
                                                 },
                                             },
                                         ]}
                                     />
 
-                                    <div className='flex flex-wrap items-center justify-end gap-2'>
+                                    <div className='flex flex-wrap items-center justify-between gap-2'>
+                                        <Text type='secondary' className='text-xs'>
+                                            AI điền sẵn — sai thì chọn lại ở cột “Nhận vào”. Dòng nhận thiếu tự ghi
+                                            vào sổ nợ NCC.
+                                        </Text>
                                         <Button
                                             type='primary'
-                                            disabled={
-                                                !receiptScanPreview.proposedPayload.items?.length &&
-                                                !receiptScanPreview.proposedPayload.shortageAllocations?.length &&
-                                                !Object.values(reviewTicks).some(Boolean)
-                                            }
+                                            disabled={!scanMapRows.some((row) => row.target && row.quantity > 0)}
                                             onClick={applyReceiptScanPreview}
                                         >
                                             Áp dụng vào form (
-                                            {(receiptScanPreview.currentAllocations?.length ?? 0) +
-                                                (receiptScanPreview.shortageAllocations?.length ?? 0)}{' '}
-                                            tự khớp
-                                            {Object.values(reviewTicks).filter(Boolean).length
-                                                ? ` + ${Object.values(reviewTicks).filter(Boolean).length} đã tick`
-                                                : ''}
-                                            )
+                                            {scanMapRows.filter((row) => row.target && row.quantity > 0).length}/
+                                            {scanMapRows.length} dòng)
                                         </Button>
                                     </div>
                                 </div>
