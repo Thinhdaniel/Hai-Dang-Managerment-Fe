@@ -1,8 +1,13 @@
 import React, { useMemo, useState } from 'react';
-import { App, Button, Card, Empty, Input, Segmented, Spin, Tag, Tooltip, Typography } from 'antd';
+import { Alert, App, Button, Card, Empty, Input, Segmented, Select, Spin, Tag, Tooltip, Typography } from 'antd';
 import {
     BarChartOutlined,
+    CheckCircleOutlined,
+    ClockCircleOutlined,
     DeleteOutlined,
+    FireOutlined,
+    HistoryOutlined,
+    LinkOutlined,
     LineChartOutlined,
     PieChartOutlined,
     PushpinOutlined,
@@ -17,6 +22,8 @@ import {
     type AnalyticsChart,
     type AnalyticsResult,
     type AnalyticsSpec,
+    type IncidentReplayEvent,
+    type IncidentReplayResult,
 } from '../core/services/ai-help.service';
 
 const { Text, Title } = Typography;
@@ -46,6 +53,60 @@ const savePins = (pins: Pin[]) => {
 
 const fmtVal = (v: number, unit: string) =>
     unit === 'đ' ? `${Math.round(v).toLocaleString('vi-VN')}đ` : `${v.toLocaleString('vi-VN')} ${unit}`;
+
+const fmtReplayValue = (value?: number, unit: 'vnd' | 'count' = 'vnd') => {
+    const safe = Number(value || 0);
+    return unit === 'vnd' ? `${Math.round(safe).toLocaleString('vi-VN')}đ` : safe.toLocaleString('vi-VN');
+};
+
+const replayDate = (value?: string) => {
+    const d = value ? new Date(value) : null;
+    return d && !Number.isNaN(d.getTime()) ? d.toLocaleDateString('vi-VN') : '-';
+};
+
+const replayTone: Record<IncidentReplayEvent['severity'], string> = {
+    info: 'border-sky-100 bg-sky-50 text-sky-700',
+    success: 'border-emerald-100 bg-emerald-50 text-emerald-700',
+    warning: 'border-amber-100 bg-amber-50 text-amber-700',
+    danger: 'border-rose-100 bg-rose-50 text-rose-700',
+};
+
+const domainLabel: Record<string, string> = {
+    purchase: 'Mua hàng',
+    distribution: 'Cấp phát',
+    maintenance: 'Bảo trì',
+    asset: 'Máy móc',
+    mixed: 'Tổng hợp',
+};
+
+const caseSeverityMeta: Record<string, { label: string; className: string; hint: string }> = {
+    normal: {
+        label: 'Ổn định',
+        className: 'border-emerald-200 bg-emerald-50 text-emerald-700',
+        hint: 'Chưa thấy tín hiệu bất thường lớn',
+    },
+    watch: {
+        label: 'Cần theo dõi',
+        className: 'border-sky-200 bg-sky-50 text-sky-700',
+        hint: 'Có biến động, nên đối soát nhanh',
+    },
+    high: {
+        label: 'Rủi ro cao',
+        className: 'border-amber-200 bg-amber-50 text-amber-700',
+        hint: 'Nên kiểm tra chứng từ và người phụ trách',
+    },
+    critical: {
+        label: 'Nghiêm trọng',
+        className: 'border-rose-200 bg-rose-50 text-rose-700',
+        hint: 'Cần xử lý ưu tiên',
+    },
+};
+
+const priorityTone: Record<string, string> = {
+    low: 'blue',
+    medium: 'orange',
+    high: 'red',
+};
 
 const buildOption = (chart: AnalyticsChart): EChartsCoreOption => {
     const isMoney = chart.unit === 'đ';
@@ -170,6 +231,334 @@ const PinnedCard: React.FC<{ pin: Pin; onRemove: (id: string) => void }> = ({ pi
     );
 };
 
+const REPLAY_SAMPLES = [
+    'Vì sao chi phí vật tư tăng trong kỳ này?',
+    'Điều tra các phiếu cấp phát bất thường gần đây',
+    'Có NCC hoặc đơn mua nào đáng chú ý không?',
+    'Bảo trì và sửa ngoài có điểm nào bất thường?',
+];
+
+const IncidentReplayPanel: React.FC = () => {
+    const { message } = App.useApp();
+    const [question, setQuestion] = useState('Vì sao chi phí vật tư tăng trong kỳ này?');
+    const [periodDays, setPeriodDays] = useState(30);
+    const [result, setResult] = useState<IncidentReplayResult | null>(null);
+
+    const replayMut = useMutation({
+        mutationFn: () => aiAnalyticsService.incidentReplay({ question, periodDays }),
+        onSuccess: (data) => setResult(data),
+        onError: () => message.error('Chưa dựng được Incident Replay, thử lại hoặc rút gọn câu hỏi.'),
+    });
+
+    const runReplay = () => {
+        if (!question.trim() || replayMut.isPending) return;
+        replayMut.mutate();
+    };
+
+    return (
+        <Card className='overflow-hidden rounded-2xl border-slate-200 shadow-sm'>
+            <div className='-m-6 mb-5 border-b border-slate-100 bg-gradient-to-br from-slate-950 via-blue-950 to-cyan-900 px-6 py-5 text-white'>
+                <div className='flex flex-wrap items-start justify-between gap-3'>
+                    <div>
+                        <div className='flex items-center gap-2 text-[12px] font-bold uppercase tracking-[0.18em] text-cyan-200'>
+                            <HistoryOutlined /> AI Incident Replay
+                        </div>
+                        <Title level={4} className='!mt-1 !mb-1 !text-white'>
+                            Dựng lại nguyên nhân bất thường
+                        </Title>
+                        <div className='max-w-2xl text-[13px] text-slate-200'>
+                            AI gom dữ liệu mua hàng, cấp phát, bảo trì và hiện trạng máy thành timeline điều tra. Số liệu gốc luôn hiển thị để đối soát.
+                        </div>
+                    </div>
+                    <Tag className='!m-0 !rounded-full !border-white/20 !bg-white/10 !px-3 !py-1 !text-cyan-50'>
+                        Không ghi dữ liệu
+                    </Tag>
+                </div>
+            </div>
+
+            <div className='grid grid-cols-1 gap-3 lg:grid-cols-[1fr_160px_auto]'>
+                <Input.TextArea
+                    value={question}
+                    onChange={(e) => setQuestion(e.target.value)}
+                    autoSize={{ minRows: 1, maxRows: 3 }}
+                    placeholder='Ví dụ: Vì sao tháng này chi phí cấp phát Phú Sơn tăng?'
+                    onPressEnter={(e) => {
+                        if (!e.shiftKey) {
+                            e.preventDefault();
+                            runReplay();
+                        }
+                    }}
+                />
+                <Select
+                    value={periodDays}
+                    onChange={setPeriodDays}
+                    options={[
+                        { value: 7, label: '7 ngày' },
+                        { value: 30, label: '30 ngày' },
+                        { value: 60, label: '60 ngày' },
+                        { value: 90, label: '90 ngày' },
+                        { value: 180, label: '180 ngày' },
+                    ]}
+                />
+                <Button type='primary' icon={<FireOutlined />} loading={replayMut.isPending} onClick={runReplay}>
+                    Replay
+                </Button>
+            </div>
+
+            <div className='mt-3 flex flex-wrap gap-1.5'>
+                {REPLAY_SAMPLES.map((sample) => (
+                    <Tag
+                        key={sample}
+                        className='cursor-pointer !rounded-full !border-slate-200 !bg-slate-50 !px-3 !py-1 !text-[12px] hover:!border-cyan-500 hover:!text-cyan-700'
+                        onClick={() => setQuestion(sample)}
+                    >
+                        {sample}
+                    </Tag>
+                ))}
+            </div>
+
+            {replayMut.isPending ? (
+                <div className='mt-5 flex h-[220px] flex-col items-center justify-center gap-3 rounded-xl bg-slate-50 text-slate-500'>
+                    <Spin />
+                    <span className='text-sm'>Đang gom timeline và điều tra nguyên nhân...</span>
+                </div>
+            ) : result ? (
+                <div className='mt-5 space-y-4'>
+                    <div className='flex flex-wrap items-center gap-2'>
+                        <Tag color='blue' className='!m-0 !rounded-full'>
+                            {domainLabel[result.focus] || 'Tổng hợp'}
+                        </Tag>
+                        <Tag className='!m-0 !rounded-full'>
+                            Kỳ này: {result.periodLabel}
+                        </Tag>
+                        <Tag className='!m-0 !rounded-full'>
+                            Kỳ trước: {result.previousPeriodLabel}
+                        </Tag>
+                        <Tag color={result.aiUsed ? 'green' : 'orange'} className='!m-0 !rounded-full'>
+                            {result.aiUsed ? 'AI phân tích' : 'Dự phòng'}
+                        </Tag>
+                    </div>
+
+                    <div className='grid grid-cols-1 gap-3 lg:grid-cols-[220px_1fr]'>
+                        <div className='relative overflow-hidden rounded-2xl border border-slate-200 bg-white p-4 shadow-sm'>
+                            <div className='absolute -right-10 -top-10 h-28 w-28 rounded-full bg-cyan-100 blur-2xl' />
+                            <div className='relative'>
+                                <div className='text-[12px] font-semibold uppercase tracking-wide text-slate-500'>Incident Score</div>
+                                <div className='mt-3 flex items-end gap-2'>
+                                    <span className='text-[44px] font-black leading-none text-slate-950'>{result.caseScore}</span>
+                                    <span className='pb-1 text-sm font-semibold text-slate-400'>/100</span>
+                                </div>
+                                <div className={`mt-3 inline-flex rounded-full border px-3 py-1 text-[12px] font-bold ${caseSeverityMeta[result.caseSeverity]?.className}`}>
+                                    {caseSeverityMeta[result.caseSeverity]?.label || result.caseSeverity}
+                                </div>
+                                <div className='mt-2 text-[12px] text-slate-500'>{caseSeverityMeta[result.caseSeverity]?.hint}</div>
+                            </div>
+                        </div>
+
+                        <div className='rounded-2xl border border-slate-200 bg-white p-4 shadow-sm'>
+                            <div className='mb-3 flex items-center gap-2 text-sm font-bold text-slate-800'>
+                                <CheckCircleOutlined className='text-emerald-500' /> Kết luận điều tra nhanh
+                            </div>
+                            <div className='grid grid-cols-1 gap-2 sm:grid-cols-3'>
+                                {result.rootCauseChains.slice(0, 3).map((chain, idx) => (
+                                    <div key={`${chain.title}-${idx}`} className={`rounded-xl border px-3 py-2 ${replayTone[chain.severity]}`}>
+                                        <div className='truncate text-[12px] font-bold'>{chain.title}</div>
+                                        <div className='mt-1 text-[11px] opacity-80'>
+                                            Tin cậy {chain.confidence}% · {fmtReplayValue(chain.value, 'vnd')}
+                                        </div>
+                                    </div>
+                                ))}
+                                {!result.rootCauseChains.length ? (
+                                    <div className='rounded-xl border border-slate-100 bg-slate-50 px-3 py-2 text-[12px] text-slate-500'>
+                                        Chưa đủ dữ liệu tạo chuỗi nguyên nhân rõ ràng.
+                                    </div>
+                                ) : null}
+                            </div>
+                        </div>
+                    </div>
+
+                    <div className='rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-[13px] leading-6 whitespace-pre-wrap text-slate-700'>
+                        {result.narrative}
+                    </div>
+
+                    {result.flags.length ? (
+                        <Alert
+                            showIcon
+                            type='warning'
+                            message='Điểm cần kiểm tra'
+                            description={
+                                <div className='mt-1 flex flex-wrap gap-1.5'>
+                                    {result.flags.map((flag) => (
+                                        <Tag key={flag} color='orange' className='!m-0 !rounded-full'>
+                                            {flag}
+                                        </Tag>
+                                    ))}
+                                </div>
+                            }
+                        />
+                    ) : null}
+
+                    {result.rootCauseChains.length ? (
+                        <div className='rounded-2xl border border-slate-200 bg-white p-4 shadow-sm'>
+                            <div className='mb-3 flex items-center gap-2 text-sm font-bold text-slate-800'>
+                                <HistoryOutlined className='text-cyan-600' /> Chuỗi nguyên nhân
+                            </div>
+                            <div className='grid grid-cols-1 gap-3 lg:grid-cols-2'>
+                                {result.rootCauseChains.slice(0, 4).map((chain, idx) => (
+                                    <div key={`${chain.title}-${idx}`} className='rounded-xl border border-slate-100 bg-slate-50 p-3'>
+                                        <div className='flex flex-wrap items-start justify-between gap-2'>
+                                            <div className='min-w-0'>
+                                                <div className='truncate text-[13px] font-bold text-slate-900'>{chain.title}</div>
+                                                <div className='mt-1 text-[11px] text-slate-500'>
+                                                    {domainLabel[chain.domain]} · độ tin cậy {chain.confidence}%
+                                                </div>
+                                            </div>
+                                            <Tag color={chain.severity === 'danger' ? 'red' : chain.severity === 'warning' ? 'orange' : 'blue'} className='!m-0 !rounded-full'>
+                                                {fmtReplayValue(chain.value, 'vnd')}
+                                            </Tag>
+                                        </div>
+                                        <div className='mt-3 space-y-1.5'>
+                                            {chain.steps.slice(0, 4).map((step, stepIdx) => (
+                                                <div key={step} className='flex gap-2 text-[12px] leading-5 text-slate-600'>
+                                                    <span className='mt-1 flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-white text-[10px] font-bold text-slate-500'>
+                                                        {stepIdx + 1}
+                                                    </span>
+                                                    <span>{step}</span>
+                                                </div>
+                                            ))}
+                                        </div>
+                                        {chain.evidence.length ? (
+                                            <div className='mt-3 border-t border-slate-200 pt-2'>
+                                                {chain.evidence.slice(0, 3).map((line) => (
+                                                    <div key={line} className='truncate text-[11px] text-slate-500'>
+                                                        {line}
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        ) : null}
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    ) : null}
+
+                    {result.recommendations.length ? (
+                        <div className='rounded-2xl border border-slate-200 bg-white p-4 shadow-sm'>
+                            <div className='mb-3 flex items-center gap-2 text-sm font-bold text-slate-800'>
+                                <LinkOutlined className='text-indigo-500' /> Hành động đề xuất
+                            </div>
+                            <div className='grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3'>
+                                {result.recommendations.map((rec) => (
+                                    <div key={rec.title} className='rounded-xl border border-slate-100 bg-gradient-to-br from-white to-slate-50 p-3'>
+                                        <div className='flex items-start justify-between gap-2'>
+                                            <div className='text-[13px] font-bold text-slate-900'>{rec.title}</div>
+                                            <Tag color={priorityTone[rec.priority]} className='!m-0 !rounded-full'>
+                                                {rec.priority}
+                                            </Tag>
+                                        </div>
+                                        <div className='mt-2 text-[12px] leading-5 text-slate-600'>{rec.description}</div>
+                                        {rec.route ? <div className='mt-2 text-[11px] font-semibold text-blue-600'>{rec.route}</div> : null}
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    ) : null}
+
+                    <div className='grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4'>
+                        {result.metrics.map((metric) => {
+                            const up = metric.delta > 0;
+                            const neutral = metric.delta === 0;
+                            return (
+                                <div key={metric.key} className='rounded-xl border border-slate-200 bg-white p-3 shadow-sm'>
+                                    <div className='text-[12px] font-medium text-slate-500'>{metric.label}</div>
+                                    <div className='mt-1 text-[20px] font-bold text-slate-900'>
+                                        {fmtReplayValue(metric.current, metric.unit)}
+                                    </div>
+                                    <div className={`mt-1 text-[12px] font-semibold ${neutral ? 'text-slate-500' : up ? 'text-rose-600' : 'text-emerald-600'}`}>
+                                        {neutral ? 'Không đổi' : `${up ? '+' : ''}${fmtReplayValue(metric.delta, metric.unit)} (${up ? '+' : ''}${metric.deltaPct}%)`}
+                                    </div>
+                                    <div className='mt-1 text-[11px] text-slate-400'>
+                                        Kỳ trước: {fmtReplayValue(metric.previous, metric.unit)}
+                                    </div>
+                                </div>
+                            );
+                        })}
+                    </div>
+
+                    <div className='grid grid-cols-1 gap-4 lg:grid-cols-[360px_1fr]'>
+                        <div className='rounded-xl border border-slate-200 bg-white p-4 shadow-sm'>
+                            <div className='mb-3 flex items-center gap-2 text-sm font-bold text-slate-800'>
+                                <FireOutlined className='text-orange-500' /> Tác nhân chính
+                            </div>
+                            {result.drivers.length ? (
+                                <div className='space-y-2'>
+                                    {result.drivers.slice(0, 8).map((driver, idx) => (
+                                        <div key={`${driver.label}-${idx}`} className='rounded-lg border border-slate-100 bg-slate-50 px-3 py-2'>
+                                            <div className='flex items-start justify-between gap-2'>
+                                                <div className='min-w-0'>
+                                                    <div className='truncate text-[13px] font-semibold text-slate-800'>{driver.label}</div>
+                                                    <div className='text-[11px] text-slate-500'>
+                                                        {domainLabel[driver.domain]} · {driver.count} dòng/sự kiện
+                                                    </div>
+                                                </div>
+                                                <div className='text-right text-[12px] font-bold text-slate-900'>
+                                                    {fmtReplayValue(driver.value, 'vnd')}
+                                                </div>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            ) : (
+                                <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description='Chưa có driver đủ rõ' />
+                            )}
+                        </div>
+
+                        <div className='rounded-xl border border-slate-200 bg-white p-4 shadow-sm'>
+                            <div className='mb-3 flex items-center gap-2 text-sm font-bold text-slate-800'>
+                                <ClockCircleOutlined className='text-blue-500' /> Timeline bằng chứng
+                            </div>
+                            {result.events.length ? (
+                                <div className='max-h-[460px] space-y-2 overflow-auto pr-1'>
+                                    {result.events.map((event) => (
+                                        <div key={`${event.type}-${event.id}`} className='relative rounded-xl border border-slate-100 bg-white p-3 shadow-sm'>
+                                            <div className='flex flex-wrap items-start justify-between gap-2'>
+                                                <div className='min-w-0'>
+                                                    <div className='flex flex-wrap items-center gap-2'>
+                                                        <span className='text-[13px] font-bold text-slate-800'>{event.title}</span>
+                                                        <span className={`rounded-full border px-2 py-0.5 text-[10.5px] font-semibold ${replayTone[event.severity]}`}>
+                                                            {domainLabel[event.type]}
+                                                        </span>
+                                                    </div>
+                                                    <div className='mt-1 text-[12px] text-slate-500'>{event.subtitle}</div>
+                                                </div>
+                                                <div className='text-right'>
+                                                    <div className='text-[12px] font-bold text-slate-900'>{fmtReplayValue(event.value, 'vnd')}</div>
+                                                    <div className='text-[11px] text-slate-400'>{replayDate(event.at)}</div>
+                                                </div>
+                                            </div>
+                                            {event.evidence?.length ? (
+                                                <div className='mt-2 flex flex-wrap gap-1'>
+                                                    {event.evidence.slice(0, 5).map((line) => (
+                                                        <Tag key={line} className='!m-0 !rounded-full !text-[11px]'>
+                                                            {line}
+                                                        </Tag>
+                                                    ))}
+                                                </div>
+                                            ) : null}
+                                        </div>
+                                    ))}
+                                </div>
+                            ) : (
+                                <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description='Không có sự kiện trong kỳ' />
+                            )}
+                        </div>
+                    </div>
+                </div>
+            ) : null}
+        </Card>
+    );
+};
+
 const AiAnalyticsStudioPage: React.FC = () => {
     const { message } = App.useApp();
     const [question, setQuestion] = useState('');
@@ -278,6 +667,9 @@ const AiAnalyticsStudioPage: React.FC = () => {
                     </div>
                 ) : null}
             </div>
+
+            {/* Incident Replay */}
+            <IncidentReplayPanel />
 
             {/* Kết quả */}
             {queryMut.isPending ? (

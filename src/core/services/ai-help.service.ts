@@ -815,8 +815,80 @@ export type AnalyticsCatalog = {
 };
 export type AnalyticsQueryBody = { question?: string; spec?: Partial<AnalyticsSpec>; plantId?: string };
 
+export type IncidentReplayMetric = {
+    key: string;
+    label: string;
+    current: number;
+    previous: number;
+    delta: number;
+    deltaPct: number;
+    unit: 'vnd' | 'count';
+};
+
+export type IncidentReplayDriver = {
+    label: string;
+    value: number;
+    count: number;
+    domain: 'purchase' | 'distribution' | 'maintenance' | 'asset' | 'mixed';
+    detail?: string;
+};
+
+export type IncidentReplayEvent = {
+    id: string;
+    type: 'purchase' | 'distribution' | 'maintenance' | 'asset' | 'mixed';
+    at: string;
+    title: string;
+    subtitle?: string;
+    value?: number;
+    severity: 'info' | 'warning' | 'danger' | 'success';
+    route?: string;
+    evidence?: string[];
+};
+
+export type IncidentReplayRootCauseChain = {
+    title: string;
+    severity: 'info' | 'warning' | 'danger' | 'success';
+    confidence: number;
+    value: number;
+    domain: 'purchase' | 'distribution' | 'maintenance' | 'asset' | 'mixed';
+    steps: string[];
+    evidence: string[];
+};
+
+export type IncidentReplayRecommendation = {
+    title: string;
+    description: string;
+    priority: 'low' | 'medium' | 'high';
+    route?: string;
+};
+
+export type IncidentReplayResult = {
+    question: string;
+    focus: 'purchase' | 'distribution' | 'maintenance' | 'asset' | 'mixed';
+    periodDays: number;
+    periodLabel: string;
+    previousPeriodLabel: string;
+    caseScore: number;
+    caseSeverity: 'normal' | 'watch' | 'high' | 'critical';
+    metrics: IncidentReplayMetric[];
+    drivers: IncidentReplayDriver[];
+    rootCauseChains: IncidentReplayRootCauseChain[];
+    recommendations: IncidentReplayRecommendation[];
+    events: IncidentReplayEvent[];
+    flags: string[];
+    narrative: string;
+    provider: string;
+    model?: string;
+    aiUsed: boolean;
+    generatedAt: string;
+};
+
 export const aiAnalyticsService = {
     catalog: (): Promise<AnalyticsCatalog> => api.get<AnalyticsCatalog>('/ai/analytics/catalog'),
     query: (body: AnalyticsQueryBody): Promise<AnalyticsResult> =>
         api.post<AnalyticsResult, AnalyticsQueryBody>('/ai/analytics/query', body, { timeout: 65000 }),
+    incidentReplay: (body: { question: string; periodDays: number }): Promise<IncidentReplayResult> =>
+        api.post<IncidentReplayResult, { question: string; periodDays: number }>('/ai/incident-replay', body, {
+            timeout: 90000,
+        }),
 };
