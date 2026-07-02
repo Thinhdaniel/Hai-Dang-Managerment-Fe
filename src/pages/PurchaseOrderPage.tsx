@@ -7,6 +7,7 @@ import {
     Button,
     Card,
     Checkbox,
+    DatePicker,
     Descriptions,
     Drawer,
     Empty,
@@ -2079,6 +2080,9 @@ const PurchaseOrderPage: React.FC = () => {
     const [selectedId, setSelectedId] = useState<string | null>(null);
     const [confirmingId, setConfirmingId] = useState<string | null>(null);
     const [receivingId, setReceivingId] = useState<string | null>(null);
+    const [exportOpen, setExportOpen] = useState(false);
+    const [exporting, setExporting] = useState(false);
+    const [exportRange, setExportRange] = useState<any>([dayjs().startOf('month'), dayjs()]);
 
     const listParams = useMemo<PurchaseOrderQueryParams>(
         () => ({
@@ -2167,6 +2171,26 @@ const PurchaseOrderPage: React.FC = () => {
             message.error(e?.message ?? 'Lỗi');
         } finally {
             setConfirmingId(null);
+        }
+    };
+
+    const handleExportRange = async () => {
+        const [from, to] = exportRange ?? [];
+        if (!from || !to) {
+            message.warning('Chọn khoảng thời gian cần xuất');
+            return;
+        }
+        setExporting(true);
+        try {
+            const startDate = from.format('YYYY-MM-DD');
+            const endDate = to.format('YYYY-MM-DD');
+            await purchaseOrderService.exportRangeXlsx({ startDate, endDate }, `dat-hang-${startDate}_${endDate}`);
+            message.success('Đã xuất Excel tổng hợp đặt hàng');
+            setExportOpen(false);
+        } catch (e: any) {
+            message.error(e?.message ?? 'Không có đơn nào trong khoảng này hoặc xuất thất bại');
+        } finally {
+            setExporting(false);
         }
     };
 
@@ -2367,16 +2391,60 @@ const PurchaseOrderPage: React.FC = () => {
                 title='Đơn đặt hàng'
                 subtitle='Quản lý đơn đặt hàng vật tư từ các phiếu đề xuất đã duyệt.'
                 actions={
-                    <Button
-                        type='primary'
-                        icon={<PlusOutlined />}
-                        style={{ background: '#1A3A5C' }}
-                        onClick={() => setModalOpen(true)}
-                    >
-                        Tạo đơn hàng
-                    </Button>
+                    <Space>
+                        <Button icon={<FileExcelOutlined />} onClick={() => setExportOpen(true)}>
+                            Xuất Excel
+                        </Button>
+                        <Button
+                            type='primary'
+                            icon={<PlusOutlined />}
+                            style={{ background: '#1A3A5C' }}
+                            onClick={() => setModalOpen(true)}
+                        >
+                            Tạo đơn hàng
+                        </Button>
+                    </Space>
                 }
             />
+
+            <Modal
+                open={exportOpen}
+                title='Xuất Excel tổng hợp đặt hàng'
+                okText='Xuất file'
+                cancelText='Huỷ'
+                confirmLoading={exporting}
+                onOk={handleExportRange}
+                onCancel={() => setExportOpen(false)}
+                width={480}
+            >
+                <div className='flex flex-col gap-3 py-2'>
+                    <Text type='secondary' className='text-xs'>
+                        Chọn khoảng thời gian (theo ngày tạo đơn). File gồm 4 sheet: Tổng quan · Danh sách đơn ·
+                        Chi tiết vật tư · Sổ nợ hàng NCC.
+                    </Text>
+                    <DatePicker.RangePicker
+                        className='w-full'
+                        value={exportRange}
+                        format='DD/MM/YYYY'
+                        onChange={(value) => setExportRange(value)}
+                        presets={[
+                            { label: 'Tháng này', value: [dayjs().startOf('month'), dayjs()] },
+                            {
+                                label: 'Tháng trước',
+                                value: [
+                                    dayjs().subtract(1, 'month').startOf('month'),
+                                    dayjs().subtract(1, 'month').endOf('month'),
+                                ],
+                            },
+                            {
+                                label: '3 tháng gần nhất',
+                                value: [dayjs().subtract(2, 'month').startOf('month'), dayjs()],
+                            },
+                            { label: 'Năm nay', value: [dayjs().startOf('year'), dayjs()] },
+                        ]}
+                    />
+                </div>
+            </Modal>
 
             {/* Stats */}
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 12 }}>

@@ -1133,6 +1133,22 @@ export const purchaseOrderService = {
         document.body.removeChild(link);
         URL.revokeObjectURL(url);
     },
+
+    exportRangeXlsx: async (params: { startDate?: string; endDate?: string }, filename: string): Promise<void> => {
+        const data: any = await axiosInstance.get(`${PURCHASE_ORDERS_BASE}/export-range-xlsx`, {
+            params,
+            responseType: 'blob',
+        });
+        const blob = data instanceof Blob ? data : new Blob([data]);
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = `${filename}.xlsx`;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
+    },
 };
 
 export const inventoryService = {
