@@ -82,12 +82,13 @@ type ScanMapRow = {
 
 const scanLineKey = (line: any) => `${line?.pageIndex ?? 0}|${line?.lineNo ?? ''}|${line?.materialName ?? ''}`;
 
-const SCAN_ROW_STATUS: Record<ScanMapRow['status'], { label: string; color: string }> = {
-    auto: { label: 'AI khớp', color: 'green' },
-    suggest: { label: 'AI gợi ý', color: 'gold' },
-    manual: { label: 'Bạn chọn', color: 'blue' },
-    unmatched: { label: 'Chưa xử lý', color: 'default' },
-    unreadable: { label: 'Không đọc được', color: 'magenta' },
+// Trạng thái hiển thị bằng chấm màu + chữ thường (không dùng tag màu rực)
+const SCAN_ROW_STATUS: Record<ScanMapRow['status'], { label: string; dot: string; hollow?: boolean }> = {
+    auto: { label: 'AI khớp', dot: '#15803d' },
+    suggest: { label: 'AI gợi ý', dot: '#b45309' },
+    manual: { label: 'Bạn chọn', dot: '#2f51d9' },
+    unmatched: { label: 'Chưa xử lý', dot: '#94a3b8', hollow: true },
+    unreadable: { label: 'Không đọc được', dot: '#b91c1c' },
 };
 
 const buildScanMapRows = (preview: PurchaseReceiptScanPreview): ScanMapRow[] => {
@@ -1251,30 +1252,48 @@ const DetailDrawer: React.FC<DrawerProps> = ({
                 destroyOnHidden
             >
                 <div className='flex flex-col gap-4 py-2'>
-                    <Alert
-                        type='info'
-                        showIcon
-                        title='Chỉ nhập số lượng thực nhận trong lần giao này. Dòng nhận thiếu sẽ được ghi vào sổ nợ hàng NCC.'
-                    />
-                    <Card
-                        size='small'
-                        className='border-sky-100 bg-sky-50/60'
-                        title={
-                            <Space>
-                                <ScanOutlined className='text-sky-600' />
-                                <span>Quét phiếu giao hàng bằng AI</span>
-                            </Space>
-                        }
-                        extra={
-                            receiptScanPreview?.provider ? (
-                                <Tag color='blue'>
-                                    {receiptScanPreview.provider}
-                                    {receiptScanPreview.model ? ` · ${receiptScanPreview.model}` : ''}
-                                </Tag>
-                            ) : null
-                        }
-                    >
+                    <div className='rounded-lg border border-slate-200 bg-white px-4 py-3'>
+                        <style>{`
+                            .hd-eyebrow { font-size: 11px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: #64748b; }
+                            .hd-num { font-variant-numeric: tabular-nums; }
+                            .hd-stamp { display: inline-block; transform: rotate(-4deg); border: 1.5px solid #2f51d9; color: #2f51d9; border-radius: 6px; padding: 2px 10px; font-size: 11px; font-weight: 800; letter-spacing: .12em; text-transform: uppercase; background: #fff; box-shadow: inset 0 0 0 1.5px #fff, inset 0 0 0 2.5px #2f51d9; user-select: none; }
+                            .hd-stamp.warn { border-color: #b45309; color: #b45309; box-shadow: inset 0 0 0 1.5px #fff, inset 0 0 0 2.5px #b45309; }
+                            .hd-dot { display: inline-block; width: 7px; height: 7px; border-radius: 999px; margin-right: 6px; vertical-align: 1px; }
+                            .hd-recon .ant-table-thead > tr > th { background: transparent !important; border-bottom: 1px solid #cbd5e1 !important; font-size: 11px; text-transform: uppercase; letter-spacing: .07em; color: #64748b !important; font-weight: 600; padding: 6px 8px !important; }
+                            .hd-recon .ant-table-thead > tr > th::before { display: none !important; }
+                            .hd-recon .ant-table-tbody > tr > td { border-bottom: 1px solid #eef2f7 !important; padding: 7px 8px !important; }
+                            .hd-recon .ant-table-tbody > tr:last-child > td { border-bottom: none !important; }
+                            .hd-scan-frame { position: relative; width: 132px; height: 96px; border-radius: 8px; overflow: hidden; border: 1px solid #e2e8f0; background: #f8fafc; }
+                            .hd-scan-frame img { width: 100%; height: 100%; object-fit: cover; display: block; }
+                            .hd-scan-frame.hd-scanning img { filter: saturate(.8) brightness(.94); }
+                            .hd-scan-corner { position: absolute; width: 14px; height: 14px; border: 0 solid #2f51d9; pointer-events: none; z-index: 3; }
+                            .hd-scan-corner.tl { top: 5px; left: 5px; border-top-width: 2px; border-left-width: 2px; border-top-left-radius: 5px; }
+                            .hd-scan-corner.tr { top: 5px; right: 5px; border-top-width: 2px; border-right-width: 2px; border-top-right-radius: 5px; }
+                            .hd-scan-corner.bl { bottom: 5px; left: 5px; border-bottom-width: 2px; border-left-width: 2px; border-bottom-left-radius: 5px; }
+                            .hd-scan-corner.br { bottom: 5px; right: 5px; border-bottom-width: 2px; border-right-width: 2px; border-bottom-right-radius: 5px; }
+                            .hd-scan-beam { position: absolute; left: 0; right: 0; height: 38%; pointer-events: none; z-index: 2;
+                                background: linear-gradient(180deg, rgba(47,81,217,0) 0%, rgba(47,81,217,.16) 60%, rgba(47,81,217,.34) 100%);
+                                border-bottom: 2px solid rgba(47,81,217,.85);
+                                box-shadow: 0 3px 12px rgba(47,81,217,.5);
+                                animation: hdScanSweep 1.5s linear infinite; }
+                            .hd-scan-lines { position: absolute; inset: 0; pointer-events: none; z-index: 1; mix-blend-mode: screen;
+                                background: repeating-linear-gradient(180deg, rgba(47,81,217,.07) 0 2px, transparent 2px 6px);
+                                animation: hdScanFlicker 1.1s steps(2) infinite; }
+                            .hd-scan-done { position: absolute; top: 5px; right: 5px; z-index: 4; background: #15803d; color: #fff; font-size: 10px; font-weight: 700; padding: 1px 7px; border-radius: 999px; }
+                            .hd-scan-status { display: inline-flex; align-items: center; gap: 8px; font-size: 12px; font-weight: 600; color: #2f51d9; }
+                            .hd-scan-status .hd-scan-pulse { width: 8px; height: 8px; border-radius: 999px; background: #2f51d9; animation: hdScanPulse 1s ease-in-out infinite; }
+                            @keyframes hdScanSweep { 0% { top: -40%; } 100% { top: 102%; } }
+                            @keyframes hdScanFlicker { 0% { opacity: .55; } 100% { opacity: 1; } }
+                            @keyframes hdScanPulse { 0%, 100% { transform: scale(.7); opacity: .5; } 50% { transform: scale(1.15); opacity: 1; } }
+                            @media (prefers-reduced-motion: reduce) { .hd-scan-beam, .hd-scan-lines, .hd-scan-status .hd-scan-pulse { animation: none; } .hd-scan-beam { display: none; } }
+                        `}</style>
                         <div className='flex flex-col gap-3'>
+                            <div className='flex flex-wrap items-baseline justify-between gap-2'>
+                                <span className='hd-eyebrow'>Quét phiếu giao hàng</span>
+                                <Text type='secondary' className='text-xs'>
+                                    Nhập số thực nhận lần này — dòng nhận thiếu tự ghi vào sổ nợ NCC
+                                </Text>
+                            </div>
                             <div className='flex flex-wrap items-center gap-2'>
                                 <Upload
                                     accept='image/*'
@@ -1300,7 +1319,6 @@ const DetailDrawer: React.FC<DrawerProps> = ({
                                     <Button
                                         size='small'
                                         type='text'
-                                        danger
                                         onClick={() => {
                                             setReceiptScanFiles([]);
                                             setReceiptScanPreview(null);
@@ -1312,37 +1330,12 @@ const DetailDrawer: React.FC<DrawerProps> = ({
                                 <Text type='secondary' className='text-xs'>
                                     {receiptScanFiles.length
                                         ? `${receiptScanFiles.length} ảnh đã chọn`
-                                        : 'Tối đa 5 ảnh cùng phiếu · dán ảnh chụp màn hình bằng Ctrl+V cũng được'}
+                                        : 'Tối đa 5 ảnh · dán ảnh chụp màn hình bằng Ctrl+V'}
                                 </Text>
                             </div>
 
                             {receiptScanUrls.length > 0 && (
                                 <div className='flex flex-wrap items-center gap-3'>
-                                    <style>{`
-                                        .hd-scan-frame { position: relative; width: 148px; height: 108px; border-radius: 10px; overflow: hidden; border: 1px solid #dbeafe; background: #f8fafc; box-shadow: 0 1px 4px rgba(15,23,42,.08); }
-                                        .hd-scan-frame img { width: 100%; height: 100%; object-fit: cover; display: block; }
-                                        .hd-scan-frame.hd-scanning img { filter: saturate(.8) brightness(.94); }
-                                        .hd-scan-corner { position: absolute; width: 16px; height: 16px; border: 0 solid #2f51d9; pointer-events: none; z-index: 3; }
-                                        .hd-scan-corner.tl { top: 5px; left: 5px; border-top-width: 2.5px; border-left-width: 2.5px; border-top-left-radius: 6px; }
-                                        .hd-scan-corner.tr { top: 5px; right: 5px; border-top-width: 2.5px; border-right-width: 2.5px; border-top-right-radius: 6px; }
-                                        .hd-scan-corner.bl { bottom: 5px; left: 5px; border-bottom-width: 2.5px; border-left-width: 2.5px; border-bottom-left-radius: 6px; }
-                                        .hd-scan-corner.br { bottom: 5px; right: 5px; border-bottom-width: 2.5px; border-right-width: 2.5px; border-bottom-right-radius: 6px; }
-                                        .hd-scan-beam { position: absolute; left: 0; right: 0; height: 38%; pointer-events: none; z-index: 2;
-                                            background: linear-gradient(180deg, rgba(56,189,248,0) 0%, rgba(56,189,248,.22) 60%, rgba(47,81,217,.42) 100%);
-                                            border-bottom: 2px solid rgba(56,189,248,.95);
-                                            box-shadow: 0 3px 14px rgba(56,189,248,.7);
-                                            animation: hdScanSweep 1.5s linear infinite; }
-                                        .hd-scan-lines { position: absolute; inset: 0; pointer-events: none; z-index: 1; mix-blend-mode: screen;
-                                            background: repeating-linear-gradient(180deg, rgba(56,189,248,.09) 0 2px, transparent 2px 6px);
-                                            animation: hdScanFlicker 1.1s steps(2) infinite; }
-                                        .hd-scan-done { position: absolute; top: 5px; right: 5px; z-index: 4; background: #16a34a; color: #fff; font-size: 10px; font-weight: 700; padding: 1px 7px; border-radius: 999px; box-shadow: 0 1px 4px rgba(22,163,74,.45); }
-                                        .hd-scan-status { display: inline-flex; align-items: center; gap: 8px; font-size: 12px; font-weight: 600; color: #2f51d9; }
-                                        .hd-scan-status .hd-scan-dot { width: 8px; height: 8px; border-radius: 999px; background: #2f51d9; animation: hdScanPulse 1s ease-in-out infinite; }
-                                        @keyframes hdScanSweep { 0% { top: -40%; } 100% { top: 102%; } }
-                                        @keyframes hdScanFlicker { 0% { opacity: .55; } 100% { opacity: 1; } }
-                                        @keyframes hdScanPulse { 0%, 100% { transform: scale(.7); opacity: .5; } 50% { transform: scale(1.15); opacity: 1; } }
-                                        @media (prefers-reduced-motion: reduce) { .hd-scan-beam, .hd-scan-lines, .hd-scan-status .hd-scan-dot { animation: none; } .hd-scan-beam { display: none; } }
-                                    `}</style>
                                     {receiptScanUrls.map((url, index) => (
                                         <div
                                             key={url}
@@ -1366,57 +1359,47 @@ const DetailDrawer: React.FC<DrawerProps> = ({
                                     ))}
                                     {receiptScanMut.isPending && (
                                         <span className='hd-scan-status'>
-                                            <span className='hd-scan-dot' />
-                                            AI đang quét & đối chiếu 2 lần đọc…
+                                            <span className='hd-scan-pulse' />
+                                            Đang quét và đối chiếu 2 lần đọc…
                                         </span>
                                     )}
                                 </div>
                             )}
 
                             {receiptScanPreview && (
-                                <div className='flex flex-col gap-2'>
-                                    <div className='flex flex-wrap items-center gap-x-4 gap-y-1 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs text-slate-600'>
-                                        <span>
-                                            NCC:{' '}
-                                            <Text strong>
-                                                {receiptScanPreview.header?.supplierName || record?.supplierName || '-'}
-                                            </Text>
-                                        </span>
-                                        <span>
-                                            Số phiếu:{' '}
-                                            <Text strong>
+                                <div className='mt-1 flex flex-col gap-2 border-t border-slate-200 pt-3'>
+                                    <div className='flex flex-wrap items-start justify-between gap-2 px-1'>
+                                        <div>
+                                            <div className='hd-eyebrow'>Phiếu giao hàng</div>
+                                            <div className='text-sm font-semibold text-slate-800'>
+                                                {receiptScanPreview.header?.supplierName || record?.supplierName || 'Chưa rõ nhà cung cấp'}
+                                            </div>
+                                            <div className='hd-num text-xs text-slate-500'>
+                                                Số{' '}
                                                 {receiptScanPreview.header?.deliveryCode ||
                                                     receiptScanPreview.header?.invoiceNo ||
-                                                    '-'}
-                                            </Text>
-                                        </span>
-                                        <span>
-                                            Ngày:{' '}
-                                            <Text strong>
+                                                    '—'}{' '}
+                                                ·{' '}
                                                 {fmtDate(
                                                     receiptScanPreview.header?.receivedDate ||
                                                         receiptScanPreview.header?.invoiceDate
                                                 )}
-                                            </Text>
-                                        </span>
-                                        <span className='ml-auto flex flex-wrap gap-1'>
-                                            {receiptScanPreview.verification?.status === 'verified' ? (
-                                                <Tag color='cyan' className='m-0'>
-                                                    Đối chiếu 2 lần đọc ·{' '}
-                                                    {receiptScanPreview.summary.verifiedLineCount ?? 0}/
-                                                    {receiptScanPreview.summary.extractedLineCount} khớp
-                                                </Tag>
-                                            ) : (
-                                                <Tooltip title={receiptScanPreview.verification?.note}>
-                                                    <Tag color='orange' className='m-0'>
-                                                        Chưa đối chiếu chéo — rà kỹ
-                                                    </Tag>
-                                                </Tooltip>
-                                            )}
-                                        </span>
+                                            </div>
+                                        </div>
+                                        {receiptScanPreview.verification?.status === 'verified' ? (
+                                            <span className='hd-stamp mt-1'>
+                                                Đối chiếu ×2 · {receiptScanPreview.summary.verifiedLineCount ?? 0}/
+                                                {receiptScanPreview.summary.extractedLineCount} khớp
+                                            </span>
+                                        ) : (
+                                            <Tooltip title={receiptScanPreview.verification?.note}>
+                                                <span className='hd-stamp warn mt-1'>Chưa đối chiếu — rà kỹ</span>
+                                            </Tooltip>
+                                        )}
                                     </div>
 
                                     <Table
+                                        className='hd-recon'
                                         size='small'
                                         rowKey='key'
                                         pagination={false}
@@ -1434,7 +1417,7 @@ const DetailDrawer: React.FC<DrawerProps> = ({
                                             {
                                                 title: 'Dòng trên phiếu',
                                                 key: 'line',
-                                                width: 300,
+                                                width: 280,
                                                 render: (_: any, row: ScanMapRow) => (
                                                     <Tooltip
                                                         title={
@@ -1444,17 +1427,30 @@ const DetailDrawer: React.FC<DrawerProps> = ({
                                                         }
                                                     >
                                                         <div>
-                                                            <Text strong>
+                                                            <div className='text-[13px] font-medium text-slate-800'>
                                                                 {row.line?.materialName || '(không rõ tên)'}
-                                                            </Text>
-                                                            <div className='text-xs text-slate-500'>
-                                                                {row.line?.quantity != null &&
-                                                                    `SL ${fmtNum(row.line.quantity)} ${row.line?.unit || ''}`}
-                                                                {row.line?.confidence != null &&
-                                                                    ` · đọc ${Math.round(row.line.confidence * 100)}%`}
                                                             </div>
+                                                            {row.line?.confidence != null && (
+                                                                <div className='text-xs text-slate-400'>
+                                                                    đọc {Math.round(row.line.confidence * 100)}%
+                                                                </div>
+                                                            )}
                                                         </div>
                                                     </Tooltip>
+                                                ),
+                                            },
+                                            {
+                                                title: 'SL phiếu',
+                                                key: 'lineQty',
+                                                width: 90,
+                                                align: 'right' as const,
+                                                render: (_: any, row: ScanMapRow) => (
+                                                    <span className='hd-num text-slate-800'>
+                                                        {row.line?.quantity != null ? fmtNum(row.line.quantity) : '—'}
+                                                        {row.line?.unit ? (
+                                                            <span className='text-slate-400'> {row.line.unit}</span>
+                                                        ) : null}
+                                                    </span>
                                                 ),
                                             },
                                             {
@@ -1497,14 +1493,25 @@ const DetailDrawer: React.FC<DrawerProps> = ({
                                             {
                                                 title: 'Trạng thái',
                                                 key: 'status',
-                                                width: 120,
+                                                width: 130,
                                                 render: (_: any, row: ScanMapRow) => {
                                                     const status = SCAN_ROW_STATUS[row.status];
                                                     return (
                                                         <Tooltip title={row.reason}>
-                                                            <Tag color={status.color} className='m-0'>
+                                                            <span className='text-xs text-slate-600'>
+                                                                <span
+                                                                    className='hd-dot'
+                                                                    style={
+                                                                        status.hollow
+                                                                            ? {
+                                                                                  border: `1.5px solid ${status.dot}`,
+                                                                                  background: 'transparent',
+                                                                              }
+                                                                            : { background: status.dot }
+                                                                    }
+                                                                />
                                                                 {status.label}
-                                                            </Tag>
+                                                            </span>
                                                         </Tooltip>
                                                     );
                                                 },
@@ -1512,10 +1519,10 @@ const DetailDrawer: React.FC<DrawerProps> = ({
                                         ]}
                                     />
 
-                                    <div className='flex flex-wrap items-center justify-between gap-2'>
+                                    <div className='flex flex-wrap items-center justify-between gap-2 px-1'>
                                         <Text type='secondary' className='text-xs'>
-                                            AI điền sẵn — sai thì chọn lại ở cột “Nhận vào”. Dòng nhận thiếu tự ghi
-                                            vào sổ nợ NCC.
+                                            Sai chỗ nào, chọn lại ở cột “Nhận vào”
+                                            {receiptScanPreview.model ? ` · đọc bởi ${receiptScanPreview.model}` : ''}
                                         </Text>
                                         <Button
                                             type='primary'
@@ -1530,35 +1537,34 @@ const DetailDrawer: React.FC<DrawerProps> = ({
                                 </div>
                             )}
                         </div>
-                    </Card>
+                    </div>
                     {receiptScanHistory.length > 0 && (
-                        <div className='rounded-lg border border-slate-100 bg-white p-3'>
-                            <div className='mb-2 flex items-center justify-between gap-2'>
-                                <Text strong className='text-sm text-slate-700'>
-                                    Lịch sử quét phiếu nhận hàng
-                                </Text>
-                                <Tag color='default'>{receiptScanHistory.length} lần gần nhất</Tag>
-                            </div>
-                            <div className='flex flex-wrap gap-2'>
+                        <div className='rounded-lg border border-slate-200 bg-white px-4 py-3'>
+                            <div className='hd-eyebrow mb-2'>Các lần quét trước</div>
+                            <div className='divide-y divide-slate-100'>
                                 {receiptScanHistory.slice(0, 6).map((scan) => (
                                     <div
                                         key={scan.id}
-                                        className='rounded-lg border border-slate-100 bg-slate-50 px-3 py-2 text-xs'
+                                        className='flex flex-wrap items-baseline gap-x-3 gap-y-0.5 py-1.5 text-xs'
                                     >
-                                        <div className='flex items-center gap-2'>
-                                            <Tag color={scan.status === 'applied' ? 'green' : 'blue'}>
-                                                {scan.status === 'applied' ? 'Đã áp dụng' : 'Preview'}
-                                            </Tag>
-                                            <Text type='secondary'>{fmtDate(scan.createdAt)}</Text>
-                                        </div>
-                                        <div className='mt-1 font-medium text-slate-700'>
+                                        <span className='hd-num text-slate-400'>{fmtDate(scan.createdAt)}</span>
+                                        <span className='font-medium text-slate-700'>
                                             {scan.header?.deliveryCode || scan.header?.invoiceNo || 'Phiếu chưa rõ số'}
-                                        </div>
-                                        <div className='mt-0.5 text-slate-500'>
-                                            Đọc {scan.summary?.extractedLineCount ?? 0} dòng · Đơn này{' '}
-                                            {fmtNum(scan.summary?.currentOrderQuantity ?? 0)} · Bù{' '}
+                                        </span>
+                                        <span className='hd-num text-slate-500'>
+                                            {scan.summary?.extractedLineCount ?? 0} dòng · đơn này{' '}
+                                            {fmtNum(scan.summary?.currentOrderQuantity ?? 0)} · bù{' '}
                                             {fmtNum(scan.summary?.shortageResolvedQuantity ?? 0)}
-                                        </div>
+                                        </span>
+                                        <span
+                                            className={
+                                                scan.status === 'applied'
+                                                    ? 'ml-auto font-medium text-emerald-700'
+                                                    : 'ml-auto text-slate-400'
+                                            }
+                                        >
+                                            {scan.status === 'applied' ? 'đã áp dụng' : 'chưa áp dụng'}
+                                        </span>
                                     </div>
                                 ))}
                             </div>
