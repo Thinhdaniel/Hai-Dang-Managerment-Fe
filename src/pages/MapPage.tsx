@@ -7,7 +7,7 @@ import 'leaflet.markercluster';
 import 'leaflet.markercluster/dist/MarkerCluster.css';
 import 'leaflet.markercluster/dist/MarkerCluster.Default.css';
 import { useQuery } from '@tanstack/react-query';
-import { Button, Empty, Select, Spin, Switch, Tag } from 'antd';
+import { Button, Empty, Input, Select, Spin, Switch, Tag } from 'antd';
 import {
     AimOutlined,
     ApartmentOutlined,
@@ -34,7 +34,6 @@ type TypeMeta = {
     shortLabel: string;
     color: string;
     textColor: string;
-    keywords: string[];
 };
 
 type TypeGroup = {
@@ -63,67 +62,34 @@ type MachineClusterGroup = L.LayerGroup & {
     on: (type: 'clusterclick', handler: (event: { layer: MachineCluster }) => void) => void;
 };
 
-const TYPE_META: TypeMeta[] = [
-    {
-        key: 'sewing',
-        label: 'Máy may',
-        shortLabel: 'MAY',
-        color: '#2563eb',
-        textColor: '#1d4ed8',
-        keywords: ['may may', '1 kim', '2 kim', 'sewing', 'single needle', 'needle'],
-    },
-    {
-        key: 'overlock',
-        label: 'Vắt sổ',
-        shortLabel: 'VS',
-        color: '#0891b2',
-        textColor: '#0e7490',
-        keywords: ['vat so', 'overlock', 'over lock'],
-    },
-    {
-        key: 'coverstitch',
-        label: 'Kansai',
-        shortLabel: 'KS',
-        color: '#7c3aed',
-        textColor: '#6d28d9',
-        keywords: ['kansai', 'coverstitch', 'cover stitch', 'tran de', 'trần đè'],
-    },
-    {
-        key: 'cutting',
-        label: 'Máy cắt',
-        shortLabel: 'CAT',
-        color: '#ea580c',
-        textColor: '#c2410c',
-        keywords: ['may cat', 'cat vai', 'cutting', 'cutter'],
-    },
-    {
-        key: 'iron',
-        label: 'Bàn là',
-        shortLabel: 'UI',
-        color: '#059669',
-        textColor: '#047857',
-        keywords: ['ban la', 'ban ui', 'ui hoi', 'iron', 'steam'],
-    },
-    {
-        key: 'press',
-        label: 'Ép/dập',
-        shortLabel: 'EP',
-        color: '#ca8a04',
-        textColor: '#a16207',
-        keywords: ['ep', 'dap', 'press', 'heat press'],
-    },
-    {
-        key: 'other',
-        label: 'Khác',
-        shortLabel: 'KH',
-        color: '#64748b',
-        textColor: '#475569',
-        keywords: [],
-    },
+/**
+ * Nhóm máy theo TÊN MÁY (asset.name) thay vì đoán "loại" bằng từ khóa:
+ * trường `type` trong dữ liệu thực tế toàn viết tắt tự do ("1k", "M1K", "vs4c")
+ * nên phân loại theo type/keyword bị sai và trùng nhóm. Tên máy là trường
+ * được nhập đầy đủ, nhất quán nhất — mỗi tên là một nhóm, màu gán ổn định theo hash.
+ */
+const GROUP_PALETTE: Array<{ color: string; textColor: string }> = [
+    { color: '#2f51d9', textColor: '#2743ae' },
+    { color: '#0e7490', textColor: '#0b5c73' },
+    { color: '#7c3aed', textColor: '#6d28d9' },
+    { color: '#c2410c', textColor: '#9a3412' },
+    { color: '#047857', textColor: '#065f46' },
+    { color: '#a16207', textColor: '#854d0e' },
+    { color: '#be185d', textColor: '#9d174d' },
+    { color: '#4d7c0f', textColor: '#3f6212' },
+    { color: '#0369a1', textColor: '#075985' },
+    { color: '#9333ea', textColor: '#7e22ce' },
+    { color: '#dc2626', textColor: '#b91c1c' },
+    { color: '#475569', textColor: '#334155' },
 ];
 
-const TYPE_META_BY_KEY = new Map(TYPE_META.map((meta) => [meta.key, meta]));
-const FALLBACK_TYPE = TYPE_META_BY_KEY.get('other')!;
+const FALLBACK_TYPE: TypeMeta = {
+    key: 'chua-dat-ten',
+    label: 'Chưa đặt tên',
+    shortLabel: '—',
+    color: '#94a3b8',
+    textColor: '#64748b',
+};
 
 const normalizeText = (value?: string) =>
     (value ?? '')
@@ -134,14 +100,46 @@ const normalizeText = (value?: string) =>
         .replace(/\s+/g, ' ')
         .trim();
 
-const getTypeMeta = (asset?: Pick<AssetLocationPoint, 'type' | 'model' | 'name'>): TypeMeta => {
-    const source = normalizeText([asset?.type, asset?.model, asset?.name].filter(Boolean).join(' '));
-    if (!source) return FALLBACK_TYPE;
+const hashString = (value: string) => {
+    let hash = 0;
+    for (let i = 0; i < value.length; i += 1) hash = (hash * 31 + value.charCodeAt(i)) | 0;
+    return Math.abs(hash);
+};
 
-    return (
-        TYPE_META.find((meta) => meta.key !== 'other' && meta.keywords.some((keyword) => source.includes(keyword))) ??
-        FALLBACK_TYPE
-    );
+/** Nhãn tắt in trên marker: bỏ chữ "máy" đầu, lấy ký tự đầu mỗi từ ("1 kim"→1K, "vắt sổ"→VS, "kansai"→KA). */
+const buildShortLabel = (name: string) => {
+    const tokens = normalizeText(name)
+        .replace(/^may\s+/, '')
+        .split(' ')
+        .filter(Boolean);
+    if (!tokens.length) return 'M';
+    if (tokens.length === 1) return tokens[0].slice(0, 2).toUpperCase();
+    return tokens
+        .slice(0, 3)
+        .map((token) => token[0])
+        .join('')
+        .toUpperCase();
+};
+
+const typeMetaCache = new Map<string, TypeMeta>();
+
+const getTypeMeta = (asset?: Pick<AssetLocationPoint, 'type' | 'model' | 'name'>): TypeMeta => {
+    const rawName = (asset?.name ?? '').trim();
+    if (!rawName) return FALLBACK_TYPE;
+    const key = normalizeText(rawName);
+    let meta = typeMetaCache.get(key);
+    if (!meta) {
+        const palette = GROUP_PALETTE[hashString(key) % GROUP_PALETTE.length];
+        meta = {
+            key,
+            label: rawName,
+            shortLabel: buildShortLabel(rawName),
+            color: palette.color,
+            textColor: palette.textColor,
+        };
+        typeMetaCache.set(key, meta);
+    }
+    return meta;
 };
 
 const getAssetDisplayCode = (asset: AssetLocationPoint) => asset.machineCode || asset.name || asset.publicId || 'Máy';
@@ -272,7 +270,7 @@ const buildPopupHtml = (asset: AssetLocationPoint) => {
             <span class="hd-map-popup__type">${escapeHtml(typeMeta.shortLabel)}</span>
             <div>
                 <strong>${escapeHtml(getAssetDisplayCode(asset))}</strong>
-                <span>${escapeHtml(asset.name || asset.model || 'Chưa có tên máy')}</span>
+                <span>${escapeHtml(asset.name || 'Chưa đặt tên máy')}</span>
             </div>
         </div>
         <div class="hd-map-popup__badges">
@@ -379,12 +377,13 @@ const ClusterMarkers = ({
 const MapPage: React.FC = () => {
     const { user } = useAuth();
     const navigate = useNavigate();
-    const { data, isLoading, isFetching, refetch } = useAssetLocations();
+    const { data, isLoading, isFetching, refetch, dataUpdatedAt } = useAssetLocations();
     const { data: plants = [] } = useQuery({ queryKey: ['plants'], queryFn: () => plantService.getAll() });
 
     const [selectedPlant, setSelectedPlant] = useState<string>(user?.plantId ?? '');
     const [statusFilter, setStatusFilter] = useState<AssetStatus[]>([]);
     const [typeFilter, setTypeFilter] = useState<string[]>([]);
+    const [typeSearch, setTypeSearch] = useState('');
     const [mismatchOnly, setMismatchOnly] = useState(false);
     const [fitSignal, setFitSignal] = useState(0);
     const [clusterAssets, setClusterAssets] = useState<AssetLocationPoint[]>([]);
@@ -449,7 +448,17 @@ const MapPage: React.FC = () => {
                         <EnvironmentOutlined /> Bản đồ vận hành
                     </span>
                     <h1>Bản đồ vị trí máy</h1>
-                    <p>Gom máy theo loại, theo dõi điểm quét QR gần nhất và xử lý nhanh các cụm máy cùng vị trí.</p>
+                    <p>Gom máy theo tên máy, theo dõi điểm quét QR gần nhất và xử lý nhanh các cụm máy cùng vị trí.</p>
+                    <span className='machine-map-live'>
+                        <i />
+                        Cập nhật lúc{' '}
+                        {dataUpdatedAt
+                            ? new Date(dataUpdatedAt).toLocaleTimeString('vi-VN', {
+                                  hour: '2-digit',
+                                  minute: '2-digit',
+                              })
+                            : '—'}
+                    </span>
                 </div>
                 <div className='machine-map-hero__actions'>
                     <Button
@@ -478,7 +487,7 @@ const MapPage: React.FC = () => {
                     <small>máy có GPS</small>
                 </div>
                 <div className='machine-map-stat'>
-                    <span>Loại chính</span>
+                    <span>Nhiều nhất</span>
                     <strong>{dominantType.label}</strong>
                     <small>{buildTypeGroups(filtered)[0]?.assets.length ?? 0} máy</small>
                 </div>
@@ -514,6 +523,7 @@ const MapPage: React.FC = () => {
                                     setSelectedPlant('');
                                     setStatusFilter([]);
                                     setTypeFilter([]);
+                                    setTypeSearch('');
                                     setMismatchOnly(false);
                                     setClusterAssets([]);
                                 }}
@@ -539,9 +549,27 @@ const MapPage: React.FC = () => {
                     </div>
 
                     <div className='machine-map-field'>
-                        <label>Loại máy</label>
-                        <div className='machine-map-type-grid'>
-                            {typeGroups.map((group) => {
+                        <label>
+                            Tên máy
+                            <em className='machine-map-field__hint'>{typeGroups.length} tên</em>
+                        </label>
+                        <Input
+                            allowClear
+                            size='small'
+                            className='machine-map-type-search'
+                            placeholder='Tìm tên máy…'
+                            value={typeSearch}
+                            onChange={(event) => setTypeSearch(event.target.value)}
+                        />
+                        <div className='machine-map-type-grid machine-map-type-grid--scroll'>
+                            {typeGroups
+                                .filter(
+                                    (group) =>
+                                        !typeSearch.trim() ||
+                                        normalizeText(group.meta.label).includes(normalizeText(typeSearch)) ||
+                                        typeFilter.includes(group.meta.key)
+                                )
+                                .map((group) => {
                                 const selected = typeFilter.includes(group.meta.key);
                                 return (
                                     <button
@@ -609,7 +637,7 @@ const MapPage: React.FC = () => {
                         </div>
                         <div className='machine-map-legend__row'>
                             <span className='machine-map-legend__sample machine-map-legend__sample--type' />
-                            Màu marker = loại máy
+                            Màu marker = tên máy
                         </div>
                         <div className='machine-map-legend__row'>
                             <span className='machine-map-legend__sample machine-map-legend__sample--status' />
