@@ -15,7 +15,8 @@ import {
     RobotOutlined,
     SendOutlined,
 } from '@ant-design/icons';
-import { useMutation, useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useNavigate } from 'react-router-dom';
 import EChart, { type EChartsCoreOption } from '../components/charts/EChart';
 import {
     aiAnalyticsService,
@@ -30,6 +31,7 @@ const { Text, Title } = Typography;
 const ACCENT = '#2f51d9';
 const PALETTE = ['#2f51d9', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#0891b2', '#ec4899', '#64748b'];
 const PINS_KEY = 'hd-analytics-pins';
+const REPLAY_SESSION_KEY = 'hd-incident-replay-session';
 
 // Ghim được cả catalog (theo spec, mở lại nhanh+chuẩn) lẫn agentic (theo câu hỏi, mở lại chạy lại).
 type Pin = { id: string; title: string; spec?: AnalyticsSpec; question?: string };
@@ -49,6 +51,75 @@ const savePins = (pins: Pin[]) => {
     } catch {
         /* noop */
     }
+};
+
+const REPLAY_WF_LABEL: Record<string, string> = {
+    draft: 'Nháp',
+    reviewed: 'Đã rà soát',
+    approved: 'Đã phê duyệt',
+    closed: 'Đã đóng',
+};
+
+const getReplaySessionId = () => {
+    try {
+        const current = localStorage.getItem(REPLAY_SESSION_KEY);
+        if (current) return current;
+        const next = `replay-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+        localStorage.setItem(REPLAY_SESSION_KEY, next);
+        return next;
+    } catch {
+        return `replay-${Date.now()}`;
+    }
+};
+
+// Narrative do AI sinh + tên/mô tả từ dữ liệu người dùng nhập -> phải escape trước khi nhét vào HTML in
+const escHtml = (value?: string | number) =>
+    String(value ?? '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+
+const exportReplayReport = (result: IncidentReplayResult) => {
+    const html = `
+        <html>
+        <head>
+            <title>Incident Replay</title>
+            <style>
+                body{font-family:Arial,sans-serif;margin:24px;color:#0f172a}
+                h1{font-size:20px;margin:0 0 8px}
+                h2{font-size:15px;margin:18px 0 8px}
+                .muted{color:#64748b;font-size:12px}
+                .box{border:1px solid #e2e8f0;border-radius:8px;padding:12px;margin:10px 0}
+                table{width:100%;border-collapse:collapse;font-size:12px}
+                th,td{border:1px solid #e2e8f0;padding:6px;text-align:left}
+                th{background:#f8fafc}
+            </style>
+        </head>
+        <body>
+            <h1>AI Incident Replay</h1>
+            <div class="muted">${escHtml(result.periodLabel)} · score ${escHtml(result.caseScore)}/100 · ${escHtml(result.caseSeverity)}</div>
+            <div class="box">${escHtml(result.narrative || '').replace(/\n/g, '<br/>')}</div>
+            <h2>Metrics</h2>
+            <table><thead><tr><th>Chỉ số</th><th>Kỳ này</th><th>Kỳ trước</th><th>Chênh</th></tr></thead><tbody>
+            ${result.metrics
+                .map((m) => `<tr><td>${escHtml(m.label)}</td><td>${escHtml(fmtReplayValue(m.current, m.unit))}</td><td>${escHtml(fmtReplayValue(m.previous, m.unit))}</td><td>${escHtml(fmtReplayValue(m.delta, m.unit))} (${escHtml(m.deltaPct)}%)</td></tr>`)
+                .join('')}
+            </tbody></table>
+            <h2>Top nguyên nhân</h2>
+            ${(result.rootCauseChains || [])
+                .slice(0, 5)
+                .map((c) => `<div class="box"><b>${escHtml(c.title)}</b><div class="muted">Tin cậy ${escHtml(c.confidence)}% · ${escHtml(fmtReplayValue(c.value, 'vnd'))}</div><ul>${c.steps.map((s) => `<li>${escHtml(s)}</li>`).join('')}</ul></div>`)
+                .join('')}
+            <h2>Hành động đề xuất</h2>
+            ${(result.recommendations || []).map((r) => `<div class="box"><b>${escHtml(r.title)}</b><div>${escHtml(r.description)}</div></div>`).join('')}
+        </body></html>`;
+    const win = window.open('', '_blank', 'width=900,height=720');
+    if (!win) return;
+    win.document.write(html);
+    win.document.close();
+    win.focus();
+    win.print();
 };
 
 const fmtVal = (v: number, unit: string) =>
@@ -240,14 +311,42 @@ const REPLAY_SAMPLES = [
 
 const IncidentReplayPanel: React.FC = () => {
     const { message } = App.useApp();
+    const navigate = useNavigate();
+    const queryClient = useQueryClient();
     const [question, setQuestion] = useState('Vì sao chi phí vật tư tăng trong kỳ này?');
     const [periodDays, setPeriodDays] = useState(30);
     const [result, setResult] = useState<IncidentReplayResult | null>(null);
+    const [sessionId] = useState(() => getReplaySessionId());
+
+    const { data: history = [] } = useQuery({
+        queryKey: ['incident-replay-history'],
+        queryFn: () => aiAnalyticsService.incidentReplayHistory(8),
+        staleTime: 60_000,
+    });
 
     const replayMut = useMutation({
-        mutationFn: () => aiAnalyticsService.incidentReplay({ question, periodDays }),
-        onSuccess: (data) => setResult(data),
+        mutationFn: () => aiAnalyticsService.incidentReplay({ question, periodDays, sessionId }),
+        onSuccess: (data) => {
+            setResult(data);
+            queryClient.invalidateQueries({ queryKey: ['incident-replay-history'] });
+        },
         onError: () => message.error('Chưa dựng được Incident Replay, thử lại hoặc rút gọn câu hỏi.'),
+    });
+
+    const historyDetailMut = useMutation({
+        mutationFn: (id: string) => aiAnalyticsService.incidentReplayHistoryDetail(id),
+        onSuccess: (data) => setResult({ ...data, historyId: data.id }),
+        onError: () => message.error('Không mở được replay đã lưu.'),
+    });
+
+    const feedbackMut = useMutation({
+        mutationFn: (rating: 'accurate' | 'wrong' | 'missing_data' | 'irrelevant') =>
+            aiAnalyticsService.incidentReplayFeedback(result?.historyId || '', { rating }),
+        onSuccess: () => {
+            message.success('Đã ghi nhận phản hồi');
+            queryClient.invalidateQueries({ queryKey: ['incident-replay-history'] });
+        },
+        onError: () => message.error('Chưa ghi được phản hồi.'),
     });
 
     const runReplay = () => {
@@ -317,6 +416,34 @@ const IncidentReplayPanel: React.FC = () => {
                 ))}
             </div>
 
+            {history.length ? (
+                <div className='mt-4 rounded-xl border border-slate-100 bg-slate-50 p-3'>
+                    <div className='mb-2 text-[12px] font-bold uppercase tracking-wide text-slate-500'>Replay gần đây</div>
+                    <div className='flex gap-2 overflow-x-auto pb-1'>
+                        {history.map((item) => (
+                            <div
+                                key={item.id}
+                                className='min-w-[240px] rounded-xl border border-white bg-white px-3 py-2 text-left shadow-sm transition hover:-translate-y-0.5 hover:border-cyan-200'
+                            >
+                                <div className='truncate text-[12px] font-bold text-slate-800'>{item.question}</div>
+                                <div className='mt-1 text-[11px] text-slate-500'>
+                                    {item.periodLabel} · score {item.caseScore ?? '-'}
+                                    {item.workflowStatus ? ` · ${REPLAY_WF_LABEL[item.workflowStatus] || item.workflowStatus}` : ''}
+                                </div>
+                                <div className='mt-2 flex gap-1.5'>
+                                    <Button size='small' onClick={() => historyDetailMut.mutate(item.id)}>
+                                        Xem nhanh
+                                    </Button>
+                                    <Button size='small' type='link' className='!px-1' onClick={() => navigate(`/ai-analytics/incident-replay/${item.id}`)}>
+                                        Mở hồ sơ
+                                    </Button>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            ) : null}
+
             {replayMut.isPending ? (
                 <div className='mt-5 flex h-[220px] flex-col items-center justify-center gap-3 rounded-xl bg-slate-50 text-slate-500'>
                     <Spin />
@@ -337,7 +464,47 @@ const IncidentReplayPanel: React.FC = () => {
                         <Tag color={result.aiUsed ? 'green' : 'orange'} className='!m-0 !rounded-full'>
                             {result.aiUsed ? 'AI phân tích' : 'Dự phòng'}
                         </Tag>
+                        {result.version ? (
+                            <Tag color='cyan' className='!m-0 !rounded-full'>
+                                V{result.version}
+                            </Tag>
+                        ) : null}
                     </div>
+
+                    <div className='flex flex-wrap items-center gap-2 rounded-xl border border-slate-100 bg-white px-3 py-2 shadow-sm'>
+                        <Button size='small' onClick={() => exportReplayReport(result)}>
+                            Xuất báo cáo
+                        </Button>
+                        {result.historyId ? (
+                            <>
+                                <Button size='small' type='primary' onClick={() => navigate(`/ai-analytics/incident-replay/${result.historyId}`)}>
+                                    Mở Case File
+                                </Button>
+                                <Button size='small' loading={feedbackMut.isPending} onClick={() => feedbackMut.mutate('accurate')}>
+                                    Đúng
+                                </Button>
+                                <Button size='small' loading={feedbackMut.isPending} onClick={() => feedbackMut.mutate('wrong')}>
+                                    Sai
+                                </Button>
+                                <Button size='small' loading={feedbackMut.isPending} onClick={() => feedbackMut.mutate('missing_data')}>
+                                    Thiếu dữ liệu
+                                </Button>
+                            </>
+                        ) : null}
+                    </div>
+
+                    {result.scope?.applied ? (
+                        <div className='rounded-xl border border-cyan-100 bg-cyan-50 px-4 py-2'>
+                            <div className='text-[12px] font-bold uppercase tracking-wide text-cyan-800'>Phạm vi phân tích</div>
+                            <div className='mt-1 flex flex-wrap gap-1.5'>
+                                {result.scope.notes.map((note) => (
+                                    <Tag key={note} color='cyan' className='!m-0 !rounded-full'>
+                                        {note}
+                                    </Tag>
+                                ))}
+                            </div>
+                        </div>
+                    ) : null}
 
                     <div className='grid grid-cols-1 gap-3 lg:grid-cols-[220px_1fr]'>
                         <div className='relative overflow-hidden rounded-2xl border border-slate-200 bg-white p-4 shadow-sm'>
@@ -396,6 +563,41 @@ const IncidentReplayPanel: React.FC = () => {
                                 </div>
                             }
                         />
+                    ) : null}
+
+                    {result.anomalies?.length ? (
+                        <div className='rounded-2xl border border-slate-200 bg-white p-4 shadow-sm'>
+                            <div className='mb-3 flex items-center gap-2 text-sm font-bold text-slate-800'>
+                                <FireOutlined className='text-rose-500' /> Anomaly Radar
+                            </div>
+                            <div className='grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3'>
+                                {result.anomalies.slice(0, 6).map((anomaly, idx) => (
+                                    <div key={`${anomaly.title}-${idx}`} className={`rounded-xl border p-3 ${replayTone[anomaly.severity]}`}>
+                                        <div className='flex items-start justify-between gap-2'>
+                                            <div className='min-w-0'>
+                                                <div className='truncate text-[13px] font-bold'>{anomaly.title}</div>
+                                                <div className='mt-1 text-[11px] opacity-80'>
+                                                    {domainLabel[anomaly.domain]} · score {Math.round(anomaly.score)}
+                                                </div>
+                                            </div>
+                                            <span className='rounded-full bg-white/70 px-2 py-0.5 text-[11px] font-bold'>
+                                                {anomaly.severity}
+                                            </span>
+                                        </div>
+                                        <div className='mt-2 text-[12px] leading-5'>{anomaly.description}</div>
+                                        {anomaly.evidence?.length ? (
+                                            <div className='mt-2 space-y-1'>
+                                                {anomaly.evidence.slice(0, 2).map((line) => (
+                                                    <div key={line} className='truncate text-[11px] opacity-80'>
+                                                        {line}
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        ) : null}
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
                     ) : null}
 
                     {result.rootCauseChains.length ? (
@@ -457,7 +659,53 @@ const IncidentReplayPanel: React.FC = () => {
                                             </Tag>
                                         </div>
                                         <div className='mt-2 text-[12px] leading-5 text-slate-600'>{rec.description}</div>
-                                        {rec.route ? <div className='mt-2 text-[11px] font-semibold text-blue-600'>{rec.route}</div> : null}
+                                        {rec.route ? (
+                                            <Button size='small' type='link' className='!mt-1 !px-0' onClick={() => navigate(rec.route!)}>
+                                                Mở module liên quan
+                                            </Button>
+                                        ) : null}
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    ) : null}
+
+                    {result.breakdowns?.length ? (
+                        <div className='rounded-2xl border border-slate-200 bg-white p-4 shadow-sm'>
+                            <div className='mb-3 flex items-center gap-2 text-sm font-bold text-slate-800'>
+                                <BarChartOutlined className='text-blue-500' /> Breakdown so với kỳ trước
+                            </div>
+                            <div className='grid grid-cols-1 gap-4 xl:grid-cols-2'>
+                                {result.breakdowns.slice(0, 4).map((group) => (
+                                    <div key={group.key} className='rounded-xl border border-slate-100 bg-slate-50 p-3'>
+                                        <div className='mb-2 flex items-center justify-between gap-2'>
+                                            <div>
+                                                <div className='text-[13px] font-bold text-slate-900'>{group.title}</div>
+                                                <div className='text-[11px] text-slate-500'>
+                                                    Tổng {fmtReplayValue(group.total, 'vnd')}
+                                                </div>
+                                            </div>
+                                            <Tag className='!m-0 !rounded-full'>{domainLabel[group.domain]}</Tag>
+                                        </div>
+                                        <div className='space-y-2'>
+                                            {group.rows.slice(0, 6).map((row) => {
+                                                const up = row.delta > 0;
+                                                return (
+                                                    <div key={row.label} className='rounded-lg bg-white px-3 py-2'>
+                                                        <div className='flex items-center justify-between gap-2'>
+                                                            <div className='min-w-0 truncate text-[12px] font-semibold text-slate-700'>{row.label}</div>
+                                                            <div className='text-[12px] font-bold text-slate-900'>{fmtReplayValue(row.value, 'vnd')}</div>
+                                                        </div>
+                                                        <div className='mt-1 flex items-center justify-between gap-2 text-[11px] text-slate-500'>
+                                                            <span>{row.sharePct}% nhóm · {row.count} dòng</span>
+                                                            <span className={up ? 'font-semibold text-rose-600' : row.delta < 0 ? 'font-semibold text-emerald-600' : ''}>
+                                                                {up ? '+' : ''}{fmtReplayValue(row.delta, 'vnd')} · {up ? '+' : ''}{row.deltaPct}%
+                                                            </span>
+                                                        </div>
+                                                    </div>
+                                                );
+                                            })}
+                                        </div>
                                     </div>
                                 ))}
                             </div>
@@ -520,7 +768,11 @@ const IncidentReplayPanel: React.FC = () => {
                             {result.events.length ? (
                                 <div className='max-h-[460px] space-y-2 overflow-auto pr-1'>
                                     {result.events.map((event) => (
-                                        <div key={`${event.type}-${event.id}`} className='relative rounded-xl border border-slate-100 bg-white p-3 shadow-sm'>
+                                        <div
+                                            key={`${event.type}-${event.id}`}
+                                            className={`relative rounded-xl border border-slate-100 bg-white p-3 shadow-sm ${event.route ? 'cursor-pointer transition hover:border-cyan-200 hover:shadow-md' : ''}`}
+                                            onClick={() => event.route && navigate(event.route)}
+                                        >
                                             <div className='flex flex-wrap items-start justify-between gap-2'>
                                                 <div className='min-w-0'>
                                                     <div className='flex flex-wrap items-center gap-2'>

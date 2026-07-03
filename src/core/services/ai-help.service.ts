@@ -833,6 +833,41 @@ export type IncidentReplayDriver = {
     detail?: string;
 };
 
+export type IncidentReplayScope = {
+    applied: boolean;
+    plantIds: string[];
+    plantNames: string[];
+    supplierTerms: string[];
+    materialTerms: string[];
+    assetTerms: string[];
+    notes: string[];
+};
+
+export type IncidentReplayBreakdown = {
+    key: string;
+    title: string;
+    domain: 'purchase' | 'distribution' | 'maintenance' | 'asset' | 'mixed';
+    total: number;
+    rows: {
+        label: string;
+        value: number;
+        count: number;
+        sharePct: number;
+        previousValue: number;
+        delta: number;
+        deltaPct: number;
+    }[];
+};
+
+export type IncidentReplayAnomaly = {
+    title: string;
+    severity: 'info' | 'warning' | 'danger' | 'success';
+    score: number;
+    description: string;
+    evidence: string[];
+    domain: 'purchase' | 'distribution' | 'maintenance' | 'asset' | 'mixed';
+};
+
 export type IncidentReplayEvent = {
     id: string;
     type: 'purchase' | 'distribution' | 'maintenance' | 'asset' | 'mixed';
@@ -862,16 +897,34 @@ export type IncidentReplayRecommendation = {
     route?: string;
 };
 
+export type IncidentReplayWorkflowStatus = 'draft' | 'reviewed' | 'approved' | 'closed';
+
+export type IncidentReplayWorkflowAction = 'review' | 'approve' | 'close' | 'reopen';
+
+export type IncidentReplayAuditEntry = {
+    action: 'created' | 'reviewed' | 'approved' | 'closed' | 'reopened' | 'feedback';
+    note?: string;
+    userName?: string;
+    at?: string;
+};
+
 export type IncidentReplayResult = {
+    version?: number;
+    sessionId?: string;
+    historyId?: string;
     question: string;
     focus: 'purchase' | 'distribution' | 'maintenance' | 'asset' | 'mixed';
     periodDays: number;
     periodLabel: string;
     previousPeriodLabel: string;
+    scope?: IncidentReplayScope;
     caseScore: number;
     caseSeverity: 'normal' | 'watch' | 'high' | 'critical';
     metrics: IncidentReplayMetric[];
     drivers: IncidentReplayDriver[];
+    previousDrivers?: IncidentReplayDriver[];
+    breakdowns?: IncidentReplayBreakdown[];
+    anomalies?: IncidentReplayAnomaly[];
     rootCauseChains: IncidentReplayRootCauseChain[];
     recommendations: IncidentReplayRecommendation[];
     events: IncidentReplayEvent[];
@@ -881,14 +934,63 @@ export type IncidentReplayResult = {
     model?: string;
     aiUsed: boolean;
     generatedAt: string;
+    createdAt?: string;
+    updatedAt?: string;
+    workflowStatus?: IncidentReplayWorkflowStatus;
+    reviewNote?: string;
+    managerConclusion?: string;
+    reviewedByName?: string;
+    reviewedAt?: string;
+    approvedByName?: string;
+    approvedAt?: string;
+    closedByName?: string;
+    closedAt?: string;
+    auditTrail?: IncidentReplayAuditEntry[];
+    feedback?: {
+        rating: 'accurate' | 'wrong' | 'missing_data' | 'irrelevant';
+        note?: string;
+        createdAt?: string;
+    };
+};
+
+export type IncidentReplayHistoryItem = Partial<IncidentReplayResult> & {
+    id: string;
+    question: string;
+    createdAt?: string;
+    updatedAt?: string;
+    feedback?: {
+        rating: 'accurate' | 'wrong' | 'missing_data' | 'irrelevant';
+        note?: string;
+        createdAt?: string;
+    };
 };
 
 export const aiAnalyticsService = {
     catalog: (): Promise<AnalyticsCatalog> => api.get<AnalyticsCatalog>('/ai/analytics/catalog'),
     query: (body: AnalyticsQueryBody): Promise<AnalyticsResult> =>
         api.post<AnalyticsResult, AnalyticsQueryBody>('/ai/analytics/query', body, { timeout: 65000 }),
-    incidentReplay: (body: { question: string; periodDays: number }): Promise<IncidentReplayResult> =>
-        api.post<IncidentReplayResult, { question: string; periodDays: number }>('/ai/incident-replay', body, {
+    incidentReplay: (body: { question: string; periodDays: number; sessionId?: string }): Promise<IncidentReplayResult> =>
+        api.post<IncidentReplayResult, { question: string; periodDays: number; sessionId?: string }>('/ai/incident-replay', body, {
             timeout: 90000,
         }),
+    incidentReplayHistory: (limit = 12): Promise<IncidentReplayHistoryItem[]> =>
+        api.get<IncidentReplayHistoryItem[]>(`/ai/incident-replay/history?limit=${limit}`),
+    incidentReplayHistoryDetail: (id: string): Promise<IncidentReplayResult & { id: string }> =>
+        api.get<IncidentReplayResult & { id: string }>(`/ai/incident-replay/history/${id}`),
+    incidentReplayFeedback: (
+        id: string,
+        body: { rating: 'accurate' | 'wrong' | 'missing_data' | 'irrelevant'; note?: string }
+    ): Promise<IncidentReplayHistoryItem> =>
+        api.post<IncidentReplayHistoryItem, { rating: 'accurate' | 'wrong' | 'missing_data' | 'irrelevant'; note?: string }>(
+            `/ai/incident-replay/history/${id}/feedback`,
+            body
+        ),
+    incidentReplayWorkflow: (
+        id: string,
+        body: { action: IncidentReplayWorkflowAction; note?: string; conclusion?: string }
+    ): Promise<IncidentReplayResult & { id: string }> =>
+        api.patch<IncidentReplayResult & { id: string }, { action: IncidentReplayWorkflowAction; note?: string; conclusion?: string }>(
+            `/ai/incident-replay/history/${id}/workflow`,
+            body
+        ),
 };
