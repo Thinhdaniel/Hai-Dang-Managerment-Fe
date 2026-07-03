@@ -18,6 +18,7 @@ import {
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import EChart, { type EChartsCoreOption } from '../components/charts/EChart';
+import MarkdownLite from '../components/shared/MarkdownLite';
 import {
     aiAnalyticsService,
     type AnalyticsChart,
@@ -544,8 +545,8 @@ const IncidentReplayPanel: React.FC = () => {
                         </div>
                     </div>
 
-                    <div className='rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-[13px] leading-6 whitespace-pre-wrap text-slate-700'>
-                        {result.narrative}
+                    <div className='rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 leading-6 text-slate-700'>
+                        <MarkdownLite text={result.narrative} className='text-[13px]' />
                     </div>
 
                     {result.flags.length ? (

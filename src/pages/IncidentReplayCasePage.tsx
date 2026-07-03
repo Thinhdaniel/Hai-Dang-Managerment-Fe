@@ -15,6 +15,7 @@ import {
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate, useParams } from 'react-router-dom';
 import PageHeader from '../components/shared/PageHeader';
+import MarkdownLite from '../components/shared/MarkdownLite';
 import {
     aiAnalyticsService,
     type IncidentReplayEvent,
@@ -366,8 +367,8 @@ const IncidentReplayCasePage: React.FC = () => {
                         </Button>
                     </div>
                 </div>
-                <div className='rounded-xl border border-slate-100 bg-slate-50 px-4 py-3 text-[13px] leading-6 whitespace-pre-wrap text-slate-700'>
-                    {data.narrative}
+                <div className='rounded-xl border border-slate-100 bg-slate-50 px-4 py-3 leading-6 text-slate-700'>
+                    <MarkdownLite text={data.narrative} className='text-[13px]' />
                 </div>
             </Card>
 
@@ -403,7 +404,9 @@ const IncidentReplayCasePage: React.FC = () => {
                 {data.managerConclusion ? (
                     <div className='mt-3 rounded-xl border border-emerald-100 bg-emerald-50 px-4 py-3'>
                         <div className='text-[11px] font-bold uppercase tracking-wide text-emerald-700'>Kết luận của quản lý</div>
-                        <div className='mt-1 text-[13px] leading-6 whitespace-pre-wrap text-slate-700'>{data.managerConclusion}</div>
+                        <div className='mt-1 leading-6 text-slate-700'>
+                            <MarkdownLite text={data.managerConclusion} className='text-[13px]' />
+                        </div>
                     </div>
                 ) : null}
                 {data.auditTrail?.length ? (
