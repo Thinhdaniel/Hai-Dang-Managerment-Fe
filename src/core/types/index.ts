@@ -1084,6 +1084,24 @@ export interface NormalizeCodeResult {
     failed: number;
 }
 
+/** 1 dòng trong bảng mã loại máy (màn rà/sửa mã viết tắt loại). */
+export interface MachineTypeCodeRow {
+    typeKey: string;
+    label: string;
+    assetCount: number;
+    currentCode: string | null;
+    suggestedCode: string;
+    /** Mã do AI đề xuất (chỉ có sau khi gọi AI gợi ý). */
+    aiCode?: string | null;
+}
+
+export interface MachineTypeCodeList {
+    total: number;
+    rows: MachineTypeCodeRow[];
+    provider?: string;
+    model?: string;
+}
+
 export type DataQualitySeverity = 'critical' | 'warning' | 'info';
 export type DataQualityCategoryKey = 'assets' | 'materials' | 'qr' | 'plants' | 'users' | 'maintenance';
 

@@ -6,6 +6,7 @@ import type {
     AssetImportPreview,
     AssetImportResult,
     AssetPublicIdResponse,
+    MachineTypeCodeList,
     NormalizeCodePreview,
     NormalizeCodeResult,
     PaginatedResponse,
@@ -46,6 +47,14 @@ export const assetService = {
 
     confirmNormalizeCodes: (): Promise<NormalizeCodeResult> =>
         api.post<NormalizeCodeResult>(`${BASE}/code/normalize/confirm`),
+
+    getTypeCodes: (): Promise<MachineTypeCodeList> => api.get<MachineTypeCodeList>(`${BASE}/code/type-codes`),
+
+    aiSuggestTypeCodes: (): Promise<MachineTypeCodeList> =>
+        api.post<MachineTypeCodeList>(`${BASE}/code/type-codes/ai-suggest`),
+
+    saveTypeCodes: (items: { label: string; code: string }[]): Promise<{ updated: number }> =>
+        api.patch<{ updated: number }>(`${BASE}/code/type-codes`, { items }),
 
     update: (id: string, data: Partial<Asset>): Promise<Asset> => api.patch<Asset>(`${BASE}/${id}`, data),
 
