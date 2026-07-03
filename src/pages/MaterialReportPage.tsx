@@ -1004,16 +1004,27 @@ function OverviewTab({
     const screens = useBreakpoint();
     const isMobile = !screens.md;
     const combinedTrend = useMemo(() => {
-        const rows = new Map<string, { period: string; purchaseCost: number; distributionValue: number }>();
+        const rows = new Map<
+            string,
+            { period: string; purchaseCost: number; purchaseCapex: number; distributionValue: number }
+        >();
         costTrend.forEach((point) => {
+            const capex = Number(point.capexAmount ?? 0);
             rows.set(point.period, {
                 period: point.period,
-                purchaseCost: Number(point.totalAmount ?? 0),
+                // Cột mua tách 2 tầng: vận hành + CAPEX (tổng cột = totalAmount như cũ).
+                purchaseCost: Number(point.opexAmount ?? Number(point.totalAmount ?? 0) - capex),
+                purchaseCapex: capex,
                 distributionValue: rows.get(point.period)?.distributionValue ?? 0,
             });
         });
         (distribution?.byPeriod ?? []).forEach((point) => {
-            const current = rows.get(point.period) ?? { period: point.period, purchaseCost: 0, distributionValue: 0 };
+            const current = rows.get(point.period) ?? {
+                period: point.period,
+                purchaseCost: 0,
+                purchaseCapex: 0,
+                distributionValue: 0,
+            };
             current.distributionValue = Number(point.totalWithVat ?? 0);
             rows.set(point.period, current);
         });
@@ -1032,6 +1043,7 @@ function OverviewTab({
 
     const trendOption = useMemo<EChartsCoreOption>(() => {
         const many = combinedTrend.length > 18;
+        const hasCapex = combinedTrend.some((row) => row.purchaseCapex > 0);
         return {
             animationDuration: 1100,
             animationEasing: 'elasticOut',
@@ -1085,13 +1097,14 @@ function OverviewTab({
                     animationDelay: (idx: number) => idx * 70,
                 },
                 {
-                    name: 'Chi phí mua vật tư net',
+                    name: hasCapex ? 'Mua vật tư vận hành (net)' : 'Chi phí mua vật tư net',
                     type: 'bar',
+                    stack: 'purchase',
                     data: combinedTrend.map((row) => row.purchaseCost),
                     barMaxWidth: 28,
                     itemStyle: {
                         color: barGradient(CHART_SEMANTIC.purchaseLine),
-                        borderRadius: [8, 8, 0, 0],
+                        borderRadius: hasCapex ? undefined : [8, 8, 0, 0],
                         shadowBlur: 8,
                         shadowColor: 'rgba(30, 58, 138, 0.26)',
                         shadowOffsetY: 4,
@@ -1099,6 +1112,27 @@ function OverviewTab({
                     emphasis: { focus: 'series', itemStyle: { shadowBlur: 16 } },
                     animationDelay: (idx: number) => idx * 70 + 35,
                 },
+                // Tầng CAPEX xếp trên cột mua — tổng cột giữ nguyên, nhưng nhìn rõ phần nào là mua máy/CCDC.
+                ...(hasCapex
+                    ? [
+                          {
+                              name: 'Mua sắm & đầu tư (CAPEX)',
+                              type: 'bar' as const,
+                              stack: 'purchase',
+                              data: combinedTrend.map((row) => row.purchaseCapex),
+                              barMaxWidth: 28,
+                              itemStyle: {
+                                  color: barGradient(CHART_SEMANTIC.capex),
+                                  borderRadius: [8, 8, 0, 0] as [number, number, number, number],
+                                  shadowBlur: 8,
+                                  shadowColor: 'rgba(139, 92, 246, 0.26)',
+                                  shadowOffsetY: 4,
+                              },
+                              emphasis: { focus: 'series' as const, itemStyle: { shadowBlur: 16 } },
+                              animationDelay: (idx: number) => idx * 70 + 70,
+                          },
+                      ]
+                    : []),
             ],
         };
     }, [combinedTrend]);

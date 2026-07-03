@@ -729,6 +729,10 @@ export interface MaterialMonthlyCostPoint {
 export interface MaterialCostByPeriodPoint {
     period: string;
     totalAmount: number;
+    /** Phần mua vật tư vận hành (tiêu hao + linh kiện + chưa phân loại) — net sau hoàn trả. */
+    opexAmount?: number;
+    /** Phần mua máy móc + CCDC (CAPEX) — tách riêng để chart mua không bị "độn". */
+    capexAmount?: number;
 }
 
 export interface TopConsumedMaterial {
