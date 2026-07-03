@@ -9,6 +9,8 @@ export const CHART_SEMANTIC = {
     purchaseLine: '#1e3a8a',
     /** Sửa chữa thuê ngoài — màu cảnh báo nhẹ */
     repair: '#f59e0b',
+    /** Mua sắm & đầu tư (CAPEX: máy móc + CCDC) — tách khỏi chi phí vận hành */
+    capex: '#8b5cf6',
     /** Tổng hợp / trung bình tham chiếu */
     reference: '#94a3b8',
     /** Lát "Khác" trong donut */

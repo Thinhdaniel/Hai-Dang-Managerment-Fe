@@ -43,7 +43,6 @@ import {
     barGradient,
     horizontalBarValueLabel,
     horizontalGridRight,
-    stackedTooltipFormatter,
 } from '../components/charts';
 import { useAuth } from '../core/contexts/AuthContext';
 import { hasManagerAccess } from '../core/lib/permissions';
@@ -113,6 +112,7 @@ const COST_COLORS = {
     material: CHART_SEMANTIC.material,
     selfPurchase: CHART_SEMANTIC.purchaseLine,
     repair: CHART_SEMANTIC.repair,
+    capex: CHART_SEMANTIC.capex,
     total: '#13c2c2',
 };
 
@@ -660,10 +660,13 @@ function CostCompositionPanel({ summary }: { summary?: FacilityCostSummary }) {
     const materialCost = summary?.materialDistributionCost ?? 0;
     const selfPurchaseCost = summary?.materialSelfPurchaseCost ?? 0;
     const repairCost = summary?.externalRepairCost ?? 0;
+    // CAPEX hiện thành lát riêng màu tím — nhìn 1 phát biết bao nhiêu tiền là đầu tư, bao nhiêu là vận hành.
+    const capexCost = summary?.materialCapexCost ?? 0;
     const mixData = [
         { name: 'Vật tư CS1 cấp cho cơ sở', value: materialCost, color: COST_COLORS.material },
         { name: 'Vật tư cơ sở tự mua', value: selfPurchaseCost, color: COST_COLORS.selfPurchase },
         { name: 'Chi phí sửa ngoài', value: repairCost, color: COST_COLORS.repair },
+        { name: 'Mua sắm & đầu tư (CAPEX)', value: capexCost, color: COST_COLORS.capex },
     ].filter((item) => item.value > 0);
     const mixTotal = mixData.reduce((sum, item) => sum + item.value, 0);
 
@@ -672,6 +675,7 @@ function CostCompositionPanel({ summary }: { summary?: FacilityCostSummary }) {
             { name: 'Vật tư CS1 cấp cho cơ sở', value: materialCost, color: COST_COLORS.material },
             { name: 'Vật tư cơ sở tự mua', value: selfPurchaseCost, color: COST_COLORS.selfPurchase },
             { name: 'Chi phí sửa ngoài', value: repairCost, color: COST_COLORS.repair },
+            { name: 'Mua sắm & đầu tư (CAPEX)', value: capexCost, color: COST_COLORS.capex },
         ].filter((item) => item.value > 0);
 
         return {
@@ -711,7 +715,7 @@ function CostCompositionPanel({ summary }: { summary?: FacilityCostSummary }) {
                 },
             ],
         };
-    }, [materialCost, selfPurchaseCost, repairCost]);
+    }, [materialCost, selfPurchaseCost, repairCost, capexCost]);
 
     return (
         <Card
@@ -723,7 +727,7 @@ function CostCompositionPanel({ summary }: { summary?: FacilityCostSummary }) {
                 {mixData.length ? (
                     <>
                         <EChart option={donutOption} height='100%' />
-                        <DonutCenter title='Tổng chi phí' value={fmtShort(mixTotal)} />
+                        <DonutCenter title='Tổng chi trong kỳ' value={fmtShort(mixTotal)} />
                     </>
                 ) : (
                     <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description='Không có dữ liệu chi phí trong kỳ' />
@@ -816,7 +820,31 @@ function CostTrendChart({
         const material = data.map((row) => Number(row.materialDistributionCost ?? 0));
         const selfPurchase = data.map((row) => Number(row.materialSelfPurchaseCost ?? 0));
         const repair = data.map((row) => Number(row.externalRepairCost ?? 0));
+        // CAPEX vẽ ở stack RIÊNG cạnh cột vận hành — không cộng chung để chart không bị "độn" lại.
+        const capex = data.map((row) => Number(row.materialCapexCost ?? 0));
+        const hasCapex = capex.some((value) => value > 0);
         const totals = material.map((value, index) => value + selfPurchase[index] + repair[index]);
+        // Tooltip tự viết: "Tổng vận hành" KHÔNG gộp CAPEX (tránh trộn lại đúng thứ đang tách).
+        const trendTooltipFormatter = (params: unknown) => {
+            const list = (Array.isArray(params) ? params : [params]) as {
+                axisValueLabel?: string;
+                marker?: string;
+                seriesName?: string;
+                value?: number;
+            }[];
+            const title = list[0]?.axisValueLabel ?? '';
+            let opexTotal = 0;
+            const rows = list
+                .map((item) => {
+                    const value = Number(item.value ?? 0);
+                    const isCapexRow = item.seriesName === 'Mua sắm & đầu tư (CAPEX)';
+                    if (!isCapexRow) opexTotal += value;
+                    return `<div style="display:flex;align-items:center;gap:8px;padding:2px 0">${item.marker ?? ''}<span style="flex:1;color:#475569">${item.seriesName ?? ''}</span><b style="font-variant-numeric:tabular-nums">${fmtCurrency(value)}</b></div>`;
+                })
+                .join('');
+            const totalRow = `<div style="margin-top:4px;padding-top:6px;border-top:1px dashed #e2e8f0;display:flex;justify-content:space-between;gap:16px"><span style="color:#475569;font-weight:700">Tổng vận hành (không gồm CAPEX)</span><b style="font-variant-numeric:tabular-nums">${fmtCurrency(opexTotal)}</b></div>`;
+            return `<div style="min-width:min(220px,64vw)"><div style="font-weight:700;margin-bottom:6px">${title}</div>${rows}${totalRow}</div>`;
+        };
         const average = totals.reduce((sum, value) => sum + value, 0) / Math.max(totals.length, 1);
         const many = data.length > 18;
 
@@ -828,7 +856,7 @@ function CostTrendChart({
                 trigger: 'axis',
                 axisPointer: { type: 'shadow', shadowStyle: { color: 'rgba(37, 99, 235, 0.06)' } },
                 ...ECHARTS_TOOLTIP_STYLE,
-                formatter: stackedTooltipFormatter,
+                formatter: trendTooltipFormatter,
             },
             legend: {
                 top: 0,
@@ -925,6 +953,26 @@ function CostTrendChart({
                               }
                             : undefined,
                 },
+                ...(hasCapex
+                    ? [
+                          {
+                              name: 'Mua sắm & đầu tư (CAPEX)',
+                              type: 'bar' as const,
+                              stack: 'capex',
+                              data: capex,
+                              barMaxWidth: 38,
+                              itemStyle: {
+                                  color: barGradient(CHART_SEMANTIC.capex),
+                                  borderRadius: [8, 8, 0, 0],
+                                  shadowBlur: 8,
+                                  shadowColor: 'rgba(139, 92, 246, 0.28)',
+                                  shadowOffsetY: 4,
+                              },
+                              emphasis: { focus: 'series' as const, itemStyle: { shadowBlur: 16 } },
+                              animationDelay: (idx: number) => idx * 70 + 220,
+                          },
+                      ]
+                    : []),
             ],
         };
     }, [data]);
@@ -983,6 +1031,9 @@ function PlantCostChart({
         const material = rows.map((row) => Number(row.materialDistributionCost ?? 0));
         const selfPurchase = rows.map((row) => Number(row.materialSelfPurchaseCost ?? 0));
         const repair = rows.map((row) => Number(row.externalRepairCost ?? 0));
+        // CAPEX vẽ stack riêng — không cộng vào thanh chi phí vận hành.
+        const capex = rows.map((row) => Number(row.materialCapexCost ?? 0));
+        const hasCapex = capex.some((value) => value > 0);
         const dot = (c: string) =>
             `<span style="display:inline-block;width:9px;height:9px;border-radius:50%;background:${c};margin-right:5px"></span>`;
 
@@ -1009,7 +1060,14 @@ function PlantCostChart({
                     }
                     lines.push(
                         `${dot(CHART_SEMANTIC.repair)}Chi phí sửa ngoài: <b>${fmtCurrency(row.externalRepairCost)}</b> (${row.externalRepairCount} phiếu)`,
-                        `Tổng chi phí vận hành: <b>${fmtCurrency(row.totalCost)}</b>`,
+                        `Tổng chi phí vận hành: <b>${fmtCurrency(row.totalCost)}</b>`
+                    );
+                    if (Number(row.materialCapexCost ?? 0) > 0) {
+                        lines.push(
+                            `${dot(CHART_SEMANTIC.capex)}Mua sắm & đầu tư (CAPEX): <b>${fmtCurrency(row.materialCapexCost)}</b> — tách riêng, không tính vào vận hành`
+                        );
+                    }
+                    lines.push(
                         '<span style="color:#64748b">Vật tư tính theo cơ sở nhận cấp phát; riêng cơ sở được tự đặt còn cộng phần tự mua.</span>'
                     );
                     return lines.join('<br/>');
@@ -1089,6 +1147,26 @@ function PlantCostChart({
                         fmtShort(rows[params.dataIndex]?.totalCost ?? 0)
                     ),
                 },
+                ...(hasCapex
+                    ? [
+                          {
+                              name: 'Mua sắm & đầu tư (CAPEX)',
+                              type: 'bar' as const,
+                              stack: 'capex',
+                              data: capex,
+                              barMaxWidth: 26,
+                              itemStyle: {
+                                  color: barGradient(CHART_SEMANTIC.capex, false),
+                                  borderRadius: [0, 8, 8, 0],
+                                  shadowBlur: 6,
+                                  shadowColor: 'rgba(139, 92, 246, 0.22)',
+                                  shadowOffsetY: 3,
+                              },
+                              emphasis: { focus: 'series' as const },
+                              animationDelay: (idx: number) => idx * 90 + 180,
+                          },
+                      ]
+                    : []),
             ],
         };
     }, [rows, isMobile]);
@@ -1200,7 +1278,14 @@ function FacilityDrilldownDrawer({
             render: (value: number) => (Number(value ?? 0) > 0 ? fmtCurrency(value) : '—'),
         },
         { title: 'Sửa ngoài', dataIndex: 'externalRepairCost', width: 140, align: 'right', render: fmtCurrency },
-        { title: 'Tổng', dataIndex: 'totalCost', width: 150, align: 'right', render: fmtCurrency },
+        { title: 'Tổng vận hành', dataIndex: 'totalCost', width: 150, align: 'right', render: fmtCurrency },
+        {
+            title: 'CAPEX (tách riêng)',
+            dataIndex: 'materialCapexCost',
+            width: 150,
+            align: 'right',
+            render: (value: number) => (Number(value ?? 0) > 0 ? fmtCurrency(value) : '—'),
+        },
     ];
     const assetColumns: ColumnsType<TopExternalRepairAsset> = [
         {
@@ -1261,6 +1346,17 @@ function FacilityDrilldownDrawer({
                         <span className='facility-cost-mix-legend__name'>Tổng chi phí kỳ</span>
                         <span className='facility-cost-mix-legend__value'>{fmtCurrency(total)}</span>
                     </div>
+                    {Number(row.materialCapexCost ?? 0) > 0 ? (
+                        <div className='facility-cost-period-detail__row'>
+                            <span className='facility-cost-mix-legend__dot' style={{ background: COST_COLORS.capex }} />
+                            <span className='facility-cost-mix-legend__name'>
+                                Mua sắm & đầu tư (CAPEX) — tách riêng
+                            </span>
+                            <span className='facility-cost-mix-legend__value'>
+                                {fmtCurrency(row.materialCapexCost)}
+                            </span>
+                        </div>
+                    ) : null}
                     <Space wrap>
                         <Button onClick={() => navigate(`/materials/distributions?${search({ toPlantId: plantId })}`)}>
                             Phiếu cấp phát kỳ này
@@ -1315,6 +1411,17 @@ function FacilityDrilldownDrawer({
                         <span className='facility-cost-mix-legend__name'>Tổng chi phí</span>
                         <span className='facility-cost-mix-legend__value'>{fmtCurrency(total)}</span>
                     </div>
+                    {Number(row.materialCapexCost ?? 0) > 0 ? (
+                        <div className='facility-cost-period-detail__row'>
+                            <span className='facility-cost-mix-legend__dot' style={{ background: COST_COLORS.capex }} />
+                            <span className='facility-cost-mix-legend__name'>
+                                Mua sắm & đầu tư (CAPEX) — tách riêng
+                            </span>
+                            <span className='facility-cost-mix-legend__value'>
+                                {fmtCurrency(row.materialCapexCost)}
+                            </span>
+                        </div>
+                    ) : null}
                     <div className='facility-cost-period-detail__row'>
                         <span className='facility-cost-mix-legend__name'>Phiếu cấp phát / sửa ngoài / máy sửa</span>
                         <span className='facility-cost-mix-legend__value'>
@@ -1363,7 +1470,7 @@ function FacilityDrilldownDrawer({
                 columns={plantColumns}
                 dataSource={drilldown.rows}
                 size='small'
-                scroll={{ x: 700 }}
+                scroll={{ x: 850 }}
                 pagination={{ pageSize: 8, showSizeChanger: true }}
             />
         );
