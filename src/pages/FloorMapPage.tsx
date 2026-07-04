@@ -87,6 +87,30 @@ const nowTime = () =>
 
 let feedSeq = 0;
 
+// Đồng hồ + đèn LIVE tách thành component riêng: tick mỗi giây chỉ re-render
+// cụm nhỏ này, không kéo theo hàng trăm khối máy 3D re-render theo.
+const HeaderClock: React.FC = React.memo(() => {
+    const [clock, setClock] = useState(nowTime());
+    const [connected, setConnected] = useState(socketService.isConnected());
+    useEffect(() => {
+        const timer = setInterval(() => {
+            setClock(nowTime());
+            setConnected(socketService.isConnected());
+        }, 1000);
+        return () => clearInterval(timer);
+    }, []);
+    return (
+        <>
+            <span className='fmp-live'>
+                <span className={`fmp-dot${connected ? '' : ' fmp-dot-off'}`} />
+                {connected ? 'LIVE' : 'MẤT KẾT NỐI'}
+            </span>
+            <span className='fmp-clock'>{clock}</span>
+        </>
+    );
+});
+HeaderClock.displayName = 'HeaderClock';
+
 const FloorMapPage: React.FC = () => {
     const { message } = App.useApp();
     const navigate = useNavigate();
@@ -105,7 +129,6 @@ const FloorMapPage: React.FC = () => {
     const [feed, setFeed] = useState<FeedItem[]>([]);
     const [unplacedSearch, setUnplacedSearch] = useState('');
     const [saving, setSaving] = useState(false);
-    const [clock, setClock] = useState(nowTime());
     const [heatMode, setHeatMode] = useState(false);
 
     const plantsQuery = useQuery({ queryKey: ['plants'], queryFn: () => plantService.getAll() });
@@ -204,11 +227,6 @@ const FloorMapPage: React.FC = () => {
     }, [plantId, pushFeed, queryClient]);
 
     useEffect(() => {
-        const timer = setInterval(() => setClock(nowTime()), 1000);
-        return () => clearInterval(timer);
-    }, []);
-
-    useEffect(() => {
         if (mapQuery.data && plantId) {
             pushFeed(`Đang giám sát trực tiếp — ${mapQuery.data.machines.length} máy`);
         }
@@ -233,11 +251,14 @@ const FloorMapPage: React.FC = () => {
         return () => ro.disconnect();
     }, [editMode, mapQuery.data]);
 
+    // Cơ sở nhiều máy: tắt hiệu ứng chạy liên tục (tia quét, nhấp nháy, parallax) để máy yếu không lag
+    const liteMode = machines.filter((m) => m.floorPos).length > 150;
+
     // ── Parallax: sàn nghiêng nhẹ theo chuột (thao tác trực tiếp DOM, không re-render) ──
     const planeRef = useRef<HTMLDivElement>(null);
     useEffect(() => {
         const viewport = viewportRef.current;
-        if (!viewport || editMode) return;
+        if (!viewport || editMode || liteMode) return;
         if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
 
         let targetRX = 56;
@@ -245,36 +266,49 @@ const FloorMapPage: React.FC = () => {
         let currentRX = 56;
         let currentRZ = -45;
         let rafId = 0;
+        let running = false;
 
+        // rAF chỉ chạy khi còn phải đuổi theo mục tiêu, đứng yên là dừng hẳn — không ngốn CPU/GPU nền
+        const tick = () => {
+            currentRX += (targetRX - currentRX) * 0.08;
+            currentRZ += (targetRZ - currentRZ) * 0.08;
+            if (planeRef.current) {
+                planeRef.current.style.transform = `rotateX(${currentRX}deg) rotateZ(${currentRZ}deg)`;
+            }
+            if (Math.abs(targetRX - currentRX) < 0.02 && Math.abs(targetRZ - currentRZ) < 0.02) {
+                running = false;
+                return;
+            }
+            rafId = requestAnimationFrame(tick);
+        };
+        const ensureRunning = () => {
+            if (!running) {
+                running = true;
+                rafId = requestAnimationFrame(tick);
+            }
+        };
         const onMove = (e: MouseEvent) => {
             const rect = viewport.getBoundingClientRect();
             const nx = (e.clientX - rect.left) / rect.width - 0.5;
             const ny = (e.clientY - rect.top) / rect.height - 0.5;
             targetRZ = -45 + nx * 5;
             targetRX = 56 - ny * 4;
+            ensureRunning();
         };
         const onLeave = () => {
             targetRX = 56;
             targetRZ = -45;
-        };
-        const tick = () => {
-            currentRX += (targetRX - currentRX) * 0.06;
-            currentRZ += (targetRZ - currentRZ) * 0.06;
-            if (planeRef.current) {
-                planeRef.current.style.transform = `rotateX(${currentRX}deg) rotateZ(${currentRZ}deg)`;
-            }
-            rafId = requestAnimationFrame(tick);
+            ensureRunning();
         };
 
         viewport.addEventListener('mousemove', onMove);
         viewport.addEventListener('mouseleave', onLeave);
-        rafId = requestAnimationFrame(tick);
         return () => {
             viewport.removeEventListener('mousemove', onMove);
             viewport.removeEventListener('mouseleave', onLeave);
             cancelAnimationFrame(rafId);
         };
-    }, [editMode, mapQuery.data]);
+    }, [editMode, liteMode, mapQuery.data]);
 
     // ── Thống kê máy đang chọn (sparkline chi phí 12 tháng) ────────────────
     const statsQuery = useQuery({
@@ -686,6 +720,13 @@ const FloorMapPage: React.FC = () => {
 
     const hasLayout = zones.length > 0 || placed.length > 0;
 
+    // Chỉ dựng lại rừng khối 3D khi dữ liệu/lựa chọn đổi — không re-render theo đồng hồ/feed
+    const isoMachines = useMemo(
+        () => placed.map(renderIsoMachine),
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+        [placed, heatMode, selectedId]
+    );
+
     return (
         <div className='fmp-page rounded-2xl p-4 md:p-5'>
             <style>{FMP_CSS}</style>
@@ -700,11 +741,7 @@ const FloorMapPage: React.FC = () => {
                     </div>
                 </div>
                 <div className='ml-auto flex flex-wrap items-center gap-3'>
-                    <span className='fmp-live'>
-                        <span className={`fmp-dot${socketService.isConnected() ? '' : ' fmp-dot-off'}`} />
-                        {socketService.isConnected() ? 'LIVE' : 'MẤT KẾT NỐI'}
-                    </span>
-                    <span className='fmp-clock'>{clock}</span>
+                    <HeaderClock />
                     <Select
                         size='middle'
                         style={{ minWidth: 190 }}
@@ -912,7 +949,7 @@ const FloorMapPage: React.FC = () => {
                                     </button>
                                 </div>
                             </div>
-                            <div ref={viewportRef} className='fmp-viewport'>
+                            <div ref={viewportRef} className={`fmp-viewport${liteMode ? ' fmp-lite' : ''}`}>
                                 <div ref={sceneRef} className='fmp-scene'>
                                     <div ref={planeRef} className='fmp-plane'>
                                         <div className='fmp-slab-f' />
@@ -946,7 +983,7 @@ const FloorMapPage: React.FC = () => {
                                                       />
                                                   ))
                                             : null}
-                                        {placed.map(renderIsoMachine)}
+                                        {isoMachines}
                                     </div>
                                 </div>
                             </div>
@@ -1154,7 +1191,7 @@ const FMP_CSS = `
 
 .fmp-kpi {
     flex: 1; min-width: 108px;
-    background: rgba(15,23,46,0.66); border: 1px solid rgba(96,140,255,0.16);
+    background: #101a33; border: 1px solid rgba(96,140,255,0.16);
     border-radius: 13px; padding: 10px 16px;
     position: relative; overflow: hidden;
 }
@@ -1166,8 +1203,9 @@ const FMP_CSS = `
 .fmp-k-ok .fmp-num { color: #2ee6a8; } .fmp-k-bad .fmp-num { color: #ff4d5e; } .fmp-k-warn .fmp-num { color: #ffb84d; }
 .fmp-lbl { font-size: 10px; color: #5c6a94; font-weight: 700; letter-spacing: 1.5px; text-transform: uppercase; }
 
+/* Nền đặc thay vì backdrop-filter blur: blur bắt GPU tính lại mỗi frame khi có animation phía sau — thủ phạm lag */
 .fmp-card {
-    background: rgba(15,23,46,0.66); border: 1px solid rgba(96,140,255,0.16);
+    background: #101a33; border: 1px solid rgba(96,140,255,0.16);
     border-radius: 15px;
     box-shadow: inset 0 1px 0 rgba(140,175,255,0.10), 0 10px 40px rgba(0,0,0,0.35);
 }
@@ -1203,6 +1241,7 @@ const FMP_CSS = `
     border: 1px solid rgba(96,140,255,0.28);
     border-radius: 5px;
     box-shadow: 0 0 90px rgba(79,124,255,0.13) inset;
+    will-change: transform;
 }
 .fmp-slab-f {
     position: absolute; left: 0; top: 100%; width: ${FLOOR_W}px; height: 18px;
@@ -1216,11 +1255,14 @@ const FMP_CSS = `
 }
 .fmp-sweep { position: absolute; inset: 0; pointer-events: none; overflow: hidden; border-radius: 5px; }
 .fmp-sweep::before {
-    content: ""; position: absolute; top: 0; bottom: 0; width: 100px;
+    content: ""; position: absolute; top: 0; bottom: 0; left: 0; width: 100px;
     background: linear-gradient(90deg, transparent, rgba(56,225,255,0.14), transparent);
+    /* animate transform (compositor) thay vì left (layout mỗi frame) */
     animation: fmpSweep 8s linear infinite;
+    will-change: transform;
 }
-@keyframes fmpSweep { from { left: -130px; } to { left: 110%; } }
+@keyframes fmpSweep { from { transform: translateX(-120px); } to { transform: translateX(920px); } }
+.fmp-lite .fmp-sweep::before { animation: none; display: none; }
 
 .fmp-zone {
     position: absolute;
@@ -1267,7 +1309,9 @@ const FMP_CSS = `
 .fmp-bad .fmp-head { --ct: #ff5364; --cf: #c73a49; --cs: #932b37; }
 .fmp-bad .fmp-head .fmp-t { box-shadow: 0 0 20px rgba(255,77,94,0.9); animation: fmpHot 0.9s ease-in-out infinite alternate; }
 .fmp-bad .fmp-base { --ct: #5a3247; }
-@keyframes fmpHot { from { filter: brightness(1); } to { filter: brightness(1.7); } }
+/* nháy bằng opacity (compositor-only) thay vì filter brightness (repaint mỗi frame) */
+@keyframes fmpHot { from { opacity: 1; } to { opacity: 0.45; } }
+.fmp-lite .fmp-bad .fmp-head .fmp-t { animation: none; }
 .fmp-m:hover .fmp-head .fmp-t { filter: brightness(1.5); }
 .fmp-selected .fmp-head .fmp-t { box-shadow: 0 0 0 2.5px #38e1ff, 0 0 22px rgba(56,225,255,0.8); }
 /* Nhiệt sự cố: màu đầu máy theo số lần hỏng đột xuất 6 tháng */
