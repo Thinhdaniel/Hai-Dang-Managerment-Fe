@@ -1004,7 +1004,7 @@ const FMP_CSS = `
 .fmp-ucode { font-family: ui-monospace, Consolas, monospace; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .fmp-uadd { margin-left: auto; color: #38e1ff; }
 
-.fmp-feed { display: flex; flex-direction: column; max-height: 240px; overflow-y: auto; }
+.fmp-feed { display: flex; flex-direction: column; max-height: 240px; overflow-y: auto; overflow-x: hidden; }
 .fmp-fe {
     display: flex; gap: 9px; padding: 6px 2px;
     border-bottom: 1px solid rgba(96,140,255,0.07);
@@ -1013,7 +1013,7 @@ const FMP_CSS = `
 }
 @keyframes fmpSlide { from { opacity: 0; transform: translateX(12px); } to { opacity: 1; transform: none; } }
 .fmp-fe-t { color: #5c6a94; font-size: 10.5px; flex-shrink: 0; font-family: ui-monospace, Consolas, monospace; }
-.fmp-fe-m { color: #93a1ca; min-width: 0; }
+.fmp-fe-m { color: #93a1ca; min-width: 0; overflow-wrap: anywhere; }
 .fmp-alarm { background: rgba(255,77,94,0.07); border-radius: 6px; }
 .fmp-alarm .fmp-fe-m { color: #ff8d98; }
 .fmp-fix .fmp-fe-m { color: #2ee6a8; }
