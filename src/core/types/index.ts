@@ -1119,6 +1119,8 @@ export interface FloorMapMachine {
     machineCode: string;
     type: string;
     status: AssetStatus;
+    /** Trường khu vực nhập tay trên máy — nguồn cho nút tự xếp theo khu. */
+    area?: string;
     /** Số phiếu hỏng đột xuất 6 tháng gần nhất — dùng cho chế độ nhiệt sự cố. */
     incidents6m?: number;
     floorPos: { x: number; y: number } | null;

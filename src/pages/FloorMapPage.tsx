@@ -9,6 +9,7 @@ import {
     PlusOutlined,
     RollbackOutlined,
     SearchOutlined,
+    ThunderboltOutlined,
 } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
@@ -441,6 +442,108 @@ const FloorMapPage: React.FC = () => {
         setZonesDirty(true);
     };
 
+    // Tự xếp: gom máy theo trường "khu vực" nhập sẵn trên máy, tự vẽ khu (to nhỏ theo số máy)
+    // và xếp máy thành lưới gọn bên trong. Thay thế toàn bộ layout hiện tại — người dùng rà lại rồi Lưu.
+    const autoLayout = () => {
+        const MAX_ZONES = 11;
+        const normalize = (raw?: string) => (raw ?? '').trim().replace(/\s+/g, ' ');
+
+        const groups = new Map<string, { label: string; items: FloorMapMachine[] }>();
+        machines.forEach((m) => {
+            const label = normalize(m.area);
+            const key = label.toLowerCase() || '__none__';
+            const group = groups.get(key) ?? { label: label || 'Chưa phân khu', items: [] };
+            group.items.push(m);
+            groups.set(key, group);
+        });
+
+        // Khu đông máy đứng trước; khu lẻ tẻ + máy chưa phân khu gom chung vào cuối
+        const sorted = [...groups.entries()]
+            .filter(([key]) => key !== '__none__')
+            .sort((a, b) => b[1].items.length - a[1].items.length);
+        const main = sorted.slice(0, MAX_ZONES);
+        const restItems = [
+            ...sorted.slice(MAX_ZONES).flatMap(([, g]) => g.items),
+            ...(groups.get('__none__')?.items ?? []),
+        ];
+        const finalGroups = main.map(([, g]) => g);
+        if (restItems.length) {
+            finalGroups.push({
+                label: main.length < sorted.length ? 'Khu khác / chưa phân khu' : 'Chưa phân khu',
+                items: restItems,
+            });
+        }
+        if (!finalGroups.length) return;
+
+        // Chia hàng: cân tổng số máy giữa các hàng để khu to không dồn 1 hàng
+        const numRows = finalGroups.length <= 3 ? 1 : finalGroups.length <= 8 ? 2 : 3;
+        const rowBuckets: { label: string; items: FloorMapMachine[] }[][] = Array.from(
+            { length: numRows },
+            () => []
+        );
+        const rowWeights = new Array(numRows).fill(0);
+        finalGroups.forEach((g) => {
+            const idx = rowWeights.indexOf(Math.min(...rowWeights));
+            rowBuckets[idx].push(g);
+            rowWeights[idx] += Math.max(g.items.length, 3);
+        });
+
+        const M = 2.5; // lề giữa các khu (%)
+        const rowH = (100 - M * (numRows + 1)) / numRows;
+        const newZones: FloorZone[] = [];
+        const newPositions: Record<string, { x: number; y: number }> = {};
+        let zoneSeq = 0;
+
+        rowBuckets.forEach((row, rowIdx) => {
+            if (!row.length) return;
+            const rowTotal = row.reduce((sum, g) => sum + Math.max(g.items.length, 3), 0);
+            const rowY = M + rowIdx * (rowH + M);
+            let cursorX = M;
+            const usableW = 100 - M * (row.length + 1);
+
+            row.forEach((g) => {
+                const w = Math.max((Math.max(g.items.length, 3) / rowTotal) * usableW, 8);
+                const zone: FloorZone = {
+                    id: `tmp-auto-${++zoneSeq}`,
+                    name: g.label,
+                    x: round2(cursorX),
+                    y: round2(rowY),
+                    w: round2(w),
+                    h: round2(rowH),
+                };
+                newZones.push(zone);
+
+                // Lưới máy trong khu: chừa chỗ nhãn tên khu phía trên
+                const padX = Math.min(w * 0.12, 2.5);
+                const padTop = Math.min(rowH * 0.28, 6);
+                const padBottom = Math.min(rowH * 0.12, 3);
+                const innerW = Math.max(w - padX * 2, 2);
+                const innerH = Math.max(rowH - padTop - padBottom, 2);
+                const count = g.items.length;
+                const cols = Math.max(1, Math.round(Math.sqrt((count * innerW) / innerH)) || 1);
+                const rows = Math.max(1, Math.ceil(count / cols));
+                const sortedItems = [...g.items].sort((a, b) => a.machineCode.localeCompare(b.machineCode));
+                sortedItems.forEach((m, i) => {
+                    const c = i % cols;
+                    const r = Math.floor(i / cols);
+                    newPositions[m.id] = {
+                        x: round2(zone.x + padX + (cols === 1 ? innerW / 2 : (c * innerW) / (cols - 1))),
+                        y: round2(zone.y + padTop + (rows === 1 ? innerH / 2 : (r * innerH) / (rows - 1))),
+                    };
+                });
+
+                cursorX += w + M;
+            });
+        });
+
+        setZones(newZones);
+        setMachines((prev) => prev.map((m) => ({ ...m, floorPos: newPositions[m.id] ?? m.floorPos })));
+        setDirtyPos((prev) => ({ ...prev, ...newPositions }));
+        setZonesDirty(true);
+        setSelectedZoneId(null);
+        message.success(`Đã tự xếp ${Object.keys(newPositions).length} máy vào ${newZones.length} khu — rà lại rồi bấm Lưu`);
+    };
+
     const removeZone = (id: string) => {
         setZones((prev) => prev.filter((z) => z.id !== id));
         if (selectedZoneId === id) setSelectedZoneId(null);
@@ -489,7 +592,10 @@ const FloorMapPage: React.FC = () => {
                 x: pos?.x ?? null,
                 y: pos?.y ?? null,
             }));
-            if (items.length) await floorMapService.savePositions(items);
+            // BE nhận tối đa 500 vị trí/lần — tự xếp cả cơ sở có thể vượt, chia lô 400
+            for (let i = 0; i < items.length; i += 400) {
+                await floorMapService.savePositions(items.slice(i, i + 400));
+            }
             message.success('Đã lưu sơ đồ xưởng');
             await queryClient.invalidateQueries({ queryKey: ['floor-map', plantId] });
         } catch {
@@ -695,6 +801,17 @@ const FloorMapPage: React.FC = () => {
                                 <span className='fmp-head-label'>Thiết lập mặt bằng</span>
                                 <span className='fmp-sub'>kéo máy/khu tới vị trí · kéo góc để đổi cỡ khu</span>
                                 <div className='ml-auto flex items-center gap-2'>
+                                    <Popconfirm
+                                        title='Tự xếp theo trường "Khu vực" của máy?'
+                                        description='Thay thế toàn bộ khu và vị trí hiện tại. Chưa ghi gì cho tới khi bấm Lưu.'
+                                        okText='Tự xếp'
+                                        cancelText='Thôi'
+                                        onConfirm={autoLayout}
+                                    >
+                                        <Button size='small' type='primary' ghost icon={<ThunderboltOutlined />}>
+                                            Tự xếp theo khu vực
+                                        </Button>
+                                    </Popconfirm>
                                     <Button size='small' icon={<PlusOutlined />} onClick={addZone}>
                                         Thêm khu
                                     </Button>
