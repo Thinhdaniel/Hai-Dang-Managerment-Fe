@@ -30,6 +30,23 @@ const FLOOR_H = 560;
 const SCENE_W = 1000;
 const SCENE_H = 640;
 
+// ── Phép chiếu isometric (tương đương rotateX(56°) + rotateZ(-45°) của CSS cũ) ──
+// Toàn bộ sàn vẽ bằng 1 <canvas> thay vì ~3600 phần tử DOM 3D — vẽ lại chỉ khi
+// dữ liệu đổi, GPU không phải composite hàng nghìn layer mỗi frame → hết lag.
+const C45 = Math.SQRT1_2;
+const COS56 = Math.cos((56 * Math.PI) / 180);
+const SIN56 = Math.sin((56 * Math.PI) / 180);
+const OX = SCENE_W / 2;
+const OY = SCENE_H / 2 + 20;
+const proj = (x: number, y: number, z = 0) => {
+    const rx = x - FLOOR_W / 2;
+    const ry = y - FLOOR_H / 2;
+    return {
+        sx: OX + C45 * (rx + ry),
+        sy: OY + C45 * (ry - rx) * COS56 - z * SIN56,
+    };
+};
+
 type StatusVisual = 'ok' | 'bad' | 'warn' | 'loan' | 'idle';
 
 const STATUS_VISUAL: Record<string, StatusVisual> = {
@@ -55,6 +72,66 @@ const statusLabel = (status: AssetStatus) => ASSET_STATUS_COLOR[status]?.label ?
 // Nhiệt sự cố: mức 0 / 1-2 / 3+ lần hỏng đột xuất trong 6 tháng
 const heatLevel = (incidents?: number): 0 | 1 | 2 => (!incidents ? 0 : incidents >= 3 ? 2 : 1);
 const HEAT_COLOR: Record<0 | 1 | 2, string> = { 0: '#33436a', 1: '#b98a3a', 2: '#ff6b4a' };
+
+// Màu 3 mặt khối [nóc, mặt trước, mặt bên] cho canvas
+type Faces = [string, string, string];
+const BASE_FACES: Faces = ['#33436a', '#232f4e', '#182238'];
+const STATUS_FACES: Record<StatusVisual, Faces> = {
+    ok: ['#2ee6a8', '#1da377', '#147354'],
+    bad: ['#ff5364', '#c73a49', '#932b37'],
+    warn: ['#ffb84d', '#c1852f', '#8d6122'],
+    loan: ['#818cf8', '#5d66c9', '#434a94'],
+    idle: ['#4a5878', '#364159', '#262f42'],
+};
+const HEAT_FACES: Record<0 | 1 | 2, Faces> = {
+    0: ['#33436a', '#232f4e', '#182238'],
+    1: ['#b98a3a', '#8d692c', '#664c20'],
+    2: ['#ff6b4a', '#c74f36', '#933a28'],
+};
+
+// Vẽ 1 khối hộp isometric: mặt trước (+Y) → mặt bên (+X) → nóc
+const drawBox = (
+    ctx: CanvasRenderingContext2D,
+    x: number,
+    y: number,
+    w: number,
+    d: number,
+    z0: number,
+    h: number,
+    faces: Faces
+) => {
+    const t1 = proj(x, y, z0 + h);
+    const t2 = proj(x + w, y, z0 + h);
+    const t3 = proj(x + w, y + d, z0 + h);
+    const t4 = proj(x, y + d, z0 + h);
+    const b2 = proj(x + w, y, z0);
+    const b3 = proj(x + w, y + d, z0);
+    const b4 = proj(x, y + d, z0);
+    ctx.beginPath();
+    ctx.moveTo(t4.sx, t4.sy);
+    ctx.lineTo(t3.sx, t3.sy);
+    ctx.lineTo(b3.sx, b3.sy);
+    ctx.lineTo(b4.sx, b4.sy);
+    ctx.closePath();
+    ctx.fillStyle = faces[1];
+    ctx.fill();
+    ctx.beginPath();
+    ctx.moveTo(t2.sx, t2.sy);
+    ctx.lineTo(t3.sx, t3.sy);
+    ctx.lineTo(b3.sx, b3.sy);
+    ctx.lineTo(b2.sx, b2.sy);
+    ctx.closePath();
+    ctx.fillStyle = faces[2];
+    ctx.fill();
+    ctx.beginPath();
+    ctx.moveTo(t1.sx, t1.sy);
+    ctx.lineTo(t2.sx, t2.sy);
+    ctx.lineTo(t3.sx, t3.sy);
+    ctx.lineTo(t4.sx, t4.sy);
+    ctx.closePath();
+    ctx.fillStyle = faces[0];
+    ctx.fill();
+};
 
 const formatMoney = (v: number) => `${Math.round(v).toLocaleString('vi-VN')} ₫`;
 
@@ -233,82 +310,19 @@ const FloorMapPage: React.FC = () => {
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [mapQuery.data, plantId]);
 
-    // ── Scale sơ đồ isometric theo bề rộng khung ───────────────────────────
-    const viewportRef = useRef<HTMLDivElement>(null);
-    const sceneRef = useRef<HTMLDivElement>(null);
-    useEffect(() => {
-        const viewport = viewportRef.current;
-        const scene = sceneRef.current;
-        if (!viewport || !scene || editMode) return;
-        const fit = () => {
-            const s = Math.min(viewport.clientWidth / SCENE_W, 1);
-            scene.style.transform = `scale(${s})`;
-            viewport.style.height = `${SCENE_H * s}px`;
-        };
-        const ro = new ResizeObserver(fit);
-        ro.observe(viewport);
-        fit();
-        return () => ro.disconnect();
-    }, [editMode, mapQuery.data]);
-
-    // Cơ sở nhiều máy: tắt hiệu ứng chạy liên tục (tia quét, nhấp nháy, parallax) để máy yếu không lag
+    // Cơ sở nhiều máy: bỏ tia quét cho nhẹ (vòng sóng máy hỏng vẫn giữ — vẽ trên canvas, rẻ)
     const liteMode = machines.filter((m) => m.floorPos).length > 150;
 
-    // ── Parallax: sàn nghiêng nhẹ theo chuột (thao tác trực tiếp DOM, không re-render) ──
-    const planeRef = useRef<HTMLDivElement>(null);
-    useEffect(() => {
-        const viewport = viewportRef.current;
-        if (!viewport || editMode || liteMode) return;
-        if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
-
-        let targetRX = 56;
-        let targetRZ = -45;
-        let currentRX = 56;
-        let currentRZ = -45;
-        let rafId = 0;
-        let running = false;
-
-        // rAF chỉ chạy khi còn phải đuổi theo mục tiêu, đứng yên là dừng hẳn — không ngốn CPU/GPU nền
-        const tick = () => {
-            currentRX += (targetRX - currentRX) * 0.08;
-            currentRZ += (targetRZ - currentRZ) * 0.08;
-            if (planeRef.current) {
-                planeRef.current.style.transform = `rotateX(${currentRX}deg) rotateZ(${currentRZ}deg)`;
-            }
-            if (Math.abs(targetRX - currentRX) < 0.02 && Math.abs(targetRZ - currentRZ) < 0.02) {
-                running = false;
-                return;
-            }
-            rafId = requestAnimationFrame(tick);
-        };
-        const ensureRunning = () => {
-            if (!running) {
-                running = true;
-                rafId = requestAnimationFrame(tick);
-            }
-        };
-        const onMove = (e: MouseEvent) => {
-            const rect = viewport.getBoundingClientRect();
-            const nx = (e.clientX - rect.left) / rect.width - 0.5;
-            const ny = (e.clientY - rect.top) / rect.height - 0.5;
-            targetRZ = -45 + nx * 5;
-            targetRX = 56 - ny * 4;
-            ensureRunning();
-        };
-        const onLeave = () => {
-            targetRX = 56;
-            targetRZ = -45;
-            ensureRunning();
-        };
-
-        viewport.addEventListener('mousemove', onMove);
-        viewport.addEventListener('mouseleave', onLeave);
-        return () => {
-            viewport.removeEventListener('mousemove', onMove);
-            viewport.removeEventListener('mouseleave', onLeave);
-            cancelAnimationFrame(rafId);
-        };
-    }, [editMode, liteMode, mapQuery.data]);
+    // ── Canvas isometric: refs ─────────────────────────────────────────────
+    const viewportRef = useRef<HTMLDivElement>(null);
+    const sceneCvRef = useRef<HTMLCanvasElement>(null);
+    const fxCvRef = useRef<HTMLCanvasElement>(null);
+    const tipRef = useRef<HTMLDivElement>(null);
+    // Tâm từng máy trên toạ độ design (1000×640) — dùng dò máy dưới con trỏ
+    const hitsRef = useRef<{ id: string; sx: number; sy: number }[]>([]);
+    const brokenRef = useRef<{ sx: number; sy: number }[]>([]);
+    const scaleRef = useRef(1);
+    const hoverIdRef = useRef<string | null>(null);
 
     // ── Thống kê máy đang chọn (sparkline chi phí 12 tháng) ────────────────
     const statsQuery = useQuery({
@@ -677,55 +691,287 @@ const FloorMapPage: React.FC = () => {
     const selectedZone = useMemo(() => zones.find((z) => z.id === selectedZoneId) ?? null, [zones, selectedZoneId]);
     const plantName = plantsQuery.data?.find((p) => p.id === plantId)?.name ?? '';
 
-    const renderIsoMachine = (m: FloorMapMachine) => {
-        if (!m.floorPos) return null;
-        const visual = visualOf(m.status);
-        const level = heatLevel(m.incidents6m);
-        const px = (m.floorPos.x / 100) * FLOOR_W;
-        const py = (m.floorPos.y / 100) * FLOOR_H;
-        const cls = heatMode ? `fmp-hm${level}` : `fmp-${visual}`;
-        const title = heatMode
-            ? `${m.machineCode} · ${m.incidents6m ?? 0} lần hỏng 6 tháng`
-            : `${m.machineCode} · ${statusLabel(m.status)}`;
-        return (
-            <React.Fragment key={m.id}>
-                {!heatMode && visual === 'bad' ? (
-                    <div className='fmp-ring' style={{ left: px - 23, top: py - 26 }} />
-                ) : null}
-                <button
-                    type='button'
-                    className={`fmp-m ${cls}${selectedId === m.id ? ' fmp-selected' : ''}`}
-                    style={{ left: px, top: py }}
-                    aria-label={m.machineCode}
-                    title={title}
-                    onClick={() => {
-                        setSelectedId((prev) => (prev === m.id ? null : m.id));
-                    }}
-                >
-                    <span className='fmp-shadow' />
-                    <span className='fmp-cub fmp-base'>
-                        <i className='fmp-t' />
-                        <i className='fmp-f' />
-                        <i className='fmp-s' />
-                    </span>
-                    <span className='fmp-cub fmp-head'>
-                        <i className='fmp-t' />
-                        <i className='fmp-f' />
-                        <i className='fmp-s' />
-                    </span>
-                </button>
-            </React.Fragment>
-        );
-    };
-
     const hasLayout = zones.length > 0 || placed.length > 0;
 
-    // Chỉ dựng lại rừng khối 3D khi dữ liệu/lựa chọn đổi — không re-render theo đồng hồ/feed
-    const isoMachines = useMemo(
-        () => placed.map(renderIsoMachine),
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-        [placed, heatMode, selectedId]
-    );
+    // ── Vẽ toàn cảnh lên canvas (chạy 1 lần mỗi khi dữ liệu/chọn lựa đổi) ──
+    const drawScene = () => {
+        const cv = sceneCvRef.current;
+        const ctx = cv?.getContext('2d');
+        if (!cv || !ctx) return;
+        const dpr = window.devicePixelRatio || 1;
+        const k = scaleRef.current;
+        ctx.setTransform(dpr * k, 0, 0, dpr * k, 0, 0);
+        ctx.clearRect(0, 0, SCENE_W, SCENE_H);
+
+        const quad = (
+            a: { sx: number; sy: number },
+            b: { sx: number; sy: number },
+            c: { sx: number; sy: number },
+            d: { sx: number; sy: number }
+        ) => {
+            ctx.beginPath();
+            ctx.moveTo(a.sx, a.sy);
+            ctx.lineTo(b.sx, b.sy);
+            ctx.lineTo(c.sx, c.sy);
+            ctx.lineTo(d.sx, d.sy);
+            ctx.closePath();
+        };
+
+        // Tấm sàn nổi có độ dày
+        const SLAB = 16;
+        const c00 = proj(0, 0);
+        const cW0 = proj(FLOOR_W, 0);
+        const cWH = proj(FLOOR_W, FLOOR_H);
+        const c0H = proj(0, FLOOR_H);
+        quad(c0H, cWH, proj(FLOOR_W, FLOOR_H, -SLAB), proj(0, FLOOR_H, -SLAB));
+        ctx.fillStyle = '#0e1730';
+        ctx.fill();
+        quad(cW0, cWH, proj(FLOOR_W, FLOOR_H, -SLAB), proj(FLOOR_W, 0, -SLAB));
+        ctx.fillStyle = '#0a1122';
+        ctx.fill();
+        const floorGrad = ctx.createLinearGradient(cW0.sx, cW0.sy, c0H.sx, c0H.sy);
+        floorGrad.addColorStop(0, '#152242');
+        floorGrad.addColorStop(1, '#0a1226');
+        quad(c00, cW0, cWH, c0H);
+        ctx.fillStyle = floorGrad;
+        ctx.fill();
+        ctx.strokeStyle = 'rgba(96,140,255,0.3)';
+        ctx.lineWidth = 1;
+        ctx.stroke();
+        // Lưới sàn
+        ctx.strokeStyle = 'rgba(88,130,255,0.08)';
+        ctx.beginPath();
+        for (let gx = 40; gx < FLOOR_W; gx += 40) {
+            const a = proj(gx, 0);
+            const b = proj(gx, FLOOR_H);
+            ctx.moveTo(a.sx, a.sy);
+            ctx.lineTo(b.sx, b.sy);
+        }
+        for (let gy = 40; gy < FLOOR_H; gy += 40) {
+            const a = proj(0, gy);
+            const b = proj(FLOOR_W, gy);
+            ctx.moveTo(a.sx, a.sy);
+            ctx.lineTo(b.sx, b.sy);
+        }
+        ctx.stroke();
+
+        // Khu vực
+        const labels: { sx: number; sy: number; text: string }[] = [];
+        zones.forEach((z) => {
+            const zx = (z.x / 100) * FLOOR_W;
+            const zy = (z.y / 100) * FLOOR_H;
+            const zw = (z.w / 100) * FLOOR_W;
+            const zh = (z.h / 100) * FLOOR_H;
+            quad(proj(zx, zy), proj(zx + zw, zy), proj(zx + zw, zy + zh), proj(zx, zy + zh));
+            ctx.fillStyle = 'rgba(56,225,255,0.035)';
+            ctx.fill();
+            ctx.setLineDash([5, 4]);
+            ctx.strokeStyle = 'rgba(56,225,255,0.35)';
+            ctx.stroke();
+            ctx.setLineDash([]);
+            labels.push({ ...proj(zx, zy), text: z.name });
+        });
+
+        // Quầng nhiệt điểm nóng (chế độ nhiệt sự cố)
+        if (heatMode) {
+            placed
+                .filter((m) => heatLevel(m.incidents6m) === 2)
+                .forEach((m) => {
+                    const p = proj((m.floorPos!.x / 100) * FLOOR_W + 13, (m.floorPos!.y / 100) * FLOOR_H + 10, 0);
+                    const g = ctx.createRadialGradient(p.sx, p.sy, 4, p.sx, p.sy, 52);
+                    g.addColorStop(0, 'rgba(255,90,60,0.38)');
+                    g.addColorStop(1, 'rgba(255,90,60,0)');
+                    ctx.fillStyle = g;
+                    ctx.beginPath();
+                    ctx.ellipse(p.sx, p.sy, 52, 52 * COS56, 0, 0, Math.PI * 2);
+                    ctx.fill();
+                });
+        }
+
+        // Máy: sắp sau→trước rồi vẽ khối bàn + đầu máy
+        const hits: { id: string; sx: number; sy: number }[] = [];
+        const broken: { sx: number; sy: number }[] = [];
+        [...placed]
+            .sort((a, b) => a.floorPos!.x + a.floorPos!.y - (b.floorPos!.x + b.floorPos!.y))
+            .forEach((m) => {
+                const x = (m.floorPos!.x / 100) * FLOOR_W;
+                const y = (m.floorPos!.y / 100) * FLOOR_H;
+                const visual = visualOf(m.status);
+                const faces = heatMode ? HEAT_FACES[heatLevel(m.incidents6m)] : STATUS_FACES[visual];
+                const sc = proj(x + 13, y + 12, 0);
+                ctx.fillStyle = 'rgba(0,0,0,0.35)';
+                ctx.beginPath();
+                ctx.ellipse(sc.sx + 2, sc.sy + 3, 17, 8, 0, 0, Math.PI * 2);
+                ctx.fill();
+                drawBox(ctx, x, y, 26, 20, 0, 8, BASE_FACES);
+                drawBox(ctx, x + 3, y + 3, 13, 13, 8, 10, faces);
+                const center = proj(x + 13, y + 10, 12);
+                hits.push({ id: m.id, sx: center.sx, sy: center.sy });
+                if (!heatMode && visual === 'bad') broken.push({ sx: sc.sx, sy: sc.sy });
+                if (m.id === selectedId) {
+                    const h1 = proj(x + 3, y + 3, 18);
+                    const h2 = proj(x + 16, y + 3, 18);
+                    const h3 = proj(x + 16, y + 16, 18);
+                    const h4 = proj(x + 3, y + 16, 18);
+                    quad(h1, h2, h3, h4);
+                    ctx.strokeStyle = '#38e1ff';
+                    ctx.lineWidth = 2.5;
+                    ctx.stroke();
+                }
+            });
+        hitsRef.current = hits;
+        brokenRef.current = broken;
+
+        // Nhãn khu vẽ sau cùng cho nổi lên trên máy
+        ctx.font = '700 10.5px "Segoe UI", sans-serif';
+        labels.forEach((l) => {
+            const text = (l.text.length > 24 ? `${l.text.slice(0, 23)}…` : l.text).toUpperCase();
+            const w = ctx.measureText(text).width;
+            ctx.fillStyle = 'rgba(13,32,56,0.92)';
+            ctx.fillRect(l.sx - 3, l.sy - 19, w + 14, 16);
+            ctx.strokeStyle = 'rgba(56,225,255,0.3)';
+            ctx.lineWidth = 1;
+            ctx.strokeRect(l.sx - 3, l.sy - 19, w + 14, 16);
+            ctx.fillStyle = '#9fefff';
+            ctx.fillText(text, l.sx + 4, l.sy - 7);
+        });
+    };
+    const drawRef = useRef(drawScene);
+    drawRef.current = drawScene;
+
+    // Vẽ lại khi dữ liệu/lựa chọn đổi
+    useEffect(() => {
+        if (!editMode) drawRef.current();
+    }, [machines, zones, heatMode, selectedId, editMode]);
+
+    // Kích thước canvas theo khung + vẽ lại khi resize
+    useEffect(() => {
+        const viewport = viewportRef.current;
+        if (!viewport || editMode) return;
+        const fit = () => {
+            const k = Math.min(viewport.clientWidth / SCENE_W, 1);
+            scaleRef.current = k;
+            const dpr = window.devicePixelRatio || 1;
+            [sceneCvRef.current, fxCvRef.current].forEach((canvas) => {
+                if (!canvas) return;
+                canvas.style.width = `${SCENE_W * k}px`;
+                canvas.style.height = `${SCENE_H * k}px`;
+                canvas.width = Math.round(SCENE_W * k * dpr);
+                canvas.height = Math.round(SCENE_H * k * dpr);
+            });
+            viewport.style.height = `${SCENE_H * k}px`;
+            drawRef.current();
+        };
+        const ro = new ResizeObserver(fit);
+        ro.observe(viewport);
+        fit();
+        return () => ro.disconnect();
+    }, [editMode, mapQuery.data]);
+
+    // Lớp hiệu ứng: vòng sóng máy hỏng + tia quét — chỉ vài nét vẽ trên 1 canvas overlay, rẻ
+    useEffect(() => {
+        const cv = fxCvRef.current;
+        const ctx = cv?.getContext('2d');
+        if (!cv || !ctx || editMode) return;
+        if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+        let rafId = 0;
+        const draw = (t: number) => {
+            const dpr = window.devicePixelRatio || 1;
+            const k = scaleRef.current;
+            ctx.setTransform(dpr * k, 0, 0, dpr * k, 0, 0);
+            ctx.clearRect(0, 0, SCENE_W, SCENE_H);
+            brokenRef.current.forEach(({ sx, sy }, i) => {
+                const phase = (t / 1700 + i * 0.35) % 1;
+                const r = 6 + phase * 30;
+                ctx.beginPath();
+                ctx.ellipse(sx, sy, r, r * COS56, 0, 0, Math.PI * 2);
+                ctx.strokeStyle = `rgba(255,77,94,${(1 - phase) * 0.9})`;
+                ctx.lineWidth = 2;
+                ctx.stroke();
+            });
+            if (!liteMode) {
+                const bx = ((t / 9000) % 1) * (FLOOR_W + 240) - 120;
+                const a1 = proj(bx - 30, 0);
+                const a2 = proj(bx + 30, 0);
+                const grad = ctx.createLinearGradient(a1.sx, 0, a2.sx, 0);
+                grad.addColorStop(0, 'rgba(56,225,255,0)');
+                grad.addColorStop(0.5, 'rgba(56,225,255,0.10)');
+                grad.addColorStop(1, 'rgba(56,225,255,0)');
+                ctx.beginPath();
+                const p1 = proj(bx - 30, 0);
+                const p2 = proj(bx + 30, 0);
+                const p3 = proj(bx + 30, FLOOR_H);
+                const p4 = proj(bx - 30, FLOOR_H);
+                ctx.moveTo(p1.sx, p1.sy);
+                ctx.lineTo(p2.sx, p2.sy);
+                ctx.lineTo(p3.sx, p3.sy);
+                ctx.lineTo(p4.sx, p4.sy);
+                ctx.closePath();
+                ctx.fillStyle = grad;
+                ctx.fill();
+            }
+            rafId = requestAnimationFrame(draw);
+        };
+        rafId = requestAnimationFrame(draw);
+        return () => cancelAnimationFrame(rafId);
+    }, [editMode, liteMode, mapQuery.data]);
+
+    // ── Dò máy dưới con trỏ trên canvas ────────────────────────────────────
+    const findHit = (e: React.MouseEvent) => {
+        const cv = fxCvRef.current;
+        if (!cv) return null;
+        const rect = cv.getBoundingClientRect();
+        const k = scaleRef.current;
+        const mx = (e.clientX - rect.left) / k;
+        const my = (e.clientY - rect.top) / k;
+        let best: { id: string; sx: number; sy: number } | null = null;
+        let bestD = 16 * 16;
+        for (const h of hitsRef.current) {
+            const d = (h.sx - mx) ** 2 + (h.sy - my) ** 2;
+            if (d < bestD) {
+                bestD = d;
+                best = h;
+            }
+        }
+        return best;
+    };
+
+    const onCanvasMove = (e: React.MouseEvent) => {
+        const hit = findHit(e);
+        const cv = fxCvRef.current;
+        const tip = tipRef.current;
+        if (cv) cv.style.cursor = hit ? 'pointer' : 'default';
+        if (!tip) return;
+        if (!hit) {
+            if (hoverIdRef.current) {
+                hoverIdRef.current = null;
+                tip.style.display = 'none';
+            }
+            return;
+        }
+        if (hoverIdRef.current === hit.id) return;
+        hoverIdRef.current = hit.id;
+        const m = machines.find((x) => x.id === hit.id);
+        if (!m) return;
+        tip.textContent = heatMode
+            ? `${m.machineCode} · ${m.incidents6m ?? 0} lần hỏng 6 tháng`
+            : `${m.machineCode} · ${statusLabel(m.status)}`;
+        const k = scaleRef.current;
+        tip.style.left = `${hit.sx * k}px`;
+        tip.style.top = `${(hit.sy - 18) * k}px`;
+        tip.style.display = 'block';
+    };
+
+    const onCanvasLeave = () => {
+        hoverIdRef.current = null;
+        if (tipRef.current) tipRef.current.style.display = 'none';
+        if (fxCvRef.current) fxCvRef.current.style.cursor = 'default';
+    };
+
+    const onCanvasClick = (e: React.MouseEvent) => {
+        const hit = findHit(e);
+        if (hit) setSelectedId((prev) => (prev === hit.id ? null : hit.id));
+    };
 
     return (
         <div className='fmp-page rounded-2xl p-4 md:p-5'>
@@ -949,43 +1195,16 @@ const FloorMapPage: React.FC = () => {
                                     </button>
                                 </div>
                             </div>
-                            <div ref={viewportRef} className={`fmp-viewport${liteMode ? ' fmp-lite' : ''}`}>
-                                <div ref={sceneRef} className='fmp-scene'>
-                                    <div ref={planeRef} className='fmp-plane'>
-                                        <div className='fmp-slab-f' />
-                                        <div className='fmp-slab-s' />
-                                        <div className='fmp-sweep' />
-                                        {zones.map((z) => (
-                                            <div
-                                                key={z.id}
-                                                className='fmp-zone'
-                                                style={{
-                                                    left: (z.x / 100) * FLOOR_W,
-                                                    top: (z.y / 100) * FLOOR_H,
-                                                    width: (z.w / 100) * FLOOR_W,
-                                                    height: (z.h / 100) * FLOOR_H,
-                                                }}
-                                            >
-                                                <span className='fmp-zname'>{z.name}</span>
-                                            </div>
-                                        ))}
-                                        {heatMode
-                                            ? placed
-                                                  .filter((m) => heatLevel(m.incidents6m) === 2)
-                                                  .map((m) => (
-                                                      <div
-                                                          key={`blob-${m.id}`}
-                                                          className='fmp-blob'
-                                                          style={{
-                                                              left: (m.floorPos!.x / 100) * FLOOR_W - 42,
-                                                              top: (m.floorPos!.y / 100) * FLOOR_H - 45,
-                                                          }}
-                                                      />
-                                                  ))
-                                            : null}
-                                        {isoMachines}
-                                    </div>
-                                </div>
+                            <div ref={viewportRef} className='fmp-viewport'>
+                                <canvas ref={sceneCvRef} className='fmp-cv' />
+                                <canvas
+                                    ref={fxCvRef}
+                                    className='fmp-cv fmp-cv-top'
+                                    onMouseMove={onCanvasMove}
+                                    onMouseLeave={onCanvasLeave}
+                                    onClick={onCanvasClick}
+                                />
+                                <div ref={tipRef} className='fmp-cvtip' style={{ display: 'none' }} />
                             </div>
                         </>
                     )}
@@ -1223,53 +1442,19 @@ const FMP_CSS = `
 .fmp-h3::after { content: ""; flex: 1; height: 1px; background: rgba(96,140,255,0.16); }
 .fmp-code { font-family: ui-monospace, Consolas, monospace; font-size: 15px; font-weight: 800; color: #38e1ff; }
 
-/* ── Isometric ── */
+/* ── Isometric: 2 canvas chồng nhau (sàn tĩnh + lớp hiệu ứng) ── */
 .fmp-viewport { width: 100%; overflow: hidden; position: relative; }
-.fmp-scene { width: ${SCENE_W}px; height: ${SCENE_H}px; position: relative; transform-origin: 0 0; }
-.fmp-plane {
-    position: absolute; left: ${SCENE_W / 2}px; top: ${SCENE_H / 2 + 18}px;
-    width: ${FLOOR_W}px; height: ${FLOOR_H}px;
-    margin-left: -${FLOOR_W / 2}px; margin-top: -${FLOOR_H / 2}px;
-    transform: rotateX(56deg) rotateZ(-45deg);
-    transform-style: preserve-3d;
-    background:
-        linear-gradient(rgba(88,130,255,0.10) 1px, transparent 1px),
-        linear-gradient(90deg, rgba(88,130,255,0.10) 1px, transparent 1px),
-        radial-gradient(60% 60% at 50% 45%, rgba(38,58,110,0.55), transparent),
-        linear-gradient(160deg, #131e3c, #0a1226);
-    background-size: 40px 40px, 40px 40px, auto, auto;
-    border: 1px solid rgba(96,140,255,0.28);
-    border-radius: 5px;
-    box-shadow: 0 0 90px rgba(79,124,255,0.13) inset;
-    will-change: transform;
+.fmp-cv { position: absolute; left: 0; top: 0; display: block; }
+.fmp-cv-top { z-index: 2; }
+.fmp-cvtip {
+    position: absolute; z-index: 5; pointer-events: none;
+    transform: translate(-50%, -100%);
+    background: rgba(7,12,26,0.96); color: #38e1ff;
+    border: 1px solid rgba(56,225,255,0.4);
+    font: 700 12px ui-monospace, Consolas, monospace;
+    padding: 4px 9px; border-radius: 6px; white-space: nowrap;
 }
-.fmp-slab-f {
-    position: absolute; left: 0; top: 100%; width: ${FLOOR_W}px; height: 18px;
-    transform-origin: center top; transform: rotateX(-90deg);
-    background: linear-gradient(#182448, #0a1122);
-}
-.fmp-slab-s {
-    position: absolute; left: 100%; top: 0; width: 18px; height: ${FLOOR_H}px;
-    transform-origin: left center; transform: rotateY(90deg);
-    background: linear-gradient(90deg, #101a36, #080e1e);
-}
-.fmp-sweep { position: absolute; inset: 0; pointer-events: none; overflow: hidden; border-radius: 5px; }
-.fmp-sweep::before {
-    content: ""; position: absolute; top: 0; bottom: 0; left: 0; width: 100px;
-    background: linear-gradient(90deg, transparent, rgba(56,225,255,0.14), transparent);
-    /* animate transform (compositor) thay vì left (layout mỗi frame) */
-    animation: fmpSweep 8s linear infinite;
-    will-change: transform;
-}
-@keyframes fmpSweep { from { transform: translateX(-120px); } to { transform: translateX(920px); } }
-.fmp-lite .fmp-sweep::before { animation: none; display: none; }
 
-.fmp-zone {
-    position: absolute;
-    border: 1px dashed rgba(56,225,255,0.28);
-    background: rgba(56,225,255,0.03);
-    border-radius: 4px;
-}
 .fmp-zname {
     position: absolute; top: -1px; left: -1px;
     font-size: 10.5px; font-weight: 700; letter-spacing: 1.2px; text-transform: uppercase;
@@ -1282,49 +1467,6 @@ const FMP_CSS = `
     max-width: 100%; overflow: hidden; text-overflow: ellipsis;
 }
 
-.fmp-m {
-    position: absolute; width: 26px; height: 20px;
-    transform-style: preserve-3d;
-    background: none; border: none; padding: 0; cursor: pointer;
-}
-.fmp-shadow {
-    position: absolute; left: -4px; top: -3px; width: 36px; height: 30px;
-    background: radial-gradient(ellipse, rgba(0,0,0,0.5), transparent 68%);
-    border-radius: 50%;
-}
-.fmp-cub { position: absolute; left: 0; top: 0; width: var(--w); height: var(--dp); transform-style: preserve-3d; }
-.fmp-cub i { position: absolute; display: block; }
-.fmp-cub .fmp-t { inset: 0; transform: translateZ(var(--h)); background: var(--ct); border-radius: 2px; }
-.fmp-cub .fmp-f { left: 0; top: 100%; width: var(--w); height: var(--h); transform-origin: center top; transform: rotateX(-90deg); background: var(--cf); }
-.fmp-cub .fmp-s { left: 100%; top: 0; width: var(--h); height: var(--dp); transform-origin: left center; transform: rotateY(90deg); background: var(--cs); }
-.fmp-base { --w: 26px; --dp: 20px; --h: 8px; --ct: #33436a; --cf: #232f4e; --cs: #182238; }
-.fmp-head { --w: 13px; --dp: 13px; --h: 10px; left: 3px; top: 3px; transform: translateZ(8px); }
-.fmp-ok .fmp-head { --ct: #2ee6a8; --cf: #1da377; --cs: #147354; }
-.fmp-ok .fmp-head .fmp-t { box-shadow: 0 0 12px rgba(46,230,168,0.55); }
-.fmp-idle .fmp-head { --ct: #4a5878; --cf: #364159; --cs: #262f42; }
-.fmp-loan .fmp-head { --ct: #818cf8; --cf: #5d66c9; --cs: #434a94; }
-.fmp-loan .fmp-head .fmp-t { box-shadow: 0 0 10px rgba(129,140,248,0.5); }
-.fmp-warn .fmp-head { --ct: #ffb84d; --cf: #c1852f; --cs: #8d6122; }
-.fmp-warn .fmp-head .fmp-t { box-shadow: 0 0 12px rgba(255,184,77,0.55); }
-.fmp-bad .fmp-head { --ct: #ff5364; --cf: #c73a49; --cs: #932b37; }
-.fmp-bad .fmp-head .fmp-t { box-shadow: 0 0 20px rgba(255,77,94,0.9); animation: fmpHot 0.9s ease-in-out infinite alternate; }
-.fmp-bad .fmp-base { --ct: #5a3247; }
-/* nháy bằng opacity (compositor-only) thay vì filter brightness (repaint mỗi frame) */
-@keyframes fmpHot { from { opacity: 1; } to { opacity: 0.45; } }
-.fmp-lite .fmp-bad .fmp-head .fmp-t { animation: none; }
-.fmp-m:hover .fmp-head .fmp-t { filter: brightness(1.5); }
-.fmp-selected .fmp-head .fmp-t { box-shadow: 0 0 0 2.5px #38e1ff, 0 0 22px rgba(56,225,255,0.8); }
-/* Nhiệt sự cố: màu đầu máy theo số lần hỏng đột xuất 6 tháng */
-.fmp-hm0 .fmp-head { --ct: #33436a; --cf: #232f4e; --cs: #182238; }
-.fmp-hm1 .fmp-head { --ct: #b98a3a; --cf: #8d692c; --cs: #664c20; }
-.fmp-hm1 .fmp-head .fmp-t { box-shadow: 0 0 10px rgba(185,138,58,0.5); }
-.fmp-hm2 .fmp-head { --ct: #ff6b4a; --cf: #c74f36; --cs: #933a28; }
-.fmp-hm2 .fmp-head .fmp-t { box-shadow: 0 0 16px rgba(255,107,74,0.8); }
-.fmp-blob {
-    position: absolute; width: 110px; height: 110px; border-radius: 50%;
-    pointer-events: none; filter: blur(4px);
-    background: radial-gradient(circle, rgba(255,90,60,0.38), rgba(255,150,60,0.15) 45%, transparent 70%);
-}
 .fmp-mode { display: inline-flex; border: 1px solid rgba(96,140,255,0.16); border-radius: 9px; overflow: hidden; }
 .fmp-mode button {
     background: transparent; color: #93a1ca; border: none; cursor: pointer;
@@ -1344,15 +1486,8 @@ const FMP_CSS = `
 .fmp-spark-sum { color: #38e1ff; font-family: ui-monospace, Consolas, monospace; letter-spacing: 0; }
 .fmp-spark-cv { width: 100%; height: 56px; display: block; }
 
-.fmp-ring {
-    position: absolute; width: 72px; height: 72px; border-radius: 50%;
-    border: 2px solid #ff4d5e; pointer-events: none;
-    animation: fmpRing 1.7s ease-out infinite;
-}
-@keyframes fmpRing { 0% { transform: scale(0.25); opacity: 1; } 100% { transform: scale(1.5); opacity: 0; } }
 @media (prefers-reduced-motion: reduce) {
-    .fmp-sweep::before, .fmp-dot, .fmp-bad .fmp-head .fmp-t { animation: none; }
-    .fmp-ring { animation: none; opacity: 0.4; }
+    .fmp-dot { animation: none; }
 }
 
 /* ── Thiết lập (sàn phẳng) ── */
