@@ -6,6 +6,8 @@ import {
     DeleteOutlined,
     EditOutlined,
     EyeOutlined,
+    BulbFilled,
+    BulbOutlined,
     PlusOutlined,
     RollbackOutlined,
     SearchOutlined,
@@ -75,7 +77,42 @@ const HEAT_COLOR: Record<0 | 1 | 2, string> = { 0: '#33436a', 1: '#b98a3a', 2: '
 
 // Màu 3 mặt khối [nóc, mặt trước, mặt bên] cho canvas
 type Faces = [string, string, string];
-const BASE_FACES: Faces = ['#33436a', '#232f4e', '#182238'];
+
+// Palette canvas theo tông Sáng/Tối (canvas không đọc được CSS var nên tách riêng ở JS)
+const CANVAS_THEME = {
+    dark: {
+        slabFront: '#0e1730',
+        slabSide: '#0a1122',
+        floorTop: '#152242',
+        floorBot: '#0a1226',
+        floorEdge: 'rgba(96,140,255,0.3)',
+        grid: 'rgba(88,130,255,0.08)',
+        zoneFill: 'rgba(56,225,255,0.035)',
+        zoneStroke: 'rgba(56,225,255,0.35)',
+        baseFaces: ['#33436a', '#232f4e', '#182238'] as Faces,
+        shadow: 'rgba(0,0,0,0.35)',
+        selection: '#38e1ff',
+        labelBg: 'rgba(13,32,56,0.92)',
+        labelStroke: 'rgba(56,225,255,0.3)',
+        labelText: '#9fefff',
+    },
+    light: {
+        slabFront: '#c2cce0',
+        slabSide: '#aab6d0',
+        floorTop: '#eef2fa',
+        floorBot: '#dce3f1',
+        floorEdge: 'rgba(47,81,217,0.35)',
+        grid: 'rgba(70,95,160,0.13)',
+        zoneFill: 'rgba(47,81,217,0.05)',
+        zoneStroke: 'rgba(47,81,217,0.4)',
+        baseFaces: ['#cbd5ea', '#b3c0dc', '#9dabca'] as Faces,
+        shadow: 'rgba(40,55,95,0.16)',
+        selection: '#2f51d9',
+        labelBg: 'rgba(255,255,255,0.94)',
+        labelStroke: 'rgba(47,81,217,0.3)',
+        labelText: '#2f4bb0',
+    },
+};
 const STATUS_FACES: Record<StatusVisual, Faces> = {
     ok: ['#2ee6a8', '#1da377', '#147354'],
     bad: ['#ff5364', '#c73a49', '#932b37'],
@@ -207,6 +244,21 @@ const FloorMapPage: React.FC = () => {
     const [unplacedSearch, setUnplacedSearch] = useState('');
     const [saving, setSaving] = useState(false);
     const [heatMode, setHeatMode] = useState(false);
+    const [theme, setTheme] = useState<'dark' | 'light'>(() => {
+        try {
+            return localStorage.getItem('floorMapTheme') === 'light' ? 'light' : 'dark';
+        } catch {
+            return 'dark';
+        }
+    });
+    const light = theme === 'light';
+    useEffect(() => {
+        try {
+            localStorage.setItem('floorMapTheme', theme);
+        } catch {
+            /* ignore */
+        }
+    }, [theme]);
 
     const plantsQuery = useQuery({ queryKey: ['plants'], queryFn: () => plantService.getAll() });
 
@@ -345,12 +397,16 @@ const FloorMapPage: React.FC = () => {
         const ctx = cv.getContext('2d');
         if (!ctx) return;
         ctx.scale(dpr, dpr);
+        const lineColor = light ? '#2f51d9' : '#38e1ff';
+        const areaTop = light ? 'rgba(47,81,217,0.22)' : 'rgba(56,225,255,0.30)';
+        const areaBot = light ? 'rgba(47,81,217,0)' : 'rgba(56,225,255,0)';
+        const dotRing = light ? 'rgba(47,81,217,0.3)' : 'rgba(56,225,255,0.35)';
         const values = data.months.map((m) => m.cost);
         const max = Math.max(...values, 1);
         const px = (i: number) => 4 + (i * (W - 8)) / (values.length - 1);
         const py = (v: number) => H - 6 - (v / max) * (H - 14);
         // lưới mờ
-        ctx.strokeStyle = 'rgba(96,140,255,0.14)';
+        ctx.strokeStyle = light ? 'rgba(47,81,217,0.12)' : 'rgba(96,140,255,0.14)';
         ctx.lineWidth = 1;
         [0.28, 0.62].forEach((f) => {
             ctx.beginPath();
@@ -360,8 +416,8 @@ const FloorMapPage: React.FC = () => {
         });
         // vùng nền
         const grad = ctx.createLinearGradient(0, 0, 0, H);
-        grad.addColorStop(0, 'rgba(56,225,255,0.30)');
-        grad.addColorStop(1, 'rgba(56,225,255,0)');
+        grad.addColorStop(0, areaTop);
+        grad.addColorStop(1, areaBot);
         ctx.beginPath();
         values.forEach((v, i) => (i === 0 ? ctx.moveTo(px(i), py(v)) : ctx.lineTo(px(i), py(v))));
         ctx.lineTo(px(values.length - 1), H - 2);
@@ -372,20 +428,20 @@ const FloorMapPage: React.FC = () => {
         // đường chính
         ctx.beginPath();
         values.forEach((v, i) => (i === 0 ? ctx.moveTo(px(i), py(v)) : ctx.lineTo(px(i), py(v))));
-        ctx.strokeStyle = '#38e1ff';
+        ctx.strokeStyle = lineColor;
         ctx.lineWidth = 2;
         ctx.lineJoin = 'round';
         ctx.stroke();
         // nhấn mạnh điểm cuối
         ctx.beginPath();
         ctx.arc(px(values.length - 1), py(values[values.length - 1]), 3.5, 0, Math.PI * 2);
-        ctx.fillStyle = '#38e1ff';
+        ctx.fillStyle = lineColor;
         ctx.fill();
         ctx.beginPath();
         ctx.arc(px(values.length - 1), py(values[values.length - 1]), 6, 0, Math.PI * 2);
-        ctx.strokeStyle = 'rgba(56,225,255,0.35)';
+        ctx.strokeStyle = dotRing;
         ctx.stroke();
-    }, [statsQuery.data, selectedId]);
+    }, [statsQuery.data, selectedId, light]);
 
     // ── Kéo-thả trong chế độ thiết lập (sàn phẳng) ─────────────────────────
     const flatRef = useRef<HTMLDivElement>(null);
@@ -700,6 +756,7 @@ const FloorMapPage: React.FC = () => {
         if (!cv || !ctx) return;
         const dpr = window.devicePixelRatio || 1;
         const k = scaleRef.current;
+        const pal = CANVAS_THEME[theme];
         ctx.setTransform(dpr * k, 0, 0, dpr * k, 0, 0);
         ctx.clearRect(0, 0, SCENE_W, SCENE_H);
 
@@ -724,22 +781,22 @@ const FloorMapPage: React.FC = () => {
         const cWH = proj(FLOOR_W, FLOOR_H);
         const c0H = proj(0, FLOOR_H);
         quad(c0H, cWH, proj(FLOOR_W, FLOOR_H, -SLAB), proj(0, FLOOR_H, -SLAB));
-        ctx.fillStyle = '#0e1730';
+        ctx.fillStyle = pal.slabFront;
         ctx.fill();
         quad(cW0, cWH, proj(FLOOR_W, FLOOR_H, -SLAB), proj(FLOOR_W, 0, -SLAB));
-        ctx.fillStyle = '#0a1122';
+        ctx.fillStyle = pal.slabSide;
         ctx.fill();
         const floorGrad = ctx.createLinearGradient(cW0.sx, cW0.sy, c0H.sx, c0H.sy);
-        floorGrad.addColorStop(0, '#152242');
-        floorGrad.addColorStop(1, '#0a1226');
+        floorGrad.addColorStop(0, pal.floorTop);
+        floorGrad.addColorStop(1, pal.floorBot);
         quad(c00, cW0, cWH, c0H);
         ctx.fillStyle = floorGrad;
         ctx.fill();
-        ctx.strokeStyle = 'rgba(96,140,255,0.3)';
+        ctx.strokeStyle = pal.floorEdge;
         ctx.lineWidth = 1;
         ctx.stroke();
         // Lưới sàn
-        ctx.strokeStyle = 'rgba(88,130,255,0.08)';
+        ctx.strokeStyle = pal.grid;
         ctx.beginPath();
         for (let gx = 40; gx < FLOOR_W; gx += 40) {
             const a = proj(gx, 0);
@@ -763,10 +820,10 @@ const FloorMapPage: React.FC = () => {
             const zw = (z.w / 100) * FLOOR_W;
             const zh = (z.h / 100) * FLOOR_H;
             quad(proj(zx, zy), proj(zx + zw, zy), proj(zx + zw, zy + zh), proj(zx, zy + zh));
-            ctx.fillStyle = 'rgba(56,225,255,0.035)';
+            ctx.fillStyle = pal.zoneFill;
             ctx.fill();
             ctx.setLineDash([5, 4]);
-            ctx.strokeStyle = 'rgba(56,225,255,0.35)';
+            ctx.strokeStyle = pal.zoneStroke;
             ctx.stroke();
             ctx.setLineDash([]);
             labels.push({ ...proj(zx, zy), text: z.name });
@@ -799,11 +856,11 @@ const FloorMapPage: React.FC = () => {
                 const visual = visualOf(m.status);
                 const faces = heatMode ? HEAT_FACES[heatLevel(m.incidents6m)] : STATUS_FACES[visual];
                 const sc = proj(x + 13, y + 12, 0);
-                ctx.fillStyle = 'rgba(0,0,0,0.35)';
+                ctx.fillStyle = pal.shadow;
                 ctx.beginPath();
                 ctx.ellipse(sc.sx + 2, sc.sy + 3, 17, 8, 0, 0, Math.PI * 2);
                 ctx.fill();
-                drawBox(ctx, x, y, 26, 20, 0, 8, BASE_FACES);
+                drawBox(ctx, x, y, 26, 20, 0, 8, pal.baseFaces);
                 drawBox(ctx, x + 3, y + 3, 13, 13, 8, 10, faces);
                 const center = proj(x + 13, y + 10, 12);
                 hits.push({ id: m.id, sx: center.sx, sy: center.sy });
@@ -814,7 +871,7 @@ const FloorMapPage: React.FC = () => {
                     const h3 = proj(x + 16, y + 16, 18);
                     const h4 = proj(x + 3, y + 16, 18);
                     quad(h1, h2, h3, h4);
-                    ctx.strokeStyle = '#38e1ff';
+                    ctx.strokeStyle = pal.selection;
                     ctx.lineWidth = 2.5;
                     ctx.stroke();
                 }
@@ -827,22 +884,22 @@ const FloorMapPage: React.FC = () => {
         labels.forEach((l) => {
             const text = (l.text.length > 24 ? `${l.text.slice(0, 23)}…` : l.text).toUpperCase();
             const w = ctx.measureText(text).width;
-            ctx.fillStyle = 'rgba(13,32,56,0.92)';
+            ctx.fillStyle = pal.labelBg;
             ctx.fillRect(l.sx - 3, l.sy - 19, w + 14, 16);
-            ctx.strokeStyle = 'rgba(56,225,255,0.3)';
+            ctx.strokeStyle = pal.labelStroke;
             ctx.lineWidth = 1;
             ctx.strokeRect(l.sx - 3, l.sy - 19, w + 14, 16);
-            ctx.fillStyle = '#9fefff';
+            ctx.fillStyle = pal.labelText;
             ctx.fillText(text, l.sx + 4, l.sy - 7);
         });
     };
     const drawRef = useRef(drawScene);
     drawRef.current = drawScene;
 
-    // Vẽ lại khi dữ liệu/lựa chọn đổi
+    // Vẽ lại khi dữ liệu/lựa chọn/tông màu đổi
     useEffect(() => {
         if (!editMode) drawRef.current();
-    }, [machines, zones, heatMode, selectedId, editMode]);
+    }, [machines, zones, heatMode, selectedId, editMode, theme]);
 
     // Kích thước canvas theo khung + vẽ lại khi resize
     useEffect(() => {
@@ -974,7 +1031,7 @@ const FloorMapPage: React.FC = () => {
     };
 
     return (
-        <div className='fmp-page rounded-2xl p-4 md:p-5'>
+        <div className={`fmp-page rounded-2xl p-4 md:p-5${light ? ' fmp-light' : ''}`}>
             <style>{FMP_CSS}</style>
 
             {/* ── Header ── */}
@@ -988,6 +1045,13 @@ const FloorMapPage: React.FC = () => {
                 </div>
                 <div className='ml-auto flex flex-wrap items-center gap-3'>
                     <HeaderClock />
+                    <Button
+                        size='middle'
+                        icon={light ? <BulbFilled /> : <BulbOutlined />}
+                        onClick={() => setTheme((t) => (t === 'light' ? 'dark' : 'light'))}
+                    >
+                        {light ? 'Nền tối' : 'Nền sáng'}
+                    </Button>
                     <Select
                         size='middle'
                         style={{ minWidth: 190 }}
@@ -1386,12 +1450,60 @@ const FloorMapPage: React.FC = () => {
 // CSS thuần cho phần isometric 3D + không khí "command center" (Tailwind không diễn tả được mặt khối 3D)
 const FMP_CSS = `
 .fmp-page {
-    background:
+    --fmp-page-bg:
         radial-gradient(1100px 480px at 22% -10%, rgba(79,124,255,0.16), transparent 60%),
         radial-gradient(900px 600px at 100% 115%, rgba(56,225,255,0.08), transparent 55%),
         #070b16;
-    color: #e2e9ff;
+    --fmp-surface: #101a33;
+    --fmp-border: rgba(96,140,255,0.16);
+    --fmp-ink: #e2e9ff;
+    --fmp-ink2: #93a1ca;
+    --fmp-ink3: #5c6a94;
+    --fmp-sub: #7d8ab3;
+    --fmp-accent: #38e1ff;
+    --fmp-accent-soft: rgba(56,225,255,0.14);
+    --fmp-glow: 0 0 16px rgba(56,225,255,0.5);
+    --fmp-card-shadow: inset 0 1px 0 rgba(140,175,255,0.10), 0 10px 40px rgba(0,0,0,0.35);
+    --fmp-divider: rgba(96,140,255,0.16);
+    --fmp-zname-bg: rgba(16,42,66,0.85);
+    --fmp-tip-bg: rgba(7,12,26,0.96);
+    --fmp-uitem-bg: rgba(96,140,255,0.06);
+    --fmp-uitem-border: rgba(96,140,255,0.12);
+    --fmp-uitem-ink: #b9c4e6;
+    --fmp-flat-bg:
+        linear-gradient(rgba(88,130,255,0.10) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(88,130,255,0.10) 1px, transparent 1px),
+        linear-gradient(160deg, #131e3c, #0a1226);
+    background: var(--fmp-page-bg);
+    color: var(--fmp-ink);
     min-height: calc(100vh - 120px);
+}
+/* Tông sáng: đồng bộ với phần còn lại của app (accent xanh thương hiệu thay cyan) */
+.fmp-page.fmp-light {
+    --fmp-page-bg:
+        radial-gradient(1100px 480px at 22% -10%, rgba(79,124,255,0.10), transparent 60%),
+        radial-gradient(900px 600px at 100% 115%, rgba(56,225,255,0.05), transparent 55%),
+        #f2f5fb;
+    --fmp-surface: #ffffff;
+    --fmp-border: rgba(47,81,217,0.14);
+    --fmp-ink: #1c2540;
+    --fmp-ink2: #55618a;
+    --fmp-ink3: #8a93b5;
+    --fmp-sub: #6b76a0;
+    --fmp-accent: #2f51d9;
+    --fmp-accent-soft: rgba(47,81,217,0.10);
+    --fmp-glow: none;
+    --fmp-card-shadow: 0 1px 3px rgba(30,45,90,0.06), 0 8px 24px rgba(30,45,90,0.08);
+    --fmp-divider: rgba(47,81,217,0.14);
+    --fmp-zname-bg: rgba(255,255,255,0.9);
+    --fmp-tip-bg: rgba(255,255,255,0.97);
+    --fmp-uitem-bg: rgba(47,81,217,0.05);
+    --fmp-uitem-border: rgba(47,81,217,0.12);
+    --fmp-uitem-ink: #40507a;
+    --fmp-flat-bg:
+        linear-gradient(rgba(70,95,160,0.12) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(70,95,160,0.12) 1px, transparent 1px),
+        linear-gradient(160deg, #eef2fa, #dce3f1);
 }
 .fmp-badge {
     width: 36px; height: 36px; border-radius: 10px; flex-shrink: 0;
@@ -1400,47 +1512,47 @@ const FMP_CSS = `
     display: flex; align-items: center; justify-content: center;
     font-weight: 800; font-size: 13px; color: #fff;
 }
-.fmp-title { font-size: 16px; font-weight: 700; letter-spacing: 2.5px; text-transform: uppercase; color: #e2e9ff; }
-.fmp-sub { color: #7d8ab3; font-size: 12px; }
-.fmp-live { display: inline-flex; align-items: center; gap: 7px; font-size: 11px; font-weight: 700; letter-spacing: 2px; color: #2ee6a8; }
-.fmp-dot { width: 8px; height: 8px; border-radius: 50%; background: #2ee6a8; box-shadow: 0 0 10px #2ee6a8; animation: fmpBlink 1.4s ease-in-out infinite; }
+.fmp-title { font-size: 16px; font-weight: 700; letter-spacing: 2.5px; text-transform: uppercase; color: var(--fmp-ink); }
+.fmp-sub { color: var(--fmp-sub); font-size: 12px; }
+.fmp-live { display: inline-flex; align-items: center; gap: 7px; font-size: 11px; font-weight: 700; letter-spacing: 2px; color: #17b789; }
+.fmp-dot { width: 8px; height: 8px; border-radius: 50%; background: #17b789; box-shadow: 0 0 10px #2ee6a8; animation: fmpBlink 1.4s ease-in-out infinite; }
 .fmp-dot-off { background: #ff4d5e; box-shadow: 0 0 10px #ff4d5e; animation: none; }
 @keyframes fmpBlink { 50% { opacity: 0.25; } }
-.fmp-clock { font-family: ui-monospace, Consolas, monospace; font-size: 19px; font-weight: 700; color: #38e1ff; text-shadow: 0 0 16px rgba(56,225,255,0.5); font-variant-numeric: tabular-nums; }
+.fmp-clock { font-family: ui-monospace, Consolas, monospace; font-size: 19px; font-weight: 700; color: var(--fmp-accent); text-shadow: var(--fmp-glow); font-variant-numeric: tabular-nums; }
 
 .fmp-kpi {
     flex: 1; min-width: 108px;
-    background: #101a33; border: 1px solid rgba(96,140,255,0.16);
+    background: var(--fmp-surface); border: 1px solid var(--fmp-border);
     border-radius: 13px; padding: 10px 16px;
     position: relative; overflow: hidden;
+    box-shadow: var(--fmp-card-shadow);
 }
-.fmp-kpi::after { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 3px; background: #38e1ff; opacity: 0.75; }
-.fmp-k-ok::after { background: #2ee6a8; }
+.fmp-kpi::after { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 3px; background: var(--fmp-accent); opacity: 0.75; }
+.fmp-k-ok::after { background: #17b789; }
 .fmp-k-bad::after { background: #ff4d5e; }
-.fmp-k-warn::after { background: #ffb84d; }
-.fmp-num { font-size: 25px; font-weight: 800; line-height: 1.15; font-variant-numeric: tabular-nums; font-family: ui-monospace, Consolas, monospace; }
-.fmp-k-ok .fmp-num { color: #2ee6a8; } .fmp-k-bad .fmp-num { color: #ff4d5e; } .fmp-k-warn .fmp-num { color: #ffb84d; }
-.fmp-lbl { font-size: 10px; color: #5c6a94; font-weight: 700; letter-spacing: 1.5px; text-transform: uppercase; }
+.fmp-k-warn::after { background: #e69500; }
+.fmp-num { font-size: 25px; font-weight: 800; line-height: 1.15; font-variant-numeric: tabular-nums; font-family: ui-monospace, Consolas, monospace; color: var(--fmp-ink); }
+.fmp-k-ok .fmp-num { color: #17b789; } .fmp-k-bad .fmp-num { color: #ff4d5e; } .fmp-k-warn .fmp-num { color: #e69500; }
+.fmp-lbl { font-size: 10px; color: var(--fmp-ink3); font-weight: 700; letter-spacing: 1.5px; text-transform: uppercase; }
 
-/* Nền đặc thay vì backdrop-filter blur: blur bắt GPU tính lại mỗi frame khi có animation phía sau — thủ phạm lag */
 .fmp-card {
-    background: #101a33; border: 1px solid rgba(96,140,255,0.16);
+    background: var(--fmp-surface); border: 1px solid var(--fmp-border);
     border-radius: 15px;
-    box-shadow: inset 0 1px 0 rgba(140,175,255,0.10), 0 10px 40px rgba(0,0,0,0.35);
+    box-shadow: var(--fmp-card-shadow);
 }
-.fmp-hud { position: absolute; width: 20px; height: 20px; border-color: #38e1ff; border-style: solid; opacity: 0.5; pointer-events: none; }
+.fmp-hud { position: absolute; width: 20px; height: 20px; border-color: var(--fmp-accent); border-style: solid; opacity: 0.5; pointer-events: none; }
 .fmp-tl { top: 7px; left: 7px; border-width: 2px 0 0 2px; border-radius: 6px 0 0 0; }
 .fmp-tr { top: 7px; right: 7px; border-width: 2px 2px 0 0; border-radius: 0 6px 0 0; }
 .fmp-bl { bottom: 7px; left: 7px; border-width: 0 0 2px 2px; border-radius: 0 0 0 6px; }
 .fmp-br { bottom: 7px; right: 7px; border-width: 0 2px 2px 0; border-radius: 0 0 6px 0; }
-.fmp-head-label { font-size: 12px; letter-spacing: 2px; text-transform: uppercase; color: #38e1ff; font-weight: 700; }
+.fmp-head-label { font-size: 12px; letter-spacing: 2px; text-transform: uppercase; color: var(--fmp-accent); font-weight: 700; }
 .fmp-h3 {
     margin: 0 0 10px; font-size: 10.5px; font-weight: 700;
-    letter-spacing: 2px; text-transform: uppercase; color: #5c6a94;
+    letter-spacing: 2px; text-transform: uppercase; color: var(--fmp-ink3);
     display: flex; align-items: center; gap: 8px;
 }
-.fmp-h3::after { content: ""; flex: 1; height: 1px; background: rgba(96,140,255,0.16); }
-.fmp-code { font-family: ui-monospace, Consolas, monospace; font-size: 15px; font-weight: 800; color: #38e1ff; }
+.fmp-h3::after { content: ""; flex: 1; height: 1px; background: var(--fmp-divider); }
+.fmp-code { font-family: ui-monospace, Consolas, monospace; font-size: 15px; font-weight: 800; color: var(--fmp-accent); }
 
 /* ── Isometric: 2 canvas chồng nhau (sàn tĩnh + lớp hiệu ứng) ── */
 .fmp-viewport { width: 100%; overflow: hidden; position: relative; }
@@ -1449,8 +1561,8 @@ const FMP_CSS = `
 .fmp-cvtip {
     position: absolute; z-index: 5; pointer-events: none;
     transform: translate(-50%, -100%);
-    background: rgba(7,12,26,0.96); color: #38e1ff;
-    border: 1px solid rgba(56,225,255,0.4);
+    background: var(--fmp-tip-bg); color: var(--fmp-accent);
+    border: 1px solid var(--fmp-accent);
     font: 700 12px ui-monospace, Consolas, monospace;
     padding: 4px 9px; border-radius: 6px; white-space: nowrap;
 }
@@ -1458,32 +1570,32 @@ const FMP_CSS = `
 .fmp-zname {
     position: absolute; top: -1px; left: -1px;
     font-size: 10.5px; font-weight: 700; letter-spacing: 1.2px; text-transform: uppercase;
-    color: #9fefff;
-    background: rgba(16,42,66,0.85);
-    border: 1px solid rgba(56,225,255,0.25);
+    color: var(--fmp-accent);
+    background: var(--fmp-zname-bg);
+    border: 1px solid var(--fmp-accent);
     border-radius: 4px 0 6px 0;
     padding: 2px 9px;
     white-space: nowrap; pointer-events: none;
     max-width: 100%; overflow: hidden; text-overflow: ellipsis;
 }
 
-.fmp-mode { display: inline-flex; border: 1px solid rgba(96,140,255,0.16); border-radius: 9px; overflow: hidden; }
+.fmp-mode { display: inline-flex; border: 1px solid var(--fmp-border); border-radius: 9px; overflow: hidden; }
 .fmp-mode button {
-    background: transparent; color: #93a1ca; border: none; cursor: pointer;
+    background: transparent; color: var(--fmp-ink2); border: none; cursor: pointer;
     font: inherit; font-size: 11.5px; font-weight: 700; letter-spacing: 0.8px;
     padding: 5px 13px;
 }
-.fmp-mode button.fmp-on { background: rgba(56,225,255,0.14); color: #38e1ff; }
+.fmp-mode button.fmp-on { background: var(--fmp-accent-soft); color: var(--fmp-accent); }
 
 .fmp-row { display: flex; justify-content: space-between; gap: 10px; font-size: 12.5px; }
-.fmp-row-k { color: #5c6a94; }
-.fmp-row-v { font-weight: 600; color: #e2e9ff; font-variant-numeric: tabular-nums; }
+.fmp-row-k { color: var(--fmp-ink3); }
+.fmp-row-v { font-weight: 600; color: var(--fmp-ink); font-variant-numeric: tabular-nums; }
 .fmp-spark-h {
     display: flex; justify-content: space-between; gap: 8px;
-    font-size: 10px; color: #5c6a94; letter-spacing: 1.2px; text-transform: uppercase;
+    font-size: 10px; color: var(--fmp-ink3); letter-spacing: 1.2px; text-transform: uppercase;
     margin-bottom: 5px; font-weight: 700;
 }
-.fmp-spark-sum { color: #38e1ff; font-family: ui-monospace, Consolas, monospace; letter-spacing: 0; }
+.fmp-spark-sum { color: var(--fmp-accent); font-family: ui-monospace, Consolas, monospace; letter-spacing: 0; }
 .fmp-spark-cv { width: 100%; height: 56px; display: block; }
 
 @media (prefers-reduced-motion: reduce) {
@@ -1493,29 +1605,25 @@ const FMP_CSS = `
 /* ── Thiết lập (sàn phẳng) ── */
 .fmp-flat {
     position: relative; width: 100%; aspect-ratio: ${FLOOR_W} / ${FLOOR_H};
-    background:
-        linear-gradient(rgba(88,130,255,0.10) 1px, transparent 1px),
-        linear-gradient(90deg, rgba(88,130,255,0.10) 1px, transparent 1px),
-        linear-gradient(160deg, #131e3c, #0a1226);
+    background: var(--fmp-flat-bg);
     background-size: 32px 32px, 32px 32px, auto;
-    border: 1px solid rgba(96,140,255,0.28);
+    border: 1px solid var(--fmp-border);
     border-radius: 8px;
     overflow: hidden;
     touch-action: none;
 }
 .fmp-flat-zone {
     position: absolute;
-    border: 1.5px dashed rgba(56,225,255,0.4);
-    background: rgba(56,225,255,0.045);
+    border: 1.5px dashed var(--fmp-accent);
+    background: var(--fmp-accent-soft);
     border-radius: 4px;
     cursor: move;
     touch-action: none;
 }
-.fmp-zone-sel { border-color: #38e1ff; background: rgba(56,225,255,0.09); }
+.fmp-zone-sel { border-color: var(--fmp-accent); background: var(--fmp-accent-soft); }
 .fmp-resize {
     position: absolute; right: -6px; bottom: -6px; width: 14px; height: 14px;
-    background: #38e1ff; border-radius: 4px; cursor: nwse-resize;
-    box-shadow: 0 0 8px rgba(56,225,255,0.6);
+    background: var(--fmp-accent); border-radius: 4px; cursor: nwse-resize;
     touch-action: none;
 }
 .fmp-chip {
@@ -1527,35 +1635,35 @@ const FMP_CSS = `
     touch-action: none;
 }
 .fmp-chip:active { cursor: grabbing; }
-.fmp-chip-sel { outline: 2.5px solid #38e1ff; outline-offset: 1.5px; }
+.fmp-chip-sel { outline: 2.5px solid var(--fmp-accent); outline-offset: 1.5px; }
 
 .fmp-unplaced { max-height: 300px; overflow-y: auto; display: flex; flex-direction: column; gap: 3px; }
 .fmp-uitem {
     display: flex; align-items: center; gap: 8px;
-    background: rgba(96,140,255,0.06); border: 1px solid rgba(96,140,255,0.12);
+    background: var(--fmp-uitem-bg); border: 1px solid var(--fmp-uitem-border);
     border-radius: 8px; padding: 5px 9px; cursor: pointer;
-    color: #b9c4e6; font-size: 12px;
+    color: var(--fmp-uitem-ink); font-size: 12px;
 }
-.fmp-uitem:hover { background: rgba(56,225,255,0.10); border-color: rgba(56,225,255,0.35); }
+.fmp-uitem:hover { background: var(--fmp-accent-soft); border-color: var(--fmp-accent); }
 .fmp-usw { width: 9px; height: 9px; border-radius: 3px; flex-shrink: 0; }
 .fmp-ucode { font-family: ui-monospace, Consolas, monospace; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.fmp-uadd { margin-left: auto; color: #38e1ff; }
+.fmp-uadd { margin-left: auto; color: var(--fmp-accent); }
 
 .fmp-feed { display: flex; flex-direction: column; max-height: 240px; overflow-y: auto; overflow-x: hidden; }
 .fmp-fe {
     display: flex; gap: 9px; padding: 6px 2px;
-    border-bottom: 1px solid rgba(96,140,255,0.07);
+    border-bottom: 1px solid var(--fmp-divider);
     font-size: 12px; align-items: baseline;
     animation: fmpSlide 0.3s ease;
 }
 @keyframes fmpSlide { from { opacity: 0; transform: translateX(12px); } to { opacity: 1; transform: none; } }
-.fmp-fe-t { color: #5c6a94; font-size: 10.5px; flex-shrink: 0; font-family: ui-monospace, Consolas, monospace; }
-.fmp-fe-m { color: #93a1ca; min-width: 0; overflow-wrap: anywhere; }
+.fmp-fe-t { color: var(--fmp-ink3); font-size: 10.5px; flex-shrink: 0; font-family: ui-monospace, Consolas, monospace; }
+.fmp-fe-m { color: var(--fmp-ink2); min-width: 0; overflow-wrap: anywhere; }
 .fmp-alarm { background: rgba(255,77,94,0.07); border-radius: 6px; }
-.fmp-alarm .fmp-fe-m { color: #ff8d98; }
-.fmp-fix .fmp-fe-m { color: #2ee6a8; }
+.fmp-alarm .fmp-fe-m { color: #e5484d; }
+.fmp-fix .fmp-fe-m { color: #17b789; }
 
-.fmp-lg-row { display: flex; align-items: center; gap: 10px; font-size: 12.5px; color: #93a1ca; }
+.fmp-lg-row { display: flex; align-items: center; gap: 10px; font-size: 12.5px; color: var(--fmp-ink2); }
 .fmp-lg-sw { width: 12px; height: 12px; border-radius: 3px; flex-shrink: 0; }
 `;
 
