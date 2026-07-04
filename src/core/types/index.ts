@@ -1119,12 +1119,23 @@ export interface FloorMapMachine {
     machineCode: string;
     type: string;
     status: AssetStatus;
+    /** Số phiếu hỏng đột xuất 6 tháng gần nhất — dùng cho chế độ nhiệt sự cố. */
+    incidents6m?: number;
     floorPos: { x: number; y: number } | null;
 }
 
 export interface FloorMapData {
     zones: FloorZone[];
     machines: FloorMapMachine[];
+}
+
+/** Thống kê 1 máy cho panel chi tiết sơ đồ xưởng. */
+export interface FloorMachineStats {
+    months: { ym: string; cost: number }[];
+    total12m: number;
+    incidents6m: number;
+    ticketCount12m: number;
+    lastMaintenanceAt: string | null;
 }
 
 export type DataQualitySeverity = 'critical' | 'warning' | 'info';

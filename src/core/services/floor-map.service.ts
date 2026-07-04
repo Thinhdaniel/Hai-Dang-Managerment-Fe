@@ -1,10 +1,13 @@
 import api from '../lib/api';
-import type { FloorMapData, FloorZone } from '../types';
+import type { FloorMachineStats, FloorMapData, FloorZone } from '../types';
 
 const BASE = '/floor-map';
 
 export const floorMapService = {
     getMap: (plantId: string): Promise<FloorMapData> => api.get<FloorMapData>(BASE, { params: { plantId } }),
+
+    getMachineStats: (assetId: string): Promise<FloorMachineStats> =>
+        api.get<FloorMachineStats>(`${BASE}/machines/${assetId}/stats`),
 
     saveZones: (
         plantId: string,

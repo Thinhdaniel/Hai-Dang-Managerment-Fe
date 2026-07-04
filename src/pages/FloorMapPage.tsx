@@ -51,6 +51,12 @@ const CHIP_COLOR: Record<StatusVisual, string> = {
 const visualOf = (status: AssetStatus): StatusVisual => STATUS_VISUAL[status] ?? 'idle';
 const statusLabel = (status: AssetStatus) => ASSET_STATUS_COLOR[status]?.label ?? status;
 
+// Nhiệt sự cố: mức 0 / 1-2 / 3+ lần hỏng đột xuất trong 6 tháng
+const heatLevel = (incidents?: number): 0 | 1 | 2 => (!incidents ? 0 : incidents >= 3 ? 2 : 1);
+const HEAT_COLOR: Record<0 | 1 | 2, string> = { 0: '#33436a', 1: '#b98a3a', 2: '#ff6b4a' };
+
+const formatMoney = (v: number) => `${Math.round(v).toLocaleString('vi-VN')} ₫`;
+
 const clamp = (v: number, min: number, max: number) => Math.min(max, Math.max(min, v));
 const round2 = (v: number) => Math.round(v * 100) / 100;
 
@@ -99,6 +105,7 @@ const FloorMapPage: React.FC = () => {
     const [unplacedSearch, setUnplacedSearch] = useState('');
     const [saving, setSaving] = useState(false);
     const [clock, setClock] = useState(nowTime());
+    const [heatMode, setHeatMode] = useState(false);
 
     const plantsQuery = useQuery({ queryKey: ['plants'], queryFn: () => plantService.getAll() });
 
@@ -224,6 +231,112 @@ const FloorMapPage: React.FC = () => {
         fit();
         return () => ro.disconnect();
     }, [editMode, mapQuery.data]);
+
+    // ── Parallax: sàn nghiêng nhẹ theo chuột (thao tác trực tiếp DOM, không re-render) ──
+    const planeRef = useRef<HTMLDivElement>(null);
+    useEffect(() => {
+        const viewport = viewportRef.current;
+        if (!viewport || editMode) return;
+        if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+
+        let targetRX = 56;
+        let targetRZ = -45;
+        let currentRX = 56;
+        let currentRZ = -45;
+        let rafId = 0;
+
+        const onMove = (e: MouseEvent) => {
+            const rect = viewport.getBoundingClientRect();
+            const nx = (e.clientX - rect.left) / rect.width - 0.5;
+            const ny = (e.clientY - rect.top) / rect.height - 0.5;
+            targetRZ = -45 + nx * 5;
+            targetRX = 56 - ny * 4;
+        };
+        const onLeave = () => {
+            targetRX = 56;
+            targetRZ = -45;
+        };
+        const tick = () => {
+            currentRX += (targetRX - currentRX) * 0.06;
+            currentRZ += (targetRZ - currentRZ) * 0.06;
+            if (planeRef.current) {
+                planeRef.current.style.transform = `rotateX(${currentRX}deg) rotateZ(${currentRZ}deg)`;
+            }
+            rafId = requestAnimationFrame(tick);
+        };
+
+        viewport.addEventListener('mousemove', onMove);
+        viewport.addEventListener('mouseleave', onLeave);
+        rafId = requestAnimationFrame(tick);
+        return () => {
+            viewport.removeEventListener('mousemove', onMove);
+            viewport.removeEventListener('mouseleave', onLeave);
+            cancelAnimationFrame(rafId);
+        };
+    }, [editMode, mapQuery.data]);
+
+    // ── Thống kê máy đang chọn (sparkline chi phí 12 tháng) ────────────────
+    const statsQuery = useQuery({
+        queryKey: ['floor-machine-stats', selectedId],
+        queryFn: () => floorMapService.getMachineStats(selectedId!),
+        enabled: Boolean(selectedId),
+        staleTime: 60_000,
+    });
+
+    const sparkRef = useRef<HTMLCanvasElement>(null);
+    useEffect(() => {
+        const cv = sparkRef.current;
+        const data = statsQuery.data;
+        if (!cv || !data || !data.total12m) return;
+        const dpr = window.devicePixelRatio || 1;
+        const W = cv.clientWidth || 240;
+        const H = 56;
+        cv.width = W * dpr;
+        cv.height = H * dpr;
+        const ctx = cv.getContext('2d');
+        if (!ctx) return;
+        ctx.scale(dpr, dpr);
+        const values = data.months.map((m) => m.cost);
+        const max = Math.max(...values, 1);
+        const px = (i: number) => 4 + (i * (W - 8)) / (values.length - 1);
+        const py = (v: number) => H - 6 - (v / max) * (H - 14);
+        // lưới mờ
+        ctx.strokeStyle = 'rgba(96,140,255,0.14)';
+        ctx.lineWidth = 1;
+        [0.28, 0.62].forEach((f) => {
+            ctx.beginPath();
+            ctx.moveTo(2, H * f);
+            ctx.lineTo(W - 2, H * f);
+            ctx.stroke();
+        });
+        // vùng nền
+        const grad = ctx.createLinearGradient(0, 0, 0, H);
+        grad.addColorStop(0, 'rgba(56,225,255,0.30)');
+        grad.addColorStop(1, 'rgba(56,225,255,0)');
+        ctx.beginPath();
+        values.forEach((v, i) => (i === 0 ? ctx.moveTo(px(i), py(v)) : ctx.lineTo(px(i), py(v))));
+        ctx.lineTo(px(values.length - 1), H - 2);
+        ctx.lineTo(px(0), H - 2);
+        ctx.closePath();
+        ctx.fillStyle = grad;
+        ctx.fill();
+        // đường chính
+        ctx.beginPath();
+        values.forEach((v, i) => (i === 0 ? ctx.moveTo(px(i), py(v)) : ctx.lineTo(px(i), py(v))));
+        ctx.strokeStyle = '#38e1ff';
+        ctx.lineWidth = 2;
+        ctx.lineJoin = 'round';
+        ctx.stroke();
+        // nhấn mạnh điểm cuối
+        ctx.beginPath();
+        ctx.arc(px(values.length - 1), py(values[values.length - 1]), 3.5, 0, Math.PI * 2);
+        ctx.fillStyle = '#38e1ff';
+        ctx.fill();
+        ctx.beginPath();
+        ctx.arc(px(values.length - 1), py(values[values.length - 1]), 6, 0, Math.PI * 2);
+        ctx.strokeStyle = 'rgba(56,225,255,0.35)';
+        ctx.stroke();
+    }, [statsQuery.data, selectedId]);
 
     // ── Kéo-thả trong chế độ thiết lập (sàn phẳng) ─────────────────────────
     const flatRef = useRef<HTMLDivElement>(null);
@@ -427,19 +540,24 @@ const FloorMapPage: React.FC = () => {
     const renderIsoMachine = (m: FloorMapMachine) => {
         if (!m.floorPos) return null;
         const visual = visualOf(m.status);
+        const level = heatLevel(m.incidents6m);
         const px = (m.floorPos.x / 100) * FLOOR_W;
         const py = (m.floorPos.y / 100) * FLOOR_H;
+        const cls = heatMode ? `fmp-hm${level}` : `fmp-${visual}`;
+        const title = heatMode
+            ? `${m.machineCode} · ${m.incidents6m ?? 0} lần hỏng 6 tháng`
+            : `${m.machineCode} · ${statusLabel(m.status)}`;
         return (
             <React.Fragment key={m.id}>
-                {visual === 'bad' ? (
+                {!heatMode && visual === 'bad' ? (
                     <div className='fmp-ring' style={{ left: px - 23, top: py - 26 }} />
                 ) : null}
                 <button
                     type='button'
-                    className={`fmp-m fmp-${visual}${selectedId === m.id ? ' fmp-selected' : ''}`}
+                    className={`fmp-m ${cls}${selectedId === m.id ? ' fmp-selected' : ''}`}
                     style={{ left: px, top: py }}
                     aria-label={m.machineCode}
-                    title={`${m.machineCode} · ${statusLabel(m.status)}`}
+                    title={title}
                     onClick={() => {
                         setSelectedId((prev) => (prev === m.id ? null : m.id));
                     }}
@@ -655,11 +773,31 @@ const FloorMapPage: React.FC = () => {
                         <>
                             <div className='mb-1 flex flex-wrap items-center gap-2 px-1'>
                                 <span className='fmp-head-label'>Mặt bằng trực tiếp</span>
-                                <span className='fmp-sub'>bấm vào khối máy để xem chi tiết</span>
+                                <span className='fmp-sub'>
+                                    {heatMode
+                                        ? 'màu theo số lần hỏng đột xuất 6 tháng'
+                                        : 'bấm vào khối máy để xem chi tiết'}
+                                </span>
+                                <div className='fmp-mode ml-auto'>
+                                    <button
+                                        type='button'
+                                        className={heatMode ? '' : 'fmp-on'}
+                                        onClick={() => setHeatMode(false)}
+                                    >
+                                        Trạng thái
+                                    </button>
+                                    <button
+                                        type='button'
+                                        className={heatMode ? 'fmp-on' : ''}
+                                        onClick={() => setHeatMode(true)}
+                                    >
+                                        Nhiệt sự cố
+                                    </button>
+                                </div>
                             </div>
                             <div ref={viewportRef} className='fmp-viewport'>
                                 <div ref={sceneRef} className='fmp-scene'>
-                                    <div className='fmp-plane'>
+                                    <div ref={planeRef} className='fmp-plane'>
                                         <div className='fmp-slab-f' />
                                         <div className='fmp-slab-s' />
                                         <div className='fmp-sweep' />
@@ -677,6 +815,20 @@ const FloorMapPage: React.FC = () => {
                                                 <span className='fmp-zname'>{z.name}</span>
                                             </div>
                                         ))}
+                                        {heatMode
+                                            ? placed
+                                                  .filter((m) => heatLevel(m.incidents6m) === 2)
+                                                  .map((m) => (
+                                                      <div
+                                                          key={`blob-${m.id}`}
+                                                          className='fmp-blob'
+                                                          style={{
+                                                              left: (m.floorPos!.x / 100) * FLOOR_W - 42,
+                                                              top: (m.floorPos!.y / 100) * FLOOR_H - 45,
+                                                          }}
+                                                      />
+                                                  ))
+                                            : null}
                                         {placed.map(renderIsoMachine)}
                                     </div>
                                 </div>
@@ -698,6 +850,52 @@ const FloorMapPage: React.FC = () => {
                                 <Tag color={ASSET_STATUS_COLOR[selected.status]?.color}>
                                     {statusLabel(selected.status)}
                                 </Tag>
+                                <div className='mt-3 flex flex-col gap-1.5'>
+                                    <div className='fmp-row'>
+                                        <span className='fmp-row-k'>Lần hỏng 6 tháng</span>
+                                        <span
+                                            className='fmp-row-v'
+                                            style={
+                                                heatLevel(selected.incidents6m) === 2
+                                                    ? { color: '#ff6b4a' }
+                                                    : undefined
+                                            }
+                                        >
+                                            {selected.incidents6m ?? 0}
+                                        </span>
+                                    </div>
+                                    {statsQuery.data?.lastMaintenanceAt ? (
+                                        <div className='fmp-row'>
+                                            <span className='fmp-row-k'>Bảo trì gần nhất</span>
+                                            <span className='fmp-row-v'>
+                                                {new Date(statsQuery.data.lastMaintenanceAt).toLocaleDateString(
+                                                    'vi-VN'
+                                                )}
+                                            </span>
+                                        </div>
+                                    ) : null}
+                                </div>
+                                <div className='fmp-spark mt-3'>
+                                    <div className='fmp-spark-h'>
+                                        <span>Chi phí sửa 12 tháng</span>
+                                        <span className='fmp-spark-sum'>
+                                            {statsQuery.isLoading
+                                                ? '…'
+                                                : formatMoney(statsQuery.data?.total12m ?? 0)}
+                                        </span>
+                                    </div>
+                                    {statsQuery.isLoading ? (
+                                        <div className='flex h-12 items-center justify-center'>
+                                            <Spin size='small' />
+                                        </div>
+                                    ) : statsQuery.data?.total12m ? (
+                                        <canvas ref={sparkRef} className='fmp-spark-cv' />
+                                    ) : (
+                                        <div className='fmp-sub py-1'>
+                                            Chưa ghi nhận chi phí sửa trong 12 tháng
+                                        </div>
+                                    )}
+                                </div>
                                 <div className='mt-3 flex flex-col gap-2'>
                                     <Button
                                         type='primary'
@@ -777,20 +975,33 @@ const FloorMapPage: React.FC = () => {
                     <div className='fmp-card p-4'>
                         <h3 className='fmp-h3'>Chú giải</h3>
                         <div className='flex flex-col gap-2'>
-                            {(
-                                [
-                                    ['ok', 'Đang hoạt động'],
-                                    ['bad', 'Đang hỏng — chờ sửa'],
-                                    ['warn', 'Bảo trì / chờ thanh lý'],
-                                    ['loan', 'Đang mượn'],
-                                    ['idle', 'Tồn kho / khác'],
-                                ] as [StatusVisual, string][]
-                            ).map(([visual, label]) => (
-                                <div key={visual} className='fmp-lg-row'>
-                                    <span className='fmp-lg-sw' style={{ background: CHIP_COLOR[visual] }} />
-                                    {label}
-                                </div>
-                            ))}
+                            {heatMode && !editMode
+                                ? (
+                                      [
+                                          [HEAT_COLOR[0], 'Không hỏng đột xuất 6 tháng'],
+                                          [HEAT_COLOR[1], '1–2 lần hỏng'],
+                                          [HEAT_COLOR[2], '3+ lần hỏng — điểm nóng'],
+                                      ] as [string, string][]
+                                  ).map(([color, label]) => (
+                                      <div key={label} className='fmp-lg-row'>
+                                          <span className='fmp-lg-sw' style={{ background: color }} />
+                                          {label}
+                                      </div>
+                                  ))
+                                : (
+                                      [
+                                          ['ok', 'Đang hoạt động'],
+                                          ['bad', 'Đang hỏng — chờ sửa'],
+                                          ['warn', 'Bảo trì / chờ thanh lý'],
+                                          ['loan', 'Đang mượn'],
+                                          ['idle', 'Tồn kho / khác'],
+                                      ] as [StatusVisual, string][]
+                                  ).map(([visual, label]) => (
+                                      <div key={visual} className='fmp-lg-row'>
+                                          <span className='fmp-lg-sw' style={{ background: CHIP_COLOR[visual] }} />
+                                          {label}
+                                      </div>
+                                  ))}
                         </div>
                     </div>
                 </div>
@@ -942,6 +1153,36 @@ const FMP_CSS = `
 @keyframes fmpHot { from { filter: brightness(1); } to { filter: brightness(1.7); } }
 .fmp-m:hover .fmp-head .fmp-t { filter: brightness(1.5); }
 .fmp-selected .fmp-head .fmp-t { box-shadow: 0 0 0 2.5px #38e1ff, 0 0 22px rgba(56,225,255,0.8); }
+/* Nhiệt sự cố: màu đầu máy theo số lần hỏng đột xuất 6 tháng */
+.fmp-hm0 .fmp-head { --ct: #33436a; --cf: #232f4e; --cs: #182238; }
+.fmp-hm1 .fmp-head { --ct: #b98a3a; --cf: #8d692c; --cs: #664c20; }
+.fmp-hm1 .fmp-head .fmp-t { box-shadow: 0 0 10px rgba(185,138,58,0.5); }
+.fmp-hm2 .fmp-head { --ct: #ff6b4a; --cf: #c74f36; --cs: #933a28; }
+.fmp-hm2 .fmp-head .fmp-t { box-shadow: 0 0 16px rgba(255,107,74,0.8); }
+.fmp-blob {
+    position: absolute; width: 110px; height: 110px; border-radius: 50%;
+    pointer-events: none; filter: blur(4px);
+    background: radial-gradient(circle, rgba(255,90,60,0.38), rgba(255,150,60,0.15) 45%, transparent 70%);
+}
+.fmp-mode { display: inline-flex; border: 1px solid rgba(96,140,255,0.16); border-radius: 9px; overflow: hidden; }
+.fmp-mode button {
+    background: transparent; color: #93a1ca; border: none; cursor: pointer;
+    font: inherit; font-size: 11.5px; font-weight: 700; letter-spacing: 0.8px;
+    padding: 5px 13px;
+}
+.fmp-mode button.fmp-on { background: rgba(56,225,255,0.14); color: #38e1ff; }
+
+.fmp-row { display: flex; justify-content: space-between; gap: 10px; font-size: 12.5px; }
+.fmp-row-k { color: #5c6a94; }
+.fmp-row-v { font-weight: 600; color: #e2e9ff; font-variant-numeric: tabular-nums; }
+.fmp-spark-h {
+    display: flex; justify-content: space-between; gap: 8px;
+    font-size: 10px; color: #5c6a94; letter-spacing: 1.2px; text-transform: uppercase;
+    margin-bottom: 5px; font-weight: 700;
+}
+.fmp-spark-sum { color: #38e1ff; font-family: ui-monospace, Consolas, monospace; letter-spacing: 0; }
+.fmp-spark-cv { width: 100%; height: 56px; display: block; }
+
 .fmp-ring {
     position: absolute; width: 72px; height: 72px; border-radius: 50%;
     border: 2px solid #ff4d5e; pointer-events: none;
