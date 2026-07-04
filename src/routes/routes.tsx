@@ -14,6 +14,7 @@ const AssetDetail = lazy(() => import('../pages/AssetDetail'));
 const StocktakePage = lazy(() => import('../pages/StocktakePage'));
 const AssetDisposalPage = lazy(() => import('../pages/AssetDisposalPage'));
 const MapPage = lazy(() => import('../pages/MapPage'));
+const FloorMapPage = lazy(() => import('../pages/FloorMapPage'));
 const BrandList = lazy(() => import('../pages/BrandList'));
 const MaintenanceList = lazy(() => import('../pages/MaintenanceList'));
 const TransferList = lazy(() => import('../pages/TransferList'));
@@ -97,6 +98,7 @@ export const router = createBrowserRouter([
             { path: 'assets/disposals', element: guarded('/assets/disposals', <AssetDisposalPage />) },
             { path: 'assets/disposals/:id', element: guarded('/assets/disposals/:id', <AssetDisposalPage />) },
             { path: 'assets/map', element: guarded('/assets/map', <MapPage />) },
+            { path: 'assets/floor-map', element: withSuspense(<FloorMapPage />) },
             { path: 'assets/:id', element: withSuspense(<AssetDetail />) },
             { path: 'qr-labels', element: guarded('/qr-labels', <QrLabelListPage />) },
             {

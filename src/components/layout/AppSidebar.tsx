@@ -21,6 +21,7 @@ import {
     MenuUnfoldOutlined,
     MessageOutlined,
     QrcodeOutlined,
+    RadarChartOutlined,
     SendOutlined,
     ShopOutlined,
     ShoppingCartOutlined,
@@ -202,6 +203,14 @@ const navigationSections: NavigationSection[] = [
                 description: 'Rà soát QR và duyệt thanh lý',
                 icon: <DeleteOutlined />,
                 capability: 'assetDisposal.manage',
+            },
+            {
+                path: '/assets/floor-map',
+                label: 'Sơ đồ xưởng',
+                description: 'Giám sát máy theo mặt bằng',
+                icon: <RadarChartOutlined />,
+                matchMode: 'exact',
+                capability: 'asset.view',
             },
             {
                 path: '/assets/map',

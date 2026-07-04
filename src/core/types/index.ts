@@ -1102,6 +1102,31 @@ export interface MachineTypeCodeList {
     model?: string;
 }
 
+/** Khu vực trên sơ đồ mặt bằng xưởng — toạ độ % (0-100) so với sàn. */
+export interface FloorZone {
+    id: string;
+    name: string;
+    x: number;
+    y: number;
+    w: number;
+    h: number;
+}
+
+/** Máy trên sơ đồ xưởng. floorPos = null nghĩa là chưa xếp lên sơ đồ. */
+export interface FloorMapMachine {
+    id: string;
+    name: string;
+    machineCode: string;
+    type: string;
+    status: AssetStatus;
+    floorPos: { x: number; y: number } | null;
+}
+
+export interface FloorMapData {
+    zones: FloorZone[];
+    machines: FloorMapMachine[];
+}
+
 export type DataQualitySeverity = 'critical' | 'warning' | 'info';
 export type DataQualityCategoryKey = 'assets' | 'materials' | 'qr' | 'plants' | 'users' | 'maintenance';
 
