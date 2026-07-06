@@ -38,7 +38,7 @@ import HandoverModal from '../components/transfer/HandoverModal';
 import ContextChatDrawer from '../components/chat/ContextChatDrawer';
 import { transferStatusOptions } from '../core/constants/transfer';
 import { useAuth } from '../core/contexts/AuthContext';
-import { hasManagerAccess } from '../core/lib/permissions';
+import { hasManagerAccess, hasDirectorAccess } from '../core/lib/permissions';
 import { plantService } from '../core/services';
 import { transferService } from '../core/services/transfer.service';
 import type { Asset, CreateTransferPayload, Transfer, TransferFilter } from '../core/types';
@@ -214,6 +214,9 @@ const TransferList: React.FC = () => {
     const pageEnd = Math.min(currentPage * pageSize, totalItems);
     const canRejectOrCancelTransfer = (transfer: Transfer) =>
         canManageTransfers && (!user?.plantId || getTransferFromPlantId(transfer) === user.plantId);
+    // Hủy lệnh: chỉ Giám đốc trở lên (admin/director), tách khỏi quyền quản lý chung
+    const canCancelTransfer = (transfer: Transfer) =>
+        hasDirectorAccess(role) && (!user?.plantId || getTransferFromPlantId(transfer) === user.plantId);
     const activeFilterChips = [
         filters.search ? `Từ khóa: ${filters.search}` : '',
         filters.status
@@ -283,7 +286,7 @@ const TransferList: React.FC = () => {
 
     const handleCancel = async () => {
         if (!cancelModal.transfer || !cancelModal.reason.trim()) return;
-        if (cancelModal.transfer.status !== 'pending' || !canRejectOrCancelTransfer(cancelModal.transfer)) return;
+        if (cancelModal.transfer.status !== 'pending' || !canCancelTransfer(cancelModal.transfer)) return;
         try {
             setCancellingTransferId(cancelModal.transfer.id);
             await cancelMutation.mutateAsync({ id: cancelModal.transfer.id, reason: cancelModal.reason.trim() });
@@ -423,7 +426,7 @@ const TransferList: React.FC = () => {
                     </Button>
                 </Tooltip>
             ) : null}
-            {record.status === 'pending' && canRejectOrCancelTransfer(record) ? (
+            {record.status === 'pending' && canCancelTransfer(record) ? (
                 <Tooltip title='Hủy lệnh'>
                     <Button
                         type={mode === 'table' ? 'text' : 'default'}

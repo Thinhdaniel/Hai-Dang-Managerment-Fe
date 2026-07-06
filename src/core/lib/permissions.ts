@@ -109,6 +109,9 @@ export const isFieldStaff = (role: Role) => role === UserRole.STAFF;
 export const hasManagerAccess = (role: Role) =>
     role === UserRole.ADMIN || role === UserRole.DIRECTOR || role === UserRole.MANAGER;
 
+/** Giám đốc trở lên (Super Admin + Giám đốc) — dùng cho thao tác nhạy cảm như hủy lệnh. */
+export const hasDirectorAccess = (role: Role) => role === UserRole.ADMIN || role === UserRole.DIRECTOR;
+
 export const isAdmin = (role: Role) => role === UserRole.ADMIN;
 
 /** Kiểm tra một role có năng lực cụ thể không. */

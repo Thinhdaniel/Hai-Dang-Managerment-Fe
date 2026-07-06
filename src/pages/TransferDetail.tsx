@@ -40,7 +40,7 @@ import ConfirmAction from '../components/shared/ConfirmAction';
 import HandoverModal from '../components/transfer/HandoverModal';
 import TransferStatusBadge from '../components/transfer/TransferStatusBadge';
 import { useAuth } from '../core/contexts/AuthContext';
-import { hasManagerAccess } from '../core/lib/permissions';
+import { hasManagerAccess, hasDirectorAccess } from '../core/lib/permissions';
 import { transferService } from '../core/services/transfer.service';
 import type { Asset, Transfer } from '../core/types';
 
@@ -269,6 +269,9 @@ const TransferDetail: React.FC = () => {
     const canExportStockOut = ['approved', 'completed'].includes(transfer.status);
     const canRejectOrCancelTransfer =
         canManage && (!user?.plantId || getTransferFromPlantId(transfer) === user.plantId);
+    // Hủy lệnh: chỉ Giám đốc trở lên (admin/director), tách khỏi quyền quản lý chung
+    const canCancel =
+        hasDirectorAccess(role) && (!user?.plantId || getTransferFromPlantId(transfer) === user.plantId);
 
     const handleExportStockOut = async () => {
         try {
@@ -439,7 +442,7 @@ const TransferDetail: React.FC = () => {
                                     Từ chối
                                 </Button>
                             ) : null}
-                            {transfer.status === 'pending' && canRejectOrCancelTransfer ? (
+                            {transfer.status === 'pending' && canCancel ? (
                                 <Button
                                     icon={<StopOutlined />}
                                     onClick={() => setCancelModal({ open: true, reason: '' })}
@@ -744,10 +747,10 @@ const TransferDetail: React.FC = () => {
                 okButtonProps={{
                     danger: true,
                     loading: cancelMutation.isPending,
-                    disabled: !cancelModal.reason.trim() || transfer.status !== 'pending' || !canRejectOrCancelTransfer,
+                    disabled: !cancelModal.reason.trim() || transfer.status !== 'pending' || !canCancel,
                 }}
                 onOk={() => {
-                    if (transfer.status !== 'pending' || !canRejectOrCancelTransfer) return;
+                    if (transfer.status !== 'pending' || !canCancel) return;
                     cancelMutation.mutate(cancelModal.reason.trim());
                 }}
                 onCancel={() => setCancelModal({ open: false, reason: '' })}
