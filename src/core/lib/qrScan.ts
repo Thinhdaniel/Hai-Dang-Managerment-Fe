@@ -24,6 +24,8 @@ export type ScanResolveResult = {
     publicId?: string;
     labelId?: string;
     source: QrScanSource;
+    /** Tem QR tồn tại nhưng đã bị thay thế/thu hồi (retired/lost/damaged) — không trỏ về máy nào nữa. */
+    inactiveLabelStatus?: string;
 };
 
 // Resolve một mã quét/nhập về đúng một Asset nội bộ.
@@ -39,6 +41,18 @@ export const resolveAssetByScan = async (rawValue: string): Promise<ScanResolveR
                 publicId: resolved.publicId,
                 labelId: resolved.label?.id,
                 source: resolved.source,
+            };
+        }
+        // Tem có thật nhưng đã bị thay thế/thu hồi -> dừng hẳn, không rơi xuống search
+        // (tránh 2 tem khác nhau resolve về cùng 1 máy như bug quét trùng ở thanh lý)
+        if (resolved.source === 'qr_label' && resolved.status && !['assigned', 'unused'].includes(resolved.status)) {
+            return {
+                asset: null,
+                ambiguous: false,
+                publicId: resolved.publicId,
+                labelId: resolved.label?.id,
+                source: resolved.source,
+                inactiveLabelStatus: resolved.status,
             };
         }
     } catch {

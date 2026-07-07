@@ -216,10 +216,12 @@ const QrQuickMaintenanceModal: React.FC<QrQuickMaintenanceModalProps> = ({ open,
                     result: result.ambiguous ? 'ambiguous' : 'not_found',
                     source: result.source,
                 });
-                message[result.ambiguous ? 'warning' : 'error'](
-                    result.ambiguous
-                        ? 'Mã nhập vào khớp nhiều máy — hãy nhập chính xác mã máy hoặc quét QR.'
-                        : 'Không tìm thấy máy từ mã vừa quét.'
+                message[result.ambiguous || result.inactiveLabelStatus ? 'warning' : 'error'](
+                    result.inactiveLabelStatus
+                        ? 'Tem QR này đã bị thay thế/thu hồi — dùng tem mới đang dán trên máy.'
+                        : result.ambiguous
+                          ? 'Mã nhập vào khớp nhiều máy — hãy nhập chính xác mã máy hoặc quét QR.'
+                          : 'Không tìm thấy máy từ mã vừa quét.'
                 );
                 return;
             }

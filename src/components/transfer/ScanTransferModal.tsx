@@ -25,7 +25,8 @@ const ScanTransferModal: React.FC<ScanTransferModalProps> = ({ open, onClose, on
         if (resolving) return;
         setResolving(true);
         try {
-            const { asset, ambiguous, publicId, labelId, source } = await resolveAssetByScan(rawValue);
+            const { asset, ambiguous, publicId, labelId, source, inactiveLabelStatus } =
+                await resolveAssetByScan(rawValue);
             const logBase = {
                 rawValue,
                 publicId,
@@ -38,7 +39,9 @@ const ScanTransferModal: React.FC<ScanTransferModalProps> = ({ open, onClose, on
                     ...logBase,
                     result: ambiguous ? 'ambiguous' : 'not_found',
                 });
-                if (ambiguous) {
+                if (inactiveLabelStatus) {
+                    message.warning('Tem QR này đã bị thay thế/thu hồi — dùng tem mới đang dán trên máy.');
+                } else if (ambiguous) {
                     message.warning('Mã nhập vào khớp nhiều máy — hãy nhập chính xác mã máy hoặc quét QR.');
                 } else {
                     message.error('Không tìm thấy máy từ mã vừa quét.');

@@ -260,7 +260,8 @@ const StocktakePage: React.FC = () => {
 
         setResolving(true);
         try {
-            const { asset, ambiguous, publicId, labelId, source } = await resolveAssetByScan(rawValue);
+            const { asset, ambiguous, publicId, labelId, source, inactiveLabelStatus } =
+                await resolveAssetByScan(rawValue);
             const logBase = {
                 rawValue,
                 publicId,
@@ -271,6 +272,9 @@ const StocktakePage: React.FC = () => {
             };
 
             if (!asset) {
+                const inactiveMsg = inactiveLabelStatus
+                    ? 'Tem QR này đã bị thay thế/thu hồi — dùng tem mới đang dán trên máy'
+                    : '';
                 recordQrScan({
                     ...logBase,
                     result: ambiguous ? 'ambiguous' : 'not_found',
@@ -278,10 +282,10 @@ const StocktakePage: React.FC = () => {
                 appendRecord({
                     type: 'unknown',
                     rawValue,
-                    message: ambiguous ? 'Mã khớp nhiều máy' : 'Không xác định được máy',
+                    message: inactiveMsg || (ambiguous ? 'Mã khớp nhiều máy' : 'Không xác định được máy'),
                 });
                 setActiveTab('anomalies');
-                message.warning(ambiguous ? 'Mã nhập vào khớp nhiều máy' : 'Không xác định được máy');
+                message.warning(inactiveMsg || (ambiguous ? 'Mã nhập vào khớp nhiều máy' : 'Không xác định được máy'));
                 return;
             }
 

@@ -760,7 +760,11 @@ const GlobalQrScannerPage: React.FC = () => {
 
                 setScanResult({ asset: null, ambiguous: false, meta, resolvedAt: Date.now() });
                 message.warning(
-                    internal.canActivate ? 'Tem QR chưa gắn máy' : 'Tem QR chưa gắn máy hoặc chưa thể kích hoạt'
+                    internal.status && !['assigned', 'unused'].includes(internal.status)
+                        ? 'Tem QR này đã bị thay thế/thu hồi — dùng tem mới đang dán trên máy'
+                        : internal.canActivate
+                          ? 'Tem QR chưa gắn máy'
+                          : 'Tem QR chưa gắn máy hoặc chưa thể kích hoạt'
                 );
                 return;
             } catch {
