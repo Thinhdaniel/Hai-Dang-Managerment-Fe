@@ -1052,6 +1052,31 @@ export interface AiDigest {
     createdAt?: string;
 }
 
+// ===== KIỂM TOÁN ĐÊM =====
+export interface AiAuditFinding {
+    code?: string;
+    source: 'rule' | 'ai';
+    severity: 'critical' | 'warning' | 'info';
+    title: string;
+    detail?: string;
+    refs?: string[];
+}
+
+export interface AiAudit {
+    _id: string;
+    runKey: string;
+    runAt?: string;
+    trigger?: 'cron' | 'manual';
+    summary?: string;
+    findings?: AiAuditFinding[];
+    recommendations?: string[];
+    stats?: { total?: number; critical?: number; warning?: number; info?: number };
+    provider?: string;
+    model?: string;
+    createdAt?: string;
+    updatedAt?: string;
+}
+
 // ===== MÃ MÁY THÔNG MINH =====
 export interface AssetCodeSuggestion {
     code: string;

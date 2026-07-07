@@ -22,6 +22,7 @@ import DashboardFacilityDistributionCard from '../components/dashboard/Dashboard
 import DashboardOperationsCard from '../components/dashboard/DashboardOperationsCard';
 import DashboardMislocatedCard from '../components/dashboard/DashboardMislocatedCard';
 import DashboardDigestCard from '../components/dashboard/DashboardDigestCard';
+import DashboardAuditCard from '../components/dashboard/DashboardAuditCard';
 import DashboardVarianceCard from '../components/dashboard/DashboardVarianceCard';
 import DashboardOverdueCard from '../components/dashboard/DashboardOverdueCard';
 import DashboardRecentActivityCard from '../components/dashboard/DashboardRecentActivityCard';
@@ -274,6 +275,8 @@ const Dashboard: React.FC = () => {
                     <DashboardVarianceCard />
                 </div>
             ) : null}
+
+            {canViewCost ? <DashboardAuditCard /> : null}
 
             <div className='dashboard-attention-grid'>
                 {attentionItems.map((item) => (
