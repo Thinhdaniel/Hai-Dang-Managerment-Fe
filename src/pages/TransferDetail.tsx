@@ -267,11 +267,12 @@ const TransferDetail: React.FC = () => {
     const transferCode = getTransferCode(transfer);
     const status = statusMeta[transfer.status] || statusMeta.pending;
     const canExportStockOut = ['approved', 'completed'].includes(transfer.status);
-    const canRejectOrCancelTransfer =
-        canManage && (!user?.plantId || getTransferFromPlantId(transfer) === user.plantId);
-    // Hủy lệnh: chỉ Giám đốc trở lên (admin/director), tách khỏi quyền quản lý chung
-    const canCancel =
-        hasDirectorAccess(role) && (!user?.plantId || getTransferFromPlantId(transfer) === user.plantId);
+    // Giám đốc trở lên (Super Admin/Giám đốc) bỏ qua giới hạn theo cơ sở, quản lý cơ sở khác cũng thao tác được
+    const canAccessTransferPlant =
+        hasDirectorAccess(role) || !user?.plantId || getTransferFromPlantId(transfer) === user.plantId;
+    const canRejectOrCancelTransfer = canManage && canAccessTransferPlant;
+    // Hủy lệnh: chỉ Giám đốc trở lên (admin/director)
+    const canCancel = hasDirectorAccess(role);
 
     const handleExportStockOut = async () => {
         try {

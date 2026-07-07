@@ -212,11 +212,12 @@ const TransferList: React.FC = () => {
     const totalPages = Math.max(transferResponse?.totalPages ?? Math.ceil(totalItems / Math.max(pageSize, 1)), 1);
     const pageStart = totalItems === 0 ? 0 : (currentPage - 1) * pageSize + 1;
     const pageEnd = Math.min(currentPage * pageSize, totalItems);
-    const canRejectOrCancelTransfer = (transfer: Transfer) =>
-        canManageTransfers && (!user?.plantId || getTransferFromPlantId(transfer) === user.plantId);
-    // Hủy lệnh: chỉ Giám đốc trở lên (admin/director), tách khỏi quyền quản lý chung
-    const canCancelTransfer = (transfer: Transfer) =>
-        hasDirectorAccess(role) && (!user?.plantId || getTransferFromPlantId(transfer) === user.plantId);
+    // Giám đốc trở lên (Super Admin/Giám đốc) bỏ qua giới hạn theo cơ sở, quản lý cơ sở khác cũng thao tác được
+    const canAccessTransferPlant = (transfer: Transfer) =>
+        hasDirectorAccess(role) || !user?.plantId || getTransferFromPlantId(transfer) === user.plantId;
+    const canRejectOrCancelTransfer = (transfer: Transfer) => canManageTransfers && canAccessTransferPlant(transfer);
+    // Hủy lệnh: chỉ Giám đốc trở lên (admin/director)
+    const canCancelTransfer = (transfer: Transfer) => hasDirectorAccess(role);
     const activeFilterChips = [
         filters.search ? `Từ khóa: ${filters.search}` : '',
         filters.status
