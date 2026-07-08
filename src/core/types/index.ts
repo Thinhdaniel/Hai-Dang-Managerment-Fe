@@ -667,7 +667,8 @@ export interface BorrowingFilter extends PaginationParams {
 
 export interface CreateBorrowingBatchPayload {
     type: BorrowingType.EXTERNAL | BorrowingType.RENTAL;
-    partnerName: string;
+    /** Bỏ trống khi rà soát chưa rõ máy của ai — BE tự điền "Chưa xác định", bổ sung sau */
+    partnerName?: string;
     contractNo?: string;
     plantId: string;
     area?: string;
@@ -678,8 +679,17 @@ export interface CreateBorrowingBatchPayload {
     createQrBatch?: boolean;
 }
 
+export interface UpdateBorrowingBatchPayload {
+    partnerName?: string;
+    contractNo?: string;
+    area?: string;
+    expectedReturnTime?: string;
+    note?: string;
+}
+
 export interface ReceiveBorrowingBatchByQrPayload {
-    publicId: string;
+    /** Bỏ trống = nhận máy KHÔNG dán tem (không đụng gì vào máy khách) */
+    publicId?: string;
     asset: {
         name: string;
         machineCode?: string;
@@ -705,7 +715,8 @@ export interface BulkReturnBorrowingBatchPayload {
     note?: string;
     items: Array<{
         borrowingId: string;
-        qrReturnAction: QrReturnAction;
+        /** Chỉ bắt buộc với máy có tem QR tạm; máy không tem bỏ qua */
+        qrReturnAction?: QrReturnAction;
         returnCondition?: string;
         returnNote?: string;
         qrReturnNote?: string;

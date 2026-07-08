@@ -78,7 +78,7 @@ const BORROWING_TYPE_RENTAL = 'rental' as BorrowingBatch['type'];
 
 type BatchFormValues = {
     type: BorrowingBatch['type'];
-    partnerName: string;
+    partnerName?: string;
     contractNo?: string;
     plantId: string;
     area?: string;
@@ -200,7 +200,8 @@ const BorrowingList: React.FC = () => {
         const values = await batchForm.validateFields();
         await createBatchMutation.mutateAsync({
             type: values.type,
-            partnerName: values.partnerName.trim(),
+            // Rà soát thực tế có thể chưa biết máy của ai — để trống, BE tự điền "Chưa xác định"
+            partnerName: values.partnerName?.trim() || undefined,
             contractNo: values.contractNo?.trim() || undefined,
             plantId: values.plantId,
             area: values.area?.trim() || undefined,
@@ -208,9 +209,15 @@ const BorrowingList: React.FC = () => {
             expectedReturnTime: values.expectedReturnTime?.toISOString(),
             plannedQuantity: Number(values.plannedQuantity),
             note: values.note?.trim() || undefined,
-            createQrBatch: values.createQrBatch !== false,
+            createQrBatch: values.createQrBatch === true,
         });
     };
+
+    // Lô còn nợ thông tin sau rà soát (chưa rõ đối tác hoặc chưa có hạn trả) — nhắc bổ sung
+    const batchNeedsInfo = (batch: BorrowingBatch) =>
+        batch.status !== 'returned' &&
+        batch.status !== 'cancelled' &&
+        (batch.partnerName === 'Chưa xác định' || !batch.expectedReturnTime);
 
     const batchColumns: TableColumnsType<BorrowingBatch> = [
         {
@@ -237,9 +244,19 @@ const BorrowingList: React.FC = () => {
             key: 'partner',
             render: (_value, record) => (
                 <div className='flex min-w-[180px] flex-col gap-1'>
-                    <span className='text-sm font-bold text-slate-800'>{record.partnerName}</span>
+                    <span className='flex items-center gap-2 text-sm font-bold text-slate-800'>
+                        {record.partnerName}
+                        {batchNeedsInfo(record) ? (
+                            <Tag color='orange' className='!m-0'>
+                                Cần bổ sung
+                            </Tag>
+                        ) : null}
+                    </span>
                     <span className='text-xs text-slate-500'>
                         {record.plant?.name || '-'} {record.area ? `· ${record.area}` : ''}
+                        {record.expectedReturnTime
+                            ? ` · Hạn trả ${dayjs(record.expectedReturnTime).format('DD/MM/YYYY')}`
+                            : ' · Chưa có hạn trả'}
                     </span>
                 </div>
             ),
@@ -770,13 +787,13 @@ const BorrowingList: React.FC = () => {
                         type: BORROWING_TYPE_EXTERNAL,
                         borrowTime: dayjs(),
                         plannedQuantity: 10,
-                        createQrBatch: true,
+                        createQrBatch: false,
                     }}
                     className='pt-2 [&_.ant-form-item-label>label]:font-bold [&_.ant-form-item-label>label]:text-slate-700'
                 >
                     <div className='mb-4 rounded-2xl border border-cyan-100 bg-cyan-50 p-4 text-sm font-semibold text-cyan-900'>
-                        Lô này dùng cho máy mượn/thuê từ đối tác. QR được xem là tem tạm và sẽ bị vô hiệu hóa khi trả
-                        máy.
+                        Lô này dùng cho máy mượn/thuê từ đối tác. Chưa rõ đối tác hay hạn trả thì cứ để trống — nhập
+                        máy trước, bổ sung sau. Chỉ tạo QR tạm nếu đối tác cho phép dán tem lên máy.
                     </div>
                     <div className='grid grid-cols-1 gap-3 md:grid-cols-2'>
                         <Form.Item label='Loại lô' name='type' rules={[{ required: true, message: 'Chọn loại lô' }]}>
@@ -788,12 +805,8 @@ const BorrowingList: React.FC = () => {
                                 ]}
                             />
                         </Form.Item>
-                        <Form.Item
-                            label='Đối tác'
-                            name='partnerName'
-                            rules={[{ required: true, whitespace: true, message: 'Nhập tên đối tác' }]}
-                        >
-                            <Input size='large' placeholder='Tên công ty/đối tác' />
+                        <Form.Item label='Đối tác' name='partnerName'>
+                            <Input size='large' placeholder='Chưa rõ thì để trống — bổ sung sau' />
                         </Form.Item>
                         <Form.Item label='Số hợp đồng / biên bản' name='contractNo'>
                             <Input size='large' placeholder='Ví dụ: HD-THUE-2026-01' />
@@ -818,7 +831,9 @@ const BorrowingList: React.FC = () => {
                             <DatePicker showTime size='large' className='w-full' format='DD/MM/YYYY HH:mm' />
                         </Form.Item>
                         <Form.Item name='createQrBatch' valuePropName='checked' className='md:col-span-2'>
-                            <Checkbox>Tạo luôn lô QR tạm theo số lượng dự kiến</Checkbox>
+                            <Checkbox>
+                                Tạo lô QR tạm để dán lên máy (bỏ trống nếu không được dán gì lên máy khách)
+                            </Checkbox>
                         </Form.Item>
                         <Form.Item label='Ghi chú' name='note' className='md:col-span-2'>
                             <Input.TextArea
