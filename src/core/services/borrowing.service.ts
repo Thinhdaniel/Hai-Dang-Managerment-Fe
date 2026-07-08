@@ -1,8 +1,10 @@
 import api from '../lib/api';
+import axiosInstance from '../lib/axios';
 import type {
     Borrowing,
     BorrowingBatch,
     BorrowingBatchDetail,
+    BorrowingBatchStats,
     BorrowingBatchStatus,
     BorrowingFilter,
     BorrowingType,
@@ -49,6 +51,22 @@ export const borrowingService = {
 
     updateBatch: (id: string, data: UpdateBorrowingBatchPayload): Promise<BorrowingBatch> =>
         api.patch<BorrowingBatch, UpdateBorrowingBatchPayload>(`${BASE}/batches/${id}`, data),
+
+    getBatchStats: (): Promise<BorrowingBatchStats> => api.get<BorrowingBatchStats>(`${BASE}/batches/stats`),
+
+    // Biên bản bàn giao in ký 2 bên (nhận/trả máy với đối tác)
+    exportBatchHandover: async (id: string, code: string): Promise<void> => {
+        const data: any = await axiosInstance.get(`${BASE}/batches/${id}/export-xlsx`, { responseType: 'blob' });
+        const blob = data instanceof Blob ? data : new Blob([data as BlobPart]);
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = `BienBan-${code}.xlsx`;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
+    },
 
     createBatchQr: (id: string, quantity?: number): Promise<BorrowingBatch> =>
         api.post<BorrowingBatch, { quantity?: number }>(`${BASE}/batches/${id}/qr-batch`, { quantity }),

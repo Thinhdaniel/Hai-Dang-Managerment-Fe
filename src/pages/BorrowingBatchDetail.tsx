@@ -21,6 +21,7 @@ import {
 import {
     ArrowLeftOutlined,
     CheckCircleOutlined,
+    DownloadOutlined,
     EditOutlined,
     PlusOutlined,
     PrinterOutlined,
@@ -152,6 +153,7 @@ const BorrowingBatchDetail: React.FC = () => {
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ['borrowing-batch', id] });
             queryClient.invalidateQueries({ queryKey: ['borrowing-batches'] });
+            queryClient.invalidateQueries({ queryKey: ['borrowing-batch-stats'] });
             queryClient.invalidateQueries({ queryKey: ['assets'] });
             queryClient.invalidateQueries({ queryKey: ['qr-label-batches'] });
             queryClient.invalidateQueries({ queryKey: ['qr-labels'] });
@@ -166,6 +168,7 @@ const BorrowingBatchDetail: React.FC = () => {
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ['borrowing-batch', id] });
             queryClient.invalidateQueries({ queryKey: ['borrowing-batches'] });
+            queryClient.invalidateQueries({ queryKey: ['borrowing-batch-stats'] });
             queryClient.invalidateQueries({ queryKey: ['borrowings'] });
             queryClient.invalidateQueries({ queryKey: ['assets'] });
             queryClient.invalidateQueries({ queryKey: ['qr-labels'] });
@@ -182,6 +185,7 @@ const BorrowingBatchDetail: React.FC = () => {
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ['borrowing-batch', id] });
             queryClient.invalidateQueries({ queryKey: ['borrowing-batches'] });
+            queryClient.invalidateQueries({ queryKey: ['borrowing-batch-stats'] });
             setIsEditBatchOpen(false);
             message.success('Đã cập nhật thông tin lô');
         },
@@ -208,6 +212,19 @@ const BorrowingBatchDetail: React.FC = () => {
             expectedReturnTime: values.expectedReturnTime?.toISOString(),
             note: values.note?.trim() || undefined,
         });
+    };
+
+    const [exportingHandover, setExportingHandover] = useState(false);
+    const handleExportHandover = async () => {
+        if (!batch) return;
+        setExportingHandover(true);
+        try {
+            await borrowingService.exportBatchHandover(id, batch.code);
+        } catch {
+            message.error('Không xuất được biên bản. Thử lại sau.');
+        } finally {
+            setExportingHandover(false);
+        }
     };
 
     const openReceiveModal = (rawValue: string) => {
@@ -490,6 +507,13 @@ const BorrowingBatchDetail: React.FC = () => {
                                 Sửa thông tin lô
                             </Button>
                         ) : null}
+                        <Button
+                            icon={<DownloadOutlined />}
+                            loading={exportingHandover}
+                            onClick={handleExportHandover}
+                        >
+                            Xuất biên bản
+                        </Button>
                         {batch.qrBatchId ? (
                             <Button
                                 icon={<PrinterOutlined />}

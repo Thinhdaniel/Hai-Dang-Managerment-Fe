@@ -679,6 +679,20 @@ export interface CreateBorrowingBatchPayload {
     createQrBatch?: boolean;
 }
 
+export interface BorrowingBatchStats {
+    activeMachines: number;
+    partnerCount: number;
+    openBatches: number;
+    overdueBatches: number;
+    needsInfoBatches: number;
+    byPartner: Array<{
+        partnerName: string;
+        machines: number;
+        nearestDue: string | null;
+        overdue: number;
+    }>;
+}
+
 export interface UpdateBorrowingBatchPayload {
     partnerName?: string;
     contractNo?: string;

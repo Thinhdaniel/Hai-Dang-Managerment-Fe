@@ -118,6 +118,14 @@ const BorrowingList: React.FC = () => {
         enabled: canManageBorrowing,
     });
 
+    // Tổng quan máy ngoài: đang giữ bao nhiêu máy của ai, lô nào quá hạn/thiếu thông tin
+    const { data: batchStats } = useQuery({
+        queryKey: ['borrowing-batch-stats'],
+        queryFn: () => borrowingService.getBatchStats(),
+        enabled: canManageBorrowing,
+        staleTime: 60_000,
+    });
+
     const returnMutation = useMutation({
         mutationFn: ({ id, returnTime, note }: { id: string; returnTime: string; note?: string }) =>
             borrowingService.returnAsset(id, returnTime, note),
@@ -132,6 +140,7 @@ const BorrowingList: React.FC = () => {
         mutationFn: borrowingService.createBatch,
         onSuccess: (batch) => {
             queryClient.invalidateQueries({ queryKey: ['borrowing-batches'] });
+            queryClient.invalidateQueries({ queryKey: ['borrowing-batch-stats'] });
             queryClient.invalidateQueries({ queryKey: ['qr-label-batches'] });
             setIsBatchModalOpen(false);
             batchForm.resetFields();
@@ -614,18 +623,88 @@ const BorrowingList: React.FC = () => {
                     <div className='borrowing-mobile-section__head flex flex-col gap-3 border-b border-slate-100 bg-slate-50 px-5 py-4 md:flex-row md:items-center md:justify-between'>
                         <div>
                             <div className='text-sm font-black tracking-[0.16em] text-blue-700 uppercase'>
-                                QR tạm cho máy mượn/thuê
+                                Máy mượn/thuê từ đối tác
                             </div>
                             <div className='mt-1 text-base font-black text-slate-950'>Lô nhận/trả nhiều máy</div>
                             <div className='mt-1 text-sm font-semibold text-slate-500'>
-                                Dùng cho máy không thuộc Hải Đăng: in tem tạm, quét nhận từng máy và bắt buộc gỡ QR khi
-                                trả.
+                                Dùng cho máy không thuộc Hải Đăng — nhận bằng tem QR tạm hoặc không tem đều được.
                             </div>
                         </div>
                         <Button type='primary' icon={<QrcodeOutlined />} onClick={() => setIsBatchModalOpen(true)}>
                             Tạo lô mới
                         </Button>
                     </div>
+
+                    {batchStats && (batchStats.activeMachines > 0 || batchStats.openBatches > 0) ? (
+                        <div className='border-b border-slate-100 px-5 py-4'>
+                            <div className='grid grid-cols-2 gap-3 lg:grid-cols-4'>
+                                <div className='rounded-xl border border-slate-200 bg-slate-50 px-4 py-3'>
+                                    <div className='text-[11px] font-bold tracking-wider text-slate-500 uppercase'>
+                                        Đang giữ máy ngoài
+                                    </div>
+                                    <div className='mt-1 text-2xl font-black text-slate-900'>
+                                        {batchStats.activeMachines}
+                                    </div>
+                                </div>
+                                <div className='rounded-xl border border-slate-200 bg-slate-50 px-4 py-3'>
+                                    <div className='text-[11px] font-bold tracking-wider text-slate-500 uppercase'>
+                                        Đối tác
+                                    </div>
+                                    <div className='mt-1 text-2xl font-black text-slate-900'>
+                                        {batchStats.partnerCount}
+                                    </div>
+                                </div>
+                                <div
+                                    className={`rounded-xl border px-4 py-3 ${batchStats.overdueBatches ? 'border-rose-200 bg-rose-50' : 'border-slate-200 bg-slate-50'}`}
+                                >
+                                    <div className='text-[11px] font-bold tracking-wider text-slate-500 uppercase'>
+                                        Lô quá hạn trả
+                                    </div>
+                                    <div
+                                        className={`mt-1 text-2xl font-black ${batchStats.overdueBatches ? 'text-rose-600' : 'text-slate-900'}`}
+                                    >
+                                        {batchStats.overdueBatches}
+                                    </div>
+                                </div>
+                                <div
+                                    className={`rounded-xl border px-4 py-3 ${batchStats.needsInfoBatches ? 'border-amber-200 bg-amber-50' : 'border-slate-200 bg-slate-50'}`}
+                                >
+                                    <div className='text-[11px] font-bold tracking-wider text-slate-500 uppercase'>
+                                        Lô cần bổ sung
+                                    </div>
+                                    <div
+                                        className={`mt-1 text-2xl font-black ${batchStats.needsInfoBatches ? 'text-amber-600' : 'text-slate-900'}`}
+                                    >
+                                        {batchStats.needsInfoBatches}
+                                    </div>
+                                </div>
+                            </div>
+                            {batchStats.byPartner.length ? (
+                                <div className='mt-3 flex flex-wrap gap-2'>
+                                    {batchStats.byPartner.slice(0, 8).map((row) => (
+                                        <span
+                                            key={row.partnerName}
+                                            className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-semibold ${
+                                                row.overdue
+                                                    ? 'border-rose-200 bg-rose-50 text-rose-700'
+                                                    : 'border-slate-200 bg-white text-slate-700'
+                                            }`}
+                                        >
+                                            {row.partnerName}
+                                            <span className='font-black'>{row.machines} máy</span>
+                                            {row.nearestDue ? (
+                                                <span className='font-normal text-slate-500'>
+                                                    · hạn {dayjs(row.nearestDue).format('DD/MM')}
+                                                </span>
+                                            ) : (
+                                                <span className='font-normal text-amber-600'>· chưa có hạn</span>
+                                            )}
+                                        </span>
+                                    ))}
+                                </div>
+                            ) : null}
+                        </div>
+                    ) : null}
                     <div className='block md:hidden'>
                         <div className='borrowing-mobile-list p-3'>
                             {isLoadingBatches ? (
