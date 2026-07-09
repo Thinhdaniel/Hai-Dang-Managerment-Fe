@@ -9419,8 +9419,12 @@ button.machine-map-stat:hover {
     position: absolute;
     inset: -35%;
     background: conic-gradient(from 180deg, transparent, rgba(255, 255, 255, 0.16), transparent, rgba(14, 165, 233, 0.22), transparent);
-    animation: lucky-wheel-aura 12s linear infinite;
     pointer-events: none;
+}
+
+/* Vầng sáng chỉ xoay khi đang quay — tránh hiệu ứng nền chạy vô hạn gây tốn CPU/GPU. */
+.lucky-wheel-page:has(.lucky-wheel-stage--spinning) .lucky-wheel-hero-card__glow {
+    animation: lucky-wheel-aura 12s linear infinite;
 }
 
 .lucky-wheel-stage {
@@ -9451,11 +9455,11 @@ button.machine-map-stat:hover {
 .lucky-wheel-stage::after {
     inset: 12%;
     background: radial-gradient(circle, transparent 58%, rgba(255, 255, 255, 0.1) 59%, transparent 62%);
-    animation: lucky-wheel-pulse 2.8s ease-in-out infinite;
+    opacity: 0.5;
 }
 
 .lucky-wheel-stage--spinning::after {
-    animation-duration: 0.85s;
+    animation: lucky-wheel-pulse 0.85s ease-in-out infinite;
 }
 
 .lucky-wheel-svg {
@@ -9499,13 +9503,48 @@ button.machine-map-stat:hover {
 
 .lucky-wheel-segment-label {
     fill: white;
-    font-size: 10.5px;
+    font-size: var(--wheel-label-size, 10.5px);
     font-weight: 800;
+    letter-spacing: 0.3px;
     paint-order: stroke;
-    stroke: rgba(15, 23, 42, 0.42);
-    stroke-width: 3px;
+    stroke: rgba(15, 23, 42, 0.45);
+    stroke-width: 2.5px;
     stroke-linecap: round;
     stroke-linejoin: round;
+}
+
+/* Bóng đèn vành + kim chỉ: chỉ nhấp nháy TRONG LÚC quay (không chạy hiệu ứng nền vô hạn). */
+.lucky-wheel-stage--spinning .lucky-wheel-bulb {
+    animation: lucky-wheel-bulb-blink 0.55s steps(2, jump-none) infinite;
+}
+
+.lucky-wheel-stage--spinning .lucky-wheel-bulb--alt {
+    animation-delay: 0.275s;
+}
+
+.lucky-wheel-stage--spinning .lucky-wheel-pointer {
+    transform-origin: 50% 20%;
+    animation: lucky-wheel-pointer-tick 0.16s ease-in-out infinite;
+}
+
+@keyframes lucky-wheel-bulb-blink {
+    0%,
+    100% {
+        opacity: 1;
+    }
+    50% {
+        opacity: 0.3;
+    }
+}
+
+@keyframes lucky-wheel-pointer-tick {
+    0%,
+    100% {
+        transform: translateX(-50%) rotate(0deg);
+    }
+    50% {
+        transform: translateX(-50%) rotate(-7deg);
+    }
 }
 
 .lucky-wheel-brand {
@@ -9675,13 +9714,15 @@ button.machine-map-stat:hover {
     }
 
     .lucky-wheel-segment-label {
-        font-size: 9px;
+        font-size: calc(var(--wheel-label-size, 10.5px) * 0.85);
     }
 }
 
 @media (prefers-reduced-motion: reduce) {
     .lucky-wheel-hero-card__glow,
     .lucky-wheel-stage::after,
+    .lucky-wheel-stage--spinning .lucky-wheel-bulb,
+    .lucky-wheel-stage--spinning .lucky-wheel-pointer,
     .lucky-wheel-winner__crown,
     .lucky-wheel-confetti span {
         animation: none !important;

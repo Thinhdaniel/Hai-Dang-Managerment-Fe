@@ -113,7 +113,8 @@ const LuckyWheelSvg = ({
         : defaultNames.map((name) => ({ name, active: true }));
     const count = activeParticipants.length;
     const angle = 360 / count;
-    const labelRadius = count > 12 ? 150 : 142;
+    const labelRadius = 176;
+    const labelFontSize = count > 14 ? 9.5 : count > 8 ? 10.5 : 12;
 
     return (
         <div className={`lucky-wheel-stage ${spinning ? 'lucky-wheel-stage--spinning' : ''}`}>
@@ -127,6 +128,16 @@ const LuckyWheelSvg = ({
                         <stop offset='0%' stopColor='#ffffff' />
                         <stop offset='48%' stopColor='#e0f2fe' />
                         <stop offset='100%' stopColor='#2563eb' />
+                    </radialGradient>
+                    <radialGradient id='wheelSheen' cx='50%' cy='42%' r='72%'>
+                        <stop offset='0%' stopColor='#ffffff' stopOpacity='0.16' />
+                        <stop offset='55%' stopColor='#ffffff' stopOpacity='0' />
+                        <stop offset='100%' stopColor='#020617' stopOpacity='0.26' />
+                    </radialGradient>
+                    <radialGradient id='wheelBulb' cx='35%' cy='30%' r='80%'>
+                        <stop offset='0%' stopColor='#fffbeb' />
+                        <stop offset='55%' stopColor='#fde047' />
+                        <stop offset='100%' stopColor='#b45309' />
                     </radialGradient>
                 </defs>
                 <g
@@ -143,6 +154,10 @@ const LuckyWheelSvg = ({
                         const end = start + angle;
                         const mid = start + angle / 2;
                         const point = polarToCartesian(210, 210, labelRadius, mid);
+                        const normalizedMid = ((mid % 360) + 360) % 360;
+                        // Chữ xếp dọc theo bán kính; nửa trái lật 180° + đổi anchor để không bao giờ ngược chữ.
+                        const isLeftHalf = normalizedMid > 180;
+                        const labelRotation = isLeftHalf ? mid + 90 : mid - 90;
                         const active = participant.active !== false;
                         return (
                             <g key={`${participant._id || participant.name}-${index}`} opacity={active ? 1 : 0.38}>
@@ -155,16 +170,18 @@ const LuckyWheelSvg = ({
                                 <text
                                     x={point.x}
                                     y={point.y}
-                                    textAnchor='middle'
+                                    textAnchor={isLeftHalf ? 'start' : 'end'}
                                     dominantBaseline='middle'
-                                    transform={`rotate(${mid} ${point.x} ${point.y})`}
+                                    transform={`rotate(${labelRotation} ${point.x} ${point.y})`}
                                     className='lucky-wheel-segment-label'
+                                    style={{ '--wheel-label-size': `${labelFontSize}px` } as React.CSSProperties}
                                 >
                                     {participant.name.length > 16 ? `${participant.name.slice(0, 15)}...` : participant.name}
                                 </text>
                             </g>
                         );
                     })}
+                    <circle cx='210' cy='210' r='188' fill='url(#wheelSheen)' pointerEvents='none' />
                     <circle cx='210' cy='210' r='72' fill='url(#wheelCenter)' stroke='rgba(255,255,255,0.9)' strokeWidth='8' />
                     <text x='210' y='198' textAnchor='middle' className='lucky-wheel-brand'>
                         HAIDANG
@@ -173,8 +190,22 @@ const LuckyWheelSvg = ({
                         LUCKY SPIN
                     </text>
                 </g>
-                <circle cx='210' cy='210' r='202' fill='none' stroke='rgba(255,255,255,0.7)' strokeWidth='8' />
-                <circle cx='210' cy='210' r='196' fill='none' stroke='rgba(250,204,21,0.55)' strokeWidth='3' strokeDasharray='7 9' />
+                <circle cx='210' cy='210' r='203' fill='none' stroke='#0b1220' strokeWidth='13' />
+                <circle cx='210' cy='210' r='209' fill='none' stroke='rgba(255,255,255,0.25)' strokeWidth='1.5' />
+                <circle cx='210' cy='210' r='196.5' fill='none' stroke='rgba(255,255,255,0.18)' strokeWidth='1' />
+                {Array.from({ length: 24 }).map((_, index) => {
+                    const bulb = polarToCartesian(210, 210, 203, index * 15);
+                    return (
+                        <circle
+                            key={index}
+                            cx={bulb.x}
+                            cy={bulb.y}
+                            r='3.4'
+                            fill='url(#wheelBulb)'
+                            className={`lucky-wheel-bulb ${index % 2 ? 'lucky-wheel-bulb--alt' : ''}`}
+                        />
+                    );
+                })}
             </svg>
         </div>
     );
