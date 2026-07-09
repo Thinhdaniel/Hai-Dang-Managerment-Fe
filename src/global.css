@@ -9732,17 +9732,19 @@ button.machine-map-stat:hover {
     color: #64748b;
 }
 
-/* Nút Quay = đèn vàng sân khấu, tách khỏi màu brand xanh của hệ thống. */
+/* Nút Quay = đèn vàng sân khấu, tách khỏi màu brand xanh của hệ thống.
+   KHÔNG dùng var(--lw-*) ở đây: nút còn xuất hiện trong modal (portal ra body,
+   ngoài phạm vi biến của stagecard) — var rỗng làm cả dòng gradient invalid. */
 .lucky-wheel-spin-button.ant-btn-primary {
     height: 58px;
     padding: 0 44px;
     border: 0;
     border-radius: 999px;
-    font-family: var(--lw-display);
+    font-family: 'Be Vietnam Pro', 'Segoe UI', system-ui, sans-serif;
     font-size: 17px;
     font-weight: 800;
     color: #241b02;
-    background: linear-gradient(135deg, #ffe08a, var(--lw-gold) 55%, #d99e0b);
+    background: linear-gradient(135deg, #ffe08a, #f5c518 55%, #d99e0b);
     box-shadow:
         0 16px 38px rgba(245, 197, 24, 0.3),
         inset 0 1px 0 rgba(255, 255, 255, 0.6);
@@ -9759,13 +9761,14 @@ button.machine-map-stat:hover {
     outline-offset: 3px;
 }
 
-/* Cần .ant-modal đằng trước để thắng CSS runtime của antd (cssinjs inject sau, cùng specificity thì antd đè). */
+/* !important vì antd cssinjs (hashPriority cao) sinh rule cùng specificity và inject SAU nên luôn đè
+   (đã verify bằng devtools: rule này có trong stylesheet, khớp element, nhưng computed vẫn trắng). */
 .ant-modal.lucky-wheel-winner-modal .ant-modal-content {
     overflow: hidden;
     border-radius: 28px;
     background:
         radial-gradient(circle at 50% 0%, rgba(245, 197, 24, 0.22), transparent 44%),
-        linear-gradient(165deg, #0b1226, #16204a 60%, #0b1226);
+        linear-gradient(165deg, #0b1226, #16204a 60%, #0b1226) !important;
     color: #f6f4ef;
 }
 
