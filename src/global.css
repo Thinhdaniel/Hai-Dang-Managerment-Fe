@@ -9759,7 +9759,8 @@ button.machine-map-stat:hover {
     outline-offset: 3px;
 }
 
-.lucky-wheel-winner-modal .ant-modal-content {
+/* Cần .ant-modal đằng trước để thắng CSS runtime của antd (cssinjs inject sau, cùng specificity thì antd đè). */
+.ant-modal.lucky-wheel-winner-modal .ant-modal-content {
     overflow: hidden;
     border-radius: 28px;
     background:

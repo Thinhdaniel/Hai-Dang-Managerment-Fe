@@ -145,7 +145,25 @@ const LuckyWheelSvg = ({
                     filter='url(#wheelShadow)'
                 >
                     <circle cx='210' cy='210' r='198' fill='#f8fafc' />
-                    {activeParticipants.map((participant, index) => {
+                    {count === 1 ? (
+                        // Còn đúng 1 người: arc 360 độ bị suy biến nên vẽ nguyên hình tròn.
+                        <g>
+                            <circle cx='210' cy='210' r='188' fill={PALETTE[0]} stroke='rgba(255,255,255,0.72)' strokeWidth='2' />
+                            <text
+                                x={polarToCartesian(210, 210, labelRadius, 90).x}
+                                y={polarToCartesian(210, 210, labelRadius, 90).y}
+                                textAnchor='end'
+                                dominantBaseline='middle'
+                                className='lucky-wheel-segment-label'
+                                style={{ '--wheel-label-size': '12px' } as React.CSSProperties}
+                            >
+                                {activeParticipants[0].name.length > 16
+                                    ? `${activeParticipants[0].name.slice(0, 15)}...`
+                                    : activeParticipants[0].name}
+                            </text>
+                        </g>
+                    ) : (
+                    activeParticipants.map((participant, index) => {
                         const start = index * angle;
                         const end = start + angle;
                         const mid = start + angle / 2;
@@ -176,16 +194,18 @@ const LuckyWheelSvg = ({
                                 </text>
                             </g>
                         );
-                    })}
+                    })
+                    )}
                     <circle cx='210' cy='210' r='188' fill='url(#wheelSheen)' pointerEvents='none' />
-                    <circle cx='210' cy='210' r='72' fill='url(#wheelCenter)' stroke='rgba(255,255,255,0.9)' strokeWidth='8' />
-                    <text x='210' y='198' textAnchor='middle' className='lucky-wheel-brand'>
-                        HAIDANG
-                    </text>
-                    <text x='210' y='224' textAnchor='middle' className='lucky-wheel-brand-sub'>
-                        LUCKY SPIN
-                    </text>
                 </g>
+                {/* Trục giữa đứng yên như nắp trục vòng quay thật — không xoay theo bánh xe. */}
+                <circle cx='210' cy='210' r='72' fill='url(#wheelCenter)' stroke='rgba(255,255,255,0.9)' strokeWidth='8' />
+                <text x='210' y='198' textAnchor='middle' className='lucky-wheel-brand'>
+                    HAIDANG
+                </text>
+                <text x='210' y='224' textAnchor='middle' className='lucky-wheel-brand-sub'>
+                    LUCKY SPIN
+                </text>
                 <circle cx='210' cy='210' r='203' fill='none' stroke='#0b1220' strokeWidth='13' />
                 <circle cx='210' cy='210' r='209' fill='none' stroke='rgba(255,255,255,0.25)' strokeWidth='1.5' />
                 <circle cx='210' cy='210' r='196.5' fill='none' stroke='rgba(255,255,255,0.18)' strokeWidth='1' />
@@ -662,7 +682,13 @@ const LuckyWheelPage: React.FC = () => {
                     setWinnerResult(null);
                     if (selectedEvent?._id) spinMutation.mutate(selectedEvent._id);
                 }}
-                getContainer={() => stageRef.current || document.body}
+                getContainer={() =>
+                    // Chỉ gắn vào sân khấu khi đang fullscreen (portal ra body sẽ bị che);
+                    // bình thường về body để modal luôn đúng tâm màn hình.
+                    document.fullscreenElement && stageRef.current && document.fullscreenElement === stageRef.current
+                        ? stageRef.current
+                        : document.body
+                }
             />
         </div>
     );
