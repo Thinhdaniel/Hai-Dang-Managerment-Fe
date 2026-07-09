@@ -317,6 +317,7 @@ const LuckyWheelPage: React.FC = () => {
     const { user } = useAuth();
     const [form] = Form.useForm();
     const stageRef = useRef<HTMLDivElement>(null);
+    const wheelParticipantsRef = useRef<LuckyWheelParticipant[]>([]);
     const [selectedId, setSelectedId] = useState<string>();
     const [rotation, setRotation] = useState(0);
     const [spinning, setSpinning] = useState(false);
@@ -409,9 +410,15 @@ const LuckyWheelPage: React.FC = () => {
     const spinMutation = useMutation({
         mutationFn: (id: string) => luckyWheelService.spin(id),
         onSuccess: (result) => {
-            const count = Math.max(result.event.participants.length, 1);
+            // Góc dừng tính theo danh sách ĐANG HIỂN THỊ trên bánh xe (người đã trúng bị loại khỏi vòng),
+            // không dùng winnerIndex của mảng đầy đủ từ server.
+            const pool = wheelParticipantsRef.current.length ? wheelParticipantsRef.current : result.event.participants;
+            const count = Math.max(pool.length, 1);
             const angle = 360 / count;
-            const winnerIndex = Math.max(0, result.winnerIndex);
+            const indexInPool = pool.findIndex(
+                (participant) => String(participant._id) === String(result.winner.participantId)
+            );
+            const winnerIndex = Math.max(0, indexInPool);
             const fullSpins = 7 + Math.floor(Math.random() * 3);
             const target = winnerIndex * angle + angle / 2;
             setSpinning(true);
@@ -455,7 +462,12 @@ const LuckyWheelPage: React.FC = () => {
     const currentTheme = themeMeta[watchedTheme || selectedEvent?.settings?.theme || 'haidang-night'];
     const watchedName = Form.useWatch('name', form) as string | undefined;
     const participants = selectedEvent?.participants || parseParticipantText(form.getFieldValue('participantsText') || defaultNames.join('\n'));
-    const activeCount = participants.filter((item) => item.active !== false).length;
+    const activeParticipants = participants.filter((item) => item.active !== false);
+    const activeCount = activeParticipants.length;
+    // Bánh xe chỉ vẽ người còn trên vòng — người đã trúng biến mất, các múi chia lại.
+    // Khi tất cả đã trúng thì vẽ đủ danh sách (mờ) thay vì bánh xe rỗng.
+    const wheelParticipants = activeParticipants.length ? activeParticipants : participants;
+    wheelParticipantsRef.current = wheelParticipants;
     const winners = selectedEvent?.winners || [];
 
     if (!hasDirectorAccess(user?.role)) {
@@ -510,7 +522,7 @@ const LuckyWheelPage: React.FC = () => {
                 </div>
 
                 <div className='lucky-wheel-stagewheel'>
-                    <LuckyWheelSvg participants={participants} rotation={rotation} spinning={spinning} />
+                    <LuckyWheelSvg participants={wheelParticipants} rotation={rotation} spinning={spinning} />
                 </div>
 
                 <Button
