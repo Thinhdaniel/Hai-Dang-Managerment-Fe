@@ -203,4 +203,11 @@ export const PAGE_META: PageMeta[] = [
         breadcrumbs: ['Dashboard', 'Báo cáo', 'Chi phí vận hành'],
         searchPlaceholder: 'Tìm theo cơ sở, máy hoặc kỳ báo cáo...',
     },
+    {
+        path: '/events/lucky-wheel',
+        title: 'Vòng Quay May Mắn',
+        subtitle: 'Tổ chức mini event nội bộ, quay thưởng minh bạch và lưu lịch sử kết quả.',
+        breadcrumbs: ['Dashboard', 'Sự kiện', 'Vòng quay may mắn'],
+        searchPlaceholder: 'Tìm theo tên sự kiện hoặc người trúng...',
+    },
 ];

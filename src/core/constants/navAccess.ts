@@ -55,4 +55,5 @@ export const ROUTE_ACCESS: Record<string, AccessCheck> = {
     '/users': requireCap('user.view'),
     '/storage': requireCap('storage.view'),
     '/admin/data-quality': requireCap('dataQuality.view'),
+    '/events/lucky-wheel': requireDirectorUp,
 };

@@ -38,6 +38,7 @@ const FacilityCostReportPage = lazy(() => import('../pages/FacilityCostReportPag
 const AiAnalyticsStudioPage = lazy(() => import('../pages/AiAnalyticsStudioPage'));
 const IncidentReplayCasePage = lazy(() => import('../pages/IncidentReplayCasePage'));
 const DataQualityDashboard = lazy(() => import('../pages/DataQualityDashboard'));
+const LuckyWheelPage = lazy(() => import('../pages/LuckyWheelPage'));
 const LoginPage = lazy(() => import('../pages/LoginPage'));
 const ForgotPasswordPage = lazy(() => import('../pages/ForgotPasswordPage'));
 const ResetPasswordPage = lazy(() => import('../pages/ResetPasswordPage'));
@@ -145,6 +146,7 @@ export const router = createBrowserRouter([
             { path: 'ai-analytics', element: guarded('/ai-analytics', <AiAnalyticsStudioPage />) },
             { path: 'ai-analytics/incident-replay/:id', element: guarded('/ai-analytics', <IncidentReplayCasePage />) },
             { path: 'admin/data-quality', element: guarded('/admin/data-quality', <DataQualityDashboard />) },
+            { path: 'events/lucky-wheel', element: guarded('/events/lucky-wheel', <LuckyWheelPage />) },
         ],
     },
     {

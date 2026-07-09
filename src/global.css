@@ -9375,3 +9375,315 @@ button.machine-map-stat:hover {
         transition: none !important;
     }
 }
+
+/* ===== Lucky Wheel internal event ===== */
+.lucky-wheel-page {
+    position: relative;
+    min-height: calc(100vh - 96px);
+}
+
+.lucky-wheel-hero-card.ant-card {
+    position: relative;
+    overflow: hidden;
+    border: 1px solid rgba(226, 232, 240, 0.65);
+    border-radius: 28px;
+    background:
+        radial-gradient(circle at 26% 18%, rgba(56, 189, 248, 0.28), transparent 34%),
+        radial-gradient(circle at 74% 20%, rgba(250, 204, 21, 0.2), transparent 28%),
+        linear-gradient(135deg, #0f172a 0%, #172554 46%, #0f766e 100%);
+    box-shadow: 0 28px 70px rgba(15, 23, 42, 0.18);
+}
+
+.lucky-wheel-page--gold .lucky-wheel-hero-card.ant-card {
+    background:
+        radial-gradient(circle at 26% 18%, rgba(245, 158, 11, 0.34), transparent 34%),
+        radial-gradient(circle at 74% 20%, rgba(59, 130, 246, 0.18), transparent 28%),
+        linear-gradient(135deg, #111827 0%, #451a03 48%, #1e293b 100%);
+}
+
+.lucky-wheel-page--tet .lucky-wheel-hero-card.ant-card {
+    background:
+        radial-gradient(circle at 26% 18%, rgba(250, 204, 21, 0.3), transparent 34%),
+        radial-gradient(circle at 74% 20%, rgba(244, 63, 94, 0.2), transparent 30%),
+        linear-gradient(135deg, #450a0a 0%, #991b1b 46%, #312e81 100%);
+}
+
+.lucky-wheel-page--ocean .lucky-wheel-hero-card.ant-card {
+    background:
+        radial-gradient(circle at 26% 18%, rgba(45, 212, 191, 0.32), transparent 34%),
+        radial-gradient(circle at 74% 20%, rgba(147, 197, 253, 0.2), transparent 30%),
+        linear-gradient(135deg, #082f49 0%, #075985 48%, #115e59 100%);
+}
+
+.lucky-wheel-hero-card__glow {
+    position: absolute;
+    inset: -35%;
+    background: conic-gradient(from 180deg, transparent, rgba(255, 255, 255, 0.16), transparent, rgba(14, 165, 233, 0.22), transparent);
+    animation: lucky-wheel-aura 12s linear infinite;
+    pointer-events: none;
+}
+
+.lucky-wheel-stage {
+    position: relative;
+    width: min(100%, 560px);
+    aspect-ratio: 1;
+    margin-inline: auto;
+    display: grid;
+    place-items: center;
+}
+
+.lucky-wheel-stage::before,
+.lucky-wheel-stage::after {
+    content: '';
+    position: absolute;
+    border-radius: 999px;
+    pointer-events: none;
+}
+
+.lucky-wheel-stage::before {
+    inset: 4%;
+    border: 1px solid rgba(255, 255, 255, 0.28);
+    box-shadow:
+        0 0 34px rgba(56, 189, 248, 0.28),
+        inset 0 0 26px rgba(255, 255, 255, 0.16);
+}
+
+.lucky-wheel-stage::after {
+    inset: 12%;
+    background: radial-gradient(circle, transparent 58%, rgba(255, 255, 255, 0.1) 59%, transparent 62%);
+    animation: lucky-wheel-pulse 2.8s ease-in-out infinite;
+}
+
+.lucky-wheel-stage--spinning::after {
+    animation-duration: 0.85s;
+}
+
+.lucky-wheel-svg {
+    position: relative;
+    z-index: 1;
+    width: 100%;
+    height: 100%;
+    overflow: visible;
+}
+
+.lucky-wheel-pointer {
+    position: absolute;
+    top: 1.5%;
+    left: 50%;
+    z-index: 3;
+    width: 46px;
+    height: 58px;
+    transform: translateX(-50%);
+    filter: drop-shadow(0 10px 18px rgba(2, 6, 23, 0.32));
+}
+
+.lucky-wheel-pointer::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    clip-path: polygon(50% 100%, 4% 0, 96% 0);
+    background: linear-gradient(180deg, #fef3c7, #f59e0b 62%, #b45309);
+}
+
+.lucky-wheel-pointer::after {
+    content: '';
+    position: absolute;
+    top: 6px;
+    left: 50%;
+    width: 12px;
+    height: 12px;
+    transform: translateX(-50%);
+    border-radius: 999px;
+    background: white;
+}
+
+.lucky-wheel-segment-label {
+    fill: white;
+    font-size: 10.5px;
+    font-weight: 800;
+    paint-order: stroke;
+    stroke: rgba(15, 23, 42, 0.42);
+    stroke-width: 3px;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+}
+
+.lucky-wheel-brand {
+    fill: #0f172a;
+    font-size: 20px;
+    font-weight: 900;
+}
+
+.lucky-wheel-brand-sub {
+    fill: #1d4ed8;
+    font-size: 11px;
+    font-weight: 800;
+}
+
+.lucky-wheel-stat {
+    border: 1px solid rgba(255, 255, 255, 0.18);
+    border-radius: 18px;
+    padding: 14px 12px;
+    background: rgba(255, 255, 255, 0.1);
+    backdrop-filter: blur(14px);
+}
+
+.lucky-wheel-stat span {
+    display: block;
+    color: white;
+    font-size: 24px;
+    font-weight: 900;
+    line-height: 1;
+}
+
+.lucky-wheel-stat small {
+    display: block;
+    margin-top: 7px;
+    color: rgba(226, 232, 240, 0.85);
+    font-size: 12px;
+    font-weight: 700;
+}
+
+.lucky-wheel-spin-button.ant-btn-primary {
+    height: 52px;
+    border: 0;
+    border-radius: 999px;
+    background: linear-gradient(135deg, #22d3ee, #2563eb 50%, #7c3aed);
+    box-shadow:
+        0 18px 34px rgba(37, 99, 235, 0.34),
+        inset 0 1px 0 rgba(255, 255, 255, 0.42);
+}
+
+.lucky-wheel-winner-modal .ant-modal-content {
+    overflow: hidden;
+    border-radius: 28px;
+    background:
+        radial-gradient(circle at 50% 0%, rgba(250, 204, 21, 0.28), transparent 42%),
+        linear-gradient(135deg, #0f172a, #172554 52%, #0f766e);
+    color: white;
+}
+
+.lucky-wheel-winner {
+    position: relative;
+    min-height: 360px;
+    padding: 28px 18px 18px;
+    text-align: center;
+}
+
+.lucky-wheel-winner__crown {
+    width: 76px;
+    height: 76px;
+    margin: 0 auto 16px;
+    display: grid;
+    place-items: center;
+    border: 1px solid rgba(255, 255, 255, 0.35);
+    border-radius: 28px;
+    background: linear-gradient(135deg, #fef3c7, #f59e0b);
+    color: #78350f;
+    font-size: 34px;
+    box-shadow: 0 20px 40px rgba(245, 158, 11, 0.28);
+    animation: lucky-wheel-crown 1.9s ease-in-out infinite;
+}
+
+.lucky-wheel-winner__eyebrow {
+    color: rgba(226, 232, 240, 0.86) !important;
+    font-weight: 800;
+    text-transform: uppercase;
+}
+
+.lucky-wheel-winner__name.ant-typography {
+    margin: 12px 0 10px;
+    color: white;
+    font-weight: 900;
+}
+
+.lucky-wheel-winner__meta {
+    display: block;
+    margin-top: 14px;
+    color: rgba(226, 232, 240, 0.72) !important;
+    font-weight: 700;
+}
+
+.lucky-wheel-confetti {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    overflow: hidden;
+}
+
+.lucky-wheel-confetti span {
+    position: absolute;
+    top: -16px;
+    width: 8px;
+    height: 14px;
+    border-radius: 3px;
+    background: hsl(calc(var(--i) * 37), 86%, 60%);
+    animation: lucky-wheel-confetti 2.6s cubic-bezier(0.18, 0.8, 0.32, 1) infinite;
+    animation-delay: calc(var(--i) * -0.08s);
+}
+
+@keyframes lucky-wheel-aura {
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+@keyframes lucky-wheel-pulse {
+    0%,
+    100% {
+        opacity: 0.35;
+        transform: scale(0.97);
+    }
+    50% {
+        opacity: 0.9;
+        transform: scale(1.02);
+    }
+}
+
+@keyframes lucky-wheel-crown {
+    0%,
+    100% {
+        transform: translateY(0) rotate(-2deg);
+    }
+    50% {
+        transform: translateY(-5px) rotate(2deg);
+    }
+}
+
+@keyframes lucky-wheel-confetti {
+    0% {
+        opacity: 0;
+        transform: translateY(-20px) rotate(0deg);
+    }
+    12% {
+        opacity: 1;
+    }
+    100% {
+        opacity: 0;
+        transform: translateY(420px) rotate(460deg);
+    }
+}
+
+@media (max-width: 640px) {
+    .lucky-wheel-hero-card.ant-card {
+        border-radius: 22px;
+    }
+
+    .lucky-wheel-pointer {
+        width: 36px;
+        height: 46px;
+    }
+
+    .lucky-wheel-segment-label {
+        font-size: 9px;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .lucky-wheel-hero-card__glow,
+    .lucky-wheel-stage::after,
+    .lucky-wheel-winner__crown,
+    .lucky-wheel-confetti span {
+        animation: none !important;
+    }
+}

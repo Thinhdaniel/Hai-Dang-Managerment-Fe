@@ -16,6 +16,7 @@ import {
     EnvironmentOutlined,
     FileAddOutlined,
     FormOutlined,
+    GiftOutlined,
     InboxOutlined,
     MenuFoldOutlined,
     MenuUnfoldOutlined,
@@ -99,6 +100,20 @@ const navigationSections: NavigationSection[] = [
                 icon: <FundOutlined />,
                 matchMode: 'exact',
                 capability: 'report.view',
+            },
+        ],
+    },
+    {
+        key: 'events',
+        label: 'Sự kiện',
+        items: [
+            {
+                path: '/events/lucky-wheel',
+                label: 'Vòng quay may mắn',
+                description: 'Mini event nội bộ',
+                icon: <GiftOutlined />,
+                matchMode: 'exact',
+                directorUp: true,
             },
         ],
     },
