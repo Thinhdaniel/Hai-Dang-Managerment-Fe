@@ -9761,14 +9761,23 @@ button.machine-map-stat:hover {
     outline-offset: 3px;
 }
 
-/* !important vì antd cssinjs (hashPriority cao) sinh rule cùng specificity và inject SAU nên luôn đè
-   (đã verify bằng devtools: rule này có trong stylesheet, khớp element, nhưng computed vẫn trắng). */
-.ant-modal.lucky-wheel-winner-modal .ant-modal-content {
+/* Bản antd này render .ant-modal-container (KHÔNG có .ant-modal-content) — đã soi DOM thật trên prod.
+   Để cả hai selector cho an toàn khi nâng/hạ version antd. */
+.ant-modal.lucky-wheel-winner-modal .ant-modal-content,
+.ant-modal.lucky-wheel-winner-modal .ant-modal-container {
     overflow: hidden;
     border-radius: 28px;
     background:
         radial-gradient(circle at 50% 0%, rgba(245, 197, 24, 0.22), transparent 44%),
         linear-gradient(165deg, #0b1226, #16204a 60%, #0b1226) !important;
+    color: #f6f4ef;
+}
+
+.ant-modal.lucky-wheel-winner-modal .ant-modal-close {
+    color: rgba(246, 244, 239, 0.65);
+}
+
+.ant-modal.lucky-wheel-winner-modal .ant-modal-close:hover {
     color: #f6f4ef;
 }
 
