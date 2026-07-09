@@ -9376,55 +9376,114 @@ button.machine-map-stat:hover {
     }
 }
 
-/* ===== Lucky Wheel internal event ===== */
+/* ===== Vòng quay may mắn — sân khấu sự kiện nội bộ =====
+   Ngôn ngữ thị giác: "đêm chàm + chỉ đỏ may mắn" — công ty may, chỉ đỏ là sợi chỉ may mắn.
+   Bố cục: Sân khấu (mặc định, để chiếu lên màn hình) / Hậu trường (Drawer chứa cấu hình). */
 .lucky-wheel-page {
     position: relative;
-    min-height: calc(100vh - 96px);
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
 }
 
-.lucky-wheel-hero-card.ant-card {
+.lucky-wheel-toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+}
+
+.lucky-wheel-stagecard {
+    --lw-night: #0b1226;
+    --lw-night-2: #16204a;
+    --lw-spot: rgba(245, 197, 24, 0.16);
+    --lw-spot-2: rgba(47, 81, 217, 0.28);
+    --lw-thread: #e5484d;
+    --lw-gold: #f5c518;
+    --lw-canvas: #f6f4ef;
+    --lw-ink-dim: rgba(246, 244, 239, 0.66);
+    --lw-display: 'Be Vietnam Pro', 'Segoe UI', system-ui, sans-serif;
+
     position: relative;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: clamp(14px, 2.2vw, 24px);
     overflow: hidden;
-    border: 1px solid rgba(226, 232, 240, 0.65);
+    border: 1px solid rgba(246, 244, 239, 0.12);
     border-radius: 28px;
+    padding: clamp(20px, 4vw, 44px);
     background:
-        radial-gradient(circle at 26% 18%, rgba(56, 189, 248, 0.28), transparent 34%),
-        radial-gradient(circle at 74% 20%, rgba(250, 204, 21, 0.2), transparent 28%),
-        linear-gradient(135deg, #0f172a 0%, #172554 46%, #0f766e 100%);
-    box-shadow: 0 28px 70px rgba(15, 23, 42, 0.18);
+        radial-gradient(circle at 50% -12%, var(--lw-spot), transparent 46%),
+        radial-gradient(circle at 88% 84%, var(--lw-spot-2), transparent 40%),
+        linear-gradient(168deg, var(--lw-night) 0%, var(--lw-night-2) 58%, var(--lw-night) 100%);
+    box-shadow: 0 28px 70px rgba(11, 18, 38, 0.28);
 }
 
-.lucky-wheel-page--gold .lucky-wheel-hero-card.ant-card {
-    background:
-        radial-gradient(circle at 26% 18%, rgba(245, 158, 11, 0.34), transparent 34%),
-        radial-gradient(circle at 74% 20%, rgba(59, 130, 246, 0.18), transparent 28%),
-        linear-gradient(135deg, #111827 0%, #451a03 48%, #1e293b 100%);
+.lucky-wheel-stagecard--gold {
+    --lw-night: #171025;
+    --lw-night-2: #3b2a10;
+    --lw-spot: rgba(245, 158, 11, 0.22);
+    --lw-spot-2: rgba(120, 53, 15, 0.4);
 }
 
-.lucky-wheel-page--tet .lucky-wheel-hero-card.ant-card {
-    background:
-        radial-gradient(circle at 26% 18%, rgba(250, 204, 21, 0.3), transparent 34%),
-        radial-gradient(circle at 74% 20%, rgba(244, 63, 94, 0.2), transparent 30%),
-        linear-gradient(135deg, #450a0a 0%, #991b1b 46%, #312e81 100%);
+.lucky-wheel-stagecard--tet {
+    --lw-night: #310a0c;
+    --lw-night-2: #7f1d1d;
+    --lw-spot: rgba(250, 204, 21, 0.24);
+    --lw-spot-2: rgba(49, 46, 129, 0.45);
 }
 
-.lucky-wheel-page--ocean .lucky-wheel-hero-card.ant-card {
-    background:
-        radial-gradient(circle at 26% 18%, rgba(45, 212, 191, 0.32), transparent 34%),
-        radial-gradient(circle at 74% 20%, rgba(147, 197, 253, 0.2), transparent 30%),
-        linear-gradient(135deg, #082f49 0%, #075985 48%, #115e59 100%);
+.lucky-wheel-stagecard--ocean {
+    --lw-night: #05263b;
+    --lw-night-2: #0b5e63;
+    --lw-spot: rgba(45, 212, 191, 0.22);
+    --lw-spot-2: rgba(147, 197, 253, 0.22);
 }
 
-.lucky-wheel-hero-card__glow {
-    position: absolute;
-    inset: -35%;
-    background: conic-gradient(from 180deg, transparent, rgba(255, 255, 255, 0.16), transparent, rgba(14, 165, 233, 0.22), transparent);
-    pointer-events: none;
+/* Chiếu sự kiện: sân khấu chiếm trọn màn hình */
+.lucky-wheel-stagecard:fullscreen {
+    justify-content: center;
+    overflow: auto;
+    border-radius: 0;
 }
 
-/* Vầng sáng chỉ xoay khi đang quay — tránh hiệu ứng nền chạy vô hạn gây tốn CPU/GPU. */
-.lucky-wheel-page:has(.lucky-wheel-stage--spinning) .lucky-wheel-hero-card__glow {
-    animation: lucky-wheel-aura 12s linear infinite;
+.lucky-wheel-stagehead {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+}
+
+.lucky-wheel-eyebrow {
+    font-family: var(--lw-display);
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.34em;
+    text-transform: uppercase;
+    color: var(--lw-gold);
+}
+
+.lucky-wheel-title {
+    margin: 8px 0 0;
+    font-family: var(--lw-display);
+    font-size: clamp(26px, 4vw, 42px);
+    font-weight: 800;
+    line-height: 1.15;
+    color: var(--lw-canvas);
+    text-wrap: balance;
+}
+
+.lucky-wheel-desc {
+    max-width: 560px;
+    margin: 8px 0 0;
+    font-size: 14px;
+    color: var(--lw-ink-dim);
+}
+
+.lucky-wheel-stagewheel {
+    width: min(100%, 620px);
 }
 
 .lucky-wheel-stage {
@@ -9559,53 +9618,160 @@ button.machine-map-stat:hover {
     font-weight: 800;
 }
 
-.lucky-wheel-stat {
-    border: 1px solid rgba(255, 255, 255, 0.18);
-    border-radius: 18px;
-    padding: 14px 12px;
-    background: rgba(255, 255, 255, 0.1);
-    backdrop-filter: blur(14px);
+/* Dải thống kê kiểu THƯỚC DÂY thợ may: nền vải trắng, vạch cm dọc mép trên, đường may nối các ô. */
+.lucky-wheel-tape {
+    position: relative;
+    display: flex;
+    overflow: hidden;
+    border-radius: 10px;
+    background: linear-gradient(180deg, #fbfaf6, #ece6d8);
+    box-shadow: 0 12px 30px rgba(2, 6, 23, 0.4);
 }
 
-.lucky-wheel-stat span {
-    display: block;
-    color: white;
-    font-size: 24px;
+.lucky-wheel-tape::before {
+    content: '';
+    position: absolute;
+    inset: 0 0 auto 0;
+    height: 11px;
+    background:
+        repeating-linear-gradient(90deg, rgba(11, 18, 38, 0.6) 0 1.5px, transparent 1.5px 9px),
+        repeating-linear-gradient(90deg, rgba(11, 18, 38, 0.85) 0 2px, transparent 2px 45px);
+    background-size: auto 6px, auto 11px;
+    background-repeat: repeat-x;
+}
+
+.lucky-wheel-tape__cell {
+    min-width: 104px;
+    padding: 20px 22px 11px;
+    text-align: center;
+}
+
+.lucky-wheel-tape__cell + .lucky-wheel-tape__cell {
+    border-left: 1.5px dashed rgba(11, 18, 38, 0.28);
+}
+
+.lucky-wheel-tape__value {
+    font-family: var(--lw-display);
+    font-size: 26px;
     font-weight: 900;
+    font-variant-numeric: tabular-nums;
     line-height: 1;
+    color: #0b1226;
 }
 
-.lucky-wheel-stat small {
-    display: block;
-    margin-top: 7px;
-    color: rgba(226, 232, 240, 0.85);
-    font-size: 12px;
+.lucky-wheel-tape__value--thread {
+    color: var(--lw-thread);
+}
+
+.lucky-wheel-tape__label {
+    margin-top: 4px;
+    font-size: 10px;
     font-weight: 700;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: rgba(11, 18, 38, 0.55);
 }
 
+/* Dải người đã trúng chạy ngang đáy sân khấu, như credits cuối phim. */
+.lucky-wheel-credits {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    width: 100%;
+    max-width: 860px;
+    min-width: 0;
+}
+
+.lucky-wheel-credits__label {
+    flex-shrink: 0;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.22em;
+    text-transform: uppercase;
+    color: var(--lw-ink-dim);
+}
+
+.lucky-wheel-credits__track {
+    display: flex;
+    gap: 8px;
+    overflow-x: auto;
+    padding: 2px;
+    scrollbar-width: none;
+}
+
+.lucky-wheel-credits__track::-webkit-scrollbar {
+    display: none;
+}
+
+.lucky-wheel-credits__chip {
+    flex-shrink: 0;
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    padding: 6px 13px;
+    border: 1px solid rgba(246, 244, 239, 0.16);
+    border-radius: 999px;
+    background: rgba(246, 244, 239, 0.07);
+    color: var(--lw-canvas);
+    font-size: 12.5px;
+    font-weight: 600;
+    white-space: nowrap;
+}
+
+.lucky-wheel-credits__chip b {
+    color: var(--lw-gold);
+    font-weight: 800;
+}
+
+.lucky-wheel-drawer__section-title {
+    margin: 20px 0 10px;
+    font-size: 12px;
+    font-weight: 800;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: #64748b;
+}
+
+/* Nút Quay = đèn vàng sân khấu, tách khỏi màu brand xanh của hệ thống. */
 .lucky-wheel-spin-button.ant-btn-primary {
-    height: 52px;
+    height: 58px;
+    padding: 0 44px;
     border: 0;
     border-radius: 999px;
-    background: linear-gradient(135deg, #22d3ee, #2563eb 50%, #7c3aed);
+    font-family: var(--lw-display);
+    font-size: 17px;
+    font-weight: 800;
+    color: #241b02;
+    background: linear-gradient(135deg, #ffe08a, var(--lw-gold) 55%, #d99e0b);
     box-shadow:
-        0 18px 34px rgba(37, 99, 235, 0.34),
-        inset 0 1px 0 rgba(255, 255, 255, 0.42);
+        0 16px 38px rgba(245, 197, 24, 0.3),
+        inset 0 1px 0 rgba(255, 255, 255, 0.6);
+}
+
+.lucky-wheel-spin-button.ant-btn-primary:not(:disabled):hover {
+    color: #241b02;
+    background: linear-gradient(135deg, #ffe9a8, #ffd23e 55%, #e3a90f);
+    transform: translateY(-1px);
+}
+
+.lucky-wheel-spin-button.ant-btn-primary:focus-visible {
+    outline: 3px solid rgba(245, 197, 24, 0.55);
+    outline-offset: 3px;
 }
 
 .lucky-wheel-winner-modal .ant-modal-content {
     overflow: hidden;
     border-radius: 28px;
     background:
-        radial-gradient(circle at 50% 0%, rgba(250, 204, 21, 0.28), transparent 42%),
-        linear-gradient(135deg, #0f172a, #172554 52%, #0f766e);
-    color: white;
+        radial-gradient(circle at 50% 0%, rgba(245, 197, 24, 0.22), transparent 44%),
+        linear-gradient(165deg, #0b1226, #16204a 60%, #0b1226);
+    color: #f6f4ef;
 }
 
 .lucky-wheel-winner {
     position: relative;
     min-height: 360px;
-    padding: 28px 18px 18px;
+    padding: 30px 18px 18px;
     text-align: center;
 }
 
@@ -9625,15 +9791,54 @@ button.machine-map-stat:hover {
 }
 
 .lucky-wheel-winner__eyebrow {
-    color: rgba(226, 232, 240, 0.86) !important;
-    font-weight: 800;
+    display: block;
+    color: #f5c518 !important;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.34em;
     text-transform: uppercase;
 }
 
+/* Chữ ký của trang: tên người trúng được "MAY" lên màn hình —
+   từng chữ cái hiện như mũi kim, đường chỉ đỏ khâu gạch chân bên dưới. */
 .lucky-wheel-winner__name.ant-typography {
-    margin: 12px 0 10px;
+    margin: 14px 0 2px;
+    font-family: 'Be Vietnam Pro', 'Segoe UI', system-ui, sans-serif;
+    font-size: clamp(34px, 7vw, 54px);
+    line-height: 1.14;
     color: white;
     font-weight: 900;
+    text-wrap: balance;
+}
+
+.lucky-wheel-stitch-char {
+    display: inline-block;
+    opacity: 0;
+    transform: translateY(10px) rotate(3deg);
+    animation: lucky-wheel-stitch-in 0.34s cubic-bezier(0.2, 0.9, 0.3, 1.4) forwards;
+    animation-delay: calc(var(--ch, 0) * 55ms);
+}
+
+.lucky-wheel-thread {
+    display: block;
+    width: min(78%, 320px);
+    height: 12px;
+    margin: 4px auto 0;
+    overflow: visible;
+}
+
+.lucky-wheel-thread path {
+    stroke: #e5484d;
+    stroke-width: 3;
+    stroke-linecap: round;
+    stroke-dasharray: 7 6;
+    fill: none;
+}
+
+.lucky-wheel-thread rect {
+    width: 0;
+    animation: lucky-wheel-thread-draw 0.9s ease-out forwards;
+    animation-delay: calc(var(--n, 10) * 55ms + 150ms);
 }
 
 .lucky-wheel-winner__meta {
@@ -9650,20 +9855,44 @@ button.machine-map-stat:hover {
     overflow: hidden;
 }
 
+/* Confetti = vụn vải cắt thừa, đúng 5 màu của palette thay vì cầu vồng ngẫu nhiên. */
 .lucky-wheel-confetti span {
     position: absolute;
     top: -16px;
     width: 8px;
     height: 14px;
     border-radius: 3px;
-    background: hsl(calc(var(--i) * 37), 86%, 60%);
+    background: #e5484d;
     animation: lucky-wheel-confetti 2.6s cubic-bezier(0.18, 0.8, 0.32, 1) infinite;
     animation-delay: calc(var(--i) * -0.08s);
 }
 
-@keyframes lucky-wheel-aura {
+.lucky-wheel-confetti span:nth-child(5n + 2) {
+    background: #f5c518;
+}
+
+.lucky-wheel-confetti span:nth-child(5n + 3) {
+    background: #2f51d9;
+}
+
+.lucky-wheel-confetti span:nth-child(5n + 4) {
+    background: #14b8a6;
+}
+
+.lucky-wheel-confetti span:nth-child(5n) {
+    background: #f6f4ef;
+}
+
+@keyframes lucky-wheel-stitch-in {
     to {
-        transform: rotate(360deg);
+        opacity: 1;
+        transform: translateY(0) rotate(0deg);
+    }
+}
+
+@keyframes lucky-wheel-thread-draw {
+    to {
+        width: 100%;
     }
 }
 
@@ -9704,8 +9933,22 @@ button.machine-map-stat:hover {
 }
 
 @media (max-width: 640px) {
-    .lucky-wheel-hero-card.ant-card {
+    .lucky-wheel-stagecard {
         border-radius: 22px;
+    }
+
+    .lucky-wheel-tape__cell {
+        min-width: 84px;
+        padding: 18px 14px 10px;
+    }
+
+    .lucky-wheel-tape__value {
+        font-size: 21px;
+    }
+
+    .lucky-wheel-spin-button.ant-btn-primary {
+        width: 100%;
+        padding: 0 20px;
     }
 
     .lucky-wheel-pointer {
@@ -9719,12 +9962,22 @@ button.machine-map-stat:hover {
 }
 
 @media (prefers-reduced-motion: reduce) {
-    .lucky-wheel-hero-card__glow,
     .lucky-wheel-stage::after,
     .lucky-wheel-stage--spinning .lucky-wheel-bulb,
     .lucky-wheel-stage--spinning .lucky-wheel-pointer,
     .lucky-wheel-winner__crown,
     .lucky-wheel-confetti span {
         animation: none !important;
+    }
+
+    .lucky-wheel-stitch-char {
+        animation: none !important;
+        opacity: 1 !important;
+        transform: none !important;
+    }
+
+    .lucky-wheel-thread rect {
+        animation: none !important;
+        width: 100% !important;
     }
 }
