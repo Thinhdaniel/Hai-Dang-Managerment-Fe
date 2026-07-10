@@ -89,7 +89,11 @@ const normalizeArea = (value?: string | null) => (value ?? '').trim();
 const areaKey = (value?: string | null) => normalizeArea(value).toLowerCase();
 const areaValue = (value?: string | null) => normalizeArea(value) || EMPTY_AREA;
 const areaLabel = (value?: string | null) =>
-    value === EMPTY_AREA ? 'Chưa gắn khu vực' : normalizeArea(value) || 'Tất cả';
+    value === EMPTY_AREA
+        ? 'Chưa gắn khu vực'
+        : value === ALL_AREAS
+          ? 'Tất cả khu vực'
+          : normalizeArea(value) || 'Tất cả';
 const assetLocation = (asset: Asset) => `${asset.plant?.name || 'Chưa rõ cơ sở'} / ${asset.area || 'Chưa gắn khu vực'}`;
 const formatTime = (value?: string) => (value ? new Date(value).toLocaleString('vi-VN') : '-');
 const formatClock = (value?: string | null) =>
