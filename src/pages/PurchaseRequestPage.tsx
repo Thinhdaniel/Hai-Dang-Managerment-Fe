@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import dayjs, { type Dayjs } from 'dayjs';
 import {
     Alert,
@@ -1127,8 +1127,7 @@ const ModalForm: React.FC<ModalFormProps> = ({ open, initial, plants, mainPlantI
     };
 
     // Quét ảnh hóa đơn/phiếu mua -> OCR trích dòng -> đổ vào bảng -> tự khớp danh mục.
-    const handleScanInvoice = async (file: File) => {
-        setScanningInvoice(true);
+    const scanOneInvoice = async (file: File) => {
         try {
             const result = await aiOcrService.scanPurchaseInvoice(file);
             if (!result.items.length) {
@@ -1227,10 +1226,41 @@ const ModalForm: React.FC<ModalFormProps> = ({ open, initial, plants, mainPlantI
                 title: 'Không quét được hóa đơn',
                 description: 'Có thể ảnh quá lớn/mờ hoặc AI đang bận. Thử lại với ảnh rõ hơn nhé.',
             });
+        }
+    };
+
+    // Nhận 1 hoặc NHIỀU ảnh (chọn file hoặc dán ảnh chụp màn hình) — quét tuần tự từng ảnh,
+    // dòng của ảnh sau tự nối tiếp vào bảng.
+    const scanBusyRef = useRef(false);
+    const handleScanInvoice = async (files: File | File[]) => {
+        const list = (Array.isArray(files) ? files : [files]).filter((file) => file.type.startsWith('image/'));
+        if (!list.length || scanBusyRef.current) return;
+        scanBusyRef.current = true;
+        setScanningInvoice(true);
+        try {
+            for (const file of list) await scanOneInvoice(file);
         } finally {
+            scanBusyRef.current = false;
             setScanningInvoice(false);
         }
     };
+
+    // Dán ảnh chụp màn hình (Ctrl+V) ở bất kỳ đâu trong form là quét luôn — hỗ trợ dán nhiều ảnh.
+    const scanInvoiceRef = useRef(handleScanInvoice);
+    scanInvoiceRef.current = handleScanInvoice;
+    useEffect(() => {
+        if (!open) return;
+        const onPaste = (event: ClipboardEvent) => {
+            const images = Array.from(event.clipboardData?.files ?? []).filter((file) =>
+                file.type.startsWith('image/')
+            );
+            if (!images.length) return;
+            event.preventDefault();
+            void scanInvoiceRef.current(images);
+        };
+        document.addEventListener('paste', onPaste);
+        return () => document.removeEventListener('paste', onPaste);
+    }, [open]);
 
     const applyStrongAiMatches = () => {
         const strongRows = items.filter((row) => {
@@ -2326,10 +2356,10 @@ const ModalForm: React.FC<ModalFormProps> = ({ open, initial, plants, mainPlantI
                     <Upload
                         accept='image/*'
                         showUploadList={false}
-                        maxCount={1}
+                        multiple
                         className='block w-full [&_.ant-upload]:block'
-                        beforeUpload={(file) => {
-                            handleScanInvoice(file as unknown as File);
+                        beforeUpload={(file, fileList) => {
+                            if (file === fileList[0]) handleScanInvoice(fileList as unknown as File[]);
                             return false;
                         }}
                     >
@@ -2339,7 +2369,7 @@ const ModalForm: React.FC<ModalFormProps> = ({ open, initial, plants, mainPlantI
                             loading={scanningInvoice}
                             style={{ color: '#2f51d9', borderColor: '#2f51d9' }}
                         >
-                            Quét hóa đơn
+                            Quét hóa đơn (chọn/dán ảnh)
                         </Button>
                     </Upload>
                     <Button type='dashed' block icon={<PlusOutlined />} onClick={addRow}>
@@ -2538,20 +2568,22 @@ const ModalForm: React.FC<ModalFormProps> = ({ open, initial, plants, mainPlantI
                             <Upload
                                 accept='image/*'
                                 showUploadList={false}
-                                maxCount={1}
-                                beforeUpload={(file) => {
-                                    handleScanInvoice(file as unknown as File);
+                                multiple
+                                beforeUpload={(file, fileList) => {
+                                    if (file === fileList[0]) handleScanInvoice(fileList as unknown as File[]);
                                     return false;
                                 }}
                             >
-                                <Button
-                                    size='small'
-                                    icon={<CameraOutlined />}
-                                    loading={scanningInvoice}
-                                    style={{ color: '#2f51d9', borderColor: '#2f51d9' }}
-                                >
-                                    Quét hóa đơn
-                                </Button>
+                                <Tooltip title='Chọn 1 hoặc nhiều ảnh — hoặc dán ảnh chụp màn hình (Ctrl+V) thẳng vào form'>
+                                    <Button
+                                        size='small'
+                                        icon={<CameraOutlined />}
+                                        loading={scanningInvoice}
+                                        style={{ color: '#2f51d9', borderColor: '#2f51d9' }}
+                                    >
+                                        Quét hóa đơn
+                                    </Button>
+                                </Tooltip>
                             </Upload>
                             <Button size='small' onClick={applySmartCatalogMatch}>
                                 Tự khớp danh mục

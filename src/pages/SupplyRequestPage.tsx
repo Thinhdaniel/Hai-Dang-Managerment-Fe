@@ -303,11 +303,7 @@ const FormDrawer: React.FC<{
         return { color: 'orange', label: 'Cần xác nhận' };
     };
 
-    const handleScanSupplyFile = async (file?: File) => {
-        if (!file) return;
-        setScanningSupply(true);
-        setScanReview(null);
-        setScanMatchesByIndex({});
+    const scanOneSupplyFile = async (file: File) => {
         try {
             const result = await aiOcrService.scanSupplyRequest(file);
             if (!result.items.length) {
@@ -361,7 +357,8 @@ const FormDrawer: React.FC<{
                     else if (item.status === 'unmatched') unmatched += 1;
                     else needsConfirm += 1;
                 });
-                setScanMatchesByIndex(byIndex);
+                // Merge (không thay thế) để quét nhiều ảnh liên tiếp giữ được gợi ý của ảnh trước.
+                setScanMatchesByIndex((prev) => ({ ...prev, ...byIndex }));
             } catch {
                 needsConfirm = scannedItems.length;
             }
@@ -387,11 +384,45 @@ const FormDrawer: React.FC<{
             message.success(`Đã quét ${scannedItems.length} dòng vật tư. Kiểm tra lại trước khi gửi.`);
         } catch {
             message.error('Không quét được phiếu. Hãy dùng ảnh rõ nét JPG/PNG/WebP và thử lại.');
+        }
+    };
+
+    // Nhận 1 hoặc NHIỀU ảnh (chọn file hoặc dán ảnh chụp màn hình) — quét tuần tự, dòng nối tiếp nhau.
+    const scanBusyRef = useRef(false);
+    const handleScanSupplyFile = async (files?: File | File[] | FileList | null) => {
+        const list = (!files ? [] : files instanceof FileList ? Array.from(files) : Array.isArray(files) ? files : [files]).filter(
+            (file) => file.type.startsWith('image/')
+        );
+        if (!list.length || scanBusyRef.current) return;
+        scanBusyRef.current = true;
+        setScanningSupply(true);
+        setScanReview(null);
+        setScanMatchesByIndex({});
+        try {
+            for (const file of list) await scanOneSupplyFile(file);
         } finally {
+            scanBusyRef.current = false;
             setScanningSupply(false);
             if (scanInputRef.current) scanInputRef.current.value = '';
         }
     };
+
+    // Dán ảnh chụp màn hình (Ctrl+V) khi form đang mở là quét luôn — hỗ trợ dán nhiều ảnh.
+    const scanSupplyRef = useRef(handleScanSupplyFile);
+    scanSupplyRef.current = handleScanSupplyFile;
+    useEffect(() => {
+        if (!open) return;
+        const onPaste = (event: ClipboardEvent) => {
+            const images = Array.from(event.clipboardData?.files ?? []).filter((file) =>
+                file.type.startsWith('image/')
+            );
+            if (!images.length) return;
+            event.preventDefault();
+            void scanSupplyRef.current(images);
+        };
+        document.addEventListener('paste', onPaste);
+        return () => document.removeEventListener('paste', onPaste);
+    }, [open]);
 
     const handleSubmit = async () => {
         const values = await form.validateFields();
@@ -519,11 +550,12 @@ const FormDrawer: React.FC<{
                             ref={scanInputRef}
                             type='file'
                             accept='.jpg,.jpeg,.png,.webp,.avif,image/jpeg,image/png,image/webp,image/avif'
+                            multiple
                             className='hidden'
                             style={{ display: 'none' }}
                             tabIndex={-1}
                             onChange={(event) => {
-                                void handleScanSupplyFile(event.target.files?.[0]);
+                                void handleScanSupplyFile(event.target.files);
                             }}
                         />
                         <div className='flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between'>
@@ -534,7 +566,8 @@ const FormDrawer: React.FC<{
                                 <div className='min-w-0'>
                                     <div className='font-semibold text-slate-900'>AI quét phiếu đề xuất cấp</div>
                                     <div className='text-xs text-slate-500'>
-                                        Đọc ảnh phiếu giấy rồi điền vào danh sách để kiểm tra trước khi gửi.
+                                        Chọn 1 hoặc nhiều ảnh, hoặc dán ảnh chụp màn hình (Ctrl+V) thẳng vào đây —
+                                        AI đọc rồi điền vào danh sách để kiểm tra trước khi gửi.
                                     </div>
                                 </div>
                             </div>
@@ -545,7 +578,7 @@ const FormDrawer: React.FC<{
                                 className='border-blue-200 bg-white text-blue-700 shadow-sm hover:!border-blue-300 hover:!text-blue-800'
                                 block={isMobile}
                             >
-                                Quét ảnh phiếu
+                                Quét ảnh phiếu (chọn/dán)
                             </Button>
                         </div>
                         {scanReview && (
