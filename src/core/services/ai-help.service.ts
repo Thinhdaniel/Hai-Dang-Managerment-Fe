@@ -770,6 +770,13 @@ export const aiOcrService = {
             timeout: 90000,
         });
     },
+    // Dán tin nhắn báo giá (Zalo/SMS) -> trích dòng vật tư, cùng schema với OCR ảnh
+    parsePurchaseQuoteText: (text: string): Promise<InvoiceOcrResponse> =>
+        api.post<InvoiceOcrResponse, { text: string }>(
+            '/ai/ocr/purchase-quote-text',
+            { text },
+            { timeout: 70000 }
+        ),
     scanPurchaseInvoice: (image: File): Promise<InvoiceOcrResponse> => {
         const formData = new FormData();
         formData.append('image', image);

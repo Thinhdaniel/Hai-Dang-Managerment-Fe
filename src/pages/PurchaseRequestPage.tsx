@@ -53,7 +53,12 @@ import PageHeader from '../components/shared/PageHeader';
 import ContextChatDrawer from '../components/chat/ContextChatDrawer';
 import { useAuth } from '../core/contexts/AuthContext';
 import { plantService } from '../core/services';
-import { aiMaterialMatchService, aiOcrService, type AiMaterialMatchItem } from '../core/services/ai-help.service';
+import {
+    aiMaterialMatchService,
+    aiOcrService,
+    type AiMaterialMatchItem,
+    type InvoiceOcrResponse,
+} from '../core/services/ai-help.service';
 import {
     materialService,
     materialSupplierService,
@@ -1126,18 +1131,8 @@ const ModalForm: React.FC<ModalFormProps> = ({ open, initial, plants, mainPlantI
         }
     };
 
-    // Quét ảnh hóa đơn/phiếu mua -> OCR trích dòng -> đổ vào bảng -> tự khớp danh mục.
-    const scanOneInvoice = async (file: File) => {
-        try {
-            const result = await aiOcrService.scanPurchaseInvoice(file);
-            if (!result.items.length) {
-                notification.warning({
-                    title: 'Chưa đọc được dòng vật tư nào',
-                    description: 'Hãy chụp hóa đơn rõ nét, đủ sáng và thẳng góc rồi thử lại.',
-                });
-                return;
-            }
-
+    // Đổ kết quả đọc (từ ảnh OCR hoặc tin nhắn báo giá) vào bảng -> tự khớp danh mục.
+    const applyInvoiceOcrResult = async (result: InvoiceOcrResponse, source: 'image' | 'text' = 'image') => {
             // Dò "Cơ sở"/"Nhà cung cấp" từ tên đọc được -> id (khớp không dấu, ưu tiên trùng khít).
             const findOption = (opts: { value: string; label: string }[], name?: string) => {
                 const q = normalizeSearchText(name);
@@ -1168,7 +1163,9 @@ const ModalForm: React.FC<ModalFormProps> = ({ open, initial, plants, mainPlantI
                           : 1;
                 const qBuy = it.quantity && it.quantity > 0 ? it.quantity : qReq;
                 const plant = findOption(plantOptions, it.plantName);
-                const supplier = findOption(supplierOptions, it.supplierName);
+                // NCC theo dòng; báo giá NCC gửi thì NCC nằm ở tiêu đề (letterhead) -> fallback header.
+                const supplierText = it.supplierName ?? result.header?.supplierName;
+                const supplier = findOption(supplierOptions, supplierText);
                 if (plant) matchedPlants += 1;
                 if (supplier) matchedSuppliers += 1;
                 return computeRow({
@@ -1182,7 +1179,7 @@ const ModalForm: React.FC<ModalFormProps> = ({ open, initial, plants, mainPlantI
                     plantId: plant?.value ?? mainPlantId,
                     proposedBy: it.proposedBy ?? '',
                     supplierId: supplier?.value,
-                    supplierName: supplier?.label ?? it.supplierName,
+                    supplierName: supplier?.label ?? supplierText,
                     purpose: it.purpose ?? '',
                     // Dòng 2 lần đọc không thống nhất -> chèn cảnh báo vào ghi chú cho người rà thấy ngay.
                     note: [it.verifyNote ? `⚠ ${it.verifyNote}` : '', it.note || invoiceTag]
@@ -1202,7 +1199,17 @@ const ModalForm: React.FC<ModalFormProps> = ({ open, initial, plants, mainPlantI
             markRecent(scannedRows.map((r) => r.key));
 
             const flagged = result.verification?.flagged ?? 0;
-            if (result.verification?.status === 'verified') {
+            if (source === 'text') {
+                notification.success({
+                    title: `Đã đọc ${scannedRows.length} dòng từ tin nhắn báo giá`,
+                    description: [
+                        matchedSuppliers ? `${matchedSuppliers} NCC đã dò` : '',
+                        'Kiểm tra lại số lượng, đơn giá trước khi lưu.',
+                    ]
+                        .filter(Boolean)
+                        .join(' · '),
+                });
+            } else if (result.verification?.status === 'verified') {
                 (flagged ? notification.warning : notification.success)({
                     title: `Đã quét ${scannedRows.length} dòng — đối chiếu 2 lần đọc`,
                     description: [
@@ -1235,6 +1242,20 @@ const ModalForm: React.FC<ModalFormProps> = ({ open, initial, plants, mainPlantI
             } catch {
                 /* Bỏ qua: người dùng vẫn có thể bấm "AI khớp vật tư" thủ công. */
             }
+    };
+
+    // Quét ảnh hóa đơn/phiếu mua -> OCR trích dòng -> đổ vào bảng.
+    const scanOneInvoice = async (file: File) => {
+        try {
+            const result = await aiOcrService.scanPurchaseInvoice(file);
+            if (!result.items.length) {
+                notification.warning({
+                    title: 'Chưa đọc được dòng vật tư nào',
+                    description: 'Hãy chụp hóa đơn rõ nét, đủ sáng và thẳng góc rồi thử lại.',
+                });
+                return;
+            }
+            await applyInvoiceOcrResult(result, 'image');
         } catch {
             notification.error({
                 title: 'Không quét được hóa đơn',
@@ -1242,6 +1263,59 @@ const ModalForm: React.FC<ModalFormProps> = ({ open, initial, plants, mainPlantI
             });
         }
     };
+
+    // Dán tin nhắn báo giá (NCC nhắn Zalo, không có phiếu để chụp) -> AI trích dòng vật tư.
+    const [quoteTextOpen, setQuoteTextOpen] = useState(false);
+    const [quoteText, setQuoteText] = useState('');
+    const [parsingQuote, setParsingQuote] = useState(false);
+    const handleParseQuoteText = async () => {
+        const text = quoteText.trim();
+        if (text.length < 10) {
+            notification.warning({ title: 'Dán nội dung tin nhắn báo giá trước đã' });
+            return;
+        }
+        setParsingQuote(true);
+        try {
+            const result = await aiOcrService.parsePurchaseQuoteText(text);
+            if (!result.items.length) {
+                notification.warning({
+                    title: 'Chưa đọc được dòng vật tư nào từ tin nhắn',
+                    description: 'Nội dung cần có tên hàng kèm giá/số lượng.',
+                });
+                return;
+            }
+            await applyInvoiceOcrResult(result, 'text');
+            setQuoteTextOpen(false);
+            setQuoteText('');
+        } catch {
+            notification.error({ title: 'Không đọc được tin nhắn báo giá', description: 'AI đang bận, thử lại sau nhé.' });
+        } finally {
+            setParsingQuote(false);
+        }
+    };
+
+    const quoteTextModal = (
+        <Modal
+            open={quoteTextOpen}
+            title='Dán tin nhắn báo giá'
+            width={560}
+            okText='Đọc và điền vào bảng'
+            confirmLoading={parsingQuote}
+            onOk={handleParseQuoteText}
+            onCancel={() => setQuoteTextOpen(false)}
+        >
+            <div className='mb-2 text-xs text-slate-500'>
+                Dán nguyên tin nhắn Zalo/SMS của nhà cung cấp (tên hàng + giá + số lượng). AI sẽ trích từng dòng vật
+                tư và điền vào bảng — giá viết tắt kiểu “35k”, “1tr2” đều hiểu được.
+            </div>
+            <Input.TextArea
+                rows={8}
+                value={quoteText}
+                onChange={(event) => setQuoteText(event.target.value)}
+                placeholder={'Vd: Ống nhựa PU 8x5mm 100m giá 6.5k/m\nMỏ dưới vắt sổ Pegasus 35k/chiếc, lấy 10 chiếc\nMỏ trên Jack 55k x 20c'}
+            />
+        </Modal>
+    );
 
     // Nhận 1 hoặc NHIỀU ảnh (chọn file hoặc dán ảnh chụp màn hình) — quét tuần tự từng ảnh,
     // dòng của ảnh sau tự nối tiếp vào bảng.
@@ -2386,6 +2460,9 @@ const ModalForm: React.FC<ModalFormProps> = ({ open, initial, plants, mainPlantI
                             Quét hóa đơn (chọn/dán ảnh)
                         </Button>
                     </Upload>
+                    <Button block icon={<MessageOutlined />} onClick={() => setQuoteTextOpen(true)}>
+                        Dán tin nhắn báo giá
+                    </Button>
                     <Button type='dashed' block icon={<PlusOutlined />} onClick={addRow}>
                         Thêm vật tư
                     </Button>
@@ -2396,6 +2473,7 @@ const ModalForm: React.FC<ModalFormProps> = ({ open, initial, plants, mainPlantI
                         Tự khớp danh mục vật tư
                     </Button>
                 </div>
+                {quoteTextModal}
             </Drawer>
         );
     }
@@ -2599,6 +2677,11 @@ const ModalForm: React.FC<ModalFormProps> = ({ open, initial, plants, mainPlantI
                                     </Button>
                                 </Tooltip>
                             </Upload>
+                            <Tooltip title='NCC chỉ nhắn tin báo giá (không có phiếu)? Dán nguyên tin nhắn để AI trích dòng vật tư'>
+                                <Button size='small' icon={<MessageOutlined />} onClick={() => setQuoteTextOpen(true)}>
+                                    Dán báo giá
+                                </Button>
+                            </Tooltip>
                             <Button size='small' onClick={applySmartCatalogMatch}>
                                 Tự khớp danh mục
                             </Button>
@@ -2761,6 +2844,7 @@ const ModalForm: React.FC<ModalFormProps> = ({ open, initial, plants, mainPlantI
 
             {/* Footer */}
             {footerBar}
+            {quoteTextModal}
         </Drawer>
     );
 };
