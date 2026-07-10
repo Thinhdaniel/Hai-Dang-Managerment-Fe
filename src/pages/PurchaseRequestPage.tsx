@@ -1184,7 +1184,10 @@ const ModalForm: React.FC<ModalFormProps> = ({ open, initial, plants, mainPlantI
                     supplierId: supplier?.value,
                     supplierName: supplier?.label ?? it.supplierName,
                     purpose: it.purpose ?? '',
-                    note: it.note || invoiceTag,
+                    // Dòng 2 lần đọc không thống nhất -> chèn cảnh báo vào ghi chú cho người rà thấy ngay.
+                    note: [it.verifyNote ? `⚠ ${it.verifyNote}` : '', it.note || invoiceTag]
+                        .filter(Boolean)
+                        .join(' · '),
                     orderDate: parseDate(it.orderDate),
                     receivedDate: parseDate(it.receivedDate),
                 });
@@ -1198,16 +1201,27 @@ const ModalForm: React.FC<ModalFormProps> = ({ open, initial, plants, mainPlantI
             setSelectedKey(scannedRows[0].key);
             markRecent(scannedRows.map((r) => r.key));
 
-            notification.success({
-                title: `Đã quét ${scannedRows.length} dòng từ hóa đơn`,
-                description: [
-                    matchedPlants ? `${matchedPlants} cơ sở` : '',
-                    matchedSuppliers ? `${matchedSuppliers} NCC đã dò` : '',
-                    'Đang khớp vật tư — kiểm tra lại số lượng, đơn giá & cơ sở giúp.',
-                ]
-                    .filter(Boolean)
-                    .join(' · '),
-            });
+            const flagged = result.verification?.flagged ?? 0;
+            if (result.verification?.status === 'verified') {
+                (flagged ? notification.warning : notification.success)({
+                    title: `Đã quét ${scannedRows.length} dòng — đối chiếu 2 lần đọc`,
+                    description: [
+                        `${result.verification.agreed ?? 0} dòng khớp cả 2 lần`,
+                        flagged ? `${flagged} dòng LỆCH/chỉ 1 lần thấy — xem cảnh báo ⚠ ở ghi chú` : '',
+                        matchedPlants ? `${matchedPlants} cơ sở` : '',
+                        matchedSuppliers ? `${matchedSuppliers} NCC đã dò` : '',
+                    ]
+                        .filter(Boolean)
+                        .join(' · '),
+                });
+            } else {
+                notification.warning({
+                    title: `Đã quét ${scannedRows.length} dòng từ hóa đơn (CHƯA đối chiếu chéo)`,
+                    description:
+                        result.verification?.note ||
+                        'Lần đọc 2 không chạy được — hãy rà kỹ số lượng, đơn giá trước khi lưu.',
+                });
+            }
 
             // Khớp danh mục cho các dòng vừa quét (tái dùng AI material-match).
             try {

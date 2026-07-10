@@ -326,7 +326,10 @@ const FormDrawer: React.FC<{
                     item.quantityRequested && Number(item.quantityRequested) > 0
                         ? Number(item.quantityRequested)
                         : 1,
-                note: [item.purpose, item.note].filter(Boolean).join(' · '),
+                // Dòng 2 lần đọc không thống nhất -> chèn cảnh báo lên đầu ghi chú.
+                note: [item.verifyNote ? `⚠ ${item.verifyNote}` : '', item.purpose, item.note]
+                    .filter(Boolean)
+                    .join(' · '),
             }));
             const offset = meaningfulItems.length;
             const requestDate = result.header?.requestDate ? dayjs(result.header.requestDate) : undefined;
@@ -381,7 +384,22 @@ const FormDrawer: React.FC<{
                     itemListRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
                 }, 150);
             }
-            message.success(`Đã quét ${scannedItems.length} dòng vật tư. Kiểm tra lại trước khi gửi.`);
+            const flagged = result.verification?.flagged ?? 0;
+            if (result.verification?.status === 'verified') {
+                if (flagged) {
+                    message.warning(
+                        `Đã quét ${scannedItems.length} dòng (đối chiếu 2 lần đọc): ${flagged} dòng lệch — xem cảnh báo ⚠ ở ghi chú.`
+                    );
+                } else {
+                    message.success(
+                        `Đã quét ${scannedItems.length} dòng — 2 lần đọc khớp nhau hoàn toàn. Vẫn nên liếc lại trước khi gửi.`
+                    );
+                }
+            } else {
+                message.warning(
+                    `Đã quét ${scannedItems.length} dòng nhưng CHƯA đối chiếu chéo được — rà kỹ số lượng trước khi gửi.`
+                );
+            }
         } catch {
             message.error('Không quét được phiếu. Hãy dùng ảnh rõ nét JPG/PNG/WebP và thử lại.');
         }

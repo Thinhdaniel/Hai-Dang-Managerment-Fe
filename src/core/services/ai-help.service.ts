@@ -676,6 +676,17 @@ export const aiMaterialMatchService = {
         ),
 };
 
+// Đọc 2 lần đối chiếu chéo: dòng khớp cả 2 lần = 'agreed'; lệch số/chỉ 1 bên thấy = cần rà.
+export type OcrVerifyStatus = 'agreed' | 'mismatch' | 'only_first' | 'only_second';
+
+export type OcrVerification = {
+    status: 'verified' | 'skipped';
+    model?: string;
+    agreed?: number;
+    flagged?: number;
+    note?: string;
+};
+
 // OCR ảnh hóa đơn mua vật tư -> dòng có cấu trúc để điền sẵn đơn mua.
 export type InvoiceOcrItem = {
     materialName: string;
@@ -691,6 +702,8 @@ export type InvoiceOcrItem = {
     note?: string; // Ghi chú
     orderDate?: string; // Ngày lên đơn (ISO)
     receivedDate?: string; // Ngày nhận (ISO)
+    verify?: OcrVerifyStatus;
+    verifyNote?: string;
 };
 
 export type InvoiceOcrResponse = {
@@ -699,6 +712,7 @@ export type InvoiceOcrResponse = {
     count: number;
     available: boolean;
     usedFallback: boolean;
+    verification?: OcrVerification;
     provider?: string;
     model?: string;
     latencyMs?: number;
@@ -710,6 +724,8 @@ export type SupplyRequestOcrItem = {
     quantityRequested?: number;
     purpose?: string;
     note?: string;
+    verify?: OcrVerifyStatus;
+    verifyNote?: string;
 };
 
 export type SupplyRequestOcrResponse = {
@@ -724,6 +740,7 @@ export type SupplyRequestOcrResponse = {
     count: number;
     available: boolean;
     usedFallback: boolean;
+    verification?: OcrVerification;
     provider?: string;
     model?: string;
     latencyMs?: number;
