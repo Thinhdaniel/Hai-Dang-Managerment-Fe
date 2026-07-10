@@ -9994,3 +9994,185 @@ button.machine-map-stat:hover {
         width: 100% !important;
     }
 }
+
+/* ===================== Kiểm kê QR (StocktakePage) ===================== */
+/* Thanh điểm danh: tiến độ qua danh sách máy hữu hạn — phần xanh = đã có mặt,
+   vạch chia mỗi 10% như đồng hồ đếm sản lượng. */
+.stocktake-meter {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    flex-wrap: wrap;
+}
+
+.stocktake-meter__count {
+    font-family: 'Be Vietnam Pro', 'Segoe UI', system-ui, sans-serif;
+    font-weight: 800;
+    font-variant-numeric: tabular-nums;
+    font-size: 27px;
+    line-height: 1;
+    color: #0f172a;
+    white-space: nowrap;
+}
+
+.stocktake-meter__count small {
+    font-size: 15px;
+    font-weight: 700;
+    color: #94a3b8;
+}
+
+.stocktake-meter__bar {
+    position: relative;
+    flex: 1 1 150px;
+    min-width: 120px;
+    height: 14px;
+    border-radius: 999px;
+    background: #e9edf4;
+    overflow: hidden;
+}
+
+.stocktake-meter__fill {
+    height: 100%;
+    border-radius: inherit;
+    background: linear-gradient(90deg, #047857, #10b981);
+    transition: width 0.45s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.stocktake-meter__ticks {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    background: repeating-linear-gradient(
+        90deg,
+        transparent 0,
+        transparent calc(10% - 1px),
+        rgba(15, 23, 42, 0.14) calc(10% - 1px),
+        rgba(15, 23, 42, 0.14) 10%
+    );
+}
+
+.stocktake-chip {
+    border-radius: 999px;
+    font-weight: 700;
+    font-size: 12px;
+    line-height: 1;
+    padding: 5px 11px;
+    border: 1px solid transparent;
+    cursor: pointer;
+    transition: filter 0.15s ease;
+}
+
+.stocktake-chip:hover {
+    filter: brightness(0.96);
+}
+
+.stocktake-chip:focus-visible {
+    outline: 2px solid #2f51d9;
+    outline-offset: 1px;
+}
+
+.stocktake-chip--missing {
+    background: #fef2f2;
+    color: #b91c1c;
+    border-color: #fecaca;
+}
+
+.stocktake-chip--anomaly {
+    background: #fffbeb;
+    color: #b45309;
+    border-color: #fde68a;
+}
+
+.stocktake-chip--muted {
+    background: #f1f5f9;
+    color: #475569;
+    border-color: #e2e8f0;
+    cursor: default;
+}
+
+/* Banner phản hồi lần quét cuối — đọc được giữa xưởng, màu theo kết quả */
+.stocktake-flash {
+    border-radius: 14px;
+    padding: 12px 16px;
+    color: #fff;
+}
+
+.stocktake-flash--in {
+    animation: stocktakeFlashIn 0.3s ease;
+}
+
+@keyframes stocktakeFlashIn {
+    from {
+        opacity: 0.3;
+        transform: scale(0.985);
+    }
+    to {
+        opacity: 1;
+        transform: none;
+    }
+}
+
+.stocktake-flash__label {
+    font-size: 11px;
+    font-weight: 800;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    opacity: 0.92;
+}
+
+.stocktake-flash__code {
+    font-family: 'Be Vietnam Pro', 'Segoe UI', system-ui, sans-serif;
+    font-weight: 800;
+    font-size: 22px;
+    line-height: 1.25;
+    overflow-wrap: anywhere;
+}
+
+.stocktake-flash__note {
+    margin-top: 2px;
+    font-size: 12.5px;
+    opacity: 0.95;
+}
+
+.stocktake-flash--present {
+    background: #059669;
+}
+
+.stocktake-flash--wrong_area {
+    background: #d97706;
+}
+
+.stocktake-flash--wrong_plant {
+    background: #dc2626;
+}
+
+.stocktake-flash--unknown {
+    background: #334155;
+}
+
+.stocktake-flash--duplicate {
+    background: #64748b;
+}
+
+/* Viền trái theo nhóm cho bảng kết quả desktop */
+.stocktake-row--missing > td:first-child {
+    box-shadow: inset 3px 0 0 #dc2626;
+}
+
+.stocktake-row--anomaly > td:first-child {
+    box-shadow: inset 3px 0 0 #d97706;
+}
+
+.stocktake-row--present > td:first-child {
+    box-shadow: inset 3px 0 0 #10b981;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .stocktake-flash--in {
+        animation: none;
+    }
+
+    .stocktake-meter__fill {
+        transition: none;
+    }
+}

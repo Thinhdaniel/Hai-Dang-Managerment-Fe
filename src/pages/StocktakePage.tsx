@@ -1,16 +1,15 @@
 import React, { lazy, useEffect, useMemo, useState } from 'react';
 import {
-    Alert,
     App,
     Button,
     Card,
+    Dropdown,
     Empty,
     Grid,
     Modal,
     Result,
     Segmented,
     Select,
-    Statistic,
     Table,
     Tag,
     Typography,
@@ -18,16 +17,14 @@ import {
 } from 'antd';
 import {
     AuditOutlined,
-    CheckCircleOutlined,
     DownloadOutlined,
     EnvironmentOutlined,
     FilePdfOutlined,
+    MoreOutlined,
     QrcodeOutlined,
     ReloadOutlined,
     SaveOutlined,
-    ScanOutlined,
     SwapOutlined,
-    WarningOutlined,
 } from '@ant-design/icons';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import LazyBoundary from '../components/shared/LazyBoundary';
@@ -44,7 +41,6 @@ import { assetService } from '../core/services/asset.service';
 import { plantService, stocktakeService } from '../core/services';
 import { transferService } from '../core/services/transfer.service';
 import {
-    AssetStatus,
     type Asset,
     type CreateTransferPayload,
     type StocktakeSession,
@@ -62,6 +58,7 @@ const EMPTY_AREA = '__empty__';
 
 type StocktakeTab = 'missing' | 'anomalies' | 'present';
 type ScanType = 'present' | 'wrong_area' | 'wrong_plant' | 'unknown';
+type FeedbackKind = ScanType | 'duplicate';
 
 type ScanRecord = {
     key: string;
@@ -73,6 +70,21 @@ type ScanRecord = {
     scannedAt: string;
 };
 
+type ScanFeedback = {
+    kind: FeedbackKind;
+    code: string;
+    note: string;
+    at: number;
+};
+
+const FLASH_META: Record<FeedbackKind, { label: string; cls: string }> = {
+    present: { label: 'Có mặt', cls: 'stocktake-flash--present' },
+    wrong_area: { label: 'Sai khu vực', cls: 'stocktake-flash--wrong_area' },
+    wrong_plant: { label: 'Sai cơ sở', cls: 'stocktake-flash--wrong_plant' },
+    unknown: { label: 'Không rõ mã', cls: 'stocktake-flash--unknown' },
+    duplicate: { label: 'Đã quét rồi', cls: 'stocktake-flash--duplicate' },
+};
+
 const normalizeArea = (value?: string | null) => (value ?? '').trim();
 const areaKey = (value?: string | null) => normalizeArea(value).toLowerCase();
 const areaValue = (value?: string | null) => normalizeArea(value) || EMPTY_AREA;
@@ -80,11 +92,13 @@ const areaLabel = (value?: string | null) =>
     value === EMPTY_AREA ? 'Chưa gắn khu vực' : normalizeArea(value) || 'Tất cả';
 const assetLocation = (asset: Asset) => `${asset.plant?.name || 'Chưa rõ cơ sở'} / ${asset.area || 'Chưa gắn khu vực'}`;
 const formatTime = (value?: string) => (value ? new Date(value).toLocaleString('vi-VN') : '-');
+const formatClock = (value?: string | null) =>
+    value ? new Date(value).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' }) : '-';
 
 const removeVietnameseMarks = (value: string) =>
     value
         .normalize('NFD')
-        .replace(/[\u0300-\u036f]/g, '')
+        .replace(/[̀-ͯ]/g, '')
         .replace(/đ/g, 'd')
         .replace(/Đ/g, 'D');
 
@@ -116,6 +130,9 @@ const StocktakePage: React.FC = () => {
     const [transferTarget, setTransferTarget] = useState<Asset | null>(null);
     const [savedSessionId, setSavedSessionId] = useState<string | null>(null);
     const [historyDetail, setHistoryDetail] = useState<StocktakeSession | null>(null);
+    const [lastScan, setLastScan] = useState<ScanFeedback | null>(null);
+    // Mobile: đang kiểm thì thu khối chọn phạm vi thành 1 dòng, bấm "Đổi phạm vi" mới mở lại.
+    const [scopeEditing, setScopeEditing] = useState(false);
 
     const { data: plants = [] } = useQuery({
         queryKey: ['plants'],
@@ -162,6 +179,7 @@ const StocktakePage: React.FC = () => {
         setExpectedAssets([]);
         setScanRecords([]);
         setSavedSessionId(null);
+        setLastScan(null);
     }, [selectedPlantId]);
 
     const handleAreaChange = (value: string) => {
@@ -170,6 +188,7 @@ const StocktakePage: React.FC = () => {
         setExpectedAssets([]);
         setScanRecords([]);
         setSavedSessionId(null);
+        setLastScan(null);
     };
 
     const selectedPlant = useMemo(
@@ -218,6 +237,10 @@ const StocktakePage: React.FC = () => {
         missing: missingAssets.length,
         anomalies: anomalyRecords.length,
     };
+    const presentPct = stats.expected ? Math.round((stats.present / stats.expected) * 100) : 0;
+
+    const flashFeedback = (kind: FeedbackKind, code: string, note: string) =>
+        setLastScan({ kind, code, note, at: Date.now() });
 
     const appendRecord = (record: Omit<ScanRecord, 'key' | 'scannedAt'>) => {
         setSavedSessionId(null);
@@ -248,6 +271,8 @@ const StocktakePage: React.FC = () => {
         setStartedAt(new Date().toISOString());
         setSavedSessionId(null);
         setActiveTab('missing');
+        setLastScan(null);
+        setScopeEditing(false);
         message.success(`Bắt đầu kiểm kê ${scopedAssets.length} máy`);
     };
 
@@ -275,6 +300,7 @@ const StocktakePage: React.FC = () => {
                 const inactiveMsg = inactiveLabelStatus
                     ? 'Tem QR này đã bị thay thế/thu hồi — dùng tem mới đang dán trên máy'
                     : '';
+                const unknownMsg = inactiveMsg || (ambiguous ? 'Mã khớp nhiều máy' : 'Không xác định được máy');
                 recordQrScan({
                     ...logBase,
                     result: ambiguous ? 'ambiguous' : 'not_found',
@@ -282,10 +308,11 @@ const StocktakePage: React.FC = () => {
                 appendRecord({
                     type: 'unknown',
                     rawValue,
-                    message: inactiveMsg || (ambiguous ? 'Mã khớp nhiều máy' : 'Không xác định được máy'),
+                    message: unknownMsg,
                 });
+                flashFeedback('unknown', rawValue.length > 28 ? `${rawValue.slice(0, 28)}…` : rawValue, unknownMsg);
                 setActiveTab('anomalies');
-                message.warning(inactiveMsg || (ambiguous ? 'Mã nhập vào khớp nhiều máy' : 'Không xác định được máy'));
+                message.warning(unknownMsg);
                 return;
             }
 
@@ -295,6 +322,7 @@ const StocktakePage: React.FC = () => {
                     assetId: asset.id,
                     result: 'duplicate',
                 });
+                flashFeedback('duplicate', asset.machineCode, `"${asset.name}" đã điểm danh trong phiên này`);
                 message.info(`"${asset.name}" đã quét rồi`);
                 return;
             }
@@ -319,6 +347,7 @@ const StocktakePage: React.FC = () => {
                     result: 'present',
                 });
                 appendRecord({ type: 'present', rawValue, asset, message: 'Có mặt trong phạm vi kiểm kê', gpsNote });
+                flashFeedback('present', asset.machineCode, gpsNote ? `${asset.name} — ${gpsNote}` : asset.name);
                 if (gpsNote) {
                     setActiveTab('anomalies');
                     message.warning(`Có mặt nhưng GPS lệch: ${asset.machineCode}`);
@@ -329,6 +358,10 @@ const StocktakePage: React.FC = () => {
             }
 
             if (asset.plantId === selectedPlantId) {
+                const areaMsg =
+                    selectedArea === ALL_AREAS
+                        ? 'Không thuộc danh sách kỳ vọng'
+                        : `Sai khu vực, đang ở ${asset.area || 'chưa gắn khu vực'}`;
                 recordQrScan({
                     ...logBase,
                     assetId: asset.id,
@@ -339,12 +372,10 @@ const StocktakePage: React.FC = () => {
                     type: 'wrong_area',
                     rawValue,
                     asset,
-                    message:
-                        selectedArea === ALL_AREAS
-                            ? 'Không thuộc danh sách kỳ vọng'
-                            : `Sai khu vực, đang ở ${asset.area || 'chưa gắn khu vực'}`,
+                    message: areaMsg,
                     gpsNote,
                 });
+                flashFeedback('wrong_area', asset.machineCode, areaMsg);
                 setActiveTab('anomalies');
                 message.warning(`Sai khu vực: ${asset.machineCode}`);
                 return;
@@ -363,6 +394,7 @@ const StocktakePage: React.FC = () => {
                 message: `Sai cơ sở, đang thuộc ${asset.plant?.name || 'cơ sở khác'}`,
                 gpsNote,
             });
+            flashFeedback('wrong_plant', asset.machineCode, `Đang thuộc ${asset.plant?.name || 'cơ sở khác'}`);
             setActiveTab('anomalies');
             message.error(`Sai vị trí: ${asset.machineCode}`);
         } finally {
@@ -530,7 +562,7 @@ const StocktakePage: React.FC = () => {
             row.scannedAt,
         ]);
         const csv = [header, ...rows].map((row) => row.map(csvEscape).join(',')).join('\r\n');
-        const blob = new Blob([`\uFEFF${csv}`], { type: 'text/csv;charset=utf-8;' });
+        const blob = new Blob([`﻿${csv}`], { type: 'text/csv;charset=utf-8;' });
         const url = URL.createObjectURL(blob);
         const link = document.createElement('a');
         link.href = url;
@@ -594,25 +626,88 @@ const StocktakePage: React.FC = () => {
         </div>
     );
 
+    // Thao tác theo chuẩn bảng: 1 nút chính + menu ⋯ cho phần còn lại.
+    const renderMissingActions = (asset: Asset, block = false) => (
+        <div className={block ? 'flex gap-2' : 'flex justify-end gap-1.5'}>
+            <Button
+                size={block ? 'middle' : 'small'}
+                className={block ? 'flex-1' : undefined}
+                icon={<SaveOutlined />}
+                onClick={() => setQuickAsset(asset)}
+            >
+                Đổi trạng thái
+            </Button>
+            <Dropdown
+                menu={{
+                    items: [{ key: 'transfer', icon: <SwapOutlined />, label: 'Tạo lệnh điều chuyển' }],
+                    onClick: ({ key }) => {
+                        if (key === 'transfer') setTransferTarget(asset);
+                    },
+                }}
+                trigger={['click']}
+            >
+                <Button size={block ? 'middle' : 'small'} icon={<MoreOutlined />} aria-label='Thao tác khác' />
+            </Dropdown>
+        </div>
+    );
+
+    const renderAnomalyActions = (record: ScanRecord, block = false) => {
+        if (!record.asset) return <Text type='secondary'>Không có máy để thao tác</Text>;
+        const asset = record.asset;
+        const canFixArea = record.type === 'wrong_area' && selectedArea !== ALL_AREAS;
+
+        const menuItems = [
+            ...(canFixArea ? [{ key: 'quick', icon: <SaveOutlined />, label: 'Cập nhật nhanh' }] : []),
+            { key: 'transfer', icon: <SwapOutlined />, label: 'Tạo lệnh điều chuyển' },
+        ];
+
+        return (
+            <div className={block ? 'flex gap-2' : 'flex justify-end gap-1.5'}>
+                {canFixArea ? (
+                    <Button
+                        size={block ? 'middle' : 'small'}
+                        className={block ? 'flex-1' : undefined}
+                        icon={<EnvironmentOutlined />}
+                        onClick={() => handleUpdateAreaToScope(asset)}
+                    >
+                        Cập nhật khu vực
+                    </Button>
+                ) : (
+                    <Button
+                        size={block ? 'middle' : 'small'}
+                        className={block ? 'flex-1' : undefined}
+                        icon={<SaveOutlined />}
+                        onClick={() => setQuickAsset(asset)}
+                    >
+                        Cập nhật nhanh
+                    </Button>
+                )}
+                <Dropdown
+                    menu={{
+                        items: menuItems,
+                        onClick: ({ key }) => {
+                            if (key === 'transfer') setTransferTarget(asset);
+                            if (key === 'quick') setQuickAsset(asset);
+                        },
+                    }}
+                    trigger={['click']}
+                >
+                    <Button size={block ? 'middle' : 'small'} icon={<MoreOutlined />} aria-label='Thao tác khác' />
+                </Dropdown>
+            </div>
+        );
+    };
+
     const missingColumns: TableColumnsType<Asset> = [
         {
-            title: 'Máy thiếu',
+            title: 'Máy chưa điểm danh',
             render: (_value, record) => renderAssetSummary(record),
         },
         {
             title: 'Thao tác',
-            width: 260,
+            width: 210,
             align: 'right',
-            render: (_value, record) => (
-                <div className='flex justify-end gap-2'>
-                    <Button size='small' icon={<SaveOutlined />} onClick={() => setQuickAsset(record)}>
-                        Đổi trạng thái
-                    </Button>
-                    <Button size='small' icon={<SwapOutlined />} onClick={() => setTransferTarget(record)}>
-                        Tạo lệnh chuyển
-                    </Button>
-                </div>
-            ),
+            render: (_value, record) => renderMissingActions(record),
         },
     ];
 
@@ -637,30 +732,9 @@ const StocktakePage: React.FC = () => {
         },
         {
             title: 'Thao tác',
-            width: 300,
+            width: 220,
             align: 'right',
-            render: (_value, record) =>
-                record.asset ? (
-                    <div className='flex justify-end gap-2'>
-                        {record.type === 'wrong_area' && selectedArea !== ALL_AREAS ? (
-                            <Button
-                                size='small'
-                                icon={<EnvironmentOutlined />}
-                                onClick={() => handleUpdateAreaToScope(record.asset!)}
-                            >
-                                Cập nhật khu vực
-                            </Button>
-                        ) : null}
-                        <Button size='small' icon={<SaveOutlined />} onClick={() => setQuickAsset(record.asset!)}>
-                            Cập nhật nhanh
-                        </Button>
-                        <Button size='small' icon={<SwapOutlined />} onClick={() => setTransferTarget(record.asset!)}>
-                            Tạo lệnh chuyển
-                        </Button>
-                    </div>
-                ) : (
-                    <Text type='secondary'>Không có máy để thao tác</Text>
-                ),
+            render: (_value, record) => renderAnomalyActions(record),
         },
     ];
 
@@ -686,6 +760,14 @@ const StocktakePage: React.FC = () => {
 
     const activeData =
         activeTab === 'missing' ? missingAssets : activeTab === 'anomalies' ? anomalyRecords : presentRecords;
+
+    const emptyTabText: Record<StocktakeTab, string> = {
+        missing: stats.expected
+            ? 'Không còn máy thiếu — tất cả máy trong phạm vi đã điểm danh.'
+            : 'Phạm vi này không có máy nào cần kiểm.',
+        anomalies: 'Chưa ghi nhận bất thường nào trong phiên này.',
+        present: 'Chưa quét thấy máy nào — đưa tem QR vào khung ngắm để bắt đầu.',
+    };
 
     const historyItemColumns: TableColumnsType<StocktakeSessionItem> = [
         {
@@ -748,7 +830,7 @@ const StocktakePage: React.FC = () => {
 
     const renderMobileList = () => {
         if (!activeData.length) {
-            return <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description='Chưa có dữ liệu trong nhóm này' />;
+            return <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={emptyTabText[activeTab]} />;
         }
 
         return (
@@ -757,14 +839,7 @@ const StocktakePage: React.FC = () => {
                     ? missingAssets.map((asset) => (
                           <Card key={asset.id} size='small' className='rounded-2xl'>
                               {renderAssetSummary(asset)}
-                              <div className='mt-3 grid grid-cols-2 gap-2'>
-                                  <Button icon={<SaveOutlined />} onClick={() => setQuickAsset(asset)}>
-                                      Đổi trạng thái
-                                  </Button>
-                                  <Button icon={<SwapOutlined />} onClick={() => setTransferTarget(asset)}>
-                                      Tạo lệnh chuyển
-                                  </Button>
-                              </div>
+                              <div className='mt-3'>{renderMissingActions(asset, true)}</div>
                           </Card>
                       ))
                     : activeTab === 'anomalies'
@@ -775,27 +850,7 @@ const StocktakePage: React.FC = () => {
                                 {record.gpsNote ? (
                                     <div className='mt-1 text-xs font-semibold text-rose-600'>📍 {record.gpsNote}</div>
                                 ) : null}
-                                {record.asset ? (
-                                    <div className='mt-3 grid grid-cols-1 gap-2'>
-                                        {record.type === 'wrong_area' && selectedArea !== ALL_AREAS ? (
-                                            <Button
-                                                icon={<EnvironmentOutlined />}
-                                                onClick={() => handleUpdateAreaToScope(record.asset!)}
-                                            >
-                                                Cập nhật khu vực về đây
-                                            </Button>
-                                        ) : null}
-                                        <Button icon={<SaveOutlined />} onClick={() => setQuickAsset(record.asset!)}>
-                                            Cập nhật nhanh
-                                        </Button>
-                                        <Button
-                                            icon={<SwapOutlined />}
-                                            onClick={() => setTransferTarget(record.asset!)}
-                                        >
-                                            Tạo lệnh điều chuyển
-                                        </Button>
-                                    </div>
-                                ) : null}
+                                {record.asset ? <div className='mt-3'>{renderAnomalyActions(record, true)}</div> : null}
                             </Card>
                         ))
                       : presentRecords.map((record) => (
@@ -821,11 +876,236 @@ const StocktakePage: React.FC = () => {
         );
     }
 
+    // ===== Các khối dùng chung giữa desktop / mobile =====
+
+    const rollCallMeter = (
+        <div className='stocktake-meter'>
+            <div>
+                <div className='stocktake-meter__count'>
+                    {stats.present}
+                    <small>/{stats.expected}</small>
+                </div>
+                <div className='text-[11px] font-bold tracking-wide text-slate-400 uppercase'>máy có mặt</div>
+            </div>
+            <div className='stocktake-meter__bar'>
+                <div className='stocktake-meter__fill' style={{ width: `${presentPct}%` }} />
+                <div className='stocktake-meter__ticks' />
+            </div>
+            <div className='flex flex-wrap items-center gap-1.5'>
+                <button type='button' className='stocktake-chip stocktake-chip--missing' onClick={() => setActiveTab('missing')}>
+                    Thiếu {stats.missing}
+                </button>
+                <button
+                    type='button'
+                    className='stocktake-chip stocktake-chip--anomaly'
+                    onClick={() => setActiveTab('anomalies')}
+                >
+                    Bất thường {stats.anomalies}
+                </button>
+                <span className='stocktake-chip stocktake-chip--muted'>Đã quét {stats.scanned}</span>
+            </div>
+        </div>
+    );
+
+    const scanFeedback = started ? (
+        lastScan ? (
+            <div key={lastScan.at} className={`stocktake-flash stocktake-flash--in ${FLASH_META[lastScan.kind].cls}`}>
+                <div className='stocktake-flash__label'>{FLASH_META[lastScan.kind].label}</div>
+                <div className='stocktake-flash__code'>{lastScan.code}</div>
+                {lastScan.note ? <div className='stocktake-flash__note'>{lastScan.note}</div> : null}
+            </div>
+        ) : (
+            <div className='rounded-xl border border-dashed border-slate-200 px-3 py-2.5 text-xs text-slate-400'>
+                Chưa quét máy nào trong phiên này — đưa tem QR vào khung ngắm.
+            </div>
+        )
+    ) : null;
+
+    const showSetupCard = isDesktop || !started || scopeEditing;
+
+    const setupCard = showSetupCard ? (
+        <Card className='rounded-2xl border-slate-200 shadow-sm'>
+            <div className='grid grid-cols-1 gap-3 lg:grid-cols-[minmax(220px,1fr)_minmax(180px,0.7fr)_auto] lg:items-end'>
+                <label className='block'>
+                    <Text className='mb-2 block text-sm font-bold text-slate-800'>Cơ sở kiểm kê</Text>
+                    <Select
+                        showSearch
+                        value={selectedPlantId || undefined}
+                        placeholder='Chọn cơ sở'
+                        optionFilterProp='label'
+                        options={plants.map((plant) => ({ value: plant.id, label: plant.name }))}
+                        onChange={setSelectedPlantId}
+                        className='w-full'
+                    />
+                </label>
+                <label className='block'>
+                    <Text className='mb-2 block text-sm font-bold text-slate-800'>Khu vực</Text>
+                    <Select
+                        value={selectedArea}
+                        options={areaOptions}
+                        loading={plantAssetsQuery.isFetching}
+                        onChange={handleAreaChange}
+                        className='w-full'
+                    />
+                </label>
+                <Button
+                    type='primary'
+                    size='large'
+                    icon={started ? <ReloadOutlined /> : <AuditOutlined />}
+                    loading={plantAssetsQuery.isFetching}
+                    onClick={handleStart}
+                >
+                    {started ? 'Quét lại từ đầu' : 'Bắt đầu kiểm kê'}
+                </Button>
+            </div>
+            <div className='mt-3 text-xs text-slate-400'>
+                Kết quả đối chiếu nằm trên thiết bị này — bấm “Lưu lịch sử” khi điểm danh xong.
+            </div>
+        </Card>
+    ) : (
+        <Card size='small' className='rounded-2xl border-slate-200 shadow-sm' styles={{ body: { padding: '10px 14px' } }}>
+            <div className='flex items-center justify-between gap-3'>
+                <div className='min-w-0'>
+                    <div className='truncate text-sm font-bold text-slate-900'>{selectedPlant?.name || 'Chưa chọn cơ sở'}</div>
+                    <div className='truncate text-xs text-slate-500'>
+                        {areaLabel(selectedArea)} · bắt đầu {formatClock(startedAt)}
+                    </div>
+                </div>
+                <Button size='small' onClick={() => setScopeEditing(true)}>
+                    Đổi phạm vi
+                </Button>
+            </div>
+        </Card>
+    );
+
+    const scannerCard = (
+        <Card className='rounded-2xl border-slate-200 shadow-sm' styles={{ body: { padding: 14 } }}>
+            <div className='mb-3 flex items-center justify-between'>
+                <div className='flex items-center gap-2 font-bold text-slate-900'>
+                    <QrcodeOutlined className='text-blue-600' />
+                    Quét kiểm kê
+                </div>
+                {started ? <Tag color='green'>Đang kiểm</Tag> : <Tag>Chưa bắt đầu</Tag>}
+            </div>
+            <QrCameraScanner active={started} onDetected={handleDetected} cooldownMs={1600} />
+            {scanFeedback ? <div className='mt-3'>{scanFeedback}</div> : null}
+            {!isDesktop && started ? <div className='mt-3 border-t border-slate-100 pt-3'>{rollCallMeter}</div> : null}
+        </Card>
+    );
+
+    const historyCard = (
+        <Card
+            className='rounded-2xl border-slate-200 shadow-sm'
+            title={<span className='text-sm font-bold text-slate-900'>Lịch sử gần đây</span>}
+            styles={{ body: { padding: 12 } }}
+        >
+            {stocktakeHistoryQuery.isFetching ? (
+                <Text type='secondary'>Đang tải lịch sử...</Text>
+            ) : stocktakeHistoryQuery.data?.data?.length ? (
+                <div className='flex flex-col gap-2'>
+                    {stocktakeHistoryQuery.data.data.map((session) => (
+                        <div key={session.id} className='rounded-xl border border-slate-100 bg-slate-50 px-3 py-2'>
+                            <div className='flex items-center justify-between gap-2'>
+                                <span className='truncate text-sm font-bold text-slate-900'>
+                                    {session.areaLabel || areaLabel(session.area)}
+                                </span>
+                                <Tag color={session.anomalyCount ? 'orange' : 'green'} className='!m-0'>
+                                    {session.anomalyCount} bất thường
+                                </Tag>
+                            </div>
+                            <div className='mt-1 text-xs text-slate-500'>
+                                {formatTime(session.createdAt)} · {session.createdByName || 'Không rõ người lưu'}
+                            </div>
+                            <div className='mt-2 grid grid-cols-3 gap-1 text-center text-xs'>
+                                <div className='rounded-lg bg-white px-2 py-1'>
+                                    <b>{session.presentCount}</b>
+                                    <span className='ml-1 text-slate-500'>có</span>
+                                </div>
+                                <div className='rounded-lg bg-white px-2 py-1'>
+                                    <b>{session.missingCount}</b>
+                                    <span className='ml-1 text-slate-500'>thiếu</span>
+                                </div>
+                                <div className='rounded-lg bg-white px-2 py-1'>
+                                    <b>{session.scannedCount}</b>
+                                    <span className='ml-1 text-slate-500'>quét</span>
+                                </div>
+                            </div>
+                            <Button size='small' className='mt-2 w-full' onClick={() => setHistoryDetail(session)}>
+                                Xem chi tiết
+                            </Button>
+                        </div>
+                    ))}
+                </div>
+            ) : (
+                <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description='Chưa có lịch sử kiểm kê' />
+            )}
+        </Card>
+    );
+
+    const resultsCard = (
+        <Card className='rounded-2xl border-slate-200 shadow-sm'>
+            {isDesktop && started ? <div className='mb-4 border-b border-slate-100 pb-4'>{rollCallMeter}</div> : null}
+            <div className='mb-4 flex flex-col gap-3 md:flex-row md:items-center md:justify-between'>
+                <Segmented
+                    block={!isDesktop}
+                    value={activeTab}
+                    onChange={(value) => setActiveTab(value as StocktakeTab)}
+                    options={[
+                        { value: 'missing', label: `Thiếu (${stats.missing})` },
+                        { value: 'anomalies', label: `Bất thường (${stats.anomalies})` },
+                        { value: 'present', label: `Có mặt (${stats.present})` },
+                    ]}
+                />
+                <Text type='secondary' className='text-xs'>
+                    {selectedPlant?.name || 'Chưa chọn cơ sở'} · {areaLabel(selectedArea)}
+                </Text>
+            </div>
+
+            {!started ? (
+                <Empty
+                    image={Empty.PRESENTED_IMAGE_SIMPLE}
+                    description='Chưa có phiên điểm danh — chọn cơ sở, khu vực rồi bấm “Bắt đầu kiểm kê”.'
+                />
+            ) : isDesktop ? (
+                activeTab === 'missing' ? (
+                    <Table
+                        rowKey='id'
+                        size='small'
+                        rowClassName={() => 'stocktake-row--missing'}
+                        locale={{ emptyText: emptyTabText.missing }}
+                        columns={missingColumns}
+                        dataSource={missingAssets}
+                    />
+                ) : activeTab === 'anomalies' ? (
+                    <Table
+                        rowKey='key'
+                        size='small'
+                        rowClassName={() => 'stocktake-row--anomaly'}
+                        locale={{ emptyText: emptyTabText.anomalies }}
+                        columns={anomalyColumns}
+                        dataSource={anomalyRecords}
+                    />
+                ) : (
+                    <Table
+                        rowKey='key'
+                        size='small'
+                        rowClassName={() => 'stocktake-row--present'}
+                        locale={{ emptyText: emptyTabText.present }}
+                        columns={presentColumns}
+                        dataSource={presentRecords}
+                    />
+                )
+            ) : (
+                renderMobileList()
+            )}
+        </Card>
+    );
+
     return (
         <div className='flex flex-col gap-5'>
             <PageHeader
                 title='Kiểm kê QR'
-                subtitle='Quét tem QR tại hiện trường để đối chiếu máy có mặt, thiếu và sai vị trí.'
+                subtitle='Điểm danh máy tại hiện trường bằng tem QR — thấy ngay máy thiếu, máy sai chỗ.'
                 actions={
                     <div className='flex flex-wrap gap-2'>
                         <Button
@@ -847,168 +1127,31 @@ const StocktakePage: React.FC = () => {
                 }
             />
 
-            <Card className='rounded-2xl border-slate-200 shadow-sm'>
-                <div className='grid grid-cols-1 gap-3 lg:grid-cols-[minmax(220px,1fr)_minmax(180px,0.7fr)_auto] lg:items-end'>
-                    <label className='block'>
-                        <Text className='mb-2 block text-sm font-bold text-slate-800'>Cơ sở kiểm kê</Text>
-                        <Select
-                            showSearch
-                            value={selectedPlantId || undefined}
-                            placeholder='Chọn cơ sở'
-                            optionFilterProp='label'
-                            options={plants.map((plant) => ({ value: plant.id, label: plant.name }))}
-                            onChange={setSelectedPlantId}
-                            className='w-full'
-                        />
-                    </label>
-                    <label className='block'>
-                        <Text className='mb-2 block text-sm font-bold text-slate-800'>Khu vực</Text>
-                        <Select
-                            value={selectedArea}
-                            options={areaOptions}
-                            loading={plantAssetsQuery.isFetching}
-                            onChange={handleAreaChange}
-                            className='w-full'
-                        />
-                    </label>
-                    <Button
-                        type='primary'
-                        size='large'
-                        icon={started ? <ReloadOutlined /> : <AuditOutlined />}
-                        loading={plantAssetsQuery.isFetching}
-                        onClick={handleStart}
-                    >
-                        {started ? 'Bắt đầu lại' : 'Bắt đầu'}
-                    </Button>
-                </div>
-                <Alert
-                    className='mt-3 rounded-xl'
-                    type='info'
-                    showIcon
-                    message='Kiểm kê đang đối chiếu trên thiết bị này'
-                    description='Sau khi quét xong, bấm Lưu lịch sử để ghi lại phiên kiểm kê gồm phạm vi, thống kê, máy thiếu, máy bất thường và máy có mặt.'
-                />
-            </Card>
+            {setupCard}
 
-            <div className='grid grid-cols-1 gap-4 lg:grid-cols-[420px_1fr]'>
+            <div className='grid grid-cols-1 gap-4 lg:grid-cols-[400px_1fr]'>
                 <div className='flex flex-col gap-4 lg:sticky lg:top-24 lg:self-start'>
-                    <Card className='rounded-2xl border-slate-200 shadow-sm' styles={{ body: { padding: 14 } }}>
-                        <div className='mb-3 flex items-center justify-between'>
-                            <div className='flex items-center gap-2 font-bold text-slate-900'>
-                                <QrcodeOutlined className='text-blue-600' />
-                                Quét kiểm kê
-                            </div>
-                            {started ? <Tag color='green'>Đang kiểm</Tag> : <Tag>Chưa bắt đầu</Tag>}
-                        </div>
-                        <QrCameraScanner active={started} onDetected={handleDetected} cooldownMs={1600} />
-                    </Card>
-
-                    <div className='grid grid-cols-2 gap-2'>
-                        {[
-                            { label: 'Cần kiểm', value: stats.expected, color: '#1d4ed8' },
-                            { label: 'Đã quét', value: stats.scanned, color: '#0f172a' },
-                            { label: 'Có mặt', value: stats.present, color: '#059669' },
-                            { label: 'Thiếu', value: stats.missing, color: '#dc2626' },
-                            { label: 'Bất thường', value: stats.anomalies, color: '#d97706' },
-                        ].map((item) => (
-                            <Card key={item.label} size='small' className='rounded-2xl border-slate-200'>
-                                <Statistic
-                                    title={<span className='text-xs font-bold text-slate-500'>{item.label}</span>}
-                                    value={item.value}
-                                    valueStyle={{ color: item.color, fontWeight: 800, fontSize: 22 }}
-                                />
-                            </Card>
-                        ))}
-                    </div>
-
-                    <Card
-                        className='rounded-2xl border-slate-200 shadow-sm'
-                        title={<span className='text-sm font-bold text-slate-900'>Lịch sử gần đây</span>}
-                        styles={{ body: { padding: 12 } }}
-                    >
-                        {stocktakeHistoryQuery.isFetching ? (
-                            <Text type='secondary'>Đang tải lịch sử...</Text>
-                        ) : stocktakeHistoryQuery.data?.data?.length ? (
-                            <div className='flex flex-col gap-2'>
-                                {stocktakeHistoryQuery.data.data.map((session) => (
-                                    <div
-                                        key={session.id}
-                                        className='rounded-xl border border-slate-100 bg-slate-50 px-3 py-2'
-                                    >
-                                        <div className='flex items-center justify-between gap-2'>
-                                            <span className='truncate text-sm font-bold text-slate-900'>
-                                                {session.areaLabel || areaLabel(session.area)}
-                                            </span>
-                                            <Tag color={session.anomalyCount ? 'orange' : 'green'} className='!m-0'>
-                                                {session.anomalyCount} bất thường
-                                            </Tag>
-                                        </div>
-                                        <div className='mt-1 text-xs text-slate-500'>
-                                            {formatTime(session.createdAt)} · {session.createdByName || 'Không rõ người lưu'}
-                                        </div>
-                                        <div className='mt-2 grid grid-cols-3 gap-1 text-center text-xs'>
-                                            <div className='rounded-lg bg-white px-2 py-1'>
-                                                <b>{session.presentCount}</b>
-                                                <span className='ml-1 text-slate-500'>có</span>
-                                            </div>
-                                            <div className='rounded-lg bg-white px-2 py-1'>
-                                                <b>{session.missingCount}</b>
-                                                <span className='ml-1 text-slate-500'>thiếu</span>
-                                            </div>
-                                            <div className='rounded-lg bg-white px-2 py-1'>
-                                                <b>{session.scannedCount}</b>
-                                                <span className='ml-1 text-slate-500'>quét</span>
-                                            </div>
-                                        </div>
-                                        <Button
-                                            size='small'
-                                            className='mt-2 w-full'
-                                            onClick={() => setHistoryDetail(session)}
-                                        >
-                                            Xem chi tiết
-                                        </Button>
-                                    </div>
-                                ))}
-                            </div>
-                        ) : (
-                            <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description='Chưa có lịch sử kiểm kê' />
-                        )}
-                    </Card>
+                    {scannerCard}
+                    {isDesktop ? historyCard : null}
                 </div>
 
-                <Card className='rounded-2xl border-slate-200 shadow-sm'>
-                    <div className='mb-4 flex flex-col gap-3 md:flex-row md:items-center md:justify-between'>
-                        <Segmented
-                            value={activeTab}
-                            onChange={(value) => setActiveTab(value as StocktakeTab)}
-                            options={[
-                                { value: 'missing', label: `Thiếu (${stats.missing})` },
-                                { value: 'anomalies', label: `Bất thường (${stats.anomalies})` },
-                                { value: 'present', label: `Có mặt (${stats.present})` },
-                            ]}
-                        />
-                        <Text type='secondary' className='text-xs'>
-                            {selectedPlant?.name || 'Chưa chọn cơ sở'} · {areaLabel(selectedArea)}
-                        </Text>
-                    </div>
-
-                    {!started ? (
-                        <Empty
-                            image={Empty.PRESENTED_IMAGE_SIMPLE}
-                            description='Chọn phạm vi và bấm Bắt đầu để tạo danh sách máy kỳ vọng.'
-                        />
-                    ) : isDesktop ? (
-                        activeTab === 'missing' ? (
-                            <Table rowKey='id' size='small' columns={missingColumns} dataSource={missingAssets} />
-                        ) : activeTab === 'anomalies' ? (
-                            <Table rowKey='key' size='small' columns={anomalyColumns} dataSource={anomalyRecords} />
-                        ) : (
-                            <Table rowKey='key' size='small' columns={presentColumns} dataSource={presentRecords} />
-                        )
-                    ) : (
-                        renderMobileList()
-                    )}
-                </Card>
+                <div className='flex flex-col gap-4'>
+                    {resultsCard}
+                    {!isDesktop && started ? (
+                        <Button
+                            block
+                            size='large'
+                            type={savedSessionId ? 'default' : 'primary'}
+                            icon={<SaveOutlined />}
+                            disabled={Boolean(savedSessionId)}
+                            loading={saveStocktakeMutation.isPending}
+                            onClick={handleSaveHistory}
+                        >
+                            {savedSessionId ? 'Đã lưu lịch sử kiểm kê' : 'Lưu lịch sử kiểm kê'}
+                        </Button>
+                    ) : null}
+                    {!isDesktop ? historyCard : null}
+                </div>
             </div>
 
             <Modal
