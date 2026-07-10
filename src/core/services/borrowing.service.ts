@@ -14,6 +14,7 @@ import type {
     CreateBorrowingPayload,
     PaginatedResponse,
     ReceiveBorrowingBatchByQrPayload,
+    ReceiveBorrowingBatchBulkPayload,
     UpdateBorrowingBatchPayload,
 } from '../types';
 
@@ -73,6 +74,9 @@ export const borrowingService = {
 
     receiveBatchByQr: (id: string, data: ReceiveBorrowingBatchByQrPayload): Promise<Borrowing> =>
         api.post<Borrowing, ReceiveBorrowingBatchByQrPayload>(`${BASE}/batches/${id}/receive-by-qr`, data),
+
+    receiveBatchBulk: (id: string, data: ReceiveBorrowingBatchBulkPayload): Promise<BorrowingBatchDetail> =>
+        api.post<BorrowingBatchDetail, ReceiveBorrowingBatchBulkPayload>(`${BASE}/batches/${id}/receive-bulk`, data),
 
     bulkReturnBatch: (id: string, data: BulkReturnBorrowingBatchPayload): Promise<BulkReturnBorrowingBatchResponse> =>
         api.post<BulkReturnBorrowingBatchResponse, BulkReturnBorrowingBatchPayload>(

@@ -724,6 +724,18 @@ export interface ReceiveBorrowingBatchByQrPayload {
     receiveNote?: string;
 }
 
+export interface ReceiveBorrowingBatchBulkPayload {
+    rows: Array<{
+        name: string;
+        model?: string;
+        serial?: string;
+        partnerMachineCode?: string;
+        note?: string;
+    }>;
+    receiveCondition?: string;
+    receiveNote?: string;
+}
+
 export interface BulkReturnBorrowingBatchPayload {
     returnTime: string;
     note?: string;

@@ -47,6 +47,7 @@ import {
     type BulkReturnBorrowingBatchPayload,
     type QrReturnAction,
     type ReceiveBorrowingBatchByQrPayload,
+    type ReceiveBorrowingBatchBulkPayload,
 } from '../core/types';
 
 type ReceiveFormValues = {
@@ -86,6 +87,18 @@ const BORROWING_STATUS_ACTIVE = 'active' as BorrowingStatus;
 const BORROWING_STATUS_RETURNED = 'returned' as BorrowingStatus;
 const QR_RETURN_ACTION_REMOVED = 'removed' as QrReturnAction;
 
+// Nhan nhanh nhieu may: moi dong 1 may, cach nhau dau | (Ten may | Serial | Ma may doi tac) - chi ten bat buoc.
+const parseBulkReceiveRows = (text: string) =>
+    text
+        .split('\n')
+        .map((line) => line.trim())
+        .filter(Boolean)
+        .map((line) => {
+            const [name, serial, partnerMachineCode] = line.split('|').map((part) => part.trim());
+            return { name, serial: serial || undefined, partnerMachineCode: partnerMachineCode || undefined };
+        })
+        .filter((row) => Boolean(row.name));
+
 const BorrowingBatchDetail: React.FC = () => {
     const { id = '' } = useParams();
     const navigate = useNavigate();
@@ -99,6 +112,8 @@ const BorrowingBatchDetail: React.FC = () => {
     const [isReceiveModalOpen, setIsReceiveModalOpen] = useState(false);
     // Nhận máy KHÔNG dán tem — không đụng gì vào máy khách, nhận diện bằng serial/mã đối tác
     const [noQrReceive, setNoQrReceive] = useState(false);
+    const [isBulkReceiveOpen, setIsBulkReceiveOpen] = useState(false);
+    const [bulkReceiveText, setBulkReceiveText] = useState('');
     const [isEditBatchOpen, setIsEditBatchOpen] = useState(false);
     const [isReturnModalOpen, setIsReturnModalOpen] = useState(false);
     const [selectedReturnIds, setSelectedReturnIds] = useState<React.Key[]>([]);
@@ -160,6 +175,19 @@ const BorrowingBatchDetail: React.FC = () => {
             setIsReceiveModalOpen(false);
             receiveForm.resetFields();
             message.success('Đã nhận máy vào lô');
+        },
+    });
+
+    const bulkReceiveMutation = useMutation({
+        mutationFn: (payload: ReceiveBorrowingBatchBulkPayload) => borrowingService.receiveBatchBulk(id, payload),
+        onSuccess: (_result, payload) => {
+            queryClient.invalidateQueries({ queryKey: ['borrowing-batch', id] });
+            queryClient.invalidateQueries({ queryKey: ['borrowing-batches'] });
+            queryClient.invalidateQueries({ queryKey: ['borrowing-batch-stats'] });
+            queryClient.invalidateQueries({ queryKey: ['assets'] });
+            setIsBulkReceiveOpen(false);
+            setBulkReceiveText('');
+            message.success(`Đã nhận nhanh ${payload.rows.length} máy vào lô`);
         },
     });
 
@@ -269,6 +297,16 @@ const BorrowingBatchDetail: React.FC = () => {
             receiveCondition: values.receiveCondition?.trim() || undefined,
             receiveNote: values.receiveNote?.trim() || undefined,
         });
+    };
+
+    const bulkReceiveRows = useMemo(() => parseBulkReceiveRows(bulkReceiveText), [bulkReceiveText]);
+
+    const handleBulkReceiveSubmit = async () => {
+        if (!bulkReceiveRows.length) {
+            message.warning('Chưa nhận diện được máy nào — mỗi dòng cần ít nhất tên máy');
+            return;
+        }
+        await bulkReceiveMutation.mutateAsync({ rows: bulkReceiveRows });
     };
 
     const handleReturnDetected = async (rawValue: string) => {
@@ -640,9 +678,20 @@ const BorrowingBatchDetail: React.FC = () => {
                                     >
                                         Nhận máy không tem
                                     </Button>
+                                    <Button
+                                        block
+                                        size='large'
+                                        icon={<PlusOutlined />}
+                                        className='mt-2'
+                                        disabled={batchClosed}
+                                        onClick={() => setIsBulkReceiveOpen(true)}
+                                    >
+                                        Nhận nhanh nhiều máy
+                                    </Button>
                                     <div className='mt-2 text-xs font-medium text-slate-500'>
                                         Máy khách không được dán/đánh dấu gì — nhập tay, nhận diện bằng serial và mã
-                                        máy đối tác.
+                                        máy đối tác. Máy chưa từng có trên hệ thống và sắp trả ngay thì dùng "Nhận
+                                        nhanh nhiều máy" để dán danh sách một lượt.
                                     </div>
                                 </Card>
 
@@ -713,9 +762,20 @@ const BorrowingBatchDetail: React.FC = () => {
                                 <Card className='rounded-3xl border-slate-200 shadow-sm'>
                                     <div className='mb-3 flex flex-wrap items-center justify-between gap-2'>
                                         <div className='font-black text-slate-950'>Danh sách máy đang giữ</div>
-                                        <Button icon={<ReloadOutlined />} onClick={() => setSelectedReturnIds([])}>
-                                            Bỏ chọn
-                                        </Button>
+                                        <Space>
+                                            <Button
+                                                icon={<CheckCircleOutlined />}
+                                                disabled={!activeItems.length}
+                                                onClick={() =>
+                                                    setSelectedReturnIds(activeItems.map((item) => item.id))
+                                                }
+                                            >
+                                                Chọn tất cả
+                                            </Button>
+                                            <Button icon={<ReloadOutlined />} onClick={() => setSelectedReturnIds([])}>
+                                                Bỏ chọn
+                                            </Button>
+                                        </Space>
                                     </div>
                                     <div className='block md:hidden'>
                                         <div className='borrowing-return-mobile-summary'>
@@ -836,6 +896,36 @@ const BorrowingBatchDetail: React.FC = () => {
                         </Form.Item>
                     </div>
                 </Form>
+            </Modal>
+
+            <Modal
+                open={isBulkReceiveOpen}
+                title='Nhận nhanh nhiều máy'
+                width={640}
+                onCancel={() => setIsBulkReceiveOpen(false)}
+                okText={`Nhận ${bulkReceiveRows.length} máy`}
+                okButtonProps={{ disabled: !bulkReceiveRows.length }}
+                confirmLoading={bulkReceiveMutation.isPending}
+                onOk={handleBulkReceiveSubmit}
+                className='[&_.ant-modal-content]:rounded-2xl'
+            >
+                <Alert
+                    showIcon
+                    type='info'
+                    className='mb-3 rounded-xl'
+                    message='Dùng cho máy chưa từng có trên hệ thống và sắp trả ngay'
+                    description='Không cần nhãn hiệu/model/loại máy — chỉ để đủ thông tin lập biên bản bàn giao. Mỗi dòng 1 máy, các ô cách nhau dấu | : Tên máy | Serial | Mã máy đối tác. Chỉ tên máy là bắt buộc, hai ô sau có thể để trống.'
+                />
+                <Input.TextArea
+                    rows={10}
+                    value={bulkReceiveText}
+                    onChange={(event) => setBulkReceiveText(event.target.value)}
+                    placeholder={'Máy 1 kim Juki | SN-00123 | KH-102\nMáy vắt sổ 4 chỉ | | KH-118\nMáy trần đè'}
+                    className='font-mono text-sm'
+                />
+                <div className='mt-2 text-xs font-semibold text-slate-500'>
+                    Nhận diện được {bulkReceiveRows.length} máy.
+                </div>
             </Modal>
 
             <Modal
