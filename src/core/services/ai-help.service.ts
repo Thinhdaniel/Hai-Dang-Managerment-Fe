@@ -729,7 +729,30 @@ export type SupplyRequestOcrResponse = {
     latencyMs?: number;
 };
 
+export type MachineLabelOcrResponse = {
+    fields: {
+        brand?: string;
+        model?: string;
+        serial?: string;
+        name?: string;
+    };
+    /** Ảnh đã upload lưu trữ — chọn 1 cái làm ảnh hồ sơ máy */
+    images: Array<{ url: string }>;
+    available: boolean;
+    provider?: string;
+    model?: string;
+    latencyMs?: number;
+};
+
 export const aiOcrService = {
+    scanMachineLabel: (images: File[]): Promise<MachineLabelOcrResponse> => {
+        const formData = new FormData();
+        images.forEach((image) => formData.append('images', image));
+        return api.post<MachineLabelOcrResponse, FormData>('/ai/ocr/machine-label', formData, {
+            headers: { 'Content-Type': 'multipart/form-data' },
+            timeout: 90000,
+        });
+    },
     scanPurchaseInvoice: (image: File): Promise<InvoiceOcrResponse> => {
         const formData = new FormData();
         formData.append('image', image);

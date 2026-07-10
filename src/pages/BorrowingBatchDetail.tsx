@@ -16,10 +16,13 @@ import {
     Table,
     Tabs,
     Tag,
+    Upload,
     type TableColumnsType,
+    type UploadFile,
 } from 'antd';
 import {
     ArrowLeftOutlined,
+    CameraOutlined,
     CheckCircleOutlined,
     DownloadOutlined,
     EditOutlined,
@@ -28,6 +31,7 @@ import {
     QrcodeOutlined,
     ReloadOutlined,
     ScanOutlined,
+    ThunderboltOutlined,
 } from '@ant-design/icons';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate, useParams } from 'react-router-dom';
@@ -39,6 +43,7 @@ import TransactionTypeBadge from '../components/transactions/TransactionTypeBadg
 import { borrowingBatchStatusMeta, qrReturnActionMeta, qrReturnActionOptions } from '../core/constants/transactions';
 import { extractPublicId } from '../core/lib/qrScan';
 import { brandService, plantService } from '../core/services';
+import { aiOcrService } from '../core/services/ai-help.service';
 import { borrowingService } from '../core/services/borrowing.service';
 import { qrLabelService } from '../core/services/qr-label.service';
 import {
@@ -87,6 +92,8 @@ const BORROWING_STATUS_ACTIVE = 'active' as BorrowingStatus;
 const BORROWING_STATUS_RETURNED = 'returned' as BorrowingStatus;
 const QR_RETURN_ACTION_REMOVED = 'removed' as QrReturnAction;
 
+const normalizeBrandText = (value: string) => value.trim().replace(/\s+/g, ' ').toLowerCase();
+
 // Nhan nhanh nhieu may: moi dong 1 may, cach nhau dau | (Ten may | Serial | Ma may doi tac) - chi ten bat buoc.
 const parseBulkReceiveRows = (text: string) =>
     text
@@ -112,6 +119,11 @@ const BorrowingBatchDetail: React.FC = () => {
     const [isReceiveModalOpen, setIsReceiveModalOpen] = useState(false);
     // Nhận máy KHÔNG dán tem — không đụng gì vào máy khách, nhận diện bằng serial/mã đối tác
     const [noQrReceive, setNoQrReceive] = useState(false);
+    // OCR tem máy: chụp 2-3 ảnh tem thông số -> AI điền brand/model/serial, chọn 1 ảnh lưu hồ sơ
+    const [labelPhotos, setLabelPhotos] = useState<UploadFile[]>([]);
+    const [ocrImages, setOcrImages] = useState<Array<{ url: string }>>([]);
+    const [chosenImageIndex, setChosenImageIndex] = useState(0);
+    const [readingLabel, setReadingLabel] = useState(false);
     const [isBulkReceiveOpen, setIsBulkReceiveOpen] = useState(false);
     const [bulkReceiveText, setBulkReceiveText] = useState('');
     const [isEditBatchOpen, setIsEditBatchOpen] = useState(false);
@@ -255,10 +267,17 @@ const BorrowingBatchDetail: React.FC = () => {
         }
     };
 
+    const resetLabelPhotoState = () => {
+        setLabelPhotos([]);
+        setOcrImages([]);
+        setChosenImageIndex(0);
+    };
+
     const openReceiveModal = (rawValue: string) => {
         if (!batch) return;
         const publicId = extractPublicId(rawValue);
         setNoQrReceive(false);
+        resetLabelPhotoState();
         receiveForm.setFieldsValue({
             publicId,
             plantId: batch.plantId,
@@ -270,12 +289,69 @@ const BorrowingBatchDetail: React.FC = () => {
     const openReceiveNoQrModal = () => {
         if (!batch) return;
         setNoQrReceive(true);
+        resetLabelPhotoState();
         receiveForm.setFieldsValue({
             publicId: undefined,
             plantId: batch.plantId,
             area: batch.area,
         });
         setIsReceiveModalOpen(true);
+    };
+
+    // Đọc tem máy từ ảnh: AI trích brand/model/serial điền form; brand chưa có thì tự tạo mới.
+    const handleReadMachineLabel = async () => {
+        const files = labelPhotos
+            .map((photo) => photo.originFileObj)
+            .filter((file): file is NonNullable<typeof file> => Boolean(file));
+        if (!files.length) {
+            message.warning('Chụp hoặc chọn ít nhất 1 ảnh tem máy trước');
+            return;
+        }
+
+        setReadingLabel(true);
+        try {
+            const result = await aiOcrService.scanMachineLabel(files);
+            setOcrImages(result.images ?? []);
+            setChosenImageIndex(0);
+
+            if (!result.available) {
+                message.warning('Chưa đọc được tem máy — ảnh đã lưu, điền tay giúp nhé.');
+                return;
+            }
+
+            const { fields } = result;
+            const current = receiveForm.getFieldsValue();
+            const patch: Partial<ReceiveFormValues> = {};
+            if (fields.serial) patch.serial = fields.serial;
+            if (fields.model) patch.model = fields.model;
+            if (fields.name && !current.name?.trim()) patch.name = fields.name;
+            if (fields.name && !current.type?.trim()) patch.type = fields.name;
+
+            if (fields.brand) {
+                const normalized = normalizeBrandText(fields.brand);
+                const matched = brandOptions.find((option) => normalizeBrandText(option.label) === normalized);
+                if (matched) {
+                    patch.brandId = matched.value;
+                } else {
+                    const created = await brandService.create({ name: fields.brand.trim() });
+                    queryClient.invalidateQueries({ queryKey: ['brands'] });
+                    patch.brandId = created.id;
+                    message.info(`Đã thêm nhãn hiệu mới "${fields.brand.trim()}"`);
+                }
+            }
+
+            receiveForm.setFieldsValue(patch);
+            const readParts = [
+                fields.brand ? `nhãn hiệu ${fields.brand}` : '',
+                fields.model ? `model ${fields.model}` : '',
+                fields.serial ? `serial ${fields.serial}` : '',
+            ].filter(Boolean);
+            message.success(`Đã đọc từ ảnh: ${readParts.join(', ')}`);
+        } catch {
+            message.error('Không đọc được ảnh. Kiểm tra mạng rồi thử lại.');
+        } finally {
+            setReadingLabel(false);
+        }
     };
 
     const handleReceiveSubmit = async () => {
@@ -292,6 +368,7 @@ const BorrowingBatchDetail: React.FC = () => {
                 plantId: values.plantId,
                 area: values.area?.trim() || undefined,
                 note: values.note?.trim() || undefined,
+                imageUrl: ocrImages[chosenImageIndex]?.url,
             },
             partnerMachineCode: values.partnerMachineCode?.trim() || undefined,
             receiveCondition: values.receiveCondition?.trim() || undefined,
@@ -830,6 +907,71 @@ const BorrowingBatchDetail: React.FC = () => {
                         message='Máy này sẽ không có tem QR — nhập serial hoặc mã máy đối tác để sau này còn nhận diện khi trả.'
                     />
                 ) : null}
+
+                <div className='mt-3 rounded-2xl border border-dashed border-blue-200 bg-blue-50/50 p-3'>
+                    <div className='mb-2 flex items-center gap-2 text-sm font-bold text-slate-800'>
+                        <CameraOutlined className='text-blue-600' />
+                        Chụp tem máy để AI điền giúp (2–3 ảnh)
+                    </div>
+                    <div className='flex flex-wrap items-start gap-3'>
+                        <Upload
+                            accept='image/*'
+                            listType='picture-card'
+                            fileList={labelPhotos}
+                            maxCount={3}
+                            multiple
+                            beforeUpload={() => false}
+                            onChange={({ fileList }) => {
+                                setLabelPhotos(fileList);
+                                setOcrImages([]);
+                                setChosenImageIndex(0);
+                            }}
+                        >
+                            {labelPhotos.length >= 3 ? null : (
+                                <div className='text-xs font-semibold text-slate-500'>
+                                    <CameraOutlined className='mb-1 block text-lg' />
+                                    Thêm ảnh
+                                </div>
+                            )}
+                        </Upload>
+                    </div>
+                    <Button
+                        type='primary'
+                        icon={<ThunderboltOutlined />}
+                        loading={readingLabel}
+                        disabled={!labelPhotos.length}
+                        onClick={handleReadMachineLabel}
+                    >
+                        Đọc thông tin từ ảnh
+                    </Button>
+                    <span className='ml-3 text-xs text-slate-500'>
+                        Chụp sát tem thông số (chỗ ghi MODEL / SERIAL) và logo hãng.
+                    </span>
+                    {ocrImages.length ? (
+                        <div className='mt-3'>
+                            <div className='mb-1.5 text-xs font-bold text-slate-600'>
+                                Chọn 1 ảnh lưu vào hồ sơ máy:
+                            </div>
+                            <div className='flex flex-wrap gap-2'>
+                                {ocrImages.map((image, index) => (
+                                    <button
+                                        key={image.url}
+                                        type='button'
+                                        onClick={() => setChosenImageIndex(index)}
+                                        className={`overflow-hidden rounded-xl border-2 p-0 transition ${
+                                            chosenImageIndex === index
+                                                ? 'border-blue-600 ring-2 ring-blue-200'
+                                                : 'border-slate-200 opacity-70 hover:opacity-100'
+                                        }`}
+                                    >
+                                        <img src={image.url} alt={`Ảnh máy ${index + 1}`} className='h-20 w-20 object-cover' />
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+                    ) : null}
+                </div>
+
                 <Form<ReceiveFormValues>
                     form={receiveForm}
                     layout='vertical'
