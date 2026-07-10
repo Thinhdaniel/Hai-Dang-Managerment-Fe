@@ -1198,6 +1198,16 @@ const ModalForm: React.FC<ModalFormProps> = ({ open, initial, plants, mainPlantI
             setSelectedKey(scannedRows[0].key);
             markRecent(scannedRows.map((r) => r.key));
 
+            // Đối chiếu toán học: tổng các dòng lệch "Cộng tiền hàng" trên phiếu -> có dòng đọc sai.
+            if (result.totals?.mismatch) {
+                notification.warning({
+                    title: 'Tổng tiền chưa khớp với phiếu',
+                    description: `Tổng tính từ các dòng ${fmtVND(result.totals.computed)} ≠ "Cộng tiền hàng" trên phiếu ${fmtVND(result.totals.stated)} — có dòng đọc sai SL/đơn giá hoặc sót dòng, kiểm tra lại.`,
+                    duration: 0,
+                });
+            }
+            const vatNote =
+                result.derivedVatRate != null ? `VAT ${result.derivedVatRate}% suy từ dòng tổng tiền thuế` : '';
             const flagged = result.verification?.flagged ?? 0;
             if (source === 'text') {
                 notification.success({
@@ -1215,6 +1225,8 @@ const ModalForm: React.FC<ModalFormProps> = ({ open, initial, plants, mainPlantI
                     description: [
                         `${result.verification.agreed ?? 0} dòng khớp cả 2 lần`,
                         flagged ? `${flagged} dòng LỆCH/chỉ 1 lần thấy — xem cảnh báo ⚠ ở ghi chú` : '',
+                        result.totals && !result.totals.mismatch ? 'tổng tiền khớp phiếu ✓' : '',
+                        vatNote,
                         matchedPlants ? `${matchedPlants} cơ sở` : '',
                         matchedSuppliers ? `${matchedSuppliers} NCC đã dò` : '',
                     ]

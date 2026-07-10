@@ -707,12 +707,23 @@ export type InvoiceOcrItem = {
 };
 
 export type InvoiceOcrResponse = {
-    header: { supplierName?: string; invoiceNo?: string; invoiceDate?: string };
+    header: {
+        supplierName?: string;
+        invoiceNo?: string;
+        invoiceDate?: string;
+        subtotal?: number;
+        taxTotal?: number;
+        grandTotal?: number;
+    };
     items: InvoiceOcrItem[];
     count: number;
     available: boolean;
     usedFallback: boolean;
     verification?: OcrVerification;
+    /** %VAT suy từ dòng tổng (tiền thuế / tiền hàng) khi phiếu không có cột VAT */
+    derivedVatRate?: number;
+    /** Đối chiếu tổng tiền hàng trên phiếu vs tổng tính từ các dòng */
+    totals?: { stated: number; computed: number; mismatch: boolean };
     provider?: string;
     model?: string;
     latencyMs?: number;
