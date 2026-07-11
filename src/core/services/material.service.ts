@@ -162,6 +162,11 @@ export interface PurchaseRequestItem {
     assetCode?: string;
     assetName?: string;
     imageUrls?: string[];
+    consumedByRequestId?: string;
+    consumedByRequestCode?: string;
+    sourceTechnicalRequestId?: string;
+    sourceTechnicalRequestCode?: string;
+    sourceTechnicalItemIndex?: number;
 }
 
 export interface PurchaseRequestItemPayload {
@@ -182,6 +187,8 @@ export interface PurchaseRequestItemPayload {
     supplierNote?: string;
     catalogStatus?: 'matched' | 'unmatched' | 'ignored';
     note?: string;
+    sourceTechnicalRequestId?: string;
+    sourceTechnicalItemIndex?: number;
 }
 
 export interface PurchaseRequest {
@@ -1037,6 +1044,22 @@ export interface TechnicalMaterialSuggestion {
     count?: number;
 }
 
+export interface TechnicalPurchasePoolItem {
+    requestId: string;
+    requestCode?: string;
+    requesterName?: string;
+    plantId: string;
+    approvedAt?: string;
+    itemIndex: number;
+    materialName: string;
+    unit?: string;
+    quantity: number;
+    note?: string;
+    assetCode?: string;
+    assetName?: string;
+    imageUrls: string[];
+}
+
 export interface TechnicalPurchasePayload {
     items: TechnicalPurchaseItemPayload[];
     requesterName?: string;
@@ -1054,6 +1077,11 @@ export const technicalPurchaseService = {
     getMaterialSuggestions: (search: string): Promise<TechnicalMaterialSuggestion[]> =>
         api.get<TechnicalMaterialSuggestion[]>(`${TECHNICAL_PURCHASE_BASE}/material-suggestions`, {
             params: { search: search || undefined },
+        }),
+
+    getPool: (plantId?: string): Promise<TechnicalPurchasePoolItem[]> =>
+        api.get<TechnicalPurchasePoolItem[]>(`${TECHNICAL_PURCHASE_BASE}/pool`, {
+            params: { plantId: plantId || undefined },
         }),
 
     create: (data: TechnicalPurchasePayload): Promise<PurchaseRequest> =>

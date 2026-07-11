@@ -95,13 +95,17 @@ type FormValues = {
 
 const STATUS_META: Record<string, { color: string; label: string; icon: React.ReactNode }> = {
     pending: { color: 'orange', label: 'Chờ duyệt', icon: <ClockCircleOutlined /> },
-    approved: { color: 'green', label: 'Đã duyệt', icon: <CheckCircleOutlined /> },
+    approved: { color: 'green', label: 'Đã duyệt — chờ mua', icon: <CheckCircleOutlined /> },
+    in_progress: { color: 'blue', label: 'Đã vào đề xuất mua', icon: <InboxOutlined /> },
+    received: { color: 'cyan', label: 'Đã nhận hàng', icon: <CheckCircleOutlined /> },
     rejected: { color: 'red', label: 'Từ chối', icon: <CloseCircleOutlined /> },
 };
 
 const STATUS_OPTIONS: Array<{ value: PurchaseRequestStatus; label: string }> = [
     { value: 'pending', label: 'Chờ duyệt' },
-    { value: 'approved', label: 'Đã duyệt' },
+    { value: 'approved', label: 'Đã duyệt — chờ mua' },
+    { value: 'in_progress', label: 'Đã vào đề xuất mua' },
+    { value: 'received', label: 'Đã nhận hàng' },
     { value: 'rejected', label: 'Từ chối' },
 ];
 
@@ -1368,12 +1372,19 @@ const TechnicalPurchaseRequestPage: React.FC = () => {
                                                             </span>
                                                             {item.materialName || '—'}
                                                         </div>
-                                                        {item.assetCode ? (
-                                                            <div className='mt-1.5'>
-                                                                <Tag color='geekblue' className='!m-0'>
-                                                                    <ToolOutlined /> {item.assetCode}
-                                                                    {item.assetName ? ` · ${item.assetName}` : ''}
-                                                                </Tag>
+                                                        {item.assetCode || item.consumedByRequestCode ? (
+                                                            <div className='mt-1.5 flex flex-wrap gap-1'>
+                                                                {item.assetCode ? (
+                                                                    <Tag color='geekblue' className='!m-0'>
+                                                                        <ToolOutlined /> {item.assetCode}
+                                                                        {item.assetName ? ` · ${item.assetName}` : ''}
+                                                                    </Tag>
+                                                                ) : null}
+                                                                {item.consumedByRequestCode ? (
+                                                                    <Tag color='cyan' className='!m-0'>
+                                                                        Đã vào {item.consumedByRequestCode}
+                                                                    </Tag>
+                                                                ) : null}
                                                             </div>
                                                         ) : null}
                                                         {item.note ? (
@@ -1441,13 +1452,19 @@ const TechnicalPurchaseRequestPage: React.FC = () => {
                                                     <span className='font-medium text-slate-800'>
                                                         {r.materialName || '—'}
                                                     </span>
-                                                    {r.assetCode ? (
-                                                        <div className='mt-1'>
-                                                            <Tag color='geekblue' className='!m-0'>
-                                                                <ToolOutlined />{' '}
-                                                                {r.assetCode}
-                                                                {r.assetName ? ` · ${r.assetName}` : ''}
-                                                            </Tag>
+                                                    {r.assetCode || r.consumedByRequestCode ? (
+                                                        <div className='mt-1 flex flex-wrap gap-1'>
+                                                            {r.assetCode ? (
+                                                                <Tag color='geekblue' className='!m-0'>
+                                                                    <ToolOutlined /> {r.assetCode}
+                                                                    {r.assetName ? ` · ${r.assetName}` : ''}
+                                                                </Tag>
+                                                            ) : null}
+                                                            {r.consumedByRequestCode ? (
+                                                                <Tag color='cyan' className='!m-0'>
+                                                                    Đã vào {r.consumedByRequestCode}
+                                                                </Tag>
+                                                            ) : null}
                                                         </div>
                                                     ) : null}
                                                     {r.imageUrls?.length ? (

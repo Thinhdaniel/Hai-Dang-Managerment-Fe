@@ -45,6 +45,7 @@ import {
     RightOutlined,
     ShoppingOutlined,
     ThunderboltOutlined,
+    ToolOutlined,
 } from '@ant-design/icons';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Navigate, useSearchParams } from 'react-router-dom';
@@ -64,12 +65,14 @@ import {
     materialSupplierService,
     type Material,
     purchaseRequestService,
+    technicalPurchaseService,
     type ApprovalReviewResult,
     type PurchaseRequest,
     type PurchaseRequestItem,
     type PurchaseRequestPayload,
     type PurchaseRequestQueryParams,
     type PurchaseRequestStatus,
+    type TechnicalPurchasePoolItem,
 } from '../core/services/material.service';
 import type { PaginatedResponse, Plant, User } from '../core/types';
 
@@ -620,6 +623,10 @@ type ItemRow = {
     totalPrice: number;
     vatAmount: number;
     totalWithVat: number;
+    // Dòng kéo từ rổ vật tư kỹ thuật (phiếu KT- đã duyệt)
+    sourceTechnicalRequestId?: string;
+    sourceTechnicalRequestCode?: string;
+    sourceTechnicalItemIndex?: number;
 };
 
 const createRowKey = () => `row-${Date.now()}-${Math.random().toString(36).slice(2)}`;
@@ -747,6 +754,30 @@ const ModalForm: React.FC<ModalFormProps> = ({ open, initial, plants, mainPlantI
         enabled: open,
     });
 
+    // Rổ vật tư kỹ thuật đã duyệt chờ mua — tick để kéo vào phiếu đang soạn
+    const [techPoolOpen, setTechPoolOpen] = useState(false);
+    const [techPoolChecked, setTechPoolChecked] = useState<React.Key[]>([]);
+    const techPoolQuery = useQuery({
+        queryKey: ['technical-purchase-pool'],
+        queryFn: () => technicalPurchaseService.getPool(),
+        enabled: open,
+        staleTime: 60_000,
+    });
+    const techPoolKeyOf = (row: TechnicalPurchasePoolItem) => `${row.requestId}:${row.itemIndex}`;
+    const usedTechKeys = useMemo(
+        () =>
+            new Set(
+                items
+                    .filter((r) => r.sourceTechnicalRequestId)
+                    .map((r) => `${r.sourceTechnicalRequestId}:${r.sourceTechnicalItemIndex}`)
+            ),
+        [items]
+    );
+    const availableTechPool = useMemo(
+        () => (techPoolQuery.data ?? []).filter((row) => !usedTechKeys.has(techPoolKeyOf(row))),
+        [techPoolQuery.data, usedTechKeys]
+    );
+
     const materialSearchIndex = useMemo(() => buildMaterialSearchIndex(getMaterialList(matResp)), [matResp]);
 
     const matOptions = useMemo<MaterialOptionData[]>(() => {
@@ -826,6 +857,9 @@ const ModalForm: React.FC<ModalFormProps> = ({ open, initial, plants, mainPlantI
                     totalPrice: 0,
                     vatAmount: 0,
                     totalWithVat: 0,
+                    sourceTechnicalRequestId: it.sourceTechnicalRequestId,
+                    sourceTechnicalRequestCode: it.sourceTechnicalRequestCode,
+                    sourceTechnicalItemIndex: it.sourceTechnicalItemIndex,
                 })
             );
         } else {
@@ -935,6 +969,8 @@ const ModalForm: React.FC<ModalFormProps> = ({ open, initial, plants, mainPlantI
                 supplierName: r.supplierName,
                 catalogStatus: hasExplicitMaterial ? 'matched' : 'unmatched',
                 note: r.note?.trim() || undefined,
+                sourceTechnicalRequestId: r.sourceTechnicalRequestId,
+                sourceTechnicalItemIndex: r.sourceTechnicalItemIndex,
             };
         }),
     });
@@ -1306,6 +1342,108 @@ const ModalForm: React.FC<ModalFormProps> = ({ open, initial, plants, mainPlantI
         }
     };
 
+    // Modal rổ vật tư kỹ thuật: tick các dòng KT đã duyệt → kéo vào phiếu đang soạn
+    const techPoolModal = (
+        <Modal
+            open={techPoolOpen}
+            title={
+                <span>
+                    <ToolOutlined className='mr-2 text-blue-600' />
+                    Vật tư kỹ thuật chờ mua ({availableTechPool.length})
+                </span>
+            }
+            width={720}
+            onCancel={() => setTechPoolOpen(false)}
+            footer={
+                <div className='flex items-center justify-between'>
+                    <span className='text-xs text-slate-400'>
+                        Dòng đã kéo sẽ được đánh dấu, kỹ thuật nhận thông báo khi phiếu tạo xong
+                    </span>
+                    <div className='flex gap-2'>
+                        <Button onClick={() => setTechPoolOpen(false)}>Đóng</Button>
+                        <Button
+                            type='primary'
+                            disabled={!techPoolChecked.length}
+                            onClick={() =>
+                                addFromTechnicalPool(
+                                    availableTechPool.filter((row) =>
+                                        techPoolChecked.includes(techPoolKeyOf(row))
+                                    )
+                                )
+                            }
+                        >
+                            Thêm {techPoolChecked.length} dòng vào phiếu
+                        </Button>
+                    </div>
+                </div>
+            }
+        >
+            {availableTechPool.length ? (
+                <Table<TechnicalPurchasePoolItem>
+                    size='small'
+                    rowKey={techPoolKeyOf}
+                    dataSource={availableTechPool}
+                    pagination={false}
+                    scroll={{ y: 360, x: 'max-content' }}
+                    loading={techPoolQuery.isLoading}
+                    rowSelection={{
+                        selectedRowKeys: techPoolChecked,
+                        onChange: setTechPoolChecked,
+                    }}
+                    columns={[
+                        {
+                            title: 'Vật tư',
+                            key: 'name',
+                            render: (_, row) => (
+                                <div>
+                                    <div className='text-[13px] font-semibold text-slate-800'>{row.materialName}</div>
+                                    {row.assetCode ? (
+                                        <div className='text-xs text-slate-400'>
+                                            Máy {row.assetCode}
+                                            {row.assetName ? ` · ${row.assetName}` : ''}
+                                        </div>
+                                    ) : null}
+                                    {row.note ? <div className='text-xs text-slate-400'>{row.note}</div> : null}
+                                </div>
+                            ),
+                        },
+                        {
+                            title: 'SL',
+                            key: 'qty',
+                            width: 90,
+                            align: 'right' as const,
+                            render: (_, row) => (
+                                <span>
+                                    <b>{row.quantity.toLocaleString('vi-VN')}</b>{' '}
+                                    <span className='text-xs text-slate-400'>{row.unit || ''}</span>
+                                </span>
+                            ),
+                        },
+                        {
+                            title: 'Phiếu KT',
+                            key: 'request',
+                            width: 170,
+                            render: (_, row) => (
+                                <div>
+                                    <span className='font-mono text-xs font-semibold text-blue-700'>
+                                        {row.requestCode || '—'}
+                                    </span>
+                                    <div className='text-xs text-slate-400'>{row.requesterName || ''}</div>
+                                </div>
+                            ),
+                        },
+                    ]}
+                />
+            ) : (
+                <Empty
+                    image={Empty.PRESENTED_IMAGE_SIMPLE}
+                    description='Không còn vật tư kỹ thuật nào chờ mua'
+                    className='py-8'
+                />
+            )}
+        </Modal>
+    );
+
     const quoteTextModal = (
         <Modal
             open={quoteTextOpen}
@@ -1520,6 +1658,36 @@ const ModalForm: React.FC<ModalFormProps> = ({ open, initial, plants, mainPlantI
         setSelectedKey(r.key);
         markRecent([r.key]);
         window.setTimeout(() => document.querySelector<HTMLElement>(`[data-row-key="${r.key}"] input`)?.focus(), 120);
+    };
+
+    const addFromTechnicalPool = (rows: TechnicalPurchasePoolItem[]) => {
+        if (!rows.length) return;
+        const newRows = rows.map((row) =>
+            computeRow({
+                ...newRow(),
+                materialName: row.materialName,
+                unit: row.unit ?? '',
+                quantityRequested: row.quantity,
+                quantityOrdered: row.quantity,
+                plantId: row.plantId || mainPlantId,
+                proposedBy: row.requesterName || 'Kỹ thuật',
+                purpose: `Kỹ thuật đề nghị (${row.requestCode || 'KT'})${row.assetCode ? ` — máy ${row.assetCode}` : ''}`,
+                note: row.note,
+                sourceTechnicalRequestId: row.requestId,
+                sourceTechnicalRequestCode: row.requestCode,
+                sourceTechnicalItemIndex: row.itemIndex,
+            })
+        );
+        setItems((prev) => {
+            // Form mới mở chỉ có 1 dòng trống → thay luôn bằng các dòng kỹ thuật
+            const isBlank = (r: ItemRow) => !r.materialName.trim() && !r.purpose.trim() && !r.unitPrice;
+            const kept = prev.filter((r) => !isBlank(r));
+            return [...kept, ...newRows];
+        });
+        setSelectedKey(newRows[0].key);
+        markRecent(newRows.map((r) => r.key));
+        setTechPoolOpen(false);
+        setTechPoolChecked([]);
     };
 
     const duplicateRow = (r: ItemRow) => {
@@ -2478,6 +2646,14 @@ const ModalForm: React.FC<ModalFormProps> = ({ open, initial, plants, mainPlantI
                     <Button type='dashed' block icon={<PlusOutlined />} onClick={addRow}>
                         Thêm vật tư
                     </Button>
+                    <Button
+                        block
+                        icon={<ToolOutlined />}
+                        onClick={() => setTechPoolOpen(true)}
+                        style={availableTechPool.length ? { color: '#0e7490', borderColor: '#67e8f9' } : undefined}
+                    >
+                        Kỹ thuật chờ mua{availableTechPool.length ? ` (${availableTechPool.length})` : ''}
+                    </Button>
                     <Button block icon={<ThunderboltOutlined />} loading={aiMatching} onClick={handleAiMaterialMatch}>
                         AI khớp vật tư
                     </Button>
@@ -2486,6 +2662,7 @@ const ModalForm: React.FC<ModalFormProps> = ({ open, initial, plants, mainPlantI
                     </Button>
                 </div>
                 {quoteTextModal}
+                {techPoolModal}
             </Drawer>
         );
     }
@@ -2722,6 +2899,18 @@ const ModalForm: React.FC<ModalFormProps> = ({ open, initial, plants, mainPlantI
                             <Button size='small' type='primary' ghost icon={<PlusOutlined />} onClick={addRow}>
                                 Thêm vật tư
                             </Button>
+                            <Button
+                                size='small'
+                                icon={<ToolOutlined />}
+                                onClick={() => setTechPoolOpen(true)}
+                                style={
+                                    availableTechPool.length
+                                        ? { color: '#0e7490', borderColor: '#67e8f9' }
+                                        : undefined
+                                }
+                            >
+                                Kỹ thuật chờ mua{availableTechPool.length ? ` (${availableTechPool.length})` : ''}
+                            </Button>
                         </Space>
                     </div>
                     {validationMessages.length > 0 && (
@@ -2857,6 +3046,7 @@ const ModalForm: React.FC<ModalFormProps> = ({ open, initial, plants, mainPlantI
             {/* Footer */}
             {footerBar}
             {quoteTextModal}
+            {techPoolModal}
         </Drawer>
     );
 };
