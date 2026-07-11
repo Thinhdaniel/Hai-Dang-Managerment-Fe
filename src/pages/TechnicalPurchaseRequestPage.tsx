@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import dayjs, { type Dayjs } from 'dayjs';
 import {
     App,
@@ -11,6 +11,7 @@ import {
     Empty,
     Form,
     Grid,
+    Image,
     Input,
     InputNumber,
     Modal,
@@ -19,17 +20,20 @@ import {
     Tag,
     Tooltip,
     Typography,
+    Upload,
     type TableColumnsType,
 } from 'antd';
 import {
+    CameraOutlined,
     CheckCircleOutlined,
     ClockCircleOutlined,
     CloseCircleOutlined,
     DeleteOutlined,
     DownloadOutlined,
+    EditOutlined,
     EyeOutlined,
-    FileTextOutlined,
     InboxOutlined,
+    LoadingOutlined,
     MessageOutlined,
     PlusOutlined,
     ReloadOutlined,
@@ -43,13 +47,16 @@ import { useSearchParams } from 'react-router-dom';
 import PageHeader from '../components/shared/PageHeader';
 import ContextChatDrawer from '../components/chat/ContextChatDrawer';
 import { useAuth } from '../core/contexts/AuthContext';
+import { APP_ENVs } from '../core/config/enviroments';
 import { hasManagerAccess } from '../core/lib/permissions';
 import { normalizeSearchTerm } from '../core/lib/search';
+import { assetService } from '../core/services/asset.service';
 import {
     technicalPurchaseService,
     type PurchaseRequest,
     type PurchaseRequestQueryParams,
     type PurchaseRequestStatus,
+    type TechnicalMaterialSuggestion,
     type TechnicalPurchasePayload,
 } from '../core/services/material.service';
 import type { PaginatedResponse, User } from '../core/types';
@@ -70,7 +77,14 @@ type FilterState = {
     startDate?: string;
     endDate?: string;
 };
-type FormItemValue = { materialName?: string; unit?: string; quantityRequested?: number; note?: string };
+type FormItemValue = {
+    materialName?: string;
+    unit?: string;
+    quantityRequested?: number;
+    note?: string;
+    assetId?: string;
+    imageUrls?: string[];
+};
 type FormValues = {
     requesterName?: string;
     department?: string;
@@ -124,7 +138,7 @@ const normalizePaginated = <T,>(res: T[] | PaginatedResponse<T>, page: number, l
     }
     return res;
 };
-const emptyItem = (): FormItemValue => ({ materialName: '', unit: '', quantityRequested: 1, note: '' });
+const emptyItem = (): FormItemValue => ({ materialName: '', unit: '', quantityRequested: 1, note: '', imageUrls: [] });
 
 const StatusTag: React.FC<{ status: string }> = ({ status }) => {
     const m = STATUS_META[status] ?? { color: 'default', label: status, icon: null };
@@ -135,23 +149,174 @@ const StatusTag: React.FC<{ status: string }> = ({ status }) => {
     );
 };
 
+// ── Upload ảnh linh kiện lên Cloudinary (unsigned preset, cùng pattern HandoverModal) ──
+const uploadItemImage = async (file: File): Promise<string> => {
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('upload_preset', APP_ENVs.CLOUDINARY_UPLOAD_PRESET);
+    formData.append('folder', 'technical-purchase');
+    const res = await fetch(`https://api.cloudinary.com/v1_1/${APP_ENVs.CLOUDINARY_CLOUD_NAME}/image/upload`, {
+        method: 'POST',
+        body: formData,
+    });
+    if (!res.ok) throw new Error('Upload ảnh thất bại');
+    const data = await res.json();
+    return data.secure_url as string;
+};
+
+// Field ảnh cho 1 dòng vật tư — dùng trong Form.Item (antd bơm value/onChange)
+const ItemImageField: React.FC<{ value?: string[]; onChange?: (value: string[]) => void }> = ({
+    value = [],
+    onChange,
+}) => {
+    const { message } = App.useApp();
+    const [uploading, setUploading] = useState(false);
+
+    const pick = async (file: File) => {
+        if (value.length >= 3) {
+            message.warning('Tối đa 3 ảnh mỗi vật tư');
+            return false;
+        }
+        setUploading(true);
+        try {
+            const url = await uploadItemImage(file);
+            onChange?.([...value, url]);
+        } catch {
+            message.error('Không tải được ảnh lên, thử lại');
+        } finally {
+            setUploading(false);
+        }
+        return false;
+    };
+
+    return (
+        <div className='flex items-center gap-2'>
+            <Image.PreviewGroup>
+                {value.map((url) => (
+                    <div key={url} className='relative shrink-0'>
+                        <Image
+                            src={url}
+                            width={42}
+                            height={42}
+                            style={{ objectFit: 'cover', borderRadius: 8 }}
+                            alt='Ảnh vật tư'
+                        />
+                        <button
+                            type='button'
+                            aria-label='Xoá ảnh'
+                            onClick={() => onChange?.(value.filter((item) => item !== url))}
+                            className='absolute -top-1.5 -right-1.5 flex h-4 w-4 items-center justify-center rounded-full bg-slate-700 text-[9px] leading-none text-white'
+                        >
+                            ✕
+                        </button>
+                    </div>
+                ))}
+            </Image.PreviewGroup>
+            {value.length < 3 && (
+                <Upload accept='image/*' showUploadList={false} beforeUpload={pick} disabled={uploading}>
+                    <button
+                        type='button'
+                        className='flex h-[42px] w-[42px] items-center justify-center rounded-lg border border-dashed border-slate-300 text-slate-400 transition-colors hover:border-blue-400 hover:text-blue-500'
+                    >
+                        {uploading ? <LoadingOutlined /> : <CameraOutlined />}
+                    </button>
+                </Upload>
+            )}
+            {!value.length && <span className='text-xs text-slate-400'>Chụp linh kiện hỏng để người mua dễ tìm</span>}
+        </div>
+    );
+};
+
 // ── FormDrawer (tạo / sửa) ──────────────────────────────────────────────────────
 const FormDrawer: React.FC<{
     open: boolean;
     initialValues?: PurchaseRequest | null;
     defaultRequesterName?: string;
+    plantId?: string;
     submitting: boolean;
     onClose: () => void;
     onSubmit: (payload: TechnicalPurchasePayload) => Promise<void>;
-}> = ({ open, initialValues, defaultRequesterName, submitting, onClose, onSubmit }) => {
+}> = ({ open, initialValues, defaultRequesterName, plantId, submitting, onClose, onSubmit }) => {
     const [form] = Form.useForm<FormValues>();
     const watchedItems: FormItemValue[] = Form.useWatch('items', form) ?? [];
+    const requesterName = Form.useWatch('requesterName', form);
+    const department = Form.useWatch('department', form);
+    const requestDate = Form.useWatch('requestDate', form);
     const screens = useBreakpoint();
     const isMobile = !screens.sm;
+    const [infoOpen, setInfoOpen] = useState(false);
+    // Ghi chú / ảnh mỗi dòng ẩn mặc định cho form gọn — bấm chip mới mở
+    const [extraOpen, setExtraOpen] = useState<Record<number, { note?: boolean; images?: boolean }>>({});
+    const [suggestions, setSuggestions] = useState<TechnicalMaterialSuggestion[]>([]);
+    const suggestTimer = useRef<number | undefined>(undefined);
+
+    // Danh sách máy của cơ sở để gắn vào dòng vật tư (tải 1 lần khi mở form)
+    const assetsQuery = useQuery({
+        queryKey: ['technical-purchase-assets', plantId ?? 'all'],
+        queryFn: () => assetService.getAll({ plantId: plantId || undefined, page: 1, limit: 500 }),
+        enabled: open,
+        staleTime: 5 * 60_000,
+    });
+    const assetOptions = useMemo(() => {
+        const options = (assetsQuery.data?.data ?? []).map((asset) => ({
+            value: asset.id,
+            label: `${asset.machineCode} — ${asset.name}`,
+        }));
+        const known = new Set(options.map((option) => option.value));
+        // Phiếu cũ có thể gắn máy đã chuyển cơ sở/xoá — vẫn hiện bằng snapshot
+        (initialValues?.items ?? []).forEach((item) => {
+            if (item.assetId && !known.has(item.assetId)) {
+                known.add(item.assetId);
+                options.push({
+                    value: item.assetId,
+                    label: `${item.assetCode || '—'} — ${item.assetName || 'Máy'}`,
+                });
+            }
+        });
+        return options;
+    }, [assetsQuery.data, initialValues]);
+
+    const fetchSuggestions = (search: string) => {
+        window.clearTimeout(suggestTimer.current);
+        suggestTimer.current = window.setTimeout(async () => {
+            try {
+                setSuggestions(await technicalPurchaseService.getMaterialSuggestions(search.trim()));
+            } catch {
+                // Gợi ý lỗi thì thôi — người dùng vẫn gõ tự do được
+            }
+        }, 250);
+    };
+
+    const suggestionOptions = useMemo(
+        () =>
+            suggestions.map((item) => ({
+                value: item.name,
+                label: (
+                    <div className='flex items-center justify-between gap-2'>
+                        <span className='truncate'>{item.name}</span>
+                        <span className='shrink-0 text-[11px] text-slate-400'>
+                            {item.unit ? `${item.unit} · ` : ''}
+                            {item.source === 'history' ? `đã mua ${item.count ?? 1} lần` : 'danh mục'}
+                        </span>
+                    </div>
+                ),
+            })),
+        [suggestions]
+    );
 
     useEffect(() => {
         if (!open) return;
+        setInfoOpen(false);
+        fetchSuggestions('');
         if (initialValues) {
+            setExtraOpen(
+                Object.fromEntries(
+                    initialValues.items.map((item, index) => [
+                        index,
+                        { note: Boolean(item.note), images: Boolean(item.imageUrls?.length) },
+                    ])
+                )
+            );
             form.setFieldsValue({
                 requesterName: initialValues.requesterName || '',
                 department: initialValues.department || 'Kỹ thuật',
@@ -162,9 +327,12 @@ const FormDrawer: React.FC<{
                     unit: i.unit || '',
                     quantityRequested: i.quantityRequested,
                     note: i.note,
+                    assetId: i.assetId,
+                    imageUrls: i.imageUrls ?? [],
                 })),
             });
         } else {
+            setExtraOpen({});
             form.resetFields();
             form.setFieldsValue({
                 requesterName: defaultRequesterName || '',
@@ -173,22 +341,37 @@ const FormDrawer: React.FC<{
                 items: [emptyItem()],
             });
         }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [open, initialValues, defaultRequesterName, form]);
 
+    const toggleExtra = (name: number, key: 'note' | 'images') =>
+        setExtraOpen((current) => ({ ...current, [name]: { ...current[name], [key]: !current[name]?.[key] } }));
+
     const handleSubmit = async () => {
-        const values = await form.validateFields();
-        await onSubmit({
-            requesterName: normalizeText(values.requesterName),
-            department: normalizeText(values.department),
-            note: normalizeText(values.note),
-            requestDate: values.requestDate?.toISOString(),
-            items: (values.items ?? []).map((i) => ({
-                materialName: String(i.materialName ?? '').trim(),
-                unit: String(i.unit ?? '').trim(),
-                quantityRequested: Number(i.quantityRequested ?? 0),
-                note: normalizeText(i.note),
-            })),
-        });
+        try {
+            const values = await form.validateFields();
+            await onSubmit({
+                requesterName: normalizeText(values.requesterName),
+                department: normalizeText(values.department),
+                note: normalizeText(values.note),
+                requestDate: values.requestDate?.toISOString(),
+                items: (values.items ?? []).map((i) => ({
+                    materialName: String(i.materialName ?? '').trim(),
+                    unit: String(i.unit ?? '').trim(),
+                    quantityRequested: Number(i.quantityRequested ?? 0),
+                    note: normalizeText(i.note),
+                    assetId: i.assetId || undefined,
+                    imageUrls: i.imageUrls?.length ? i.imageUrls : undefined,
+                })),
+            });
+        } catch (error: any) {
+            // Field bắt buộc nằm trong khối thông tin đang thu gọn → mở ra cho người dùng thấy lỗi
+            const errorFields: Array<{ name: (string | number)[] }> = error?.errorFields ?? [];
+            if (errorFields.some((f) => ['requesterName', 'requestDate'].includes(String(f.name?.[0])))) {
+                setInfoOpen(true);
+            }
+            if (!errorFields.length) throw error;
+        }
     };
 
     return (
@@ -241,22 +424,37 @@ const FormDrawer: React.FC<{
             }
         >
             <Form form={form} layout='vertical' className='flex h-full min-h-0 flex-col'>
-                {/* Thông tin chung */}
-                <div className='shrink-0 border-b border-slate-200 bg-white px-4 py-4 sm:px-6 sm:py-5'>
-                    <div className='mb-3 flex items-center gap-2 text-sm font-semibold text-slate-700'>
-                        <FileTextOutlined className='text-blue-500' /> Thông tin chung
+                {/* Thông tin chung — điền sẵn, thu gọn 1 dòng; bấm Sửa mới mở */}
+                <div className='shrink-0 border-b border-slate-200 bg-white px-4 py-3 sm:px-6'>
+                    <div className='flex items-center justify-between gap-3'>
+                        <div className='min-w-0 truncate text-sm text-slate-600'>
+                            <span className='font-semibold text-slate-800'>{requesterName || '—'}</span>
+                            <span className='text-slate-400'>
+                                {' '}
+                                · {department || 'Kỹ thuật'} · {requestDate ? requestDate.format('DD/MM/YYYY') : '—'}
+                            </span>
+                        </div>
+                        <Button
+                            size='small'
+                            type='text'
+                            icon={<EditOutlined />}
+                            onClick={() => setInfoOpen((v) => !v)}
+                            className='shrink-0 text-slate-400'
+                        >
+                            {infoOpen ? 'Thu gọn' : 'Sửa'}
+                        </Button>
                     </div>
-                    <div className='grid grid-cols-2 gap-3 sm:gap-4'>
+                    <div className={infoOpen ? 'mt-3 grid grid-cols-2 gap-3' : 'hidden'}>
                         <Form.Item
                             name='requesterName'
                             label='Họ và tên người đề nghị'
                             className='col-span-2 mb-0 sm:col-span-1'
                             rules={[{ required: true, message: 'Nhập họ và tên' }]}
                         >
-                            <Input placeholder='VD: Nguyễn Văn A' size='large' maxLength={120} allowClear />
+                            <Input placeholder='VD: Nguyễn Văn A' maxLength={120} allowClear />
                         </Form.Item>
                         <Form.Item name='department' label='Bộ phận' className='col-span-2 mb-0 sm:col-span-1'>
-                            <Input placeholder='Kỹ thuật' size='large' maxLength={120} allowClear />
+                            <Input placeholder='Kỹ thuật' maxLength={120} allowClear />
                         </Form.Item>
                         <Form.Item
                             name='requestDate'
@@ -264,7 +462,7 @@ const FormDrawer: React.FC<{
                             className='col-span-2 mb-0 sm:col-span-1'
                             rules={[{ required: true, message: 'Chọn ngày' }]}
                         >
-                            <DatePicker format='DD/MM/YYYY' className='w-full' size='large' inputReadOnly={isMobile} />
+                            <DatePicker format='DD/MM/YYYY' className='w-full' inputReadOnly={isMobile} />
                         </Form.Item>
                         <Form.Item name='note' label='Ghi chú chung (nếu có)' className='col-span-2 mb-0'>
                             <Input.TextArea rows={1} maxLength={500} placeholder='Lý do / mục đích chung...' />
@@ -305,77 +503,141 @@ const FormDrawer: React.FC<{
                                     </div>
                                 )}
 
-                                {fields.map((field, index) => (
-                                    <div
-                                        key={field.key}
-                                        className='rounded-2xl border border-slate-200 bg-white p-3.5 transition-all hover:border-blue-300 hover:shadow-sm sm:p-4'
-                                    >
-                                        <div className='mb-2.5 flex items-center justify-between'>
-                                            <span className='inline-flex h-6 min-w-[30px] items-center justify-center rounded-lg bg-blue-50 px-2 text-xs font-bold text-blue-600'>
-                                                #{index + 1}
-                                            </span>
-                                            <Tooltip title='Xoá vật tư này'>
+                                {fields.map((field, index) => {
+                                    const itemValue = watchedItems[field.name] ?? {};
+                                    const extra = extraOpen[field.name] ?? {};
+                                    const showNote = Boolean(extra.note || itemValue.note);
+                                    const showImages = Boolean(extra.images || itemValue.imageUrls?.length);
+                                    return (
+                                        <div
+                                            key={field.key}
+                                            className='rounded-xl border border-slate-200 bg-white p-3 transition-colors focus-within:border-blue-300'
+                                        >
+                                            {/* Hàng 1: tên vật tư (gợi ý) + số lượng + xoá */}
+                                            <div className='flex items-start gap-2'>
+                                                <span className='mt-1.5 inline-flex h-5 w-6 shrink-0 items-center justify-center rounded-md bg-blue-50 text-[11px] font-bold text-blue-600'>
+                                                    {index + 1}
+                                                </span>
+                                                <Form.Item
+                                                    name={[field.name, 'materialName']}
+                                                    className='mb-0 min-w-0 flex-1'
+                                                    rules={[{ required: true, message: 'Nhập tên vật tư' }]}
+                                                >
+                                                    <AutoComplete
+                                                        options={suggestionOptions}
+                                                        onSearch={fetchSuggestions}
+                                                        onFocus={() =>
+                                                            fetchSuggestions(String(itemValue.materialName ?? ''))
+                                                        }
+                                                        onSelect={(value: string) => {
+                                                            const picked = suggestions.find((s) => s.name === value);
+                                                            if (picked?.unit && !itemValue.unit) {
+                                                                form.setFieldValue(
+                                                                    ['items', field.name, 'unit'],
+                                                                    picked.unit
+                                                                );
+                                                            }
+                                                        }}
+                                                        placeholder='Tên vật tư — gõ để gợi ý từ đồ đã mua'
+                                                        allowClear
+                                                    />
+                                                </Form.Item>
+                                                <Form.Item
+                                                    name={[field.name, 'quantityRequested']}
+                                                    className='mb-0 w-20 shrink-0'
+                                                    rules={[{ required: true, message: 'SL?' }]}
+                                                >
+                                                    <InputNumber<number>
+                                                        min={1}
+                                                        className='w-full'
+                                                        placeholder='SL'
+                                                        formatter={(v) =>
+                                                            `${v ?? ''}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')
+                                                        }
+                                                        parser={parseNum}
+                                                    />
+                                                </Form.Item>
                                                 <Button
                                                     type='text'
                                                     danger
-                                                    size='small'
                                                     disabled={fields.length === 1}
                                                     icon={<DeleteOutlined />}
                                                     onClick={() => remove(field.name)}
+                                                    className='shrink-0'
                                                 />
-                                            </Tooltip>
+                                            </div>
+                                            {/* Hàng 2: ĐVT + máy liên quan */}
+                                            <div className='mt-2 flex items-start gap-2 pl-8'>
+                                                <Form.Item
+                                                    name={[field.name, 'unit']}
+                                                    className='mb-0 w-24 shrink-0'
+                                                    rules={[{ required: true, message: 'ĐVT?' }]}
+                                                >
+                                                    <AutoComplete
+                                                        options={UNIT_OPTIONS}
+                                                        placeholder='ĐVT'
+                                                        allowClear
+                                                        filterOption={(input, option) =>
+                                                            normalizeSearchTerm(String(option?.value ?? '')).includes(
+                                                                normalizeSearchTerm(input)
+                                                            )
+                                                        }
+                                                    />
+                                                </Form.Item>
+                                                <Form.Item name={[field.name, 'assetId']} className='mb-0 min-w-0 flex-1'>
+                                                    <Select
+                                                        allowClear
+                                                        showSearch
+                                                        options={assetOptions}
+                                                        loading={assetsQuery.isLoading}
+                                                        placeholder='Cho máy nào? (không bắt buộc)'
+                                                        filterOption={(input, option) =>
+                                                            normalizeSearchTerm(String(option?.label ?? '')).includes(
+                                                                normalizeSearchTerm(input)
+                                                            )
+                                                        }
+                                                    />
+                                                </Form.Item>
+                                            </div>
+                                            {/* Chips mở ghi chú / ảnh — giữ card gọn khi không dùng */}
+                                            <div className='mt-2 flex flex-wrap items-center gap-2 pl-8'>
+                                                {!showNote && (
+                                                    <button
+                                                        type='button'
+                                                        onClick={() => toggleExtra(field.name, 'note')}
+                                                        className='rounded-md border border-dashed border-slate-300 px-2 py-0.5 text-xs text-slate-400 hover:border-blue-400 hover:text-blue-500'
+                                                    >
+                                                        ＋ Ghi chú
+                                                    </button>
+                                                )}
+                                                {!showImages && (
+                                                    <button
+                                                        type='button'
+                                                        onClick={() => toggleExtra(field.name, 'images')}
+                                                        className='rounded-md border border-dashed border-slate-300 px-2 py-0.5 text-xs text-slate-400 hover:border-blue-400 hover:text-blue-500'
+                                                    >
+                                                        <CameraOutlined /> Ảnh linh kiện
+                                                    </button>
+                                                )}
+                                            </div>
+                                            {showNote && (
+                                                <Form.Item name={[field.name, 'note']} className='mt-2 mb-0 pl-8'>
+                                                    <Input
+                                                        placeholder='Quy cách, vị trí lắp... (nếu có)'
+                                                        maxLength={250}
+                                                    />
+                                                </Form.Item>
+                                            )}
+                                            {showImages && (
+                                                <div className='mt-2 pl-8'>
+                                                    <Form.Item name={[field.name, 'imageUrls']} className='mb-0'>
+                                                        <ItemImageField />
+                                                    </Form.Item>
+                                                </div>
+                                            )}
                                         </div>
-                                        <Form.Item
-                                            name={[field.name, 'materialName']}
-                                            label='Tên vật tư'
-                                            className='mb-3'
-                                            rules={[{ required: true, message: 'Nhập tên vật tư' }]}
-                                        >
-                                            <Input placeholder='VD: Vòng bi, Dây curoa, Kim máy...' maxLength={200} size='large' allowClear />
-                                        </Form.Item>
-                                        <div className='grid grid-cols-2 gap-3 sm:grid-cols-[150px_150px_minmax(0,1fr)]'>
-                                            <Form.Item
-                                                name={[field.name, 'unit']}
-                                                label='Đơn vị tính'
-                                                className='mb-0'
-                                                rules={[{ required: true, message: 'Nhập ĐVT' }]}
-                                            >
-                                                <AutoComplete
-                                                    options={UNIT_OPTIONS}
-                                                    placeholder='Cái, Bộ, Mét...'
-                                                    size='large'
-                                                    allowClear
-                                                    filterOption={(input, option) =>
-                                                        normalizeSearchTerm(String(option?.value ?? '')).includes(
-                                                            normalizeSearchTerm(input)
-                                                        )
-                                                    }
-                                                />
-                                            </Form.Item>
-                                            <Form.Item
-                                                name={[field.name, 'quantityRequested']}
-                                                label='Số lượng'
-                                                className='mb-0'
-                                                rules={[{ required: true, message: 'Nhập SL' }]}
-                                            >
-                                                <InputNumber<number>
-                                                    min={1}
-                                                    className='w-full'
-                                                    size='large'
-                                                    formatter={(v) => `${v ?? ''}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')}
-                                                    parser={parseNum}
-                                                />
-                                            </Form.Item>
-                                            <Form.Item
-                                                name={[field.name, 'note']}
-                                                label='Ghi chú'
-                                                className='col-span-2 mb-0 sm:col-span-1'
-                                            >
-                                                <Input placeholder='Quy cách, vị trí lắp... (nếu có)' maxLength={250} size='large' />
-                                            </Form.Item>
-                                        </div>
-                                    </div>
-                                ))}
+                                    );
+                                })}
 
                                 {fields.length > 0 && (
                                     <Button type='dashed' block icon={<PlusOutlined />} onClick={() => add(emptyItem())} className='h-11'>
@@ -816,6 +1078,7 @@ const TechnicalPurchaseRequestPage: React.FC = () => {
                 open={formOpen}
                 initialValues={editing}
                 defaultRequesterName={(user as any)?.name || (user as any)?.fullname || ''}
+                plantId={(user as any)?.plantId}
                 submitting={isCreating || isUpdating}
                 onClose={() => {
                     setFormOpen(false);
@@ -1002,7 +1265,36 @@ const TechnicalPurchaseRequestPage: React.FC = () => {
                                             title: 'Tên vật tư',
                                             key: 'name',
                                             render: (_: any, r: any) => (
-                                                <span className='font-medium text-slate-800'>{r.materialName || '—'}</span>
+                                                <div>
+                                                    <span className='font-medium text-slate-800'>
+                                                        {r.materialName || '—'}
+                                                    </span>
+                                                    {r.assetCode ? (
+                                                        <div className='mt-1'>
+                                                            <Tag color='geekblue' className='!m-0'>
+                                                                <ToolOutlined />{' '}
+                                                                {r.assetCode}
+                                                                {r.assetName ? ` · ${r.assetName}` : ''}
+                                                            </Tag>
+                                                        </div>
+                                                    ) : null}
+                                                    {r.imageUrls?.length ? (
+                                                        <div className='mt-1.5 flex gap-1.5'>
+                                                            <Image.PreviewGroup>
+                                                                {r.imageUrls.map((url: string) => (
+                                                                    <Image
+                                                                        key={url}
+                                                                        src={url}
+                                                                        width={38}
+                                                                        height={38}
+                                                                        style={{ objectFit: 'cover', borderRadius: 6 }}
+                                                                        alt='Ảnh vật tư'
+                                                                    />
+                                                                ))}
+                                                            </Image.PreviewGroup>
+                                                        </div>
+                                                    ) : null}
+                                                </div>
                                             ),
                                         },
                                         { title: 'ĐVT', dataIndex: 'unit', width: 80 },
