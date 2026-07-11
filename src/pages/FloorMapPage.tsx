@@ -12,16 +12,26 @@ import {
     RollbackOutlined,
     SearchOutlined,
     ThunderboltOutlined,
+    HistoryOutlined,
+    AlertOutlined,
 } from '@ant-design/icons';
-import { useNavigate } from 'react-router-dom';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { plantService } from '../core/services';
 import { floorMapService } from '../core/services/floor-map.service';
+import { stocktakeService } from '../core/services/stocktake.service';
 import { socketService } from '../core/services/socket.service';
 import { useAuth } from '../core/contexts/AuthContext';
-import { isAdmin, isDirector } from '../core/lib/permissions';
+import { hasDirectorAccess, hasManagerAccess } from '../core/lib/permissions';
 import { ASSET_STATUS_COLOR } from '../core/constants/assetStatusColor';
 import { AssetStatus, type FloorMapMachine, type FloorZone } from '../core/types';
+import type { FloorMapRevision } from '../core/types';
+import FloorMapRevisionDrawer from '../components/floor-map/FloorMapRevisionDrawer';
+import FloorRealityHealthPanel, {
+    REALITY_META,
+    type FloorRealityFilter,
+} from '../components/floor-map/FloorRealityHealthPanel';
+import RealityOperationsDrawer from '../components/floor-map/RealityOperationsDrawer';
 
 // ─── Sơ đồ xưởng: giám sát máy theo mặt bằng, real-time qua socket asset:updated ───
 // Chế độ Giám sát: sàn isometric 3D, máy = khối nổi phát sáng theo trạng thái.
@@ -125,6 +135,13 @@ const HEAT_FACES: Record<0 | 1 | 2, Faces> = {
     1: ['#b98a3a', '#8d692c', '#664c20'],
     2: ['#ff6b4a', '#c74f36', '#933a28'],
 };
+const REALITY_FACES: Record<import('../core/types').FloorRealityStatus, Faces> = {
+    verified: ['#34d399', '#15966f', '#0f6b50'],
+    drift: ['#fb7185', '#dc344d', '#9f2438'],
+    unplaced: ['#fbbf24', '#d28a12', '#9a620d'],
+    stale: ['#a78bfa', '#7656cf', '#543b9c'],
+    unverified: ['#94a3b8', '#64748b', '#475569'],
+};
 
 // Vẽ 1 khối hộp isometric: mặt trước (+Y) → mặt bên (+X) → nóc
 const drawBox = (
@@ -196,8 +213,7 @@ interface AssetSocketPayload {
     };
 }
 
-const nowTime = () =>
-    new Date().toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+const nowTime = () => new Date().toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
 
 let feedSeq = 0;
 
@@ -228,11 +244,13 @@ HeaderClock.displayName = 'HeaderClock';
 const FloorMapPage: React.FC = () => {
     const { message } = App.useApp();
     const navigate = useNavigate();
+    const [searchParams] = useSearchParams();
     const queryClient = useQueryClient();
     const { user, role } = useAuth();
-    const canEdit = Boolean(role) && (isAdmin(role!) || isDirector(role!));
+    const canEdit = hasDirectorAccess(role);
+    const canOperate = hasManagerAccess(role);
 
-    const [plantId, setPlantId] = useState<string>('');
+    const [plantId, setPlantId] = useState<string>(() => searchParams.get('plantId') || '');
     const [editMode, setEditMode] = useState(false);
     const [machines, setMachines] = useState<FloorMapMachine[]>([]);
     const [zones, setZones] = useState<FloorZone[]>([]);
@@ -244,6 +262,10 @@ const FloorMapPage: React.FC = () => {
     const [unplacedSearch, setUnplacedSearch] = useState('');
     const [saving, setSaving] = useState(false);
     const [heatMode, setHeatMode] = useState(false);
+    const [realityMode, setRealityMode] = useState(() => searchParams.get('reality') === '1');
+    const [realityFilter, setRealityFilter] = useState<FloorRealityFilter>('all');
+    const [revisionOpen, setRevisionOpen] = useState(false);
+    const [operationsOpen, setOperationsOpen] = useState(() => searchParams.get('reality') === '1' && canOperate);
     const [theme, setTheme] = useState<'dark' | 'light'>(() => {
         try {
             return localStorage.getItem('floorMapTheme') === 'light' ? 'light' : 'dark';
@@ -275,6 +297,91 @@ const FloorMapPage: React.FC = () => {
         enabled: Boolean(plantId),
     });
 
+    const revisionsQuery = useQuery({
+        queryKey: ['floor-map-revisions', plantId],
+        queryFn: () => floorMapService.getRevisions(plantId, 30),
+        enabled: Boolean(plantId && revisionOpen),
+    });
+
+    const realityQuery = useQuery({
+        queryKey: ['floor-map-reality', plantId],
+        queryFn: () => floorMapService.getRealityHealth(plantId, 30),
+        enabled: Boolean(plantId),
+        staleTime: 60_000,
+    });
+
+    const operationsQuery = useQuery({
+        queryKey: ['floor-map-operations', plantId],
+        queryFn: () => floorMapService.getOperations(plantId),
+        enabled: Boolean(plantId && canOperate),
+        staleTime: 30_000,
+    });
+
+    const updateOperationalAlertMutation = useMutation({
+        mutationFn: ({
+            alertId,
+            data,
+        }: {
+            alertId: string;
+            data: Parameters<typeof floorMapService.updateOperationalAlert>[1];
+        }) => floorMapService.updateOperationalAlert(alertId, data),
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['floor-map-operations', plantId] });
+            message.success('Đã cập nhật công việc');
+        },
+        onError: () => message.error('Không thể cập nhật công việc'),
+    });
+
+    const saveOperationsRuleMutation = useMutation({
+        mutationFn: (data: Partial<import('../core/types').RealityAlertRule>) =>
+            floorMapService.updateOperationsRule({ ...data, plantId }),
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['floor-map-operations', plantId] });
+            message.success('Đã lưu ngưỡng cảnh báo');
+        },
+        onError: () => message.error('Không thể lưu ngưỡng cảnh báo'),
+    });
+
+    const evaluateOperationsMutation = useMutation({
+        mutationFn: () => floorMapService.evaluateOperations(plantId),
+        onSuccess: (result) => {
+            queryClient.invalidateQueries({ queryKey: ['floor-map-operations', plantId] });
+            queryClient.invalidateQueries({ queryKey: ['floor-map-reality', plantId] });
+            message.success(`Đánh giá xong: ${result.opened} cảnh báo mới, ${result.resolved} cảnh báo tự đóng`);
+        },
+        onError: () => message.error('Không thể chạy đánh giá Reality Operations'),
+    });
+
+    const createDriftProposalMutation = useMutation({
+        mutationFn: ({ sessionId, assetId }: { sessionId: string; assetId: string }) =>
+            stocktakeService.createDriftPositionProposal(sessionId, assetId),
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['stocktake-history'] });
+            queryClient.invalidateQueries({ queryKey: ['floor-map-reality', plantId] });
+            message.success('Đã tạo đề xuất vị trí. Giám đốc/Admin có thể duyệt trong lịch sử kiểm kê.');
+        },
+        onError: () => message.error('Không thể tạo đề xuất. Máy có thể đã có đề xuất trong phiên này.'),
+    });
+
+    const rollbackRevisionMutation = useMutation({
+        mutationFn: (revision: FloorMapRevision) => floorMapService.rollbackRevision(revision.id),
+        onSuccess: async (result) => {
+            await Promise.all([
+                queryClient.invalidateQueries({ queryKey: ['floor-map', plantId] }),
+                queryClient.invalidateQueries({ queryKey: ['floor-map-revisions', plantId] }),
+                queryClient.invalidateQueries({ queryKey: ['floor-map-reality', plantId] }),
+            ]);
+            if (result.summary.conflicts) {
+                message.warning(
+                    `Đã hoàn tác ${result.summary.reverted} máy; ${result.summary.conflicts} máy có thay đổi mới hơn được giữ nguyên`
+                );
+            } else {
+                message.success(`Đã hoàn tác an toàn vị trí của ${result.summary.reverted} máy`);
+            }
+        },
+        onError: () => message.error('Không thể hoàn tác phiên bản sơ đồ'),
+    });
+
     // Đồng bộ dữ liệu server -> state cục bộ (state cục bộ nhận thêm patch socket + kéo-thả)
     useEffect(() => {
         if (mapQuery.data) {
@@ -286,6 +393,18 @@ const FloorMapPage: React.FC = () => {
             setSelectedZoneId(null);
         }
     }, [mapQuery.data]);
+
+    useEffect(() => {
+        setRealityFilter('all');
+    }, [plantId]);
+
+    useEffect(() => {
+        if (searchParams.get('reality') !== '1') return;
+        setRealityMode(true);
+        const requestedPlantId = searchParams.get('plantId');
+        if (requestedPlantId) setPlantId(requestedPlantId);
+        if (canOperate) setOperationsOpen(true);
+    }, [canOperate, searchParams]);
 
     const pushFeed = useCallback((msg: string, cls?: 'alarm' | 'fix') => {
         setFeed((prev) => [{ id: ++feedSeq, time: nowTime(), msg, cls }, ...prev].slice(0, 30));
@@ -359,8 +478,7 @@ const FloorMapPage: React.FC = () => {
         if (mapQuery.data && plantId) {
             pushFeed(`Đang giám sát trực tiếp — ${mapQuery.data.machines.length} máy`);
         }
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [mapQuery.data, plantId]);
+    }, [mapQuery.data, plantId, pushFeed]);
 
     // Cơ sở nhiều máy: bỏ tia quét cho nhẹ (vòng sóng máy hỏng vẫn giữ — vẽ trên canvas, rẻ)
     const liteMode = machines.filter((m) => m.floorPos).length > 150;
@@ -581,10 +699,7 @@ const FloorMapPage: React.FC = () => {
 
         // Chia hàng: cân tổng số máy giữa các hàng để khu to không dồn 1 hàng
         const numRows = finalGroups.length <= 3 ? 1 : finalGroups.length <= 8 ? 2 : 3;
-        const rowBuckets: { label: string; items: FloorMapMachine[] }[][] = Array.from(
-            { length: numRows },
-            () => []
-        );
+        const rowBuckets: { label: string; items: FloorMapMachine[] }[][] = Array.from({ length: numRows }, () => []);
         const rowWeights = new Array(numRows).fill(0);
         finalGroups.forEach((g) => {
             const idx = rowWeights.indexOf(Math.min(...rowWeights));
@@ -645,7 +760,9 @@ const FloorMapPage: React.FC = () => {
         setDirtyPos((prev) => ({ ...prev, ...newPositions }));
         setZonesDirty(true);
         setSelectedZoneId(null);
-        message.success(`Đã tự xếp ${Object.keys(newPositions).length} máy vào ${newZones.length} khu — rà lại rồi bấm Lưu`);
+        message.success(
+            `Đã tự xếp ${Object.keys(newPositions).length} máy vào ${newZones.length} khu — rà lại rồi bấm Lưu`
+        );
     };
 
     const removeZone = (id: string) => {
@@ -691,17 +808,34 @@ const FloorMapPage: React.FC = () => {
                     h: z.h,
                 }))
             );
+            const originalPositionById = new Map(
+                (mapQuery.data?.machines ?? []).map((machine) => [machine.id, machine.floorPos])
+            );
             const items = Object.entries(dirtyPos).map(([assetId, pos]) => ({
                 assetId,
                 x: pos?.x ?? null,
                 y: pos?.y ?? null,
+                expectedX: originalPositionById.get(assetId)?.x ?? null,
+                expectedY: originalPositionById.get(assetId)?.y ?? null,
             }));
+            let updatedCount = 0;
+            const conflictIds: string[] = [];
             // BE nhận tối đa 500 vị trí/lần — tự xếp cả cơ sở có thể vượt, chia lô 400
             for (let i = 0; i < items.length; i += 400) {
-                await floorMapService.savePositions(items.slice(i, i + 400));
+                const result = await floorMapService.savePositions(items.slice(i, i + 400));
+                updatedCount += result.updated;
+                conflictIds.push(...result.conflicts);
             }
-            message.success('Đã lưu sơ đồ xưởng');
+            if (conflictIds.length) {
+                message.warning(
+                    `Đã lưu ${updatedCount} máy; ${conflictIds.length} máy vừa bị thay đổi nên chưa ghi đè`
+                );
+            } else {
+                message.success('Đã lưu sơ đồ xưởng');
+            }
             await queryClient.invalidateQueries({ queryKey: ['floor-map', plantId] });
+            await queryClient.invalidateQueries({ queryKey: ['floor-map-revisions', plantId] });
+            await queryClient.invalidateQueries({ queryKey: ['floor-map-reality', plantId] });
         } catch {
             message.error('Lưu sơ đồ thất bại, thử lại sau');
         } finally {
@@ -744,6 +878,11 @@ const FloorMapPage: React.FC = () => {
     );
 
     const selected = useMemo(() => machines.find((m) => m.id === selectedId) ?? null, [machines, selectedId]);
+    const realityByAssetId = useMemo(
+        () => new Map((realityQuery.data?.machines ?? []).map((machine) => [machine.assetId, machine])),
+        [realityQuery.data?.machines]
+    );
+    const selectedReality = selectedId ? realityByAssetId.get(selectedId) : undefined;
     const selectedZone = useMemo(() => zones.find((z) => z.id === selectedZoneId) ?? null, [zones, selectedZoneId]);
     const plantName = plantsQuery.data?.find((p) => p.id === plantId)?.name ?? '';
 
@@ -851,10 +990,17 @@ const FloorMapPage: React.FC = () => {
         [...placed]
             .sort((a, b) => a.floorPos!.x + a.floorPos!.y - (b.floorPos!.x + b.floorPos!.y))
             .forEach((m) => {
+                const reality = realityByAssetId.get(m.id);
+                const realityStatus = reality?.status ?? 'unverified';
+                if (realityMode && realityFilter !== 'all' && realityStatus !== realityFilter) return;
                 const x = (m.floorPos!.x / 100) * FLOOR_W;
                 const y = (m.floorPos!.y / 100) * FLOOR_H;
                 const visual = visualOf(m.status);
-                const faces = heatMode ? HEAT_FACES[heatLevel(m.incidents6m)] : STATUS_FACES[visual];
+                const faces = realityMode
+                    ? REALITY_FACES[realityStatus]
+                    : heatMode
+                      ? HEAT_FACES[heatLevel(m.incidents6m)]
+                      : STATUS_FACES[visual];
                 const sc = proj(x + 13, y + 12, 0);
                 ctx.fillStyle = pal.shadow;
                 ctx.beginPath();
@@ -864,7 +1010,7 @@ const FloorMapPage: React.FC = () => {
                 drawBox(ctx, x + 3, y + 3, 13, 13, 8, 10, faces);
                 const center = proj(x + 13, y + 10, 12);
                 hits.push({ id: m.id, sx: center.sx, sy: center.sy });
-                if (!heatMode && visual === 'bad') broken.push({ sx: sc.sx, sy: sc.sy });
+                if (!heatMode && !realityMode && visual === 'bad') broken.push({ sx: sc.sx, sy: sc.sy });
                 if (m.id === selectedId) {
                     const h1 = proj(x + 3, y + 3, 18);
                     const h2 = proj(x + 16, y + 3, 18);
@@ -899,7 +1045,7 @@ const FloorMapPage: React.FC = () => {
     // Vẽ lại khi dữ liệu/lựa chọn/tông màu đổi
     useEffect(() => {
         if (!editMode) drawRef.current();
-    }, [machines, zones, heatMode, selectedId, editMode, theme]);
+    }, [machines, zones, heatMode, realityMode, realityFilter, realityByAssetId, selectedId, editMode, theme]);
 
     // Kích thước canvas theo khung + vẽ lại khi resize
     useEffect(() => {
@@ -1045,6 +1191,22 @@ const FloorMapPage: React.FC = () => {
                 </div>
                 <div className='ml-auto flex flex-wrap items-center gap-3'>
                     <HeaderClock />
+                    <Button icon={<HistoryOutlined />} onClick={() => setRevisionOpen(true)}>
+                        Lịch sử
+                    </Button>
+                    {canOperate ? (
+                        <Button
+                            type={operationsQuery.data?.summary.overdue ? 'primary' : 'default'}
+                            danger={Boolean(operationsQuery.data?.summary.overdue)}
+                            icon={<AlertOutlined />}
+                            onClick={() => setOperationsOpen(true)}
+                        >
+                            Vận hành
+                            {operationsQuery.data
+                                ? ` (${operationsQuery.data.summary.open + operationsQuery.data.summary.inProgress})`
+                                : ''}
+                        </Button>
+                    ) : null}
                     <Button
                         size='middle'
                         icon={light ? <BulbFilled /> : <BulbOutlined />}
@@ -1111,6 +1273,17 @@ const FloorMapPage: React.FC = () => {
                     <div className='fmp-num'>{placed.length}</div>
                     <div className='fmp-lbl'>Đã lên sơ đồ</div>
                 </div>
+                <button
+                    type='button'
+                    className={`fmp-kpi text-left ${realityMode ? 'ring-2 ring-cyan-400/60' : ''}`}
+                    onClick={() => {
+                        setHeatMode(false);
+                        setRealityMode(true);
+                    }}
+                >
+                    <div className='fmp-num'>{realityQuery.isLoading ? '…' : `${realityQuery.data?.score ?? 0}%`}</div>
+                    <div className='fmp-lbl'>Tin cậy sơ đồ</div>
+                </button>
             </div>
 
             <div className='grid gap-4 lg:grid-cols-[minmax(0,1fr)_300px]'>
@@ -1129,11 +1302,7 @@ const FloorMapPage: React.FC = () => {
                         <div className='py-10'>
                             <Empty
                                 image={Empty.PRESENTED_IMAGE_SIMPLE}
-                                description={
-                                    <span className='fmp-sub'>
-                                        Cơ sở này chưa thiết lập sơ đồ mặt bằng
-                                    </span>
-                                }
+                                description={<span className='fmp-sub'>Cơ sở này chưa thiết lập sơ đồ mặt bằng</span>}
                             >
                                 {canEdit ? (
                                     <Button type='primary' icon={<EditOutlined />} onClick={() => setEditMode(true)}>
@@ -1238,24 +1407,42 @@ const FloorMapPage: React.FC = () => {
                             <div className='mb-1 flex flex-wrap items-center gap-2 px-1'>
                                 <span className='fmp-head-label'>Mặt bằng trực tiếp</span>
                                 <span className='fmp-sub'>
-                                    {heatMode
-                                        ? 'màu theo số lần hỏng đột xuất 6 tháng'
-                                        : 'bấm vào khối máy để xem chi tiết'}
+                                    {realityMode
+                                        ? 'độ tin cậy theo bằng chứng kiểm kê gần nhất'
+                                        : heatMode
+                                          ? 'màu theo số lần hỏng đột xuất 6 tháng'
+                                          : 'bấm vào khối máy để xem chi tiết'}
                                 </span>
                                 <div className='fmp-mode ml-auto'>
                                     <button
                                         type='button'
-                                        className={heatMode ? '' : 'fmp-on'}
-                                        onClick={() => setHeatMode(false)}
+                                        className={!heatMode && !realityMode ? 'fmp-on' : ''}
+                                        onClick={() => {
+                                            setHeatMode(false);
+                                            setRealityMode(false);
+                                        }}
                                     >
                                         Trạng thái
                                     </button>
                                     <button
                                         type='button'
                                         className={heatMode ? 'fmp-on' : ''}
-                                        onClick={() => setHeatMode(true)}
+                                        onClick={() => {
+                                            setHeatMode(true);
+                                            setRealityMode(false);
+                                        }}
                                     >
                                         Nhiệt sự cố
+                                    </button>
+                                    <button
+                                        type='button'
+                                        className={realityMode ? 'fmp-on' : ''}
+                                        onClick={() => {
+                                            setHeatMode(false);
+                                            setRealityMode(true);
+                                        }}
+                                    >
+                                        Reality
                                     </button>
                                 </div>
                             </div>
@@ -1276,6 +1463,17 @@ const FloorMapPage: React.FC = () => {
 
                 {/* ── Panel bên phải ── */}
                 <div className='flex min-w-0 flex-col gap-4'>
+                    {realityMode && !editMode ? (
+                        <div className='fmp-card p-4'>
+                            <FloorRealityHealthPanel
+                                health={realityQuery.data}
+                                loading={realityQuery.isLoading}
+                                filter={realityFilter}
+                                onFilterChange={setRealityFilter}
+                                onSelectMachine={setSelectedId}
+                            />
+                        </div>
+                    ) : null}
                     <div className='fmp-card p-4'>
                         <h3 className='fmp-h3'>Chi tiết máy</h3>
                         {selected ? (
@@ -1287,15 +1485,92 @@ const FloorMapPage: React.FC = () => {
                                 <Tag color={ASSET_STATUS_COLOR[selected.status]?.color}>
                                     {statusLabel(selected.status)}
                                 </Tag>
+                                {realityMode && selectedReality ? (
+                                    <div className='mt-3 rounded-lg border border-slate-200 bg-white/70 p-3'>
+                                        <div className='flex items-center justify-between gap-2'>
+                                            <span className='text-xs font-bold text-slate-500'>Reality Health</span>
+                                            <Tag
+                                                className='!m-0'
+                                                style={{
+                                                    color: REALITY_META[selectedReality.status].color,
+                                                    borderColor: REALITY_META[selectedReality.status].color,
+                                                    background: REALITY_META[selectedReality.status].background,
+                                                }}
+                                            >
+                                                {REALITY_META[selectedReality.status].label}
+                                            </Tag>
+                                        </div>
+                                        <div className='mt-2 space-y-1.5 text-xs'>
+                                            <div className='flex justify-between gap-3'>
+                                                <span className='text-slate-400'>Vùng trên sơ đồ</span>
+                                                <span className='text-right font-semibold text-slate-700'>
+                                                    {selectedReality.currentZone?.name || 'Chưa xác định'}
+                                                </span>
+                                            </div>
+                                            <div className='flex justify-between gap-3'>
+                                                <span className='text-slate-400'>Vùng quét thấy</span>
+                                                <span className='text-right font-semibold text-slate-700'>
+                                                    {selectedReality.evidence?.zoneName || 'Chưa có bằng chứng vùng'}
+                                                </span>
+                                            </div>
+                                            <div className='flex justify-between gap-3'>
+                                                <span className='text-slate-400'>Lần xác minh</span>
+                                                <span className='text-right font-semibold text-slate-700'>
+                                                    {selectedReality.evidence?.scannedAt
+                                                        ? new Date(selectedReality.evidence.scannedAt).toLocaleString(
+                                                              'vi-VN'
+                                                          )
+                                                        : 'Chưa từng xác minh'}
+                                                </span>
+                                            </div>
+                                            {selectedReality.evidence?.createdByName ? (
+                                                <div className='flex justify-between gap-3'>
+                                                    <span className='text-slate-400'>Người kiểm</span>
+                                                    <span className='text-right font-semibold text-slate-700'>
+                                                        {selectedReality.evidence.createdByName}
+                                                    </span>
+                                                </div>
+                                            ) : null}
+                                        </div>
+                                        {selectedReality.evidence?.proposalStatus ? (
+                                            <div className='mt-3 rounded-md bg-slate-100 px-2.5 py-2 text-center text-xs font-semibold text-slate-500'>
+                                                Phiên kiểm kê đã có đề xuất:{' '}
+                                                {
+                                                    {
+                                                        pending: 'Chờ duyệt',
+                                                        approved: 'Đã áp dụng',
+                                                        rejected: 'Đã từ chối',
+                                                        conflict: 'Có xung đột',
+                                                    }[selectedReality.evidence.proposalStatus]
+                                                }
+                                            </div>
+                                        ) : ['drift', 'unplaced'].includes(selectedReality.status) &&
+                                          selectedReality.evidence?.sessionId ? (
+                                            <Button
+                                                block
+                                                className='mt-3'
+                                                type='primary'
+                                                size='small'
+                                                loading={createDriftProposalMutation.isPending}
+                                                onClick={() =>
+                                                    createDriftProposalMutation.mutate({
+                                                        sessionId: selectedReality.evidence!.sessionId,
+                                                        assetId: selectedReality.assetId,
+                                                    })
+                                                }
+                                            >
+                                                Tạo đề xuất vị trí từ bằng chứng này
+                                            </Button>
+                                        ) : null}
+                                    </div>
+                                ) : null}
                                 <div className='mt-3 flex flex-col gap-1.5'>
                                     <div className='fmp-row'>
                                         <span className='fmp-row-k'>Lần hỏng 6 tháng</span>
                                         <span
                                             className='fmp-row-v'
                                             style={
-                                                heatLevel(selected.incidents6m) === 2
-                                                    ? { color: '#ff6b4a' }
-                                                    : undefined
+                                                heatLevel(selected.incidents6m) === 2 ? { color: '#ff6b4a' } : undefined
                                             }
                                         >
                                             {selected.incidents6m ?? 0}
@@ -1316,9 +1591,7 @@ const FloorMapPage: React.FC = () => {
                                     <div className='fmp-spark-h'>
                                         <span>Chi phí sửa 12 tháng</span>
                                         <span className='fmp-spark-sum'>
-                                            {statsQuery.isLoading
-                                                ? '…'
-                                                : formatMoney(statsQuery.data?.total12m ?? 0)}
+                                            {statsQuery.isLoading ? '…' : formatMoney(statsQuery.data?.total12m ?? 0)}
                                         </span>
                                     </div>
                                     {statsQuery.isLoading ? (
@@ -1328,9 +1601,7 @@ const FloorMapPage: React.FC = () => {
                                     ) : statsQuery.data?.total12m ? (
                                         <canvas ref={sparkRef} className='fmp-spark-cv' />
                                     ) : (
-                                        <div className='fmp-sub py-1'>
-                                            Chưa ghi nhận chi phí sửa trong 12 tháng
-                                        </div>
+                                        <div className='fmp-sub py-1'>Chưa ghi nhận chi phí sửa trong 12 tháng</div>
                                     )}
                                 </div>
                                 <div className='mt-3 flex flex-col gap-2'>
@@ -1412,37 +1683,72 @@ const FloorMapPage: React.FC = () => {
                     <div className='fmp-card p-4'>
                         <h3 className='fmp-h3'>Chú giải</h3>
                         <div className='flex flex-col gap-2'>
-                            {heatMode && !editMode
-                                ? (
-                                      [
-                                          [HEAT_COLOR[0], 'Không hỏng đột xuất 6 tháng'],
-                                          [HEAT_COLOR[1], '1–2 lần hỏng'],
-                                          [HEAT_COLOR[2], '3+ lần hỏng — điểm nóng'],
-                                      ] as [string, string][]
-                                  ).map(([color, label]) => (
-                                      <div key={label} className='fmp-lg-row'>
-                                          <span className='fmp-lg-sw' style={{ background: color }} />
-                                          {label}
+                            {realityMode && !editMode
+                                ? Object.entries(REALITY_META).map(([status, meta]) => (
+                                      <div key={status} className='fmp-lg-row'>
+                                          <span className='fmp-lg-sw' style={{ background: meta.color }} />
+                                          {meta.label}
                                       </div>
                                   ))
-                                : (
-                                      [
-                                          ['ok', 'Đang hoạt động'],
-                                          ['bad', 'Đang hỏng — chờ sửa'],
-                                          ['warn', 'Bảo trì / chờ thanh lý'],
-                                          ['loan', 'Đang mượn'],
-                                          ['idle', 'Tồn kho / khác'],
-                                      ] as [StatusVisual, string][]
-                                  ).map(([visual, label]) => (
-                                      <div key={visual} className='fmp-lg-row'>
-                                          <span className='fmp-lg-sw' style={{ background: CHIP_COLOR[visual] }} />
-                                          {label}
-                                      </div>
-                                  ))}
+                                : heatMode && !editMode
+                                  ? (
+                                        [
+                                            [HEAT_COLOR[0], 'Không hỏng đột xuất 6 tháng'],
+                                            [HEAT_COLOR[1], '1–2 lần hỏng'],
+                                            [HEAT_COLOR[2], '3+ lần hỏng — điểm nóng'],
+                                        ] as [string, string][]
+                                    ).map(([color, label]) => (
+                                        <div key={label} className='fmp-lg-row'>
+                                            <span className='fmp-lg-sw' style={{ background: color }} />
+                                            {label}
+                                        </div>
+                                    ))
+                                  : (
+                                        [
+                                            ['ok', 'Đang hoạt động'],
+                                            ['bad', 'Đang hỏng — chờ sửa'],
+                                            ['warn', 'Bảo trì / chờ thanh lý'],
+                                            ['loan', 'Đang mượn'],
+                                            ['idle', 'Tồn kho / khác'],
+                                        ] as [StatusVisual, string][]
+                                    ).map(([visual, label]) => (
+                                        <div key={visual} className='fmp-lg-row'>
+                                            <span className='fmp-lg-sw' style={{ background: CHIP_COLOR[visual] }} />
+                                            {label}
+                                        </div>
+                                    ))}
                         </div>
                     </div>
                 </div>
             </div>
+            <FloorMapRevisionDrawer
+                open={revisionOpen}
+                revisions={revisionsQuery.data?.revisions ?? []}
+                loading={revisionsQuery.isLoading}
+                rollingBackId={rollbackRevisionMutation.isPending ? rollbackRevisionMutation.variables?.id : null}
+                canRollback={canEdit}
+                onClose={() => setRevisionOpen(false)}
+                onRollback={(revision) => rollbackRevisionMutation.mutate(revision)}
+            />
+            {canOperate ? (
+                <RealityOperationsDrawer
+                    open={operationsOpen}
+                    data={operationsQuery.data}
+                    loading={operationsQuery.isLoading}
+                    updatingAlertId={
+                        updateOperationalAlertMutation.isPending
+                            ? updateOperationalAlertMutation.variables?.alertId
+                            : null
+                    }
+                    savingRule={saveOperationsRuleMutation.isPending}
+                    evaluating={evaluateOperationsMutation.isPending}
+                    canConfigure={canEdit}
+                    onClose={() => setOperationsOpen(false)}
+                    onUpdateAlert={(alertId, data) => updateOperationalAlertMutation.mutate({ alertId, data })}
+                    onSaveRule={(rule) => saveOperationsRuleMutation.mutate(rule)}
+                    onEvaluate={() => evaluateOperationsMutation.mutate()}
+                />
+            ) : null}
         </div>
     );
 };
@@ -1582,10 +1888,16 @@ const FMP_CSS = `
 .fmp-mode { display: inline-flex; border: 1px solid var(--fmp-border); border-radius: 9px; overflow: hidden; }
 .fmp-mode button {
     background: transparent; color: var(--fmp-ink2); border: none; cursor: pointer;
-    font: inherit; font-size: 11.5px; font-weight: 700; letter-spacing: 0.8px;
+    font: inherit; font-size: 11.5px; font-weight: 700; letter-spacing: 0;
     padding: 5px 13px;
 }
 .fmp-mode button.fmp-on { background: var(--fmp-accent-soft); color: var(--fmp-accent); }
+
+@media (max-width: 520px) {
+    .fmp-mode { width: 100%; }
+    .fmp-mode button { flex: 1; min-width: 0; padding: 7px 6px; white-space: nowrap; }
+    .fmp-kpi { min-width: calc(50% - 6px); padding: 9px 12px; }
+}
 
 .fmp-row { display: flex; justify-content: space-between; gap: 10px; font-size: 12.5px; }
 .fmp-row-k { color: var(--fmp-ink3); }

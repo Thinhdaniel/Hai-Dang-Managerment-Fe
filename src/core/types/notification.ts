@@ -12,6 +12,7 @@ export type NotificationActionType =
     | 'purchase_order'
     | 'distribution'
     | 'chat'
+    | 'floor_map'
     | 'system';
 
 export interface Notification {

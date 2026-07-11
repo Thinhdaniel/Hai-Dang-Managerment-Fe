@@ -8406,7 +8406,9 @@ button.machine-map-stat:hover {
     margin-left: 2px;
     border-radius: 999px;
     background: #10b981;
-    box-shadow: 0 0 0 2px #ffffff, 0 0 0 3px #cbd5e1;
+    box-shadow:
+        0 0 0 2px #ffffff,
+        0 0 0 3px #cbd5e1;
 }
 
 .machine-map-legend__sample--danger {
@@ -9159,7 +9161,9 @@ button.machine-map-stat:hover {
     cursor: pointer;
     padding: 9px 10px;
     text-align: left;
-    transition: background 0.12s ease, border-color 0.12s ease;
+    transition:
+        background 0.12s ease,
+        border-color 0.12s ease;
 }
 
 .machine-map-cluster-item:hover {
@@ -9636,7 +9640,9 @@ button.machine-map-stat:hover {
     background:
         repeating-linear-gradient(90deg, rgba(11, 18, 38, 0.6) 0 1.5px, transparent 1.5px 9px),
         repeating-linear-gradient(90deg, rgba(11, 18, 38, 0.85) 0 2px, transparent 2px 45px);
-    background-size: auto 6px, auto 11px;
+    background-size:
+        auto 6px,
+        auto 11px;
     background-repeat: repeat-x;
 }
 
@@ -10167,6 +10173,110 @@ button.machine-map-stat:hover {
     box-shadow: inset 3px 0 0 #10b981;
 }
 
+.qr-sweep-camera__shade {
+    background:
+        linear-gradient(180deg, rgba(2, 6, 23, 0.38), transparent 22%, transparent 68%, rgba(2, 6, 23, 0.7)),
+        radial-gradient(circle at center, transparent 34%, rgba(2, 6, 23, 0.18) 100%);
+}
+
+.qr-sweep-camera__scan-line {
+    z-index: 2;
+    background: linear-gradient(
+        90deg,
+        transparent,
+        rgba(34, 211, 238, 0.95) 18%,
+        #fff 50%,
+        rgba(34, 211, 238, 0.95) 82%,
+        transparent
+    );
+    box-shadow: 0 0 14px rgba(34, 211, 238, 0.8);
+    animation: qr-sweep-line 3.2s ease-in-out infinite;
+}
+
+.qr-sweep-camera__box {
+    z-index: 3;
+    min-width: 42px;
+    min-height: 42px;
+    border: 2px solid #22d3ee;
+    border-radius: 10px;
+    box-shadow:
+        0 0 0 1px rgba(255, 255, 255, 0.6),
+        0 0 22px rgba(34, 211, 238, 0.55);
+    animation: qr-sweep-lock 0.28s ease-out both;
+}
+
+.qr-sweep-camera__box::before,
+.qr-sweep-camera__box::after {
+    position: absolute;
+    width: 12px;
+    height: 12px;
+    content: '';
+}
+
+.qr-sweep-camera__box::before {
+    top: -4px;
+    left: -4px;
+    border-top: 4px solid #fff;
+    border-left: 4px solid #fff;
+    border-radius: 4px 0 0;
+}
+
+.qr-sweep-camera__box::after {
+    right: -4px;
+    bottom: -4px;
+    border-right: 4px solid #fff;
+    border-bottom: 4px solid #fff;
+    border-radius: 0 0 4px;
+}
+
+.qr-sweep-camera__box span {
+    position: absolute;
+    bottom: calc(100% + 5px);
+    left: -2px;
+    max-width: 132px;
+    overflow: hidden;
+    padding: 3px 7px;
+    border: 1px solid rgba(255, 255, 255, 0.25);
+    border-radius: 7px;
+    background: rgba(8, 47, 73, 0.84);
+    color: #ecfeff;
+    font-size: 10px;
+    font-weight: 800;
+    line-height: 1.2;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    backdrop-filter: blur(8px);
+}
+
+.zone-anchor-qr canvas {
+    display: block;
+    width: min(240px, 66vw) !important;
+    height: min(240px, 66vw) !important;
+}
+
+@keyframes qr-sweep-line {
+    0%,
+    100% {
+        transform: translateY(-130px);
+        opacity: 0.35;
+    }
+    50% {
+        transform: translateY(130px);
+        opacity: 1;
+    }
+}
+
+@keyframes qr-sweep-lock {
+    from {
+        transform: scale(1.18);
+        opacity: 0;
+    }
+    to {
+        transform: scale(1);
+        opacity: 1;
+    }
+}
+
 @media (prefers-reduced-motion: reduce) {
     .stocktake-flash--in {
         animation: none;
@@ -10174,5 +10284,10 @@ button.machine-map-stat:hover {
 
     .stocktake-meter__fill {
         transition: none;
+    }
+
+    .qr-sweep-camera__scan-line,
+    .qr-sweep-camera__box {
+        animation: none;
     }
 }

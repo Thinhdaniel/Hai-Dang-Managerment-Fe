@@ -169,6 +169,7 @@ export interface Asset {
     nextMaintenanceDate?: string;
     lastSeen?: AssetLastSeen;
     locationMismatch?: AssetLocationMismatch;
+    floorPos?: { x: number; y: number } | null;
     createdAt: string;
     updatedAt: string;
     hasOpenTransfer?: boolean;
@@ -353,6 +354,48 @@ export interface TransferFilter extends PaginationParams {
 
 // ===== STOCKTAKE (Kiểm kê QR) =====
 export type StocktakeItemType = 'missing' | 'present' | 'wrong_area' | 'wrong_plant' | 'unknown';
+export type StocktakeCaptureMode = 'single' | 'sweep';
+export type StocktakeScannerEngine = 'zxing' | 'barcode_detector';
+export type StocktakeCoverageStatus = 'pending' | 'in_progress' | 'completed' | 'skipped';
+export type StocktakeCoverageActivationSource = 'anchor' | 'manual' | 'auto';
+export type StocktakePositionProposalStatus = 'pending' | 'approved' | 'rejected' | 'conflict';
+
+export interface StocktakeCoverageZone {
+    zoneId?: string;
+    name: string;
+    anchorCode?: string;
+    x?: number;
+    y?: number;
+    w?: number;
+    h?: number;
+    status: StocktakeCoverageStatus;
+    activationSource?: StocktakeCoverageActivationSource;
+    expectedCount: number;
+    scannedCount: number;
+    startedAt?: string;
+    completedAt?: string;
+}
+
+export interface StocktakePositionProposal {
+    assetId: string;
+    machineCode?: string;
+    name?: string;
+    zoneId: string;
+    zoneName: string;
+    currentX?: number;
+    currentY?: number;
+    proposedX: number;
+    proposedY: number;
+    assetUpdatedAt: string;
+    scannedAt: string;
+    confidence: number;
+    basis: 'scan_order';
+    status?: StocktakePositionProposalStatus;
+    conflictReason?: string;
+    reviewedBy?: string;
+    reviewedAt?: string;
+    reviewNote?: string;
+}
 
 export interface StocktakeSessionItem {
     type: StocktakeItemType;
@@ -366,6 +409,8 @@ export interface StocktakeSessionItem {
     message?: string;
     gpsNote?: string;
     scannedAt?: string;
+    coverageZoneId?: string;
+    coverageZoneName?: string;
 }
 
 export interface StocktakeSession {
@@ -375,6 +420,14 @@ export interface StocktakeSession {
     plant?: Plant;
     area?: string;
     areaLabel?: string;
+    captureMode?: StocktakeCaptureMode;
+    scannerEngine?: StocktakeScannerEngine;
+    detectedCodeCount?: number;
+    duplicateScanCount?: number;
+    coveragePercent?: number;
+    coverageCompletedCount?: number;
+    coverageZones?: StocktakeCoverageZone[];
+    positionProposals?: StocktakePositionProposal[];
     startedAt: string;
     finishedAt: string;
     expectedCount: number;
@@ -394,6 +447,14 @@ export interface CreateStocktakeSessionPayload {
     plantName?: string;
     area?: string;
     areaLabel?: string;
+    captureMode?: StocktakeCaptureMode;
+    scannerEngine?: StocktakeScannerEngine;
+    detectedCodeCount?: number;
+    duplicateScanCount?: number;
+    coveragePercent?: number;
+    coverageCompletedCount?: number;
+    coverageZones?: StocktakeCoverageZone[];
+    positionProposals?: StocktakePositionProposal[];
     startedAt: string;
     finishedAt: string;
     expectedCount: number;
@@ -402,6 +463,17 @@ export interface CreateStocktakeSessionPayload {
     missingCount: number;
     anomalyCount: number;
     items: StocktakeSessionItem[];
+}
+
+export interface ReviewStocktakePositionProposalsPayload {
+    assetIds: string[];
+    action: 'approve' | 'reject';
+    note?: string;
+}
+
+export interface ReviewStocktakePositionProposalsResult {
+    session: StocktakeSession;
+    summary: { approved: number; rejected: number; conflicts: number };
 }
 
 // ===== ASSET DISPOSAL (Thanh ly may) =====
@@ -1168,6 +1240,7 @@ export interface MachineTypeCodeList {
 export interface FloorZone {
     id: string;
     name: string;
+    anchorCode?: string;
     x: number;
     y: number;
     w: number;
@@ -1191,6 +1264,144 @@ export interface FloorMapMachine {
 export interface FloorMapData {
     zones: FloorZone[];
     machines: FloorMapMachine[];
+}
+
+export interface FloorMapRevisionChange {
+    assetId: string;
+    machineCode?: string;
+    name?: string;
+    before: { x: number; y: number } | null;
+    after: { x: number; y: number } | null;
+}
+
+export interface FloorMapRevision {
+    id: string;
+    plantId: string;
+    source: 'manual' | 'stocktake';
+    stocktakeSessionId?: string;
+    status: 'applied' | 'reverted' | 'partial';
+    changedBy?: string;
+    changedByName?: string;
+    changes: FloorMapRevisionChange[];
+    revertedBy?: string;
+    revertedByName?: string;
+    revertedAt?: string;
+    conflictAssetIds?: string[];
+    createdAt: string;
+}
+
+export interface FloorMapRollbackResult {
+    revision: FloorMapRevision;
+    summary: { reverted: number; conflicts: number; conflictAssetIds: string[] };
+}
+
+export type FloorRealityStatus = 'verified' | 'drift' | 'unplaced' | 'stale' | 'unverified';
+
+export interface FloorRealityMachineHealth {
+    assetId: string;
+    machineCode: string;
+    name: string;
+    floorPos: { x: number; y: number } | null;
+    status: FloorRealityStatus;
+    score: number;
+    currentZone?: { id: string; name: string };
+    evidence?: {
+        sessionId: string;
+        scannedAt?: string;
+        ageDays?: number;
+        zoneId?: string;
+        zoneName?: string;
+        captureMode?: StocktakeCaptureMode;
+        createdByName?: string;
+        proposalStatus?: StocktakePositionProposalStatus;
+    };
+}
+
+export interface FloorRealityZoneHealth {
+    zoneId: string;
+    zoneName: string;
+    anchorCode?: string;
+    total: number;
+    score: number;
+    counts: Record<FloorRealityStatus, number>;
+}
+
+export interface FloorRealityHealth {
+    generatedAt: string;
+    staleDays: number;
+    score: number;
+    total: number;
+    counts: Record<FloorRealityStatus, number>;
+    machines: FloorRealityMachineHealth[];
+    zones: FloorRealityZoneHealth[];
+    latestSession?: {
+        id: string;
+        createdAt: string;
+        coveragePercent: number;
+        coverageCompletedCount: number;
+        coverageZoneCount: number;
+        createdByName?: string;
+    };
+}
+
+export type RealityAlertCode = 'low_score' | 'zone_drift' | 'stale_evidence' | 'coverage_overdue' | 'proposal_overdue';
+export type RealityAlertStatus = 'open' | 'in_progress' | 'resolved' | 'dismissed';
+
+export interface RealityAlertRule {
+    _id?: string;
+    plantId: string;
+    enabled: boolean;
+    staleDays: number;
+    minScore: number;
+    driftThreshold: number;
+    stalePercentThreshold: number;
+    coverageOverdueDays: number;
+    proposalOverdueDays: number;
+    cooldownHours: number;
+    defaultAssignee?: string | null;
+}
+
+export interface RealityOperationalAlert {
+    id: string;
+    plantId: string;
+    code: RealityAlertCode;
+    scopeKey: string;
+    severity: 'info' | 'warning' | 'critical';
+    status: RealityAlertStatus;
+    title: string;
+    message: string;
+    zoneId?: string;
+    zoneName?: string;
+    assetIds: string[];
+    metrics: Record<string, number | string | null>;
+    assignedTo?: string;
+    assignedToName?: string;
+    dueAt?: string;
+    firstDetectedAt: string;
+    lastDetectedAt: string;
+    lastNotifiedAt?: string;
+    occurrenceCount: number;
+    resolvedAt?: string;
+    resolutionNote?: string;
+    createdAt: string;
+    updatedAt: string;
+}
+
+export interface RealityHealthSnapshot {
+    id: string;
+    snapshotKey: string;
+    generatedAt: string;
+    score: number;
+    total: number;
+    counts: Record<FloorRealityStatus, number>;
+}
+
+export interface RealityOperationsDashboard {
+    rule: RealityAlertRule;
+    alerts: RealityOperationalAlert[];
+    summary: { open: number; inProgress: number; overdue: number; resolved: number };
+    snapshots: RealityHealthSnapshot[];
+    managers: Array<{ id: string; name: string; role: string }>;
 }
 
 /** Thống kê 1 máy cho panel chi tiết sơ đồ xưởng. */

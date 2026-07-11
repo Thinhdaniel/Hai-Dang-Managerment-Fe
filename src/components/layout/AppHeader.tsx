@@ -288,12 +288,13 @@ const AppHeader: React.FC<AppHeaderProps> = ({ collapsed, isDesktop, mobileOpen,
                     else if (item.actionType === 'borrowing') href = '/borrowings';
                     else if (item.actionType === 'purchase_request') href = '/materials/purchase-requests';
                     else if (item.actionType === 'supply_request') href = '/materials/supply-requests';
-                    else if (item.actionType === 'technical_purchase')
-                        href = '/materials/technical-purchase-requests';
+                    else if (item.actionType === 'technical_purchase') href = '/materials/technical-purchase-requests';
                     else if (item.actionType === 'purchase_order') href = '/materials/purchase-orders';
                     else if (item.actionType === 'distribution') href = '/materials/distributions';
                     else if (item.actionType === 'chat') {
                         href = `/chat${item.actionId ? `?conversation=${encodeURIComponent(item.actionId)}` : ''}`;
+                    } else if (item.actionType === 'floor_map') {
+                        href = `/assets/floor-map?reality=1${item.actionId ? `&plantId=${encodeURIComponent(item.actionId)}` : ''}`;
                     }
 
                     return (
