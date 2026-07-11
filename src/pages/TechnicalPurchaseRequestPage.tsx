@@ -897,6 +897,18 @@ const TechnicalPurchaseRequestPage: React.FC = () => {
         setEditing(r);
         setFormOpen(true);
     };
+    const confirmApprove = (record: PurchaseRequest) => {
+        Modal.confirm({
+            title: 'Duyệt giấy đề nghị mua vật tư?',
+            content: 'Sau khi duyệt, phiếu chuyển sang trạng thái "Đã duyệt".',
+            okText: 'Duyệt',
+            okButtonProps: { className: 'bg-green-600' },
+            onOk: () => {
+                setApprovingId(record.id);
+                return approveReq(record.id);
+            },
+        });
+    };
 
     return (
         <>
@@ -1098,11 +1110,14 @@ const TechnicalPurchaseRequestPage: React.FC = () => {
                 open={!!selectedId}
                 onClose={() => setSelectedId(null)}
                 width={isMobile ? '100%' : 760}
+                height={isMobile ? '92%' : undefined}
                 placement={isMobile ? 'bottom' : 'right'}
                 destroyOnHidden
                 styles={{
                     body: { padding: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden' },
-                    header: { padding: isMobile ? '12px 16px' : undefined },
+                    header: { padding: isMobile ? '12px 16px' : undefined, borderBottom: '1px solid #f1f5f9' },
+                    content: isMobile ? { borderRadius: '16px 16px 0 0' } : undefined,
+                    footer: isMobile ? { padding: '10px 16px' } : undefined,
                 }}
                 title={
                     <div className='flex items-center gap-3'>
@@ -1121,18 +1136,72 @@ const TechnicalPurchaseRequestPage: React.FC = () => {
                     </div>
                 }
                 footer={
-                    selectedRequest && (
-                        <div className={`flex gap-2 ${isMobile ? 'flex-col' : 'items-center justify-between'}`}>
-                            <div className={`flex gap-2 ${isMobile ? 'flex-col' : ''}`}>
+                    selectedRequest &&
+                    (isMobile ? (
+                        <div className='flex flex-col gap-2'>
+                            {selectedRequest.status === 'pending' && isManager && (
+                                <div className='flex gap-2'>
+                                    <Button
+                                        danger
+                                        size='large'
+                                        className='flex-1'
+                                        onClick={() => setRejectTarget(selectedRequest)}
+                                    >
+                                        Từ chối
+                                    </Button>
+                                    <Button
+                                        type='primary'
+                                        size='large'
+                                        className='flex-[2] bg-green-600 hover:!bg-green-700'
+                                        loading={approvingId === selectedRequest.id}
+                                        icon={<CheckCircleOutlined />}
+                                        onClick={() => confirmApprove(selectedRequest)}
+                                    >
+                                        Duyệt phiếu
+                                    </Button>
+                                </div>
+                            )}
+                            <div className='flex gap-2'>
+                                <Button
+                                    icon={<MessageOutlined />}
+                                    className='flex-1 text-blue-600'
+                                    onClick={() => setChatOpen(true)}
+                                >
+                                    Trao đổi
+                                </Button>
+                                <Button
+                                    icon={<DownloadOutlined />}
+                                    className='flex-1'
+                                    onClick={() => exportXlsx(selectedRequest)}
+                                >
+                                    Excel
+                                </Button>
+                                {canEdit(selectedRequest) && (
+                                    <Button
+                                        icon={<EditOutlined />}
+                                        className='flex-1'
+                                        onClick={() => {
+                                            const r = selectedRequest;
+                                            setSelectedId(null);
+                                            openEdit(r);
+                                        }}
+                                    >
+                                        Sửa
+                                    </Button>
+                                )}
+                            </div>
+                        </div>
+                    ) : (
+                        <div className='flex items-center justify-between gap-2'>
+                            <div className='flex gap-2'>
                                 <Button
                                     icon={<MessageOutlined />}
                                     className='text-blue-600'
                                     onClick={() => setChatOpen(true)}
-                                    block={isMobile}
                                 >
                                     Trao đổi
                                 </Button>
-                                <Button icon={<DownloadOutlined />} onClick={() => exportXlsx(selectedRequest)} block={isMobile}>
+                                <Button icon={<DownloadOutlined />} onClick={() => exportXlsx(selectedRequest)}>
                                     Xuất Excel
                                 </Button>
                                 {canEdit(selectedRequest) && (
@@ -1142,35 +1211,22 @@ const TechnicalPurchaseRequestPage: React.FC = () => {
                                             setSelectedId(null);
                                             openEdit(r);
                                         }}
-                                        block={isMobile}
                                     >
                                         Sửa
                                     </Button>
                                 )}
                             </div>
-                            <div className={`flex gap-2 ${isMobile ? 'flex-col' : ''}`}>
+                            <div className='flex gap-2'>
                                 {selectedRequest.status === 'pending' && isManager && (
                                     <>
-                                        <Button danger onClick={() => setRejectTarget(selectedRequest)} block={isMobile}>
+                                        <Button danger onClick={() => setRejectTarget(selectedRequest)}>
                                             Từ chối
                                         </Button>
                                         <Button
                                             type='primary'
                                             className='bg-green-600 hover:!bg-green-700'
-                                            block={isMobile}
                                             loading={approvingId === selectedRequest.id}
-                                            onClick={() => {
-                                                Modal.confirm({
-                                                    title: 'Duyệt giấy đề nghị mua vật tư?',
-                                                    content: 'Sau khi duyệt, phiếu chuyển sang trạng thái "Đã duyệt".',
-                                                    okText: 'Duyệt',
-                                                    okButtonProps: { className: 'bg-green-600' },
-                                                    onOk: () => {
-                                                        setApprovingId(selectedRequest.id);
-                                                        return approveReq(selectedRequest.id);
-                                                    },
-                                                });
-                                            }}
+                                            onClick={() => confirmApprove(selectedRequest)}
                                         >
                                             <CheckCircleOutlined /> Duyệt phiếu
                                         </Button>
@@ -1178,7 +1234,7 @@ const TechnicalPurchaseRequestPage: React.FC = () => {
                                 )}
                             </div>
                         </div>
-                    )
+                    ))
                 }
             >
                 {selectedRequest ? (
@@ -1194,13 +1250,67 @@ const TechnicalPurchaseRequestPage: React.FC = () => {
                                 </div>
                             )}
 
-                            {/* Info */}
+                            {/* Info — mobile: card phẳng dễ đọc; desktop: Descriptions 2 cột */}
+                            {isMobile ? (
+                                <div className='rounded-2xl border border-slate-200 bg-white p-4'>
+                                    <div className='flex items-center gap-3'>
+                                        <div className='flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-blue-50 text-sm font-bold text-blue-600'>
+                                            {(selectedRequest.requesterName || resolveUser(selectedRequest.requestedBy))
+                                                .trim()
+                                                .charAt(0)
+                                                .toUpperCase() || '?'}
+                                        </div>
+                                        <div className='min-w-0 flex-1'>
+                                            <div className='truncate text-sm font-semibold text-slate-900'>
+                                                {selectedRequest.requesterName || resolveUser(selectedRequest.requestedBy)}
+                                            </div>
+                                            <div className='text-xs text-slate-400'>
+                                                {selectedRequest.department || 'Kỹ thuật'} ·{' '}
+                                                {fmtDate(selectedRequest.requestDate || selectedRequest.createdAt)}
+                                            </div>
+                                        </div>
+                                        <Text
+                                            copyable={{ text: selectedRequest.requestCode || '' }}
+                                            className='shrink-0 font-mono text-xs font-semibold text-blue-600'
+                                        >
+                                            {selectedRequest.requestCode}
+                                        </Text>
+                                    </div>
+                                    {selectedRequest.approvedBy && (
+                                        <div
+                                            className={`mt-3 flex items-center gap-2 rounded-lg px-3 py-2 text-xs ${
+                                                selectedRequest.status === 'rejected'
+                                                    ? 'bg-red-50 text-red-600'
+                                                    : 'bg-emerald-50 text-emerald-700'
+                                            }`}
+                                        >
+                                            {selectedRequest.status === 'rejected' ? (
+                                                <CloseCircleOutlined />
+                                            ) : (
+                                                <CheckCircleOutlined />
+                                            )}
+                                            <span className='min-w-0 truncate'>
+                                                {selectedRequest.status === 'rejected' ? 'Từ chối' : 'Duyệt'} bởi{' '}
+                                                <strong>{resolveUser(selectedRequest.approvedBy)}</strong>
+                                                {selectedRequest.approvedAt
+                                                    ? ` · ${fmtDateTime(selectedRequest.approvedAt)}`
+                                                    : ''}
+                                            </span>
+                                        </div>
+                                    )}
+                                    {selectedRequest.note && (
+                                        <div className='mt-3 border-l-2 border-slate-200 pl-3 text-sm leading-5 text-slate-600'>
+                                            {selectedRequest.note}
+                                        </div>
+                                    )}
+                                </div>
+                            ) : (
                             <div className='overflow-hidden rounded-2xl border border-slate-200 bg-white'>
                                 <div className='border-b border-slate-100 bg-slate-50 px-4 py-2.5 text-xs font-semibold tracking-wider text-slate-400 uppercase'>
                                     Thông tin phiếu
                                 </div>
                                 <div className='p-4 sm:p-5'>
-                                    <Descriptions column={isMobile ? 1 : 2} size='small' labelStyle={{ color: '#94a3b8', fontWeight: 500 }}>
+                                    <Descriptions column={2} size='small' labelStyle={{ color: '#94a3b8', fontWeight: 500 }}>
                                         <Descriptions.Item label='Mã phiếu'>
                                             <Text copyable className='font-mono font-semibold text-blue-700'>
                                                 {selectedRequest.requestCode}
@@ -1239,12 +1349,74 @@ const TechnicalPurchaseRequestPage: React.FC = () => {
                                     </Descriptions>
                                 </div>
                             </div>
+                            )}
 
-                            {/* Items */}
+                            {/* Items — mobile: card list; desktop: table */}
                             <div className='overflow-hidden rounded-2xl border border-slate-200 bg-white'>
                                 <div className='border-b border-slate-100 bg-slate-50 px-4 py-2.5 text-xs font-semibold tracking-wider text-slate-400 uppercase'>
                                     Danh sách vật tư · {selectedRequest.items?.length ?? 0} loại
                                 </div>
+                                {isMobile ? (
+                                    <div className='divide-y divide-slate-100'>
+                                        {(selectedRequest.items ?? []).map((item: any, idx: number) => (
+                                            <div key={idx} className='px-4 py-3'>
+                                                <div className='flex items-start justify-between gap-3'>
+                                                    <div className='min-w-0 flex-1'>
+                                                        <div className='text-sm leading-5 font-semibold text-slate-800'>
+                                                            <span className='mr-1.5 text-xs font-bold text-slate-300'>
+                                                                {idx + 1}
+                                                            </span>
+                                                            {item.materialName || '—'}
+                                                        </div>
+                                                        {item.assetCode ? (
+                                                            <div className='mt-1.5'>
+                                                                <Tag color='geekblue' className='!m-0'>
+                                                                    <ToolOutlined /> {item.assetCode}
+                                                                    {item.assetName ? ` · ${item.assetName}` : ''}
+                                                                </Tag>
+                                                            </div>
+                                                        ) : null}
+                                                        {item.note ? (
+                                                            <div className='mt-1 text-xs leading-4 text-slate-400'>
+                                                                {item.note}
+                                                            </div>
+                                                        ) : null}
+                                                    </div>
+                                                    <div className='shrink-0 text-right'>
+                                                        <span className='text-base leading-5 font-bold text-slate-900'>
+                                                            {fmtNum(item.quantityRequested)}
+                                                        </span>
+                                                        <span className='ml-1 text-xs text-slate-400'>
+                                                            {item.unit || ''}
+                                                        </span>
+                                                        {item.quantityApproved != null &&
+                                                            item.quantityApproved !== item.quantityRequested && (
+                                                                <div className='mt-0.5 text-[11px] font-semibold text-amber-600'>
+                                                                    duyệt {fmtNum(item.quantityApproved)}
+                                                                </div>
+                                                            )}
+                                                    </div>
+                                                </div>
+                                                {item.imageUrls?.length ? (
+                                                    <div className='mt-2 flex gap-1.5 pl-5'>
+                                                        <Image.PreviewGroup>
+                                                            {item.imageUrls.map((url: string) => (
+                                                                <Image
+                                                                    key={url}
+                                                                    src={url}
+                                                                    width={48}
+                                                                    height={48}
+                                                                    style={{ objectFit: 'cover', borderRadius: 8 }}
+                                                                    alt='Ảnh vật tư'
+                                                                />
+                                                            ))}
+                                                        </Image.PreviewGroup>
+                                                    </div>
+                                                ) : null}
+                                            </div>
+                                        ))}
+                                    </div>
+                                ) : (
                                 <Table
                                     dataSource={selectedRequest.items}
                                     rowKey={(_, idx) => String(idx)}
@@ -1313,6 +1485,7 @@ const TechnicalPurchaseRequestPage: React.FC = () => {
                                         },
                                     ]}
                                 />
+                                )}
                             </div>
                         </div>
                     </div>
