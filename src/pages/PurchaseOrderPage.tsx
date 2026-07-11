@@ -409,6 +409,7 @@ const DetailDrawer: React.FC<DrawerProps> = ({
     const [receiptScanFiles, setReceiptScanFiles] = useState<File[]>([]);
     const [receiptScanPreview, setReceiptScanPreview] = useState<PurchaseReceiptScanPreview | null>(null);
     const [scanMapRows, setScanMapRows] = useState<ScanMapRow[]>([]);
+    const [showMappedScanRows, setShowMappedScanRows] = useState(false);
     const [appliedReceiptScanId, setAppliedReceiptScanId] = useState<string>();
     const [catalogTarget, setCatalogTarget] = useState<{ index: number; item: PurchaseOrderItem } | null>(null);
     const [catalogMode, setCatalogMode] = useState<'link' | 'create'>('link');
@@ -434,6 +435,7 @@ const DetailDrawer: React.FC<DrawerProps> = ({
         onSuccess: (preview) => {
             setReceiptScanPreview(preview);
             setScanMapRows(buildScanMapRows(preview));
+            setShowMappedScanRows(false);
             setAppliedReceiptScanId(undefined);
             if (record?.id) queryClient.invalidateQueries({ queryKey: ['purchase-receipt-scans', record.id] });
             if ((preview.extractedLines?.length ?? 0) <= 0) {
@@ -1399,14 +1401,13 @@ const DetailDrawer: React.FC<DrawerProps> = ({
                                         )}
                                     </div>
 
-                                    <Table
-                                        className='hd-recon'
-                                        size='small'
-                                        rowKey='key'
-                                        pagination={false}
-                                        dataSource={scanMapRows}
-                                        scroll={{ x: 'max-content' }}
-                                        columns={[
+                                    {(() => {
+                                        // Dòng AI đã khớp / bạn đã chọn thì thu gọn — chỉ phơi ra dòng cần xử lý tay
+                                        const isHandled = (row: ScanMapRow) =>
+                                            !!row.target && (row.status === 'auto' || row.status === 'manual');
+                                        const pendingRows = scanMapRows.filter((row) => !isHandled(row));
+                                        const handledRows = scanMapRows.filter(isHandled);
+                                        const scanReconColumns = [
                                             {
                                                 title: '#',
                                                 key: 'no',
@@ -1517,8 +1518,57 @@ const DetailDrawer: React.FC<DrawerProps> = ({
                                                     );
                                                 },
                                             },
-                                        ]}
-                                    />
+                                        ];
+                                        return (
+                                            <>
+                                                {pendingRows.length > 0 ? (
+                                                    <>
+                                                        <div className='px-1 text-xs font-medium text-slate-600'>
+                                                            Cần bạn xử lý ({pendingRows.length} dòng)
+                                                        </div>
+                                                        <Table
+                                                            className='hd-recon'
+                                                            size='small'
+                                                            rowKey='key'
+                                                            pagination={false}
+                                                            dataSource={pendingRows}
+                                                            scroll={{ x: 'max-content' }}
+                                                            columns={scanReconColumns}
+                                                        />
+                                                    </>
+                                                ) : (
+                                                    <div className='rounded-md border border-emerald-200 bg-emerald-50/60 px-3 py-2 text-xs text-emerald-700'>
+                                                        AI đã map toàn bộ {scanMapRows.length} dòng — bấm bên dưới nếu
+                                                        muốn rà lại.
+                                                    </div>
+                                                )}
+                                                {handledRows.length > 0 && (
+                                                    <div className='px-1'>
+                                                        <button
+                                                            type='button'
+                                                            className='text-xs text-slate-500 hover:text-slate-700'
+                                                            onClick={() => setShowMappedScanRows((v) => !v)}
+                                                        >
+                                                            {showMappedScanRows ? '▾' : '▸'} AI đã map{' '}
+                                                            {handledRows.length} dòng
+                                                            {showMappedScanRows ? ' — thu gọn' : ' — xem lại'}
+                                                        </button>
+                                                        {showMappedScanRows && (
+                                                            <Table
+                                                                className='hd-recon mt-1'
+                                                                size='small'
+                                                                rowKey='key'
+                                                                pagination={false}
+                                                                dataSource={handledRows}
+                                                                scroll={{ x: 'max-content' }}
+                                                                columns={scanReconColumns}
+                                                            />
+                                                        )}
+                                                    </div>
+                                                )}
+                                            </>
+                                        );
+                                    })()}
 
                                     <div className='flex flex-wrap items-center justify-between gap-2 px-1'>
                                         <Text type='secondary' className='text-xs'>
