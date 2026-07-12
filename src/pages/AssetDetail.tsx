@@ -6,6 +6,7 @@ import {
     Card,
     Descriptions,
     Empty,
+    Image,
     Segmented,
     Spin,
     Tag,
@@ -494,6 +495,31 @@ const AssetDetail: React.FC = () => {
                             { key: 'purchasePrice', label: 'Giá trị', children: formatMoney(asset.purchasePrice) },
                             { key: 'createdAt', label: 'Ngày nhập hệ thống', children: formatDate(asset.createdAt) },
                             { key: 'note', label: 'Ghi chú', span: 3, children: asset.note || '-' },
+                            ...(asset.verificationImages?.length
+                                ? [
+                                      {
+                                          key: 'verificationImages',
+                                          label: 'Ảnh xác thực (nhận diện khi mất tem)',
+                                          span: 3,
+                                          children: (
+                                              <div className='flex flex-wrap gap-2'>
+                                                  <Image.PreviewGroup>
+                                                      {asset.verificationImages.map((url) => (
+                                                          <Image
+                                                              key={url}
+                                                              src={url}
+                                                              width={72}
+                                                              height={72}
+                                                              style={{ objectFit: 'cover', borderRadius: 10 }}
+                                                              alt='Ảnh xác thực máy'
+                                                          />
+                                                      ))}
+                                                  </Image.PreviewGroup>
+                                              </div>
+                                          ),
+                                      },
+                                  ]
+                                : []),
                         ]}
                     />
                 </Card>

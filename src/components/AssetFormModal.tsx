@@ -13,6 +13,7 @@ import { ASSET_OWNERSHIP_OPTIONS } from '../core/constants';
 import { assetService } from '../core/services/asset.service';
 import { AssetOwnershipType, AssetStatus } from '../core/types';
 import type { Asset, Brand, Plant } from '../core/types';
+import CloudinaryImagesField from './shared/CloudinaryImagesField';
 
 const { Text } = Typography;
 
@@ -32,6 +33,7 @@ type AssetFormValues = {
     purchasePrice?: number;
     specificationsText?: string;
     note?: string;
+    verificationImages?: string[];
 };
 
 interface AssetFormModalProps {
@@ -102,6 +104,7 @@ const AssetFormModal: React.FC<AssetFormModalProps> = ({ open, onClose, initialV
                     ? JSON.stringify(initialValues.specifications, null, 2)
                     : undefined,
             note: initialValues.note,
+            verificationImages: initialValues.verificationImages ?? [],
         });
     }, [open, initialValues, form]);
 
@@ -175,6 +178,7 @@ const AssetFormModal: React.FC<AssetFormModalProps> = ({ open, onClose, initialV
                 purchasePrice: values.purchasePrice,
                 specifications,
                 note: values.note?.trim(),
+                verificationImages: values.verificationImages?.length ? values.verificationImages : undefined,
             } as Omit<Asset, 'id' | 'createdAt' | 'updatedAt'> & { typeCode?: string });
 
             message.success(isEditing ? 'Đã cập nhật thông tin máy' : 'Đã thêm máy mới');
@@ -297,6 +301,32 @@ const AssetFormModal: React.FC<AssetFormModalProps> = ({ open, onClose, initialV
                                     showSearch={{ optionFilterProp: 'label' }}
                                     options={brandOptions}
                                     placeholder='Chọn nhãn hiệu'
+                                />
+                            </Form.Item>
+                            <Form.Item
+                                name='verificationImages'
+                                label='Ảnh xác thực máy'
+                                className='md:col-span-2'
+                                extra='Chụp toàn thân máy + điểm đặc trưng (tem hãng, vết riêng). Máy KHÔNG có serial bắt buộc chụp — đây là căn cứ nhận diện khi mất tem QR.'
+                                dependencies={['serial']}
+                                rules={[
+                                    {
+                                        validator: async (_, value: string[] | undefined) => {
+                                            const serial = form.getFieldValue('serial')?.trim();
+                                            // Chỉ ép khi tạo mới — sửa máy cũ không bị chặn vì thiếu ảnh
+                                            if (!isEditing && !serial && !value?.length) {
+                                                throw new Error(
+                                                    'Máy không có số serial — cần ít nhất 1 ảnh xác thực để truy xuất khi mất tem'
+                                                );
+                                            }
+                                        },
+                                    },
+                                ]}
+                            >
+                                <CloudinaryImagesField
+                                    folder='asset-verification'
+                                    max={3}
+                                    emptyHint='Chụp/tải tối đa 3 ảnh'
                                 />
                             </Form.Item>
                         </div>

@@ -165,6 +165,7 @@ export interface Asset {
     specifications?: Record<string, string | number>;
     note?: string;
     imageUrl?: string;
+    verificationImages?: string[];
     lastMaintenanceDate?: string;
     nextMaintenanceDate?: string;
     lastSeen?: AssetLastSeen;
