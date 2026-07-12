@@ -705,6 +705,25 @@ const DetailDrawer: React.FC<DrawerProps> = ({
         setShortageAllocations(nextShortageAllocations);
         setAppliedReceiptScanId(receiptScanPreview.scanId);
         message.success(`Đã điền ${appliedCount} dòng vào form nhận hàng. Rà lại rồi bấm "Cập nhật nhận hàng".`);
+
+        // Học map NCC từ các dòng vừa đối soát: lần giao sau cùng NCC sẽ tự khớp (fire-and-forget)
+        if (record?.id) {
+            const mappings = scanMapRows
+                .filter((row) => row.target?.startsWith('po:') && row.quantity > 0 && row.line?.materialName)
+                .map((row) => ({
+                    materialName: row.line.materialName,
+                    note: row.line.note,
+                    poItemIndex: Number(row.target!.slice(3)),
+                }));
+            if (mappings.length) {
+                void purchaseOrderService
+                    .recordReceiptScanMappings(record.id, {
+                        supplierName: receiptScanPreview.header?.supplierName || undefined,
+                        mappings,
+                    })
+                    .catch(() => undefined);
+            }
+        }
     };
 
     const handleReceiveSubmit = async () => {

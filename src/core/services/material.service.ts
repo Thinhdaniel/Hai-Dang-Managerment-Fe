@@ -1129,6 +1129,15 @@ export const purchaseOrderService = {
     receive: (id: string, data: ReceivePurchaseOrderPayload): Promise<PurchaseOrder> =>
         api.patch<PurchaseOrder, ReceivePurchaseOrderPayload>(`${PURCHASE_ORDERS_BASE}/${id}/receive`, data),
 
+    recordReceiptScanMappings: (
+        id: string,
+        data: {
+            supplierName?: string;
+            mappings: Array<{ materialName?: string; note?: string; poItemIndex: number }>;
+        }
+    ): Promise<{ saved: number }> =>
+        api.post<{ saved: number }, typeof data>(`${PURCHASE_ORDERS_BASE}/${id}/receipt-scan/mappings`, data),
+
     previewReceiptScan: (id: string, files: File[]): Promise<PurchaseReceiptScanPreview> => {
         const formData = new FormData();
         files.forEach((file) => formData.append('images', file));
