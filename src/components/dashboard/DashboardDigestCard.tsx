@@ -1,12 +1,14 @@
 import React, { useState } from 'react';
 import { App, Button, Card, Empty, Segmented, Spin, Tag } from 'antd';
-import { BulbOutlined, ReloadOutlined, RobotOutlined, WarningFilled } from '@ant-design/icons';
+import { ArrowRightOutlined, BulbOutlined, ReloadOutlined, RobotOutlined, WarningFilled } from '@ant-design/icons';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useNavigate } from 'react-router-dom';
 import { digestService, type DigestPeriod } from '../../core/services/digest.service';
 
 const DashboardDigestCard: React.FC = () => {
     const { message } = App.useApp();
     const queryClient = useQueryClient();
+    const navigate = useNavigate();
     const [period, setPeriod] = useState<DigestPeriod>('week');
 
     const { data: digest, isLoading } = useQuery({
@@ -33,7 +35,7 @@ const DashboardDigestCard: React.FC = () => {
                     <span className='flex h-8 w-8 items-center justify-center rounded-xl bg-gradient-to-br from-blue-600 to-indigo-600 text-white'>
                         <RobotOutlined />
                     </span>
-                    <span className='font-bold text-slate-900'>Bản tin AI</span>
+                    <span className='font-bold text-slate-900'>Bản tin điều hành</span>
                 </div>
             }
             extra={
@@ -55,6 +57,17 @@ const DashboardDigestCard: React.FC = () => {
                     >
                         {digest ? 'Làm mới' : 'Tạo'}
                     </Button>
+                    <Button
+                        size='small'
+                        type='text'
+                        icon={<ArrowRightOutlined />}
+                        aria-label='Mở bản tin điều hành'
+                        onClick={() =>
+                            navigate(
+                                `/executive-digests${digest?._id ? `?digest=${encodeURIComponent(digest._id)}` : ''}`
+                            )
+                        }
+                    />
                 </div>
             }
         >
@@ -78,6 +91,18 @@ const DashboardDigestCard: React.FC = () => {
                     <div className='flex items-center gap-2'>
                         <Tag color='blue' className='!m-0'>
                             {digest.periodLabel}
+                        </Tag>
+                        <Tag
+                            color={
+                                digest.status === 'published' ? 'green' : digest.status === 'approved' ? 'blue' : 'gold'
+                            }
+                            className='!m-0'
+                        >
+                            {digest.status === 'published'
+                                ? 'Đã xuất bản'
+                                : digest.status === 'approved'
+                                  ? 'Đã duyệt'
+                                  : 'Bản nháp'}
                         </Tag>
                         {generateMut.isPending ? <Spin size='small' /> : null}
                     </div>

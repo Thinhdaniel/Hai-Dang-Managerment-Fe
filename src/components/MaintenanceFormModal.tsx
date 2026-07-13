@@ -4,12 +4,14 @@ import dayjs, { type Dayjs } from 'dayjs';
 import { MaintenanceRepairMode, MaintenanceType, type Asset } from '../core/types';
 import type { MaintenancePayload } from '../core/services/maintenance.service';
 import type { MaintenanceAssistantDraft } from '../core/lib/assistant-actions';
+import CloudinaryImagesField from './shared/CloudinaryImagesField';
 
 type MaintenanceFormValues = {
     assetIds: string[];
     type: MaintenanceType;
     repairMode: MaintenanceRepairMode;
     description: string;
+    beforeImages?: string[];
     startDate: Dayjs;
     technician?: string;
     note?: string;
@@ -69,6 +71,7 @@ const MaintenanceFormModal = ({
             type: initialDraft?.type || MaintenanceType.EMERGENCY,
             repairMode: initialDraft?.repairMode || MaintenanceRepairMode.INTERNAL,
             description: initialDraft?.description || undefined,
+            beforeImages: [],
             startDate: dayjs(),
             technician: initialDraft?.technician,
             note: initialDraft?.note,
@@ -100,6 +103,7 @@ const MaintenanceFormModal = ({
             type: values.type,
             repairMode: values.repairMode,
             description: values.description.trim(),
+            beforeImages: values.beforeImages ?? [],
             startDate: toIso(values.startDate) ?? new Date().toISOString(),
             technician: values.technician?.trim() || undefined,
             note: values.note?.trim() || undefined,
@@ -143,6 +147,7 @@ const MaintenanceFormModal = ({
                     type: initialDraft?.type || MaintenanceType.EMERGENCY,
                     repairMode: initialDraft?.repairMode || MaintenanceRepairMode.INTERNAL,
                     description: initialDraft?.description,
+                    beforeImages: [],
                     startDate: dayjs(),
                     technician: initialDraft?.technician,
                     note: initialDraft?.note,
@@ -187,6 +192,19 @@ const MaintenanceFormModal = ({
                     rules={[{ required: true, message: 'Nhập nội dung sửa chữa' }]}
                 >
                     <Input.TextArea rows={3} placeholder='Ví dụ: Máy bỏ mũi, kẹt ổ, cần kiểm tra motor...' />
+                </Form.Item>
+
+                <Form.Item
+                    name='beforeImages'
+                    label='Ảnh hiện trạng trước sửa'
+                    extra='Chụp rõ bộ phận lỗi và toàn cảnh máy. Tối đa 6 ảnh.'
+                >
+                    <CloudinaryImagesField
+                        folder='hai-dang/maintenance/before'
+                        max={6}
+                        size={76}
+                        emptyHint='Thêm ảnh hiện trạng để đối chiếu sau sửa'
+                    />
                 </Form.Item>
 
                 <div className='grid grid-cols-1 gap-3 md:grid-cols-2'>

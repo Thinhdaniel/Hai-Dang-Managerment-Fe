@@ -15,6 +15,13 @@ export const PAGE_META: PageMeta[] = [
         searchPlaceholder: 'Tìm nhanh theo mã máy hoặc tên thiết bị...',
     },
     {
+        path: '/executive-digests',
+        title: 'Bản Tin Điều Hành',
+        subtitle: 'Báo cáo trực quan định kỳ dành cho ban giám đốc.',
+        breadcrumbs: ['Dashboard', 'Bản tin điều hành'],
+        searchPlaceholder: 'Tìm kỳ báo cáo...',
+    },
+    {
         path: '/assets',
         title: 'Quản Lý Thiết Bị',
         subtitle: 'Tra cứu, cập nhật, điều phối và theo dõi toàn bộ máy móc trong hệ thống.',

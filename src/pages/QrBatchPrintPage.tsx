@@ -384,7 +384,7 @@ const QrBatchPrintPage: React.FC = () => {
     };
 
     const handleDownloadPdf = async () => {
-        if (!printLabels.length) return;
+        if (!data || !printLabels.length) return;
 
         const { jsPDF } = await import('jspdf');
         const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4', compress: true });

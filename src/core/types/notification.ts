@@ -13,6 +13,7 @@ export type NotificationActionType =
     | 'distribution'
     | 'chat'
     | 'floor_map'
+    | 'digest'
     | 'system';
 
 export interface Notification {

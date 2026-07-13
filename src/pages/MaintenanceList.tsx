@@ -11,6 +11,7 @@ import {
     Grid,
     Input,
     InputNumber,
+    Image,
     Modal,
     Pagination,
     Select,
@@ -47,6 +48,7 @@ import ConfirmAction from '../components/shared/ConfirmAction';
 import LazyBoundary from '../components/shared/LazyBoundary';
 import StatsCard from '../components/shared/StatsCard';
 import ContextChatDrawer from '../components/chat/ContextChatDrawer';
+import CloudinaryImagesField from '../components/shared/CloudinaryImagesField';
 import { useAuth } from '../core/contexts/AuthContext';
 import { hasManagerAccess } from '../core/lib/permissions';
 import { consumeAssistantAction, type MaintenanceAssistantDraft } from '../core/lib/assistant-actions';
@@ -66,6 +68,7 @@ type CompleteFormValues = {
     endDate: Dayjs;
     note?: string;
     cost?: number;
+    afterImages?: string[];
     externalRepair?: {
         returnedAt?: Dayjs;
         actualCost?: number;
@@ -715,6 +718,7 @@ const MaintenanceList: React.FC = () => {
         completeForm.setFieldsValue({
             endDate: dayjs(),
             cost: record.cost,
+            afterImages: record.afterImages ?? [],
             externalRepair: {
                 returnedAt: dayjs(),
                 actualCost: record.externalRepair?.actualCost ?? record.cost,
@@ -738,6 +742,7 @@ const MaintenanceList: React.FC = () => {
                 endDate: toIso(values.endDate) ?? new Date().toISOString(),
                 note: values.note,
                 cost,
+                afterImages: values.afterImages ?? [],
                 externalRepair:
                     completeTarget.repairMode === 'external'
                         ? {
@@ -1612,6 +1617,54 @@ const MaintenanceList: React.FC = () => {
                             ]}
                         />
 
+                        {detailTarget.beforeImages?.length || detailTarget.afterImages?.length ? (
+                            <>
+                                <Divider className='!my-1'>Ảnh hiện trạng</Divider>
+                                <div className='grid grid-cols-1 gap-4 md:grid-cols-2'>
+                                    <div>
+                                        <Text strong>Trước sửa</Text>
+                                        <div className='mt-2 flex flex-wrap gap-2'>
+                                            <Image.PreviewGroup>
+                                                {(detailTarget.beforeImages ?? []).map((url) => (
+                                                    <Image
+                                                        key={url}
+                                                        src={url}
+                                                        width={88}
+                                                        height={88}
+                                                        className='rounded-lg object-cover'
+                                                        alt='Hiện trạng trước sửa'
+                                                    />
+                                                ))}
+                                            </Image.PreviewGroup>
+                                            {!detailTarget.beforeImages?.length ? (
+                                                <Text type='secondary'>Chưa có ảnh</Text>
+                                            ) : null}
+                                        </div>
+                                    </div>
+                                    <div>
+                                        <Text strong>Sau sửa</Text>
+                                        <div className='mt-2 flex flex-wrap gap-2'>
+                                            <Image.PreviewGroup>
+                                                {(detailTarget.afterImages ?? []).map((url) => (
+                                                    <Image
+                                                        key={url}
+                                                        src={url}
+                                                        width={88}
+                                                        height={88}
+                                                        className='rounded-lg object-cover'
+                                                        alt='Hiện trạng sau sửa'
+                                                    />
+                                                ))}
+                                            </Image.PreviewGroup>
+                                            {!detailTarget.afterImages?.length ? (
+                                                <Text type='secondary'>Chưa có ảnh</Text>
+                                            ) : null}
+                                        </div>
+                                    </div>
+                                </div>
+                            </>
+                        ) : null}
+
                         {detailTarget.repairMode === 'external' ? (
                             <>
                                 <Divider className='!my-1'>Thông tin sửa ngoài</Divider>
@@ -1903,6 +1956,19 @@ const MaintenanceList: React.FC = () => {
                             </Form.Item>
                         </>
                     )}
+
+                    <Form.Item
+                        name='afterImages'
+                        label='Ảnh sau sửa'
+                        extra='Chụp lại đúng vị trí đã xử lý và trạng thái máy khi bàn giao. Tối đa 6 ảnh.'
+                    >
+                        <CloudinaryImagesField
+                            folder='hai-dang/maintenance/after'
+                            max={6}
+                            size={76}
+                            emptyHint='Thêm ảnh kết quả sau sửa'
+                        />
+                    </Form.Item>
 
                     <Form.Item name='note' label='Ghi chú hoàn tất'>
                         <Input.TextArea rows={3} />

@@ -13,6 +13,8 @@ export type MaintenancePayload = Pick<Maintenance, 'assetId' | 'type' | 'descrip
             | 'endDate'
             | 'technician'
             | 'cost'
+            | 'beforeImages'
+            | 'afterImages'
             | 'note'
             | 'externalRepair'
             | 'approvalStatus'
@@ -24,6 +26,7 @@ export type CompleteMaintenancePayload = {
     endDate: string;
     note?: string;
     cost?: number;
+    afterImages?: string[];
     externalRepair?: Maintenance['externalRepair'];
 };
 
