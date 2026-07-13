@@ -7,6 +7,7 @@ import {
     FileTextOutlined,
     InboxOutlined,
     SwapOutlined,
+    WarningOutlined,
 } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import type { Asset, CreateTransferPayload, Plant } from '../../core/types';
@@ -56,15 +57,17 @@ const TransferModal = ({
     onClose,
     onSubmit,
 }: TransferModalProps) => {
-    const { message } = App.useApp();
+    const { message, modal } = App.useApp();
     const [form] = Form.useForm<TransferModalFormValues>();
     const transferAssets = assets.length ? assets : asset ? [asset] : [];
     const firstAsset = transferAssets[0] ?? null;
+    const sourcePlantId = firstAsset?.plantId;
     const toPlantId = Form.useWatch('toPlantId', form);
     const toArea = Form.useWatch('toArea', form);
     const selectedPlant = plants.find((plant) => plant.id === toPlantId);
     const sourceAreaSummary = getSourceAreaSummary(transferAssets);
     const hasMultipleSourceAreas = sourceAreaSummary === 'Nhiều khu vực';
+    const isSamePlant = Boolean(toPlantId && sourcePlantId && toPlantId === sourcePlantId);
 
     useEffect(() => {
         if (!open) {
@@ -95,17 +98,36 @@ const TransferModal = ({
             return;
         }
 
-        await onSubmit({
-            assetId: transferAssets[0].id,
-            assetIds: transferAssets.map((item) => item.id),
-            toPlantId: values.toPlantId,
-            toArea: values.toArea?.trim() || undefined,
-            reason: values.reason.trim(),
-            transferDate: values.transferDate.toISOString(),
-            note: values.note?.trim() || undefined,
-        });
+        const submit = async () => {
+            await onSubmit({
+                assetId: transferAssets[0].id,
+                assetIds: transferAssets.map((item) => item.id),
+                toPlantId: values.toPlantId,
+                toArea: values.toArea?.trim() || undefined,
+                reason: values.reason.trim(),
+                transferDate: values.transferDate.toISOString(),
+                note: values.note?.trim() || undefined,
+            });
 
-        form.resetFields();
+            form.resetFields();
+        };
+
+        // Cơ sở đến trùng cơ sở nguồn -> nhiều khả năng chọn nhầm, xác nhận lại
+        if (values.toPlantId === sourcePlantId) {
+            const plantName = firstAsset?.plant?.name || 'cùng cơ sở';
+            modal.confirm({
+                title: 'Điều chuyển trong cùng một cơ sở?',
+                content: `Cơ sở đến (${plantName}) đang trùng cơ sở xuất phát. Nếu bạn muốn chuyển máy sang cơ sở khác thì hãy chọn lại. Chỉ tiếp tục nếu đây là điều chuyển nội bộ giữa các khu vực trong cùng cơ sở.`,
+                okText: 'Đúng, điều chuyển nội bộ',
+                cancelText: 'Chọn lại cơ sở',
+                centered: true,
+                zIndex: (zIndex ?? 1000) + 10,
+                onOk: submit,
+            });
+            return;
+        }
+
+        await submit();
     };
 
     return (
@@ -193,12 +215,28 @@ const TransferModal = ({
                                 <ArrowRightOutlined />
                             </div>
                         </div>
-                        <div className='rounded-lg border border-blue-100 bg-blue-50 p-4'>
-                            <div className='text-xs font-semibold tracking-wide text-blue-700 uppercase'>Điểm đến</div>
+                        <div
+                            className={`rounded-lg border p-4 ${
+                                isSamePlant ? 'border-amber-200 bg-amber-50' : 'border-blue-100 bg-blue-50'
+                            }`}
+                        >
+                            <div
+                                className={`text-xs font-semibold tracking-wide uppercase ${
+                                    isSamePlant ? 'text-amber-700' : 'text-blue-700'
+                                }`}
+                            >
+                                Điểm đến
+                            </div>
                             <div className='mt-2 truncate text-base font-bold text-slate-900'>
                                 {selectedPlant?.name || 'Chưa chọn cơ sở'}
                             </div>
                             <div className='mt-1 truncate text-sm text-slate-600'>{renderArea(toArea)}</div>
+                            {isSamePlant && (
+                                <div className='mt-2 flex items-start gap-1.5 text-xs font-medium text-amber-700'>
+                                    <WarningOutlined className='mt-0.5 shrink-0' />
+                                    <span>Trùng cơ sở xuất phát — chỉ dùng khi chuyển nội bộ giữa các khu vực.</span>
+                                </div>
+                            )}
                         </div>
                     </div>
                 </section>
