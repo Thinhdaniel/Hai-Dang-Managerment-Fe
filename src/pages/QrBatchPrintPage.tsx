@@ -232,6 +232,9 @@ const QrBatchPrintPage: React.FC = () => {
     const queryClient = useQueryClient();
     const { message } = App.useApp();
     const [template, setTemplate] = useState<PrintTemplate>(() => loadTemplate());
+    // Mặc định chỉ in tem CHƯA DÙNG: in lại lô đã gán mà kéo cả tem đã dán sẽ đẻ ra bản
+    // trùng vật lý (2 tem cùng mã), dán nhầm lên máy khác là hỏng truy xuất.
+    const [onlyUnused, setOnlyUnused] = useState(true);
     const qrRefs = useRef<Record<string, HTMLDivElement | null>>({});
 
     const { data, isLoading, isError } = useQuery({
@@ -239,6 +242,14 @@ const QrBatchPrintPage: React.FC = () => {
         queryFn: () => qrLabelService.getBatchById(id),
         enabled: Boolean(id),
     });
+
+    const allLabels = data?.labels ?? [];
+    const unusedLabelCount = allLabels.filter((label) => label.status === QrLabelStatus.UNUSED).length;
+    const assignedLabelCount = allLabels.filter((label) => label.status === QrLabelStatus.ASSIGNED).length;
+    const printLabels = useMemo(
+        () => (onlyUnused ? allLabels.filter((label) => label.status === QrLabelStatus.UNUSED) : allLabels),
+        [allLabels, onlyUnused]
+    );
 
     const markPrintedMutation = useMutation({
         mutationFn: () => qrLabelService.markBatchPrinted(id),
@@ -254,7 +265,7 @@ const QrBatchPrintPage: React.FC = () => {
     }, [template]);
 
     const labelsPerPage = Math.max(1, template.columns * template.rows);
-    const pages = useMemo(() => chunkLabels(data?.labels ?? [], labelsPerPage), [data?.labels, labelsPerPage]);
+    const pages = useMemo(() => chunkLabels(printLabels, labelsPerPage), [printLabels, labelsPerPage]);
 
     const usedWidth =
         template.marginLeft + template.columns * template.labelWidth + (template.columns - 1) * template.gapX;
@@ -373,12 +384,12 @@ const QrBatchPrintPage: React.FC = () => {
     };
 
     const handleDownloadPdf = async () => {
-        if (!data?.labels.length) return;
+        if (!printLabels.length) return;
 
         const { jsPDF } = await import('jspdf');
         const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4', compress: true });
 
-        data.labels.forEach((label, index) => {
+        printLabels.forEach((label, index) => {
             if (index > 0 && index % labelsPerPage === 0) {
                 doc.addPage('a4', 'portrait');
             }
@@ -498,9 +509,17 @@ const QrBatchPrintPage: React.FC = () => {
                             </Button>
                             <h1 className='m-0 text-xl font-bold text-slate-900'>In lô tem {data.batch.code}</h1>
                             <Text type='secondary'>
-                                {data.batch.quantity} tem - {data.batch.plant?.name || 'Không gán cơ sở'}{' '}
+                                {data.batch.quantity} tem · {unusedLabelCount} chưa dùng · {assignedLabelCount} đã gán
+                                {' - '}
+                                {data.batch.plant?.name || 'Không gán cơ sở'}{' '}
                                 {data.batch.area ? `- ${data.batch.area}` : ''}
                             </Text>
+                            <div className='mt-2 flex items-center gap-2'>
+                                <Switch size='small' checked={onlyUnused} onChange={setOnlyUnused} />
+                                <span className='text-sm font-medium text-slate-700'>
+                                    Chỉ in tem chưa dùng ({unusedLabelCount})
+                                </span>
+                            </div>
                         </div>
                         <div className='flex flex-wrap gap-2'>
                             {!data.batch.printedAt ? (
@@ -520,6 +539,30 @@ const QrBatchPrintPage: React.FC = () => {
                             </Button>
                         </div>
                     </div>
+
+                    {!onlyUnused && assignedLabelCount > 0 ? (
+                        <Alert
+                            type='warning'
+                            showIcon
+                            message={`Đang in CẢ ${assignedLabelCount} tem đã gán máy — sẽ tạo bản trùng của tem đang dán trên máy.`}
+                            description='Chỉ tắt "Chỉ in tem chưa dùng" khi bạn thực sự cần in lại toàn bộ lô. Tuyệt đối không dán tem đã gán lên một máy khác — sẽ khiến hai máy chung một mã QR.'
+                        />
+                    ) : assignedLabelCount > 0 ? (
+                        <Alert
+                            type='info'
+                            showIcon
+                            message={`Lô này đã gán ${assignedLabelCount}/${data.batch.quantity} tem. Đang in ${printLabels.length} tem chưa dùng để tránh in trùng.`}
+                        />
+                    ) : null}
+
+                    {onlyUnused && unusedLabelCount === 0 ? (
+                        <Alert
+                            type='warning'
+                            showIcon
+                            message='Lô này không còn tem chưa dùng để in.'
+                            description='Tất cả tem trong lô đã được gán máy. Nếu cần thêm tem cho máy mới, hãy tạo lô mới.'
+                        />
+                    ) : null}
 
                     <Card size='small' className='qr-print-config-card'>
                         <div className='qr-print-config'>
