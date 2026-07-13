@@ -148,6 +148,13 @@ export const PAGE_META: PageMeta[] = [
         searchPlaceholder: 'Tìm theo mã máy, mã vật tư, QR...',
     },
     {
+        path: '/admin/assistant-quality',
+        title: 'Chất Lượng Trợ Lý AI',
+        subtitle: 'Theo dõi trace, grounding, độ trễ và phản hồi của trợ lý vận hành.',
+        breadcrumbs: ['Dashboard', 'Thiết lập', 'Chất lượng trợ lý AI'],
+        searchPlaceholder: 'Tìm theo câu hỏi, reqId hoặc model...',
+    },
+    {
         path: '/materials',
         title: 'Danh Mục Vật Tư',
         subtitle: 'Quản lý danh mục vật tư dùng chung cho mua sắm, tồn kho và cấp phát trong hệ thống.',

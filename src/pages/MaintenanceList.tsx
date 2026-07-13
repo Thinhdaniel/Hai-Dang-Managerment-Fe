@@ -49,6 +49,7 @@ import StatsCard from '../components/shared/StatsCard';
 import ContextChatDrawer from '../components/chat/ContextChatDrawer';
 import { useAuth } from '../core/contexts/AuthContext';
 import { hasManagerAccess } from '../core/lib/permissions';
+import { consumeAssistantAction, type MaintenanceAssistantDraft } from '../core/lib/assistant-actions';
 import { assetService } from '../core/services/asset.service';
 import { maintenanceService, type MaintenancePayload } from '../core/services/maintenance.service';
 import { plantService } from '../core/services/plant.service';
@@ -522,6 +523,7 @@ const MaintenanceList: React.FC = () => {
     const [filters, setFilters] = useState(initialFilters);
     const [draftFilters, setDraftFilters] = useState(initialFilters);
     const [createOpen, setCreateOpen] = useState(false);
+    const [assistantDraft, setAssistantDraft] = useState<MaintenanceAssistantDraft>();
     const [quickMaintenanceOpen, setQuickMaintenanceOpen] = useState(false);
     const [mobileFilterOpen, setMobileFilterOpen] = useState(false);
     const [detailTarget, setDetailTarget] = useState<Maintenance | null>(null);
@@ -546,6 +548,28 @@ const MaintenanceList: React.FC = () => {
 
     // Deep-link từ chat "Mở phiếu": ?maintenance=<id> → mở drawer chi tiết rồi gỡ param khỏi URL
     const deepLinkId = searchParams.get('maintenance');
+    const assistantActionId = searchParams.get('assistantAction');
+    useEffect(() => {
+        if (!assistantActionId) return;
+        const action = consumeAssistantAction<MaintenanceAssistantDraft>(assistantActionId, 'maintenance_draft');
+        setSearchParams(
+            (prev) => {
+                const next = new URLSearchParams(prev);
+                next.delete('assistantAction');
+                return next;
+            },
+            { replace: true }
+        );
+        if (!action?.payload?.assetIds?.length) {
+            message.warning('Bản nháp bảo trì đã hết hạn hoặc không còn hợp lệ.');
+            return;
+        }
+        setAssistantDraft(action.payload);
+        setCreateOpen(true);
+        if (action.warnings?.length) message.warning(`Bản nháp có ${action.warnings.length} cảnh báo cần kiểm tra.`);
+        else message.info('Đã điền bản nháp từ trợ lý. Hãy kiểm tra trước khi tạo phiếu.');
+    }, [assistantActionId, message, setSearchParams]);
+
     useEffect(() => {
         if (!deepLinkId) return;
 
@@ -683,6 +707,7 @@ const MaintenanceList: React.FC = () => {
         await createMutation.mutateAsync(payload);
         message.success('Đã tạo phiếu bảo trì');
         setCreateOpen(false);
+        setAssistantDraft(undefined);
     };
 
     const openCompleteModal = (record: Maintenance) => {
@@ -1710,8 +1735,12 @@ const MaintenanceList: React.FC = () => {
                     <MaintenanceFormModal
                         open
                         assets={assets}
+                        initialDraft={assistantDraft}
                         submitting={createMutation.isPending}
-                        onClose={() => setCreateOpen(false)}
+                        onClose={() => {
+                            setCreateOpen(false);
+                            setAssistantDraft(undefined);
+                        }}
                         onSubmit={handleCreate}
                     />
                 </LazyBoundary>

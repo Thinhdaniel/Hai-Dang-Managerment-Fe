@@ -5,12 +5,15 @@ import {
     AppstoreOutlined,
     AudioOutlined,
     CloseOutlined,
+    CheckOutlined,
     DatabaseOutlined,
     DollarOutlined,
     EnvironmentOutlined,
     FileTextOutlined,
     FormOutlined,
     HolderOutlined,
+    DislikeOutlined,
+    LikeOutlined,
     LoadingOutlined,
     RobotOutlined,
     SendOutlined,
@@ -28,9 +31,15 @@ import {
     operationsAssistantService,
     type AssetAssistantResponse,
     type AssistantAppliedFilters,
+    type AssistantFeedbackInput,
     type AssistantStreamStep,
     type AssistantTransferDraft,
 } from '../core/services/ai-help.service';
+import {
+    ASSISTANT_ACTION_PATH,
+    storeAssistantAction,
+    type AssistantActionProposal,
+} from '../core/lib/assistant-actions';
 import { getAssetStatusColor } from '../core/constants/assetStatusColor';
 import {
     useVoiceChat,
@@ -45,11 +54,16 @@ import { useMutation, useQuery } from '@tanstack/react-query';
 import { plantService } from '../core/services/plant.service';
 import { transferService } from '../core/services/transfer.service';
 import TransferModal from './transfer/TransferModal';
+import { useAuth } from '../core/contexts/AuthContext';
+import {
+    ASSISTANT_CONTEXT_LIMIT,
+    clearAssistantSession,
+    loadAssistantSession,
+    saveAssistantSession,
+} from '../core/lib/assistant-session';
 
 type ChatMessage = { role: 'user' | 'assistant'; content: string; data?: AssetAssistantResponse; animate?: boolean };
 
-// Lưu phiên chat để không mất khi chuyển trang / reload (giữ tối đa 30 tin gần nhất).
-const CHAT_KEY = 'hd-asset-assistant-chat';
 // Bật/tắt đọc câu trả lời thành giọng nói (ghi nhớ lựa chọn).
 const READ_ALOUD_KEY = 'hd-asset-assistant-read-aloud';
 const VOICE_URI_KEY = 'hd-asset-assistant-voice-uri';
@@ -60,25 +74,6 @@ const VOICE_SAMPLE =
 const WINDOW_RECT_KEY = 'hd-asset-assistant-rect';
 // Màu nhấn thương hiệu duy nhất (phẳng, sạch — bỏ gradient nhiều màu).
 const ACCENT = '#2f51d9';
-const loadChat = (): ChatMessage[] => {
-    try {
-        const raw = localStorage.getItem(CHAT_KEY);
-        const arr = raw ? JSON.parse(raw) : [];
-        return Array.isArray(arr) ? arr : [];
-    } catch {
-        return [];
-    }
-};
-const saveChat = (msgs: ChatMessage[]) => {
-    try {
-        // Không lưu cờ animate (để mở lại không chạy hiệu ứng chữ với tin cũ).
-        const slim = msgs.slice(-30).map((m) => ({ role: m.role, content: m.content, data: m.data }));
-        localStorage.setItem(CHAT_KEY, JSON.stringify(slim));
-    } catch {
-        /* bỏ qua khi storage đầy/không khả dụng */
-    }
-};
-
 // Gợi ý mở đầu phân nhóm — khoe đủ năng lực: máy/bảo trì, vật tư/kho, chi phí/mua hàng.
 const STARTER_GROUPS: { label: string; color: string; items: { icon: React.ReactNode; text: string }[] }[] = [
     {
@@ -112,11 +107,22 @@ const STARTER_GROUPS: { label: string; color: string; items: { icon: React.React
 // Các bước "đang suy nghĩ" xoay vòng (agentic chạy vài giây) — tạo cảm giác đang làm việc thật.
 const THINKING_STEPS = ['Đang phân tích câu hỏi…', 'Đang truy vấn dữ liệu thật…', 'Đang tổng hợp kết quả…'];
 
+const isAbortError = (error: unknown) =>
+    error instanceof DOMException ? error.name === 'AbortError' : error instanceof Error && error.name === 'AbortError';
+
+const shouldFallbackFromStream = (error: unknown) => {
+    if (isAbortError(error)) return false;
+    const message = error instanceof Error ? error.message : String(error || '');
+    // Lỗi 4xx là lỗi quyền/validation/rate-limit; gọi lại endpoint JSON chỉ tạo request trùng.
+    return !/stream HTTP 4\d\d/i.test(message);
+};
+
 // Nhãn + màu theo mảng dữ liệu của câu trả lời.
 const DOMAIN_BADGE: Record<string, { label: string; color: string }> = {
     asset: { label: 'Máy móc', color: '#6366f1' },
     material: { label: 'Vật tư', color: '#10b981' },
     cost: { label: 'Chi phí', color: '#f59e0b' },
+    mixed: { label: 'Tổng hợp', color: '#0f766e' },
 };
 
 // Nhãn + màu mức tin cậy của câu trả lời (theo việc có truy vấn dữ liệu thật hay không).
@@ -125,6 +131,12 @@ const CONFIDENCE: Record<string, { label: string; color: string }> = {
     medium: { label: 'độ tin vừa', color: '#f59e0b' },
     low: { label: 'độ tin thấp', color: '#ef4444' },
     none: { label: 'tham khảo', color: '#94a3b8' },
+};
+
+const GROUNDING: Record<string, { label: string; color: string }> = {
+    verified: { label: 'Đã đối chiếu', color: '#0f766e' },
+    corrected: { label: 'Đã hiệu chỉnh', color: '#2563eb' },
+    unverified: { label: 'Chưa kiểm chứng', color: '#d97706' },
 };
 
 const STYLES = `
@@ -209,9 +221,11 @@ interface Props {
 
 const AssetAssistantDrawer: React.FC<Props> = ({ open, onClose }) => {
     const navigate = useNavigate();
+    const { user } = useAuth();
     const screens = Grid.useBreakpoint();
     const isMobile = !screens.md;
-    const [messages, setMessages] = useState<ChatMessage[]>(() => loadChat());
+    const [chatOwnerId, setChatOwnerId] = useState<string | undefined>(() => user?.id);
+    const [messages, setMessages] = useState<ChatMessage[]>(() => loadAssistantSession(user?.id));
     const [input, setInput] = useState('');
     const { message } = App.useApp();
     // Nháp lệnh điều chuyển do trợ lý soạn -> mở TransferModal để người dùng chốt.
@@ -256,6 +270,7 @@ const AssetAssistantDrawer: React.FC<Props> = ({ open, onClose }) => {
         }
     });
     const endRef = useRef<HTMLDivElement>(null);
+    const requestAbortRef = useRef<AbortController | null>(null);
 
     // Cửa sổ nổi (desktop): kéo tiêu đề để di chuyển, kéo góc để đổi cỡ; nhớ vị trí/kích thước.
     const defaultRect = (): Rect => {
@@ -296,19 +311,37 @@ const AssetAssistantDrawer: React.FC<Props> = ({ open, onClose }) => {
         endRef.current?.scrollIntoView({ behavior: 'smooth' });
     }, [messages, loading]);
 
-    // Giữ phiên qua chuyển trang / reload.
+    // Nếu tài khoản thay đổi trong cùng tab, nạp đúng phiên của tài khoản đó trước khi cho phép lưu.
     useEffect(() => {
-        saveChat(messages);
-    }, [messages]);
+        if (user?.id === chatOwnerId) return;
+        setMessages(loadAssistantSession(user?.id));
+        setChatOwnerId(user?.id);
+    }, [chatOwnerId, user?.id]);
+
+    // Chỉ giữ text trong sessionStorage theo user; không lưu card dữ liệu nhạy cảm vào localStorage.
+    useEffect(() => {
+        if (!user?.id || chatOwnerId !== user.id) return;
+        saveAssistantSession(user.id, messages);
+    }, [chatOwnerId, messages, user?.id]);
 
     const startNewChat = () => {
+        requestAbortRef.current?.abort();
+        requestAbortRef.current = null;
         setMessages([]);
         setInput('');
-        try {
-            localStorage.removeItem(CHAT_KEY);
-        } catch {
-            /* noop */
+        setLoading(false);
+        setLiveStep('');
+        clearAssistantSession(user?.id);
+    };
+
+    const openGuidedAction = (action: AssistantActionProposal) => {
+        if (!storeAssistantAction(action)) {
+            message.error('Bản nháp hành động không hợp lệ hoặc trình duyệt không thể lưu phiên tạm.');
+            return;
         }
+        const targetPath = ASSISTANT_ACTION_PATH[action.type];
+        onClose();
+        navigate(`${targetPath}?assistantAction=${encodeURIComponent(action.id)}`);
     };
 
     // Đổi bước tiến trình (streaming) -> câu mô tả tiếng Việt hiển thị cho người dùng.
@@ -321,31 +354,45 @@ const AssetAssistantDrawer: React.FC<Props> = ({ open, onClose }) => {
     const send = async (text: string) => {
         const q = text.trim();
         if (!q || loading) return;
-        const history = messages.map((m) => ({ role: m.role, content: m.content }));
+        // BE nhận tối đa 20 messages; chừa 1 slot cho câu hiện tại.
+        const history = messages.slice(-ASSISTANT_CONTEXT_LIMIT).map((m) => ({ role: m.role, content: m.content }));
         const convo = [...history, { role: 'user' as const, content: q }];
         setMessages((prev) => [...prev, { role: 'user', content: q }]);
         setInput('');
         setLoading(true);
         setLiveStep('');
+        const controller = new AbortController();
+        requestAbortRef.current = controller;
         try {
             let resp: AssetAssistantResponse;
             try {
                 // Ưu tiên streaming để thấy tiến trình thật; lỗi (proxy/trình duyệt) -> fallback ask().
                 resp = await operationsAssistantService.askStream(convo, {
-                    onStep: (s) => setLiveStep(stepText(s)),
+                    onStep: (s) => {
+                        if (!controller.signal.aborted) setLiveStep(stepText(s));
+                    },
+                    signal: controller.signal,
                 });
-            } catch {
+            } catch (streamError) {
+                if (!shouldFallbackFromStream(streamError)) throw streamError;
                 resp = await operationsAssistantService.ask(convo);
             }
+            if (controller.signal.aborted) return;
             setMessages((prev) => [...prev, { role: 'assistant', content: resp.answer, data: resp, animate: true }]);
             if (readAloud) readOut(resp.answer);
-        } catch {
-            const fail = 'Xin lỗi, mình chưa xử lý được câu này. Thử hỏi lại nhé.';
+        } catch (error) {
+            if (controller.signal.aborted || isAbortError(error)) return;
+            const rawMessage = error instanceof Error ? error.message : '';
+            const serverMessage = rawMessage.match(/^stream HTTP 4\d\d:\s*(.+)$/i)?.[1];
+            const fail = serverMessage || 'Xin lỗi, mình chưa xử lý được câu này. Thử hỏi lại nhé.';
             setMessages((prev) => [...prev, { role: 'assistant', content: fail }]);
             if (readAloud) readOut(fail);
         } finally {
-            setLoading(false);
-            setLiveStep('');
+            if (requestAbortRef.current === controller) {
+                requestAbortRef.current = null;
+                setLoading(false);
+                setLiveStep('');
+            }
         }
     };
 
@@ -400,10 +447,19 @@ const AssetAssistantDrawer: React.FC<Props> = ({ open, onClose }) => {
 
     // Đóng cửa sổ / nhấn nút đóng: ngắt giọng đang đọc + dừng nghe.
     const handleClose = () => {
+        requestAbortRef.current?.abort();
+        requestAbortRef.current = null;
         stopSpeaking();
         stopListening();
         onClose();
     };
+
+    useEffect(
+        () => () => {
+            requestAbortRef.current?.abort();
+        },
+        []
+    );
 
     // Esc để đóng nhanh.
     useEffect(() => {
@@ -413,7 +469,6 @@ const AssetAssistantDrawer: React.FC<Props> = ({ open, onClose }) => {
         };
         window.addEventListener('keydown', onKey);
         return () => window.removeEventListener('keydown', onKey);
-        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [open]);
 
     // Áp bộ lọc -> điều hướng tới danh sách máy kèm query (toàn cục, không phụ thuộc trang đang đứng).
@@ -646,6 +701,7 @@ const AssetAssistantDrawer: React.FC<Props> = ({ open, onClose }) => {
                                             onApply={applyToList}
                                             onAsk={send}
                                             onCreateTransfer={setTransferDraft}
+                                            onRunAction={openGuidedAction}
                                         />
                                     ) : null}
                                 </div>
@@ -786,13 +842,116 @@ const fmtShortDate = (value?: string) => {
     }
 };
 
+const FEEDBACK_REASONS: Array<{ value: NonNullable<AssistantFeedbackInput['reason']>; label: string }> = [
+    { value: 'incorrect', label: 'Sai số liệu' },
+    { value: 'misunderstood', label: 'Hiểu sai câu hỏi' },
+    { value: 'missing_data', label: 'Thiếu dữ liệu' },
+    { value: 'too_slow', label: 'Phản hồi chậm' },
+    { value: 'too_verbose', label: 'Trả lời quá dài' },
+    { value: 'other', label: 'Lý do khác' },
+];
+
+const AssistantFeedbackControls: React.FC<{ reqId?: string }> = ({ reqId }) => {
+    const { message } = App.useApp();
+    const [submitted, setSubmitted] = useState<AssistantFeedbackInput['rating']>();
+    const [open, setOpen] = useState(false);
+    const [reason, setReason] = useState<AssistantFeedbackInput['reason']>();
+    const [note, setNote] = useState('');
+    const mutation = useMutation({
+        mutationFn: (input: AssistantFeedbackInput) => operationsAssistantService.submitFeedback(reqId!, input),
+        onSuccess: (_, input) => {
+            setSubmitted(input.rating);
+            setOpen(false);
+            message.success('Đã ghi nhận phản hồi');
+        },
+        onError: () => message.error('Chưa gửi được phản hồi'),
+    });
+
+    if (!reqId) return null;
+    if (submitted) {
+        return (
+            <div className='flex items-center gap-1.5 text-[10.5px] font-medium text-emerald-700'>
+                <CheckOutlined /> Đã ghi nhận phản hồi
+            </div>
+        );
+    }
+
+    return (
+        <div className='flex items-center gap-1.5 text-[10.5px] text-slate-400'>
+            <span className='mr-0.5'>Câu trả lời này có hữu ích?</span>
+            <Tooltip title='Hữu ích'>
+                <Button
+                    type='text'
+                    size='small'
+                    aria-label='Đánh giá hữu ích'
+                    className='!h-7 !w-7 !min-w-7 !rounded-full !text-slate-400 hover:!bg-emerald-50 hover:!text-emerald-600'
+                    icon={<LikeOutlined />}
+                    loading={mutation.isPending && !open}
+                    onClick={() => mutation.mutate({ rating: 'helpful' })}
+                />
+            </Tooltip>
+            <Popover
+                trigger='click'
+                open={open}
+                onOpenChange={setOpen}
+                placement='topRight'
+                content={
+                    <div className='w-[270px] max-w-[calc(100vw-48px)] space-y-2.5 p-1'>
+                        <div className='text-[12px] font-bold text-slate-800'>Điểm nào cần cải thiện?</div>
+                        <Select
+                            value={reason}
+                            onChange={setReason}
+                            options={FEEDBACK_REASONS}
+                            placeholder='Chọn nguyên nhân'
+                            className='w-full'
+                        />
+                        <Input.TextArea
+                            value={note}
+                            onChange={(event) => setNote(event.target.value)}
+                            placeholder='Ghi chú cụ thể (không bắt buộc)'
+                            maxLength={1000}
+                            autoSize={{ minRows: 2, maxRows: 4 }}
+                        />
+                        <Button
+                            type='primary'
+                            block
+                            disabled={!reason}
+                            loading={mutation.isPending}
+                            onClick={() =>
+                                mutation.mutate({
+                                    rating: 'not_helpful',
+                                    reason,
+                                    note: note.trim() || undefined,
+                                })
+                            }
+                        >
+                            Gửi phản hồi
+                        </Button>
+                    </div>
+                }
+            >
+                <Tooltip title='Chưa hữu ích'>
+                    <Button
+                        type='text'
+                        size='small'
+                        aria-label='Báo câu trả lời chưa hữu ích'
+                        className='!h-7 !w-7 !min-w-7 !rounded-full !text-slate-400 hover:!bg-rose-50 hover:!text-rose-600'
+                        icon={<DislikeOutlined />}
+                    />
+                </Tooltip>
+            </Popover>
+        </div>
+    );
+};
+
 const AssistantResult: React.FC<{
     data: AssetAssistantResponse;
     onOpen: (id: string) => void;
     onApply: (f: AssistantAppliedFilters) => void;
     onAsk: (q: string) => void;
     onCreateTransfer?: (draft: AssistantTransferDraft) => void;
-}> = ({ data, onOpen, onApply, onAsk, onCreateTransfer }) => {
+    onRunAction?: (action: AssistantActionProposal) => void;
+}> = ({ data, onOpen, onApply, onAsk, onCreateTransfer, onRunAction }) => {
     // Phòng vệ: tin nhắn cũ lưu trong localStorage có thể thiếu trường -> luôn dùng mảng/đối tượng mặc định.
     const aggregates = data.aggregates ?? {};
     const items = data.items ?? [];
@@ -853,6 +1012,7 @@ const AssistantResult: React.FC<{
         !!aggregates.topBroken?.length ||
         !!aggregates.breakdown?.length ||
         !!data.transferDraft?.assets?.length ||
+        !!data.actions?.length ||
         items.length > 0;
     const badge = data.domain ? DOMAIN_BADGE[data.domain] : undefined;
 
@@ -869,6 +1029,62 @@ const AssistantResult: React.FC<{
                     </span>
                 </div>
             ) : null}
+
+            {data.actions?.map((action) => {
+                const visual =
+                    action.type === 'maintenance_draft'
+                        ? { icon: <ToolOutlined />, tone: 'bg-rose-50 text-rose-600', eyebrow: 'Bảo trì' }
+                        : action.type === 'supply_request_draft'
+                          ? { icon: <FormOutlined />, tone: 'bg-emerald-50 text-emerald-600', eyebrow: 'Cấp vật tư' }
+                          : { icon: <ShoppingOutlined />, tone: 'bg-amber-50 text-amber-700', eyebrow: 'Mua vật tư' };
+                return (
+                    <div
+                        key={action.id}
+                        className='overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-sm'
+                    >
+                        <div className='flex items-start gap-2.5 px-3 py-3'>
+                            <span
+                                className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl ${visual.tone}`}
+                            >
+                                {visual.icon}
+                            </span>
+                            <div className='min-w-0 flex-1'>
+                                <div className='flex flex-wrap items-center gap-1.5'>
+                                    <span className='text-[10px] font-bold tracking-wide text-slate-400 uppercase'>
+                                        {visual.eyebrow}
+                                    </span>
+                                    <span className='rounded-full bg-blue-50 px-1.5 py-0.5 text-[9.5px] font-semibold text-blue-700'>
+                                        Cần xác nhận
+                                    </span>
+                                </div>
+                                <div className='mt-0.5 text-[13px] font-bold text-slate-800'>{action.label}</div>
+                                <div className='mt-0.5 text-[11px] leading-relaxed text-slate-500'>
+                                    {action.description}
+                                </div>
+                            </div>
+                        </div>
+                        {action.warnings?.length ? (
+                            <div className='mx-3 mb-2.5 rounded-xl bg-amber-50 px-2.5 py-2 text-[10.5px] leading-relaxed text-amber-800'>
+                                <WarningOutlined className='mr-1.5' />
+                                {action.warnings.slice(0, 2).join(' · ')}
+                                {action.warnings.length > 2 ? ` · +${action.warnings.length - 2} cảnh báo` : ''}
+                            </div>
+                        ) : null}
+                        <div className='border-t border-slate-100 px-3 py-2'>
+                            <Button
+                                type='primary'
+                                block
+                                icon={visual.icon}
+                                onClick={() => onRunAction?.(action)}
+                                className='!h-9 !rounded-xl !font-semibold'
+                                style={{ background: ACCENT }}
+                            >
+                                {action.label}
+                            </Button>
+                        </div>
+                    </div>
+                );
+            })}
 
             {data.transferDraft?.assets?.length ? (
                 <div className='overflow-hidden rounded-2xl border border-slate-200/70 bg-white shadow-sm'>
@@ -1927,36 +2143,51 @@ const AssistantResult: React.FC<{
 
             {data.sources?.length ? (
                 <div className='rounded-xl border border-slate-200/70 bg-slate-50/60 px-2.5 py-1.5'>
-                    <div className='mb-1 flex items-center gap-1 text-[10px] font-semibold tracking-wide text-slate-400 uppercase'>
+                    <div className='mb-1 flex flex-wrap items-center gap-1 text-[10px] font-semibold tracking-wide text-slate-400 uppercase'>
                         <DatabaseOutlined />
                         Nguồn dữ liệu
-                        {data.confidence ? (
-                            <span
-                                className='ml-auto rounded-full px-1.5 py-0.5 text-[9.5px] font-bold'
-                                style={{
-                                    background: `${CONFIDENCE[data.confidence].color}1a`,
-                                    color: CONFIDENCE[data.confidence].color,
-                                }}
-                            >
-                                {CONFIDENCE[data.confidence].label}
-                            </span>
-                        ) : null}
+                        <span className='ml-auto flex items-center gap-1'>
+                            {data.grounding && GROUNDING[data.grounding] ? (
+                                <span
+                                    className='rounded-full px-1.5 py-0.5 text-[9.5px] font-bold normal-case'
+                                    style={{
+                                        background: `${GROUNDING[data.grounding].color}14`,
+                                        color: GROUNDING[data.grounding].color,
+                                    }}
+                                >
+                                    {GROUNDING[data.grounding].label}
+                                </span>
+                            ) : null}
+                            {data.confidence ? (
+                                <span
+                                    className='rounded-full px-1.5 py-0.5 text-[9.5px] font-bold normal-case'
+                                    style={{
+                                        background: `${CONFIDENCE[data.confidence].color}1a`,
+                                        color: CONFIDENCE[data.confidence].color,
+                                    }}
+                                >
+                                    {CONFIDENCE[data.confidence].label}
+                                </span>
+                            ) : null}
+                        </span>
                     </div>
                     <div className='flex flex-wrap gap-1'>
-                        {data.sources.map((s) => (
+                        {data.sources.map((s, index) => (
                             <span
-                                key={s.tool}
+                                key={`${s.tool}-${s.scope || 'all'}-${index}`}
                                 className='inline-flex items-center gap-1 rounded-full bg-white px-2 py-0.5 text-[10.5px] text-slate-600 ring-1 ring-slate-200'
                                 title={s.module}
                             >
                                 {s.label}
                                 {s.scope ? <span className='text-slate-400'>· {s.scope}</span> : null}
-                                {s.records ? <b className='text-slate-700'>· {s.records}</b> : null}
+                                {s.records != null ? <b className='text-slate-700'>· {s.records}</b> : null}
                             </span>
                         ))}
                     </div>
                 </div>
             ) : null}
+
+            <AssistantFeedbackControls reqId={data.reqId} />
 
             {data.model ? (
                 <div className='flex items-center gap-1.5 pt-0.5 text-[10.5px] text-slate-400'>

@@ -54,6 +54,7 @@ import ContextChatDrawer from '../components/chat/ContextChatDrawer';
 import { useAuth } from '../core/contexts/AuthContext';
 import { api } from '../core/lib/api';
 import { normalizeSearchTerm } from '../core/lib/search';
+import { consumeAssistantAction, type MaterialAssistantDraft } from '../core/lib/assistant-actions';
 import { plantService } from '../core/services';
 import {
     aiMaterialMatchService,
@@ -254,10 +255,11 @@ const FormDrawer: React.FC<{
     initialValues?: PurchaseRequest | null;
     defaultPlantId?: string;
     defaultPlantName?: string;
+    assistantDraft?: MaterialAssistantDraft;
     submitting: boolean;
     onClose: () => void;
     onSubmit: (payload: Partial<PurchaseRequestPayload>) => Promise<void>;
-}> = ({ open, initialValues, defaultPlantId, defaultPlantName, submitting, onClose, onSubmit }) => {
+}> = ({ open, initialValues, defaultPlantId, defaultPlantName, assistantDraft, submitting, onClose, onSubmit }) => {
     const { message } = App.useApp();
     const [form] = Form.useForm<FormValues>();
     const scanInputRef = useRef<HTMLInputElement | null>(null);
@@ -285,11 +287,24 @@ const FormDrawer: React.FC<{
                     note: i.note,
                 })),
             });
+        } else if (assistantDraft?.items?.length) {
+            form.resetFields();
+            form.setFieldsValue({
+                fromPlantId: defaultPlantId,
+                note: assistantDraft.purpose,
+                requestDate: dayjs(),
+                items: assistantDraft.items.map((item) => ({
+                    materialName: item.materialName,
+                    unit: item.unit,
+                    quantityRequested: item.quantityRequested,
+                    note: item.note,
+                })),
+            });
         } else {
             form.resetFields();
             form.setFieldsValue({ fromPlantId: defaultPlantId, requestDate: dayjs(), items: [emptyItem()] });
         }
-    }, [open, initialValues, defaultPlantId, form]);
+    }, [open, initialValues, assistantDraft, defaultPlantId, form]);
 
     const clearScanHints = () => {
         setScanReview(null);
@@ -518,6 +533,20 @@ const FormDrawer: React.FC<{
                 layout='vertical'
                 className={isMobile ? 'min-h-full pb-4' : 'flex h-full min-h-0 flex-col'}
             >
+                {assistantDraft ? (
+                    <div className='shrink-0 bg-white px-4 pt-4 sm:px-6'>
+                        <Alert
+                            showIcon
+                            type={assistantDraft.unresolved?.length ? 'warning' : 'info'}
+                            message='Bản nháp do trợ lý chuẩn bị'
+                            description={
+                                assistantDraft.unresolved?.length
+                                    ? `Chưa khớp danh mục: ${assistantDraft.unresolved.join(', ')}. Chỉ các dòng đã khớp được điền vào form.`
+                                    : 'Kiểm tra lại vật tư, số lượng, đơn vị và mục đích trước khi gửi.'
+                            }
+                        />
+                    </div>
+                ) : null}
                 {/* Thông tin chung */}
                 <div className='shrink-0 border-b border-slate-200 bg-white px-4 py-4 sm:px-6 sm:py-5'>
                     <div className='mb-3 flex items-center gap-2 text-sm font-semibold text-slate-700'>
@@ -861,6 +890,7 @@ const SupplyRequestPage: React.FC = () => {
     const [selectedId, setSelectedId] = useState<string | null>(null);
     const [compensationOpen, setCompensationOpen] = useState(false);
     const [formOpen, setFormOpen] = useState(false);
+    const [assistantDraft, setAssistantDraft] = useState<MaterialAssistantDraft>();
     const [filterOpen, setFilterOpen] = useState(false);
     const [rejectTarget, setRejectTarget] = useState<PurchaseRequest | null>(null);
     const [chatOpen, setChatOpen] = useState(false);
@@ -880,6 +910,27 @@ const SupplyRequestPage: React.FC = () => {
 
     // Deep-link từ chat "Mở phiếu": ?request=<id> → mở drawer chi tiết rồi gỡ param khỏi URL
     const deepLinkId = searchParams.get('request');
+    const assistantActionId = searchParams.get('assistantAction');
+    useEffect(() => {
+        if (!assistantActionId) return;
+        const action = consumeAssistantAction<MaterialAssistantDraft>(assistantActionId, 'supply_request_draft');
+        setSearchParams(
+            (prev) => {
+                const next = new URLSearchParams(prev);
+                next.delete('assistantAction');
+                return next;
+            },
+            { replace: true }
+        );
+        if (!action?.payload?.items?.length) {
+            message.warning('Bản nháp đề xuất cấp đã hết hạn hoặc không còn hợp lệ.');
+            return;
+        }
+        setAssistantDraft(action.payload);
+        setFormOpen(true);
+        message.info('Đã điền bản nháp từ trợ lý. Hãy kiểm tra kỹ trước khi gửi đề xuất.');
+    }, [assistantActionId, message, setSearchParams]);
+
     useEffect(() => {
         if (!deepLinkId) return;
         setSelectedId(deepLinkId);
@@ -1018,6 +1069,7 @@ const SupplyRequestPage: React.FC = () => {
             queryClient.invalidateQueries({ queryKey: ['supply-requests'] });
             message.success('Tạo phiếu đề xuất thành công');
             setFormOpen(false);
+            setAssistantDraft(undefined);
         },
         onError: (e) => message.error(resolveError(e, 'Không thể tạo phiếu')),
     });
@@ -1547,8 +1599,12 @@ const SupplyRequestPage: React.FC = () => {
                 open={formOpen}
                 defaultPlantId={user?.plantId}
                 defaultPlantName={defaultPlantName}
+                assistantDraft={assistantDraft}
                 submitting={isCreating}
-                onClose={() => setFormOpen(false)}
+                onClose={() => {
+                    setFormOpen(false);
+                    setAssistantDraft(undefined);
+                }}
                 onSubmit={async (payload) => {
                     await createReq(payload);
                 }}

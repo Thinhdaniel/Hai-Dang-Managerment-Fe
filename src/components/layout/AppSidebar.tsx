@@ -23,6 +23,7 @@ import {
     MessageOutlined,
     QrcodeOutlined,
     RadarChartOutlined,
+    SafetyCertificateOutlined,
     SendOutlined,
     ShopOutlined,
     ShoppingCartOutlined,
@@ -297,6 +298,14 @@ const navigationSections: NavigationSection[] = [
                 icon: <AuditOutlined />,
                 matchMode: 'exact',
                 capability: 'dataQuality.view',
+            },
+            {
+                path: '/admin/assistant-quality',
+                label: 'Chất lượng AI',
+                description: 'Trace và đánh giá trợ lý',
+                icon: <SafetyCertificateOutlined />,
+                matchMode: 'exact',
+                capability: 'assistantQuality.view',
             },
             {
                 path: '/storage',

@@ -1,7 +1,9 @@
+import { useEffect } from 'react';
 import { App, DatePicker, Form, Input, InputNumber, Modal, Radio, Select } from 'antd';
 import dayjs, { type Dayjs } from 'dayjs';
-import type { Asset, MaintenanceRepairMode, MaintenanceType } from '../core/types';
+import { MaintenanceRepairMode, MaintenanceType, type Asset } from '../core/types';
 import type { MaintenancePayload } from '../core/services/maintenance.service';
+import type { MaintenanceAssistantDraft } from '../core/lib/assistant-actions';
 
 type MaintenanceFormValues = {
     assetIds: string[];
@@ -24,6 +26,7 @@ type MaintenanceFormModalProps = {
     open: boolean;
     assets: Asset[];
     initialAssetId?: string;
+    initialDraft?: MaintenanceAssistantDraft;
     submitting?: boolean;
     onClose: () => void;
     onSubmit: (payload: MaintenancePayload) => Promise<void> | void;
@@ -46,6 +49,7 @@ const MaintenanceFormModal = ({
     open,
     assets,
     initialAssetId,
+    initialDraft,
     submitting,
     onClose,
     onSubmit,
@@ -53,6 +57,26 @@ const MaintenanceFormModal = ({
     const [form] = Form.useForm<MaintenanceFormValues>();
     const { message } = App.useApp();
     const repairMode = Form.useWatch('repairMode', form) ?? 'internal';
+
+    useEffect(() => {
+        if (!open) return;
+        form.setFieldsValue({
+            assetIds: initialDraft?.assetIds?.length
+                ? initialDraft.assetIds
+                : initialAssetId
+                  ? [initialAssetId]
+                  : undefined,
+            type: initialDraft?.type || MaintenanceType.EMERGENCY,
+            repairMode: initialDraft?.repairMode || MaintenanceRepairMode.INTERNAL,
+            description: initialDraft?.description || undefined,
+            startDate: dayjs(),
+            technician: initialDraft?.technician,
+            note: initialDraft?.note,
+            externalRepair: {
+                sentOutAt: dayjs(),
+            },
+        });
+    }, [form, initialAssetId, initialDraft, open]);
 
     const assetOptions = assets.map((asset) => ({
         value: asset.id,
@@ -111,10 +135,17 @@ const MaintenanceFormModal = ({
                 layout='vertical'
                 requiredMark='optional'
                 initialValues={{
-                    assetIds: initialAssetId ? [initialAssetId] : undefined,
-                    type: 'emergency',
-                    repairMode: 'internal',
+                    assetIds: initialDraft?.assetIds?.length
+                        ? initialDraft.assetIds
+                        : initialAssetId
+                          ? [initialAssetId]
+                          : undefined,
+                    type: initialDraft?.type || MaintenanceType.EMERGENCY,
+                    repairMode: initialDraft?.repairMode || MaintenanceRepairMode.INTERNAL,
+                    description: initialDraft?.description,
                     startDate: dayjs(),
+                    technician: initialDraft?.technician,
+                    note: initialDraft?.note,
                     externalRepair: {
                         sentOutAt: dayjs(),
                     },

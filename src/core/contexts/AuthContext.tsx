@@ -16,6 +16,7 @@ import {
     setStoredAccessToken,
     type AuthTokenChangedDetail,
 } from '../lib/auth-session';
+import { clearAllAssistantSessions } from '../lib/assistant-session';
 
 type LoginResult = {
     access_token: string;
@@ -40,6 +41,7 @@ export const AuthProvider = ({ children }: PropsWithChildren) => {
 
     const clearLocalSession = useCallback(() => {
         clearStoredAccessToken();
+        clearAllAssistantSessions();
         setAccessToken(null);
         setUserState(null);
         socketService.disconnect();

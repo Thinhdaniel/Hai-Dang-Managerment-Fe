@@ -53,6 +53,7 @@ import ConfirmAction from '../components/shared/ConfirmAction';
 import PageHeader from '../components/shared/PageHeader';
 import ContextChatDrawer from '../components/chat/ContextChatDrawer';
 import { useAuth } from '../core/contexts/AuthContext';
+import { consumeAssistantAction, type MaterialAssistantDraft } from '../core/lib/assistant-actions';
 import { plantService } from '../core/services';
 import {
     aiMaterialMatchService,
@@ -706,12 +707,22 @@ type ModalFormProps = {
     initial?: PurchaseRequest | null;
     plants: Plant[];
     mainPlantId: string;
+    assistantDraft?: MaterialAssistantDraft;
     submitting: boolean;
     onClose: () => void;
     onSave: (payload: PurchaseRequestPayload, status: 'draft' | 'pending') => Promise<void>;
 };
 
-const ModalForm: React.FC<ModalFormProps> = ({ open, initial, plants, mainPlantId, submitting, onClose, onSave }) => {
+const ModalForm: React.FC<ModalFormProps> = ({
+    open,
+    initial,
+    plants,
+    mainPlantId,
+    assistantDraft,
+    submitting,
+    onClose,
+    onSave,
+}) => {
     const { modal, notification } = App.useApp();
     const screens = useBreakpoint();
     const isEditingPending = initial?.status === 'pending';
@@ -862,6 +873,23 @@ const ModalForm: React.FC<ModalFormProps> = ({ open, initial, plants, mainPlantI
                     sourceTechnicalItemIndex: it.sourceTechnicalItemIndex,
                 })
             );
+        } else if (assistantDraft?.items?.length) {
+            setMonth(now.month() + 1);
+            setYear(now.year());
+            loadedItems = assistantDraft.items.map((item) =>
+                computeRow({
+                    ...newRow(),
+                    materialId: item.materialId,
+                    materialName: item.materialName,
+                    plantId: assistantDraft.plantId || mainPlantId,
+                    proposedBy: assistantDraft.proposedBy || '',
+                    quantityRequested: item.quantityRequested,
+                    unit: item.unit,
+                    quantityOrdered: item.quantityRequested,
+                    purpose: assistantDraft.purpose || '',
+                    note: item.note || '',
+                })
+            );
         } else {
             setMonth(now.month() + 1);
             setYear(now.year());
@@ -877,7 +905,7 @@ const ModalForm: React.FC<ModalFormProps> = ({ open, initial, plants, mainPlantI
         setAiMatching(false);
         setMaterialSearchInput('');
         lastTotalRef.current = loadedItems.reduce((s, r) => s + r.totalWithVat, 0);
-    }, [open, initial]);
+    }, [open, initial, assistantDraft, mainPlantId]);
 
     const totals = useMemo(
         () => ({
@@ -2457,6 +2485,19 @@ const ModalForm: React.FC<ModalFormProps> = ({ open, initial, plants, mainPlantI
                     </div>
                 }
             >
+                {assistantDraft ? (
+                    <Alert
+                        showIcon
+                        type={assistantDraft.unresolved?.length ? 'warning' : 'info'}
+                        className='mb-4'
+                        title='Bản nháp do trợ lý chuẩn bị'
+                        description={
+                            assistantDraft.unresolved?.length
+                                ? `Chưa khớp danh mục: ${assistantDraft.unresolved.join(', ')}. Hãy bổ sung nếu cần.`
+                                : 'Kiểm tra người đề xuất, mục đích, số lượng, đơn vị và cơ sở trước khi lưu.'
+                        }
+                    />
+                ) : null}
                 <div className='mb-4 grid grid-cols-2 gap-3'>
                     <div>
                         <div className='mb-1 text-xs text-slate-400'>
@@ -2740,6 +2781,20 @@ const ModalForm: React.FC<ModalFormProps> = ({ open, initial, plants, mainPlantI
                     style={{ flexShrink: 0, color: '#64748b' }}
                 />
             </div>
+
+            {assistantDraft ? (
+                <Alert
+                    showIcon
+                    type={assistantDraft.unresolved?.length ? 'warning' : 'info'}
+                    style={{ borderRadius: 0, flexShrink: 0 }}
+                    title='Bản nháp do trợ lý chuẩn bị — chưa ghi dữ liệu'
+                    description={
+                        assistantDraft.unresolved?.length
+                            ? `Chưa khớp danh mục: ${assistantDraft.unresolved.join(', ')}. Kiểm tra và bổ sung trước khi lưu.`
+                            : 'Kiểm tra người đề xuất, mục đích, số lượng, đơn vị và cơ sở trước khi lưu.'
+                    }
+                />
+            ) : null}
 
             {/* Main body: left grid + right detail */}
             <div style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
@@ -3603,6 +3658,7 @@ const PurchaseRequestPage: React.FC = () => {
     const screens = useBreakpoint();
     const isMobile = !screens.sm;
     const [modalOpen, setModalOpen] = useState(false);
+    const [assistantDraft, setAssistantDraft] = useState<MaterialAssistantDraft>();
     const [editingRecord, setEditingRecord] = useState<PurchaseRequest | null>(null);
     const [selectedId, setSelectedId] = useState<string | null>(null);
     const [rejectTarget, setRejectTarget] = useState<PurchaseRequest | null>(null);
@@ -3612,6 +3668,28 @@ const PurchaseRequestPage: React.FC = () => {
 
     // Deep-link từ chat "Mở phiếu": ?request=<id> → mở drawer chi tiết rồi gỡ param khỏi URL
     const deepLinkId = searchParams.get('request');
+    const assistantActionId = searchParams.get('assistantAction');
+    useEffect(() => {
+        if (!assistantActionId) return;
+        const action = consumeAssistantAction<MaterialAssistantDraft>(assistantActionId, 'purchase_request_draft');
+        setSearchParams(
+            (prev) => {
+                const next = new URLSearchParams(prev);
+                next.delete('assistantAction');
+                return next;
+            },
+            { replace: true }
+        );
+        if (!action?.payload?.items?.length) {
+            message.warning('Bản nháp đề xuất mua đã hết hạn hoặc không còn hợp lệ.');
+            return;
+        }
+        setEditingRecord(null);
+        setAssistantDraft(action.payload);
+        setModalOpen(true);
+        message.info('Đã điền bản nháp từ trợ lý. Hãy kiểm tra kỹ trước khi lưu hoặc gửi duyệt.');
+    }, [assistantActionId, message, setSearchParams]);
+
     useEffect(() => {
         if (!deepLinkId) return;
         setSelectedId(deepLinkId);
@@ -3715,6 +3793,7 @@ const PurchaseRequestPage: React.FC = () => {
             }
             setModalOpen(false);
             setEditingRecord(null);
+            setAssistantDraft(undefined);
         } catch (e: any) {
             message.error(e?.message ?? 'Có lỗi xảy ra');
             throw e;
@@ -3911,6 +3990,7 @@ const PurchaseRequestPage: React.FC = () => {
                         style={{ background: '#1A3A5C' }}
                         onClick={() => {
                             setEditingRecord(null);
+                            setAssistantDraft(undefined);
                             setModalOpen(true);
                         }}
                     >
@@ -4194,10 +4274,12 @@ const PurchaseRequestPage: React.FC = () => {
                 initial={editingRecord}
                 plants={plants}
                 mainPlantId={currentPurchasePlantId}
+                assistantDraft={assistantDraft}
                 submitting={createMut.isPending || updateMut.isPending}
                 onClose={() => {
                     setModalOpen(false);
                     setEditingRecord(null);
+                    setAssistantDraft(undefined);
                 }}
                 onSave={handleSave}
             />
@@ -4209,6 +4291,7 @@ const PurchaseRequestPage: React.FC = () => {
                 onClose={() => setSelectedId(null)}
                 onEdit={() => {
                     setEditingRecord(detailRecord ?? null);
+                    setAssistantDraft(undefined);
                     setModalOpen(true);
                 }}
                 onApprove={handleApprove}

@@ -536,23 +536,34 @@ export type AssistantTransferDraft = {
     warnings: string[];
 };
 
+export type { AssistantActionProposal } from '../lib/assistant-actions';
+
 export type AssetAssistantResponse = {
-    domain?: 'asset' | 'material' | 'cost';
+    domain?: 'asset' | 'material' | 'cost' | 'mixed';
     answer: string;
     intent: string;
     count: number;
     items: AssistantItem[];
     aggregates: AssistantAggregates;
     transferDraft?: AssistantTransferDraft;
+    actions?: import('../lib/assistant-actions').AssistantActionProposal[];
     appliedFilters?: AssistantAppliedFilters;
     followups: string[];
     sources?: AssistantSource[];
     confidence?: 'high' | 'medium' | 'low' | 'none';
+    grounding?: 'verified' | 'corrected' | 'unverified' | 'not_applicable';
+    groundingIssueCount?: number;
     reqId?: string;
     tookMs?: number;
     provider: string;
     model?: string;
     tier?: 'light' | 'standard' | 'heavy';
+};
+
+export type AssistantFeedbackInput = {
+    rating: 'helpful' | 'not_helpful';
+    reason?: 'incorrect' | 'misunderstood' | 'missing_data' | 'too_slow' | 'too_verbose' | 'other';
+    note?: string;
 };
 
 // Bước tiến trình bắn ra trong lúc trợ lý đang xử lý (streaming).
@@ -570,6 +581,12 @@ export const operationsAssistantService = {
             { timeout: 90000 }
         ),
 
+    submitFeedback: (reqId: string, input: AssistantFeedbackInput) =>
+        api.post<{ reqId: string; feedback: AssistantFeedbackInput }, AssistantFeedbackInput>(
+            `/ai/assistant/${encodeURIComponent(reqId)}/feedback`,
+            input
+        ),
+
     // Streaming (SSE qua fetch): nhận tiến trình thật theo thời gian thực rồi trả kết quả cuối.
     // Nếu trình duyệt/mạng/proxy không hỗ trợ -> ném lỗi để nơi gọi fallback sang ask().
     askStream: async (
@@ -584,7 +601,17 @@ export const operationsAssistantService = {
             body: JSON.stringify({ messages }),
             signal: handlers.signal,
         });
-        if (!resp.ok || !resp.body) throw new Error(`stream HTTP ${resp.status}`);
+        if (!resp.ok) {
+            let serverMessage = '';
+            try {
+                const payload = (await resp.json()) as { message?: string };
+                serverMessage = payload?.message ? `: ${payload.message}` : '';
+            } catch {
+                // Response không phải JSON.
+            }
+            throw new Error(`stream HTTP ${resp.status}${serverMessage}`);
+        }
+        if (!resp.body) throw new Error(`stream HTTP ${resp.status}: empty body`);
 
         const reader = resp.body.getReader();
         const decoder = new TextDecoder();
@@ -612,7 +639,6 @@ export const operationsAssistantService = {
             else if (event === 'error') errored = true;
         };
 
-        // eslint-disable-next-line no-constant-condition
         while (true) {
             const { done: streamDone, value } = await reader.read();
             if (streamDone) break;
@@ -783,11 +809,7 @@ export const aiOcrService = {
     },
     // Dán tin nhắn báo giá (Zalo/SMS) -> trích dòng vật tư, cùng schema với OCR ảnh
     parsePurchaseQuoteText: (text: string): Promise<InvoiceOcrResponse> =>
-        api.post<InvoiceOcrResponse, { text: string }>(
-            '/ai/ocr/purchase-quote-text',
-            { text },
-            { timeout: 70000 }
-        ),
+        api.post<InvoiceOcrResponse, { text: string }>('/ai/ocr/purchase-quote-text', { text }, { timeout: 70000 }),
     scanPurchaseInvoice: (image: File): Promise<InvoiceOcrResponse> => {
         const formData = new FormData();
         formData.append('image', image);
@@ -1027,10 +1049,18 @@ export const aiAnalyticsService = {
     catalog: (): Promise<AnalyticsCatalog> => api.get<AnalyticsCatalog>('/ai/analytics/catalog'),
     query: (body: AnalyticsQueryBody): Promise<AnalyticsResult> =>
         api.post<AnalyticsResult, AnalyticsQueryBody>('/ai/analytics/query', body, { timeout: 65000 }),
-    incidentReplay: (body: { question: string; periodDays: number; sessionId?: string }): Promise<IncidentReplayResult> =>
-        api.post<IncidentReplayResult, { question: string; periodDays: number; sessionId?: string }>('/ai/incident-replay', body, {
-            timeout: 90000,
-        }),
+    incidentReplay: (body: {
+        question: string;
+        periodDays: number;
+        sessionId?: string;
+    }): Promise<IncidentReplayResult> =>
+        api.post<IncidentReplayResult, { question: string; periodDays: number; sessionId?: string }>(
+            '/ai/incident-replay',
+            body,
+            {
+                timeout: 90000,
+            }
+        ),
     incidentReplayHistory: (limit = 12): Promise<IncidentReplayHistoryItem[]> =>
         api.get<IncidentReplayHistoryItem[]>(`/ai/incident-replay/history?limit=${limit}`),
     incidentReplayHistoryDetail: (id: string): Promise<IncidentReplayResult & { id: string }> =>
@@ -1039,16 +1069,16 @@ export const aiAnalyticsService = {
         id: string,
         body: { rating: 'accurate' | 'wrong' | 'missing_data' | 'irrelevant'; note?: string }
     ): Promise<IncidentReplayHistoryItem> =>
-        api.post<IncidentReplayHistoryItem, { rating: 'accurate' | 'wrong' | 'missing_data' | 'irrelevant'; note?: string }>(
-            `/ai/incident-replay/history/${id}/feedback`,
-            body
-        ),
+        api.post<
+            IncidentReplayHistoryItem,
+            { rating: 'accurate' | 'wrong' | 'missing_data' | 'irrelevant'; note?: string }
+        >(`/ai/incident-replay/history/${id}/feedback`, body),
     incidentReplayWorkflow: (
         id: string,
         body: { action: IncidentReplayWorkflowAction; note?: string; conclusion?: string }
     ): Promise<IncidentReplayResult & { id: string }> =>
-        api.patch<IncidentReplayResult & { id: string }, { action: IncidentReplayWorkflowAction; note?: string; conclusion?: string }>(
-            `/ai/incident-replay/history/${id}/workflow`,
-            body
-        ),
+        api.patch<
+            IncidentReplayResult & { id: string },
+            { action: IncidentReplayWorkflowAction; note?: string; conclusion?: string }
+        >(`/ai/incident-replay/history/${id}/workflow`, body),
 };
