@@ -2,8 +2,7 @@ import React, { useState } from 'react';
 import { Card, Segmented, Spin, Tag } from 'antd';
 import { ArrowDownOutlined, ArrowUpOutlined, LineChartOutlined } from '@ant-design/icons';
 import { useQuery } from '@tanstack/react-query';
-import { varianceService, type VarianceMetric } from '../../core/services/digest.service';
-import type { DigestPeriod } from '../../core/services/digest.service';
+import { varianceService, type VarianceMetric, type VariancePeriod } from '../../core/services/variance.service';
 
 const METRICS: { label: string; value: VarianceMetric }[] = [
     { label: 'Tổng chi phí', value: 'total_cost' },
@@ -14,7 +13,7 @@ const METRICS: { label: string; value: VarianceMetric }[] = [
 
 const DashboardVarianceCard: React.FC = () => {
     const [metric, setMetric] = useState<VarianceMetric>('total_cost');
-    const [period, setPeriod] = useState<DigestPeriod>('month');
+    const [period, setPeriod] = useState<VariancePeriod>('month');
 
     const { data, isFetching } = useQuery({
         queryKey: ['variance', metric, period],
@@ -42,7 +41,7 @@ const DashboardVarianceCard: React.FC = () => {
                 <Segmented
                     size='small'
                     value={period}
-                    onChange={(v) => setPeriod(v as DigestPeriod)}
+                    onChange={(v) => setPeriod(v as VariancePeriod)}
                     options={[
                         { label: 'Tuần', value: 'week' },
                         { label: 'Tháng', value: 'month' },
@@ -115,7 +114,9 @@ const DashboardVarianceCard: React.FC = () => {
                     ) : null}
 
                     {data.provider === 'fallback' ? (
-                        <div className='text-right text-[10.5px] text-slate-400'>AI tạm nghỉ — giải thích theo số liệu</div>
+                        <div className='text-right text-[10.5px] text-slate-400'>
+                            AI tạm nghỉ — giải thích theo số liệu
+                        </div>
                     ) : null}
                 </div>
             ) : (

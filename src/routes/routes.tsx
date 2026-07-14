@@ -40,7 +40,6 @@ const IncidentReplayCasePage = lazy(() => import('../pages/IncidentReplayCasePag
 const DataQualityDashboard = lazy(() => import('../pages/DataQualityDashboard'));
 const AiAssistantQualityPage = lazy(() => import('../pages/AiAssistantQualityPage'));
 const LuckyWheelPage = lazy(() => import('../pages/LuckyWheelPage'));
-const ExecutiveDigestPage = lazy(() => import('../pages/ExecutiveDigestPage'));
 const LoginPage = lazy(() => import('../pages/LoginPage'));
 const ForgotPasswordPage = lazy(() => import('../pages/ForgotPasswordPage'));
 const ResetPasswordPage = lazy(() => import('../pages/ResetPasswordPage'));
@@ -153,7 +152,6 @@ export const router = createBrowserRouter([
                 element: guarded('/admin/assistant-quality', <AiAssistantQualityPage />),
             },
             { path: 'events/lucky-wheel', element: guarded('/events/lucky-wheel', <LuckyWheelPage />) },
-            { path: 'executive-digests', element: guarded('/executive-digests', <ExecutiveDigestPage />) },
         ],
     },
     {

@@ -21,7 +21,6 @@ import DashboardCostTrendCard from '../components/dashboard/DashboardCostTrendCa
 import DashboardFacilityDistributionCard from '../components/dashboard/DashboardFacilityDistributionCard';
 import DashboardOperationsCard from '../components/dashboard/DashboardOperationsCard';
 import DashboardMislocatedCard from '../components/dashboard/DashboardMislocatedCard';
-import DashboardDigestCard from '../components/dashboard/DashboardDigestCard';
 import DashboardAuditCard from '../components/dashboard/DashboardAuditCard';
 import DashboardVarianceCard from '../components/dashboard/DashboardVarianceCard';
 import DashboardOverdueCard from '../components/dashboard/DashboardOverdueCard';
@@ -270,8 +269,7 @@ const Dashboard: React.FC = () => {
             </div>
 
             {canViewCost ? (
-                <div className='grid grid-cols-1 gap-4 xl:grid-cols-2'>
-                    <DashboardDigestCard />
+                <div className='grid grid-cols-1 gap-4'>
                     <DashboardVarianceCard />
                 </div>
             ) : null}
