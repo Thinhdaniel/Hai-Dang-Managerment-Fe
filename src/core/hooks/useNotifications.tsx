@@ -134,6 +134,7 @@ export const useNotifications = (socket: import('socket.io-client').Socket | nul
                     technical_purchase: [['technical-purchase-requests']],
                     distribution: [['distributions']],
                     floor_map: [['floor-map-reality'], ['floor-map-operations'], ['floor-map']],
+                    briefing: [['dashboard', 'executive-briefing']],
                 };
                 const keys = invalidateMap[notification.actionType] ?? [];
                 keys.forEach((queryKey) => queryClient.invalidateQueries({ queryKey }));

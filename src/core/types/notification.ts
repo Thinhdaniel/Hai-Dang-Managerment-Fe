@@ -14,6 +14,7 @@ export type NotificationActionType =
     | 'chat'
     | 'floor_map'
     | 'digest'
+    | 'briefing'
     | 'system';
 
 export interface Notification {

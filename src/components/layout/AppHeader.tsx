@@ -295,6 +295,8 @@ const AppHeader: React.FC<AppHeaderProps> = ({ collapsed, isDesktop, mobileOpen,
                         href = `/chat${item.actionId ? `?conversation=${encodeURIComponent(item.actionId)}` : ''}`;
                     } else if (item.actionType === 'floor_map') {
                         href = `/assets/floor-map?reality=1${item.actionId ? `&plantId=${encodeURIComponent(item.actionId)}` : ''}`;
+                    } else if (item.actionType === 'briefing') {
+                        href = `/dashboard${item.actionId ? `?briefing=${encodeURIComponent(item.actionId)}` : ''}`;
                     }
 
                     return (

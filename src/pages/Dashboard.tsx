@@ -22,7 +22,7 @@ import DashboardFacilityDistributionCard from '../components/dashboard/Dashboard
 import DashboardOperationsCard from '../components/dashboard/DashboardOperationsCard';
 import DashboardMislocatedCard from '../components/dashboard/DashboardMislocatedCard';
 import DashboardAuditCard from '../components/dashboard/DashboardAuditCard';
-import DashboardVarianceCard from '../components/dashboard/DashboardVarianceCard';
+import DashboardExecutiveBriefing from '../components/dashboard/DashboardExecutiveBriefing';
 import DashboardOverdueCard from '../components/dashboard/DashboardOverdueCard';
 import DashboardRecentActivityCard from '../components/dashboard/DashboardRecentActivityCard';
 import DashboardTopBrokenCard from '../components/dashboard/DashboardTopBrokenCard';
@@ -30,11 +30,7 @@ import PageHeader from '../components/shared/PageHeader';
 import StatsCard from '../components/shared/StatsCard';
 import { useAuth } from '../core/contexts/AuthContext';
 import { isAdmin, isDirector } from '../core/lib/permissions';
-import {
-    useDashboardCharts,
-    useDashboardInsights,
-    useDashboardOverview,
-} from '../core/hooks/useDashboardOverview';
+import { useDashboardCharts, useDashboardInsights, useDashboardOverview } from '../core/hooks/useDashboardOverview';
 import type { DashboardOverviewResponse } from '../core/types';
 
 const emptyOverview: DashboardOverviewResponse = {
@@ -66,8 +62,12 @@ const Dashboard: React.FC = () => {
     // Chi phí chỉ dành cho ADMIN + Giám đốc (kỹ thuật & quản lý không thấy trên dashboard).
     const canViewCost = isAdmin(user?.role) || isDirector(user?.role);
     const { data = emptyOverview, isLoading, isFetching, refetch, dataUpdatedAt } = useDashboardOverview();
-    const { data: chartData, isLoading: chartsLoading, isFetching: chartsFetching, refetch: refetchCharts } =
-        useDashboardCharts();
+    const {
+        data: chartData,
+        isLoading: chartsLoading,
+        isFetching: chartsFetching,
+        refetch: refetchCharts,
+    } = useDashboardCharts();
     const {
         data: insights,
         isLoading: insightsLoading,
@@ -268,11 +268,7 @@ const Dashboard: React.FC = () => {
                 ))}
             </div>
 
-            {canViewCost ? (
-                <div className='grid grid-cols-1 gap-4'>
-                    <DashboardVarianceCard />
-                </div>
-            ) : null}
+            {canViewCost ? <DashboardExecutiveBriefing /> : null}
 
             {canViewCost ? <DashboardAuditCard /> : null}
 
