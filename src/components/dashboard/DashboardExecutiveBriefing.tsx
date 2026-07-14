@@ -331,7 +331,7 @@ const DataNotes = ({ briefing }: { briefing: ExecutiveBriefing }) => {
                     <strong>{aiReady ? 'AI đã hoàn tất phân tích có kiểm chứng' : 'Đang dùng quy tắc hệ thống'}</strong>
                     <p>
                         {aiReady
-                            ? 'AI chỉ bổ sung cách diễn giải trên các bằng chứng đã được backend tính và đối chiếu.'
+                            ? `AI đã bổ sung ${briefing.aiContributionCount ?? 0} nhận định trên các bằng chứng được backend tính và đối chiếu.`
                             : `${briefing.fallbackReason || 'Nhà cung cấp AI tạm thời không khả dụng.'} Số liệu, cảnh báo và hành động vẫn được tạo từ dữ liệu thật.`}
                     </p>
                     {!aiReady && briefing.nextAiRetryAt ? (
@@ -404,6 +404,12 @@ const DataNotes = ({ briefing }: { briefing: ExecutiveBriefing }) => {
                         <dt>Mô hình</dt>
                         <dd>{modelLabel}</dd>
                     </div>
+                    {aiReady ? (
+                        <div>
+                            <dt>Đóng góp AI</dt>
+                            <dd>{briefing.aiContributionCount ?? 0} nhận định</dd>
+                        </div>
+                    ) : null}
                     {briefing.aiAttemptedAt ? (
                         <div>
                             <dt>Lần xử lý AI</dt>

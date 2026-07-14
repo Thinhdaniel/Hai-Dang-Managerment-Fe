@@ -155,6 +155,7 @@ export interface ExecutiveBriefing {
     fallbackReason?: string;
     aiAttemptedAt?: string;
     nextAiRetryAt?: string;
+    aiContributionCount?: number;
     version: number;
     createdAt: string;
     updatedAt: string;
@@ -178,6 +179,7 @@ export type ExecutiveBriefingHistoryItem = Pick<
     | 'fallbackReason'
     | 'aiAttemptedAt'
     | 'nextAiRetryAt'
+    | 'aiContributionCount'
     | 'version'
     | 'createdAt'
     | 'updatedAt'
