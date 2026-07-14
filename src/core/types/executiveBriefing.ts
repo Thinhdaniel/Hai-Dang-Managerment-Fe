@@ -1,6 +1,13 @@
 export type BriefingPeriodType = 'week' | 'month';
 export type BriefingSeverity = 'positive' | 'info' | 'warning' | 'critical';
 export type BriefingGenerationStatus = 'ready' | 'degraded';
+export type BriefingFallbackCode =
+    | 'ai_disabled'
+    | 'authentication'
+    | 'quota'
+    | 'timeout'
+    | 'invalid_response'
+    | 'provider_unavailable';
 
 export interface BriefingComparison {
     current: number;
@@ -144,6 +151,10 @@ export interface ExecutiveBriefing {
     provider?: string;
     model?: string;
     latencyMs?: number;
+    fallbackCode?: BriefingFallbackCode;
+    fallbackReason?: string;
+    aiAttemptedAt?: string;
+    nextAiRetryAt?: string;
     version: number;
     createdAt: string;
     updatedAt: string;
@@ -163,6 +174,10 @@ export type ExecutiveBriefingHistoryItem = Pick<
     | 'trigger'
     | 'provider'
     | 'model'
+    | 'fallbackCode'
+    | 'fallbackReason'
+    | 'aiAttemptedAt'
+    | 'nextAiRetryAt'
     | 'version'
     | 'createdAt'
     | 'updatedAt'

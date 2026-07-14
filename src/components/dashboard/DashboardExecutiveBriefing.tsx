@@ -316,74 +316,105 @@ const DrawerOverview = ({ briefing, onAction }: { briefing: ExecutiveBriefing; o
     );
 };
 
-const DataNotes = ({ briefing }: { briefing: ExecutiveBriefing }) => (
-    <div className='briefing-drawer-pane'>
-        {briefing.snapshot.dataWarnings.length ? (
-            <section className='briefing-data-warning'>
-                <AlertTriangle size={19} />
+const DataNotes = ({ briefing }: { briefing: ExecutiveBriefing }) => {
+    const aiReady = briefing.generationStatus === 'ready';
+    const modelLabel = aiReady ? briefing.model || briefing.provider || 'Không ghi nhận' : 'Quy tắc hệ thống';
+
+    return (
+        <div className='briefing-drawer-pane'>
+            <section className={`briefing-ai-source briefing-ai-source--${aiReady ? 'ready' : 'fallback'}`}>
+                <span className='briefing-ai-source__icon'>
+                    {aiReady ? <ShieldCheck size={20} /> : <AlertTriangle size={20} />}
+                </span>
                 <div>
-                    <strong>Lưu ý chất lượng dữ liệu</strong>
-                    {briefing.snapshot.dataWarnings.map((warning) => (
-                        <p key={warning}>{warning}</p>
+                    <span className='briefing-section-kicker'>Phương thức diễn giải</span>
+                    <strong>{aiReady ? 'AI đã hoàn tất phân tích có kiểm chứng' : 'Đang dùng quy tắc hệ thống'}</strong>
+                    <p>
+                        {aiReady
+                            ? 'AI chỉ bổ sung cách diễn giải trên các bằng chứng đã được backend tính và đối chiếu.'
+                            : `${briefing.fallbackReason || 'Nhà cung cấp AI tạm thời không khả dụng.'} Số liệu, cảnh báo và hành động vẫn được tạo từ dữ liệu thật.`}
+                    </p>
+                    {!aiReady && briefing.nextAiRetryAt ? (
+                        <small>
+                            <Clock3 size={13} /> Hệ thống tự thử lại từ{' '}
+                            {dayjs(briefing.nextAiRetryAt).format('HH:mm DD/MM/YYYY')}
+                        </small>
+                    ) : null}
+                </div>
+            </section>
+            {briefing.snapshot.dataWarnings.length ? (
+                <section className='briefing-data-warning'>
+                    <AlertTriangle size={19} />
+                    <div>
+                        <strong>Lưu ý chất lượng dữ liệu</strong>
+                        {briefing.snapshot.dataWarnings.map((warning) => (
+                            <p key={warning}>{warning}</p>
+                        ))}
+                    </div>
+                </section>
+            ) : (
+                <section className='briefing-data-ok'>
+                    <ShieldCheck size={20} />
+                    <div>
+                        <strong>Không có cảnh báo nguồn dữ liệu</strong>
+                        <p>Các tập dữ liệu chính đã được tổng hợp thành công tại thời điểm chốt.</p>
+                    </div>
+                </section>
+            )}
+            <section>
+                <div className='briefing-section-heading'>
+                    <div>
+                        <span className='briefing-section-kicker'>Phạm vi và định nghĩa</span>
+                        <h3>Cách hệ thống tính các chỉ số</h3>
+                    </div>
+                </div>
+                <div className='briefing-definition-list'>
+                    {briefing.snapshot.dataDefinitions.map((definition) => (
+                        <div key={definition.key}>
+                            <strong>{definition.label}</strong>
+                            <p>{definition.definition}</p>
+                        </div>
                     ))}
                 </div>
             </section>
-        ) : (
-            <section className='briefing-data-ok'>
-                <ShieldCheck size={20} />
-                <div>
-                    <strong>Không có cảnh báo nguồn dữ liệu</strong>
-                    <p>Các tập dữ liệu chính đã được tổng hợp thành công tại thời điểm chốt.</p>
-                </div>
-            </section>
-        )}
-        <section>
-            <div className='briefing-section-heading'>
-                <div>
-                    <span className='briefing-section-kicker'>Phạm vi và định nghĩa</span>
-                    <h3>Cách hệ thống tính các chỉ số</h3>
-                </div>
-            </div>
-            <div className='briefing-definition-list'>
-                {briefing.snapshot.dataDefinitions.map((definition) => (
-                    <div key={definition.key}>
-                        <strong>{definition.label}</strong>
-                        <p>{definition.definition}</p>
+            <section className='briefing-provenance'>
+                <span className='briefing-section-kicker'>Thông tin bản tin</span>
+                <dl>
+                    <div>
+                        <dt>Thời điểm chốt</dt>
+                        <dd>{dayjs(briefing.dataAsOf).format('DD/MM/YYYY HH:mm')}</dd>
                     </div>
-                ))}
-            </div>
-        </section>
-        <section className='briefing-provenance'>
-            <span className='briefing-section-kicker'>Thông tin bản tin</span>
-            <dl>
-                <div>
-                    <dt>Thời điểm chốt</dt>
-                    <dd>{dayjs(briefing.dataAsOf).format('DD/MM/YYYY HH:mm')}</dd>
-                </div>
-                <div>
-                    <dt>Kỳ so sánh</dt>
-                    <dd>{briefing.comparisonLabel}</dd>
-                </div>
-                <div>
-                    <dt>Phiên bản</dt>
-                    <dd>v{briefing.version}</dd>
-                </div>
-                <div>
-                    <dt>Nội dung</dt>
-                    <dd>
-                        {briefing.generationStatus === 'ready'
-                            ? 'Phân tích có kiểm chứng'
-                            : 'Tóm tắt xác định dự phòng'}
-                    </dd>
-                </div>
-                <div>
-                    <dt>Mô hình</dt>
-                    <dd>{briefing.model || briefing.provider || 'Không sử dụng'}</dd>
-                </div>
-            </dl>
-        </section>
-    </div>
-);
+                    <div>
+                        <dt>Kỳ so sánh</dt>
+                        <dd>{briefing.comparisonLabel}</dd>
+                    </div>
+                    <div>
+                        <dt>Phiên bản</dt>
+                        <dd>v{briefing.version}</dd>
+                    </div>
+                    <div>
+                        <dt>Nội dung</dt>
+                        <dd>
+                            {briefing.generationStatus === 'ready'
+                                ? 'Phân tích có kiểm chứng'
+                                : 'Tóm tắt xác định dự phòng'}
+                        </dd>
+                    </div>
+                    <div>
+                        <dt>Mô hình</dt>
+                        <dd>{modelLabel}</dd>
+                    </div>
+                    {briefing.aiAttemptedAt ? (
+                        <div>
+                            <dt>Lần xử lý AI</dt>
+                            <dd>{dayjs(briefing.aiAttemptedAt).format('DD/MM/YYYY HH:mm')}</dd>
+                        </div>
+                    ) : null}
+                </dl>
+            </section>
+        </div>
+    );
+};
 
 const DashboardExecutiveBriefing = () => {
     const navigate = useNavigate();
@@ -531,7 +562,7 @@ const DashboardExecutiveBriefing = () => {
                                 <Tag color={previewBriefing?.generationStatus === 'ready' ? 'green' : 'gold'}>
                                     {previewBriefing?.generationStatus === 'ready'
                                         ? 'Đã đối chiếu'
-                                        : 'Nội dung dự phòng'}
+                                        : 'Quy tắc hệ thống'}
                                 </Tag>
                             </div>
                             <p>
@@ -669,7 +700,7 @@ const DashboardExecutiveBriefing = () => {
                                 <ShieldCheck size={14} />{' '}
                                 {briefing.generationStatus === 'ready'
                                     ? 'Nội dung đã kiểm chứng số liệu'
-                                    : 'Đang dùng tóm tắt dự phòng'}
+                                    : 'Số liệu đã kiểm chứng · diễn giải dự phòng'}
                             </span>
                         </div>
                     ) : null}

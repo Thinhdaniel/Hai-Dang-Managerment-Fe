@@ -6037,6 +6037,62 @@ body:has(.ant-image-preview-root) .hd-launcher {
     display: block;
 }
 
+.briefing-ai-source {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    border: 1px solid #cddfea;
+    background: #f5f9fc;
+    padding: 15px 16px;
+}
+
+.briefing-ai-source--fallback {
+    border-color: #ead7ae;
+    background: #fffaf0;
+}
+
+.briefing-ai-source__icon {
+    display: inline-flex;
+    flex: 0 0 auto;
+    align-items: center;
+    justify-content: center;
+    width: 36px;
+    height: 36px;
+    border: 1px solid #bfd7e5;
+    border-radius: 50%;
+    background: #fff;
+    color: #236783;
+}
+
+.briefing-ai-source--fallback .briefing-ai-source__icon {
+    border-color: #e4cd9d;
+    color: #966316;
+}
+
+.briefing-ai-source strong {
+    display: block;
+    margin-top: 2px;
+    color: #25364a;
+    font-size: 12px;
+}
+
+.briefing-ai-source p {
+    margin: 4px 0 0;
+    color: #64748b;
+    font-size: 11px;
+    line-height: 1.55;
+}
+
+.briefing-ai-source small {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    margin-top: 8px;
+    color: #8a611d;
+    font-size: 10px;
+    font-weight: 600;
+}
+
 .briefing-data-warning,
 .briefing-data-ok {
     display: flex;
