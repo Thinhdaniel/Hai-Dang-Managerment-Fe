@@ -291,7 +291,12 @@ export interface PurchaseOrderItem {
     quantityOrdered?: number;
     quantityReceived?: number;
     quantityMissing?: number;
-    receiveStatus?: 'pending' | 'partially_received' | 'received';
+    lineStatus?: 'active' | 'cancelled';
+    cancelledQuantity?: number;
+    cancelledAt?: string;
+    cancelledBy?: string;
+    cancelledReason?: string;
+    receiveStatus?: 'pending' | 'partially_received' | 'received' | 'cancelled';
     quantity?: number; // backward compat alias
     unitPrice?: number;
     totalPrice?: number;
@@ -1161,6 +1166,11 @@ export const purchaseOrderService = {
 
     ignoreItemInventory: (id: string, index: number, reason?: string): Promise<PurchaseOrder> =>
         api.patch<PurchaseOrder, { reason?: string }>(`${PURCHASE_ORDERS_BASE}/${id}/items/${index}/ignore-inventory`, {
+            reason,
+        }),
+
+    cancelItem: (id: string, index: number, reason: string): Promise<PurchaseOrder> =>
+        api.patch<PurchaseOrder, { reason: string }>(`${PURCHASE_ORDERS_BASE}/${id}/items/${index}/cancel`, {
             reason,
         }),
 

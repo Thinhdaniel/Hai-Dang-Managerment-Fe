@@ -106,9 +106,7 @@ const buildScanMapRows = (preview: PurchaseReceiptScanPreview): ScanMapRow[] => 
             autosByKey.set(key, { ...allocation, kind: 'shortage' });
     });
     const reviewByKey = new Map((preview.reviewLines ?? []).map((review) => [scanLineKey(review.sourceLine), review]));
-    const unreadableByKey = new Map(
-        (preview.unreadableLines ?? []).map((row) => [scanLineKey(row.sourceLine), row])
-    );
+    const unreadableByKey = new Map((preview.unreadableLines ?? []).map((row) => [scanLineKey(row.sourceLine), row]));
 
     return (preview.extractedLines ?? []).map((line, index) => {
         const key = `${scanLineKey(line)}#${index}`;
@@ -416,6 +414,8 @@ const DetailDrawer: React.FC<DrawerProps> = ({
     const [materialSearch, setMaterialSearch] = useState('');
     const [selectedMaterialId, setSelectedMaterialId] = useState<string>();
     const [materialDraft, setMaterialDraft] = useState<Partial<MaterialPayload>>({ trackInventory: true });
+    const [cancelTarget, setCancelTarget] = useState<{ index: number; item: PurchaseOrderItem } | null>(null);
+    const [cancelReason, setCancelReason] = useState('');
 
     const returnMut = useMutation({
         mutationFn: returnRecordService.create,
@@ -431,7 +431,8 @@ const DetailDrawer: React.FC<DrawerProps> = ({
     });
 
     const receiptScanMut = useMutation({
-        mutationFn: ({ id, files }: { id: string; files: File[] }) => purchaseOrderService.previewReceiptScan(id, files),
+        mutationFn: ({ id, files }: { id: string; files: File[] }) =>
+            purchaseOrderService.previewReceiptScan(id, files),
         onSuccess: (preview) => {
             setReceiptScanPreview(preview);
             setScanMapRows(buildScanMapRows(preview));
@@ -454,7 +455,10 @@ const DetailDrawer: React.FC<DrawerProps> = ({
     };
 
     // Thumbnail ảnh phiếu để chạy hiệu ứng quét; thu hồi objectURL khi đổi ảnh
-    const receiptScanUrls = useMemo(() => receiptScanFiles.map((file) => URL.createObjectURL(file)), [receiptScanFiles]);
+    const receiptScanUrls = useMemo(
+        () => receiptScanFiles.map((file) => URL.createObjectURL(file)),
+        [receiptScanFiles]
+    );
     React.useEffect(
         () => () => {
             receiptScanUrls.forEach((url) => URL.revokeObjectURL(url));
@@ -515,6 +519,19 @@ const DetailDrawer: React.FC<DrawerProps> = ({
             message.success('Da bo qua quan ton cho dong vat tu');
         },
         onError: (e: any) => message.error(e?.message || 'Khong the bo qua quan ton'),
+    });
+
+    const cancelItemMut = useMutation({
+        mutationFn: ({ index, reason }: { index: number; reason: string }) =>
+            purchaseOrderService.cancelItem(record!.id, index, reason),
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['purchase-orders'] });
+            if (record) queryClient.invalidateQueries({ queryKey: ['purchase-order', record.id] });
+            message.success('Đã hủy dòng vật tư và cập nhật lại giá trị đơn hàng');
+            setCancelTarget(null);
+            setCancelReason('');
+        },
+        onError: (e: any) => message.error(e?.message || 'Không thể hủy dòng vật tư'),
     });
 
     const { data: returnRecords = [] } = useQuery({
@@ -600,12 +617,14 @@ const DetailDrawer: React.FC<DrawerProps> = ({
 
     const receiveRows = useMemo(() => {
         if (!record) return [];
-        return record.items.map((item, index) => {
-            const ordered = item.quantityOrdered ?? item.quantityRequested ?? 0;
-            const received = item.quantityReceived ?? 0;
-            const remaining = Math.max(0, ordered - received);
-            return { ...item, index, ordered, received, remaining };
-        });
+        return record.items
+            .map((item, index) => {
+                const ordered = item.quantityOrdered ?? item.quantityRequested ?? 0;
+                const received = item.quantityReceived ?? 0;
+                const remaining = Math.max(0, ordered - received);
+                return { ...item, index, ordered, received, remaining };
+            })
+            .filter((item) => item.lineStatus !== 'cancelled');
     }, [record]);
 
     // Ứng viên đích để nhận từng dòng phiếu: dòng của đơn này + nợ NCC còn thiếu
@@ -790,6 +809,9 @@ const DetailDrawer: React.FC<DrawerProps> = ({
     }, [record?.id]);
 
     const canEdit = record && record.status === 'draft' && isCS1Manager;
+    const canCancelItem = Boolean(
+        record && isCS1Director && ['confirmed', 'ordered', 'partially_received'].includes(record.status)
+    );
 
     const patchItem = (idx: number, patch: Partial<PurchaseOrderItemUpdate>) => {
         setEditedItems((p) => ({ ...p, [idx]: { ...p[idx], ...patch, index: idx } }));
@@ -880,7 +902,14 @@ const DetailDrawer: React.FC<DrawerProps> = ({
                     : r.purchaseRequestCode;
                 return (
                     <div>
-                        <div style={{ fontWeight: 600 }}>{r.materialName}</div>
+                        <div
+                            style={{
+                                fontWeight: 600,
+                                textDecoration: r.lineStatus === 'cancelled' ? 'line-through' : undefined,
+                            }}
+                        >
+                            {r.materialName}
+                        </div>
                         <Tooltip title={<span style={{ whiteSpace: 'pre-line' }}>{sourceTitle}</span>}>
                             <div style={{ fontSize: 11, color: '#888', cursor: sourceTitle ? 'help' : 'default' }}>
                                 {r.purchaseRequestCode}
@@ -902,6 +931,37 @@ const DetailDrawer: React.FC<DrawerProps> = ({
                                 <Tag color='gold' style={{ fontSize: 10, marginTop: 2 }}>
                                     Cho cong ton
                                 </Tag>
+                            )}
+                        {r.lineStatus === 'cancelled' && (
+                            <Tooltip
+                                title={`${r.cancelledReason || 'Đã hủy với nhà cung cấp'}${r.cancelledAt ? ` · ${fmtDate(r.cancelledAt)}` : ''}`}
+                            >
+                                <Tag
+                                    color='default'
+                                    icon={<CloseCircleOutlined />}
+                                    style={{ fontSize: 10, marginTop: 2 }}
+                                >
+                                    Đã hủy {fmtNum(r.cancelledQuantity ?? 0)} {r.unit || ''}
+                                </Tag>
+                            </Tooltip>
+                        )}
+                        {canCancelItem &&
+                            r.lineStatus !== 'cancelled' &&
+                            Number(r.quantityReceived ?? 0) <= 0 &&
+                            Number(r.quantityInventoried ?? 0) <= 0 && (
+                                <Button
+                                    type='link'
+                                    danger
+                                    size='small'
+                                    icon={<CloseCircleOutlined />}
+                                    style={{ height: 24, paddingInline: 0, marginTop: 2 }}
+                                    onClick={() => {
+                                        setCancelTarget({ index: r._idx, item: r });
+                                        setCancelReason('');
+                                    }}
+                                >
+                                    Hủy dòng
+                                </Button>
                             )}
                         {ret && (
                             <Tooltip title={ret.reasons.length ? `Lý do: ${ret.reasons.join('; ')}` : 'Đã trả hàng'}>
@@ -931,6 +991,7 @@ const DetailDrawer: React.FC<DrawerProps> = ({
             width: 86,
             align: 'right',
             render: (_: any, r: any) => {
+                if (r.lineStatus === 'cancelled') return <Text type='secondary'>0</Text>;
                 const missing = r.quantityMissing ?? Math.max(0, (r.quantityOrdered ?? 0) - (r.quantityReceived ?? 0));
                 return missing > 0 ? <Text type='danger'>{fmtNum(missing)}</Text> : <Text type='success'>0</Text>;
             },
@@ -942,7 +1003,14 @@ const DetailDrawer: React.FC<DrawerProps> = ({
             width: 90,
             align: 'center',
             render: (_: any, r: any) =>
-                canEdit ? (
+                r.lineStatus === 'cancelled' ? (
+                    <Space size={4}>
+                        <Text delete type='secondary'>
+                            {fmtNum(r.cancelledQuantity ?? 0)}
+                        </Text>
+                        <Text type='secondary'>0</Text>
+                    </Space>
+                ) : canEdit ? (
                     <InputNumber
                         size='small'
                         min={0}
@@ -1052,7 +1120,9 @@ const DetailDrawer: React.FC<DrawerProps> = ({
             width: 150,
             render: (_: any, r: any) => (
                 <Space size={2} wrap>
-                    {r.catalogStatus !== 'matched' && (
+                    {r.lineStatus === 'cancelled' ? (
+                        <Text type='secondary'>Không áp dụng</Text>
+                    ) : r.catalogStatus !== 'matched' ? (
                         <>
                             <Button size='small' onClick={() => openCatalogModal(r._idx, r, 'link')}>
                                 Gắn
@@ -1061,8 +1131,8 @@ const DetailDrawer: React.FC<DrawerProps> = ({
                                 Tạo
                             </Button>
                         </>
-                    )}
-                    {r.catalogStatus !== 'ignored' && (
+                    ) : null}
+                    {r.lineStatus !== 'cancelled' && r.catalogStatus !== 'ignored' && (
                         <Button
                             size='small'
                             danger
@@ -1233,7 +1303,11 @@ const DetailDrawer: React.FC<DrawerProps> = ({
                             size='small'
                             scroll={{ x: 'max-content' }}
                             rowClassName={(r) =>
-                                returnedMap.has(String(r.materialId ?? r.materialName)) ? 'bg-red-50/40' : ''
+                                r.lineStatus === 'cancelled'
+                                    ? 'bg-slate-50 opacity-70'
+                                    : returnedMap.has(String(r.materialId ?? r.materialName))
+                                      ? 'bg-red-50/40'
+                                      : ''
                             }
                             summary={() => (
                                 <Table.Summary.Row>
@@ -1259,6 +1333,46 @@ const DetailDrawer: React.FC<DrawerProps> = ({
                     </div>
                 )}
             </Drawer>
+
+            <Modal
+                open={Boolean(cancelTarget)}
+                title='Hủy vật tư khỏi đơn đặt hàng'
+                okText='Xác nhận hủy dòng'
+                cancelText='Quay lại'
+                okButtonProps={{ danger: true, loading: cancelItemMut.isPending }}
+                onCancel={() => {
+                    if (cancelItemMut.isPending) return;
+                    setCancelTarget(null);
+                    setCancelReason('');
+                }}
+                onOk={() => {
+                    const reason = cancelReason.trim();
+                    if (!cancelTarget || !reason) {
+                        message.warning('Vui lòng nhập lý do hủy với nhà cung cấp');
+                        return;
+                    }
+                    cancelItemMut.mutate({ index: cancelTarget.index, reason });
+                }}
+                destroyOnHidden
+            >
+                <Alert
+                    type='warning'
+                    showIcon
+                    message={cancelTarget?.item.materialName || 'Dòng vật tư'}
+                    description={`Số lượng đặt ${fmtNum(cancelTarget?.item.quantityOrdered ?? 0)} ${cancelTarget?.item.unit || ''}. Dòng vẫn được giữ trong lịch sử nhưng sẽ bị loại khỏi giá trị đơn và form nhận hàng.`}
+                    className='mb-4'
+                />
+                <Text strong>Lý do hủy với nhà cung cấp</Text>
+                <Input.TextArea
+                    value={cancelReason}
+                    onChange={(event) => setCancelReason(event.target.value)}
+                    placeholder='Ví dụ: Nhà cung cấp giao quá thời hạn, hai bên đã thống nhất hủy.'
+                    maxLength={500}
+                    showCount
+                    autoSize={{ minRows: 3, maxRows: 5 }}
+                    className='mt-2'
+                />
+            </Modal>
 
             <Modal
                 open={receiveOpen}
@@ -1394,7 +1508,9 @@ const DetailDrawer: React.FC<DrawerProps> = ({
                                         <div>
                                             <div className='hd-eyebrow'>Phiếu giao hàng</div>
                                             <div className='text-sm font-semibold text-slate-800'>
-                                                {receiptScanPreview.header?.supplierName || record?.supplierName || 'Chưa rõ nhà cung cấp'}
+                                                {receiptScanPreview.header?.supplierName ||
+                                                    record?.supplierName ||
+                                                    'Chưa rõ nhà cung cấp'}
                                             </div>
                                             <div className='hd-num text-xs text-slate-500'>
                                                 Số{' '}
@@ -1488,9 +1604,7 @@ const DetailDrawer: React.FC<DrawerProps> = ({
                                                         showSearch
                                                         optionFilterProp='label'
                                                         options={scanTargetOptions}
-                                                        onChange={(value) =>
-                                                            updateScanRow(row.key, { target: value })
-                                                        }
+                                                        onChange={(value) => updateScanRow(row.key, { target: value })}
                                                     />
                                                 ),
                                             },
@@ -2488,8 +2602,8 @@ const PurchaseOrderPage: React.FC = () => {
             >
                 <div className='flex flex-col gap-3 py-2'>
                     <Text type='secondary' className='text-xs'>
-                        Chọn khoảng thời gian (theo ngày tạo đơn). File gồm 4 sheet: Tổng quan · Danh sách đơn ·
-                        Chi tiết vật tư · Sổ nợ hàng NCC.
+                        Chọn khoảng thời gian (theo ngày tạo đơn). File gồm 4 sheet: Tổng quan · Danh sách đơn · Chi
+                        tiết vật tư · Sổ nợ hàng NCC.
                     </Text>
                     <DatePicker.RangePicker
                         className='w-full'
