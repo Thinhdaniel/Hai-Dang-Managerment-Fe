@@ -431,7 +431,7 @@ const DashboardExecutiveBriefing = () => {
     const [period, setPeriod] = useState<BriefingPeriodType>('week');
     const [drawerOpen, setDrawerOpen] = useState(Boolean(briefingFromUrl));
     const [selectedId, setSelectedId] = useState<string | undefined>(briefingFromUrl);
-    const isMobile = !screens.md;
+    const isCompact = !screens.lg;
 
     const latestQuery = useLatestExecutiveBriefing(period);
     const detailQuery = useExecutiveBriefingDetail(selectedId);
@@ -637,14 +637,14 @@ const DashboardExecutiveBriefing = () => {
                 title={null}
                 open={drawerOpen}
                 onClose={closeDrawer}
-                placement={isMobile ? 'bottom' : 'right'}
-                size={isMobile ? '94%' : 820}
+                placement={isCompact ? 'bottom' : 'right'}
+                size={isCompact ? '94dvh' : 820}
                 destroyOnHidden
                 className='executive-briefing-drawer'
                 styles={{
                     body: { padding: 0 },
                     header: { display: 'none' },
-                    wrapper: isMobile ? { maxHeight: '94dvh' } : undefined,
+                    wrapper: isCompact ? { maxHeight: '94dvh' } : { maxWidth: '100vw' },
                 }}
             >
                 <div className='briefing-drawer-header'>
@@ -690,7 +690,7 @@ const DashboardExecutiveBriefing = () => {
                                 loading={refreshMutation.isPending}
                                 onClick={handleRefresh}
                             >
-                                {!isMobile ? 'Cập nhật' : null}
+                                {!isCompact ? 'Cập nhật' : null}
                             </Button>
                         </Tooltip>
                     </div>

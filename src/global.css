@@ -4456,298 +4456,6 @@ body:has(.ant-image-preview-root) .hd-launcher {
     animation: briefing-enter 0.32s ease-out both;
 }
 
-@media (max-width: 1023px) {
-    .dashboard-briefing__metrics {
-        grid-template-columns: repeat(2, minmax(0, 1fr));
-    }
-
-    .dashboard-briefing-metric:nth-child(3) {
-        border-left: 0;
-    }
-
-    .dashboard-briefing-metric:nth-child(n + 3) {
-        border-top: 1px solid #edf0f4;
-    }
-
-    .dashboard-briefing__body {
-        grid-template-columns: 1fr;
-        gap: 14px;
-    }
-
-    .dashboard-briefing__priority {
-        border-top: 1px solid #edf0f4;
-        border-left: 0;
-        padding-top: 14px;
-        padding-left: 0;
-    }
-
-    .briefing-detail-kpis {
-        grid-template-columns: repeat(2, minmax(0, 1fr));
-    }
-
-    .briefing-detail-kpis > div:nth-child(3) {
-        border-top: 1px solid #edf0f4;
-        border-left: 0;
-    }
-
-    .briefing-detail-kpis > div:nth-child(4) {
-        border-top: 1px solid #edf0f4;
-    }
-}
-
-@media (max-width: 767px) {
-    .dashboard-briefing__header {
-        align-items: flex-start;
-        padding: 17px 14px 13px;
-    }
-
-    .dashboard-briefing__identity {
-        gap: 9px;
-    }
-
-    .dashboard-briefing__mark {
-        width: 34px;
-        height: 34px;
-        flex-basis: 34px;
-    }
-
-    .dashboard-briefing__title-line h2 {
-        font-size: 15px;
-    }
-
-    .dashboard-briefing__title-line .ant-tag {
-        display: none;
-    }
-
-    .dashboard-briefing__identity p {
-        max-width: 185px;
-        font-size: 10px;
-    }
-
-    .dashboard-briefing .ant-segmented-item-label {
-        min-height: 26px;
-        padding-inline: 8px;
-        font-size: 10px;
-        line-height: 26px;
-    }
-
-    .dashboard-briefing-metric {
-        grid-template-columns: 24px minmax(0, 1fr);
-        padding: 11px 12px;
-    }
-
-    .dashboard-briefing-metric__icon {
-        width: 24px;
-        height: 24px;
-    }
-
-    .dashboard-briefing-metric__label {
-        font-size: 9px;
-    }
-
-    .dashboard-briefing-metric strong {
-        font-size: 17px;
-    }
-
-    .dashboard-briefing-metric small {
-        font-size: 8px;
-    }
-
-    .dashboard-briefing__body {
-        padding: 14px;
-    }
-
-    .dashboard-briefing__summary p {
-        -webkit-line-clamp: 4;
-        font-size: 11px;
-        line-height: 1.6;
-    }
-
-    .executive-briefing-drawer .ant-drawer-content,
-    .executive-briefing-drawer .ant-drawer-content-wrapper {
-        border-radius: 16px 16px 0 0;
-    }
-
-    .executive-briefing-drawer .ant-drawer-content {
-        overflow: hidden;
-    }
-
-    .briefing-drawer-header {
-        padding: 14px 14px 11px;
-    }
-
-    .briefing-drawer-header__title {
-        gap: 9px;
-    }
-
-    .briefing-drawer-header__title h2 {
-        font-size: 17px;
-    }
-
-    .briefing-drawer-controls {
-        display: grid;
-        grid-template-columns: minmax(0, 1fr) 38px;
-        margin-top: 12px;
-    }
-
-    .briefing-drawer-controls .ant-segmented {
-        grid-column: 1 / -1;
-    }
-
-    .briefing-drawer-controls .ant-segmented-group,
-    .briefing-drawer-controls .ant-segmented-item {
-        width: 100%;
-    }
-
-    .briefing-period-select {
-        width: 100%;
-        min-width: 0;
-    }
-
-    .briefing-drawer-controls > .ant-btn {
-        width: 38px;
-        padding: 0;
-    }
-
-    .briefing-drawer-meta {
-        gap: 5px 11px;
-        margin-top: 9px;
-        font-size: 9px;
-    }
-
-    .briefing-drawer-meta span:nth-child(3) {
-        display: none;
-    }
-
-    .briefing-tabs > .ant-tabs-nav {
-        padding: 0 14px;
-    }
-
-    .briefing-tabs .ant-tabs-tab {
-        padding: 11px 0;
-        font-size: 11px;
-    }
-
-    .briefing-drawer-pane {
-        gap: 18px;
-        padding: 16px 14px calc(24px + env(safe-area-inset-bottom));
-    }
-
-    .briefing-narrative {
-        padding: 13px 14px;
-    }
-
-    .briefing-narrative p {
-        font-size: 12px;
-        line-height: 1.65;
-    }
-
-    .briefing-section-heading {
-        align-items: flex-start;
-        margin-bottom: 9px;
-    }
-
-    .briefing-section-heading h3 {
-        font-size: 13px;
-    }
-
-    .briefing-section-note {
-        max-width: 110px;
-        font-size: 8px;
-    }
-
-    .briefing-detail-kpis > div {
-        padding: 11px;
-    }
-
-    .briefing-detail-kpis strong {
-        font-size: 17px;
-    }
-
-    .briefing-financial-grid,
-    .briefing-content-columns {
-        grid-template-columns: 1fr;
-    }
-
-    .briefing-financial-grid > div + div {
-        border-top: 1px solid #edf0f4;
-        border-left: 0;
-    }
-
-    .briefing-financial-grid > div {
-        padding: 13px 14px;
-    }
-
-    .briefing-financial-grid strong {
-        font-size: 16px;
-    }
-
-    .briefing-content-columns {
-        gap: 18px;
-    }
-
-    .briefing-item {
-        padding: 12px;
-    }
-
-    .briefing-item__heading {
-        display: block;
-    }
-
-    .briefing-item__heading > span {
-        display: none;
-    }
-
-    .briefing-evidence {
-        max-width: 100%;
-    }
-
-    .briefing-plant-list__header {
-        display: none;
-    }
-
-    .briefing-plant-row {
-        display: grid;
-        grid-template-columns: repeat(3, minmax(0, 1fr));
-        padding: 11px 12px;
-    }
-
-    .briefing-plant-row > div {
-        padding: 7px 4px;
-    }
-
-    .briefing-plant-row__name,
-    .briefing-plant-row__availability {
-        grid-column: 1 / -1;
-    }
-
-    .briefing-plant-row__name {
-        border-bottom: 1px solid #edf0f4;
-        padding-top: 0 !important;
-        padding-bottom: 9px !important;
-    }
-
-    .briefing-plant-row__name strong {
-        white-space: normal;
-    }
-
-    .briefing-plant-row__availability {
-        padding-top: 10px !important;
-    }
-
-    .briefing-plant-row__metric:not(.briefing-plant-row__availability)::before {
-        display: block;
-        margin-bottom: 2px;
-        color: #8591a4;
-        content: attr(data-label);
-        font-size: 8px;
-    }
-
-    .briefing-provenance dl {
-        grid-template-columns: 1fr;
-    }
-}
-
 @media (prefers-reduced-motion: reduce) {
     .dashboard-briefing {
         animation: none;
@@ -6189,6 +5897,556 @@ body:has(.ant-image-preview-root) .hd-launcher {
 .briefing-drawer-loading,
 .briefing-drawer-empty {
     padding: 32px 22px;
+}
+
+/* Keep briefing breakpoints after the base rules so desktop declarations cannot override mobile. */
+@media (max-width: 1023px) {
+    .dashboard-briefing__metrics {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .dashboard-briefing-metric:nth-child(3) {
+        border-left: 0;
+    }
+
+    .dashboard-briefing-metric:nth-child(n + 3) {
+        border-top: 1px solid #edf0f4;
+    }
+
+    .dashboard-briefing__body {
+        grid-template-columns: 1fr;
+        gap: 14px;
+    }
+
+    .dashboard-briefing__priority {
+        border-top: 1px solid #edf0f4;
+        border-left: 0;
+        padding-top: 14px;
+        padding-left: 0;
+    }
+
+    .briefing-detail-kpis {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .briefing-detail-kpis > div:nth-child(3) {
+        border-top: 1px solid #edf0f4;
+        border-left: 0;
+    }
+
+    .briefing-detail-kpis > div:nth-child(4) {
+        border-top: 1px solid #edf0f4;
+    }
+
+    .executive-briefing-drawer .ant-drawer-content-wrapper,
+    .executive-briefing-drawer .ant-drawer-content {
+        border-radius: 14px 14px 0 0;
+    }
+
+    .executive-briefing-drawer .ant-drawer-content {
+        overflow: hidden;
+        overscroll-behavior: contain;
+    }
+
+    .briefing-drawer-header {
+        padding-top: 20px;
+    }
+
+    .briefing-drawer-header::before {
+        position: absolute;
+        top: 7px;
+        left: 50%;
+        width: 38px;
+        height: 4px;
+        border-radius: 999px;
+        background: #d8e0e8;
+        content: '';
+        transform: translateX(-50%);
+    }
+}
+
+@media (max-width: 767px) {
+    .dashboard-briefing {
+        width: 100%;
+        min-width: 0;
+    }
+
+    .dashboard-briefing__header {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr);
+        gap: 12px;
+        padding: 16px 14px 13px;
+    }
+
+    .dashboard-briefing__identity {
+        width: 100%;
+        min-width: 0;
+        align-items: flex-start;
+        gap: 10px;
+    }
+
+    .dashboard-briefing__identity > div {
+        min-width: 0;
+        flex: 1;
+    }
+
+    .dashboard-briefing__mark {
+        width: 34px;
+        height: 34px;
+        flex-basis: 34px;
+    }
+
+    .dashboard-briefing__title-line {
+        align-items: center;
+        gap: 6px;
+    }
+
+    .dashboard-briefing__title-line h2 {
+        font-size: 15px;
+        line-height: 1.3;
+    }
+
+    .dashboard-briefing__title-line .ant-tag {
+        max-width: 100%;
+        padding-inline: 6px;
+        font-size: 9px;
+        line-height: 18px;
+        white-space: normal;
+    }
+
+    .dashboard-briefing__identity p {
+        max-width: none;
+        margin-top: 4px;
+        overflow-wrap: anywhere;
+        font-size: 10px;
+        line-height: 1.45;
+    }
+
+    .dashboard-briefing__header > .ant-segmented {
+        width: 100%;
+    }
+
+    .dashboard-briefing__header > .ant-segmented .ant-segmented-group {
+        width: 100%;
+    }
+
+    .dashboard-briefing__header > .ant-segmented .ant-segmented-item {
+        min-width: 0;
+        flex: 1;
+    }
+
+    .dashboard-briefing .ant-segmented-item-label {
+        min-height: 30px;
+        padding-inline: 10px;
+        font-size: 11px;
+        line-height: 30px;
+    }
+
+    .dashboard-briefing-metric {
+        min-height: 106px;
+        grid-template-columns: 26px minmax(0, 1fr);
+        grid-template-rows: auto auto minmax(28px, auto);
+        align-content: start;
+        gap: 2px 8px;
+        padding: 12px;
+    }
+
+    .dashboard-briefing-metric__icon {
+        width: 26px;
+        height: 26px;
+    }
+
+    .dashboard-briefing-metric__label {
+        overflow: visible;
+        font-size: 9px;
+        line-height: 1.35;
+        text-overflow: clip;
+        white-space: normal;
+    }
+
+    .dashboard-briefing-metric strong {
+        font-size: 18px;
+        line-height: 1.2;
+    }
+
+    .dashboard-briefing-metric small {
+        display: block;
+        grid-column: 1 / -1;
+        align-self: end;
+        overflow: visible;
+        margin-top: 7px;
+        color: #7b8798;
+        font-size: 9px;
+        line-height: 1.4;
+        text-overflow: clip;
+        white-space: normal;
+    }
+
+    .dashboard-briefing__body {
+        gap: 13px;
+        padding: 14px;
+    }
+
+    .dashboard-briefing__summary p {
+        -webkit-line-clamp: 4;
+        font-size: 12px;
+        line-height: 1.6;
+    }
+
+    .dashboard-briefing__priority {
+        gap: 9px;
+        padding-top: 13px;
+    }
+
+    .dashboard-briefing__priority > div {
+        min-width: 0;
+    }
+
+    .dashboard-briefing__priority strong,
+    .dashboard-briefing__priority p {
+        overflow-wrap: anywhere;
+    }
+
+    .dashboard-briefing__open {
+        min-height: 44px;
+        font-size: 12px;
+    }
+
+    .dashboard-briefing--error {
+        flex-wrap: wrap;
+        align-items: flex-start;
+        padding: 16px 14px;
+    }
+
+    .dashboard-briefing--error .ant-btn {
+        width: 100%;
+    }
+
+    .briefing-drawer-header {
+        padding: 20px 14px 11px;
+    }
+
+    .briefing-drawer-header__top {
+        align-items: center;
+    }
+
+    .briefing-drawer-header__title {
+        min-width: 0;
+        gap: 9px;
+    }
+
+    .briefing-drawer-header__title > div {
+        min-width: 0;
+    }
+
+    .briefing-drawer-header__title h2 {
+        font-size: 17px;
+        line-height: 1.25;
+    }
+
+    .briefing-drawer-close.ant-btn {
+        width: 38px;
+        min-width: 38px;
+        height: 38px;
+    }
+
+    .briefing-drawer-controls {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) 40px;
+        gap: 8px;
+        margin-top: 12px;
+    }
+
+    .briefing-drawer-controls .ant-segmented {
+        width: 100%;
+        grid-column: 1 / -1;
+    }
+
+    .briefing-drawer-controls .ant-segmented-group {
+        width: 100%;
+    }
+
+    .briefing-drawer-controls .ant-segmented-item {
+        min-width: 0;
+        flex: 1;
+    }
+
+    .briefing-period-select {
+        width: 100%;
+        min-width: 0;
+    }
+
+    .briefing-drawer-controls > .ant-btn {
+        width: 40px;
+        min-width: 40px;
+        padding: 0;
+    }
+
+    .briefing-drawer-meta {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr);
+        gap: 5px;
+        margin-top: 10px;
+        font-size: 9px;
+    }
+
+    .briefing-drawer-meta span {
+        min-width: 0;
+        overflow-wrap: anywhere;
+    }
+
+    .briefing-drawer-meta span:nth-child(3) {
+        display: none;
+    }
+
+    .briefing-tabs {
+        min-width: 0;
+    }
+
+    .briefing-tabs > .ant-tabs-nav {
+        padding: 0 10px;
+    }
+
+    .briefing-tabs > .ant-tabs-nav .ant-tabs-nav-wrap,
+    .briefing-tabs > .ant-tabs-nav .ant-tabs-nav-list {
+        width: 100%;
+        min-width: 0;
+    }
+
+    .briefing-tabs > .ant-tabs-nav .ant-tabs-nav-list {
+        display: flex;
+    }
+
+    .briefing-tabs .ant-tabs-tab {
+        min-width: 0;
+        flex: 1 1 0;
+        justify-content: center;
+        margin: 0 !important;
+        padding: 11px 4px;
+        font-size: 11px;
+    }
+
+    .briefing-tabs .ant-tabs-tab-btn {
+        min-width: 0;
+        max-width: 100%;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    .briefing-tabs .ant-tabs-tab-btn > span {
+        min-width: 0;
+        justify-content: center;
+        gap: 4px;
+    }
+
+    .briefing-drawer-pane {
+        width: 100%;
+        min-width: 0;
+        gap: 18px;
+        overflow-x: clip;
+        padding: 16px 14px calc(28px + env(safe-area-inset-bottom));
+    }
+
+    .briefing-drawer-pane > section,
+    .briefing-content-columns > section {
+        min-width: 0;
+    }
+
+    .briefing-narrative {
+        padding: 13px 14px;
+    }
+
+    .briefing-narrative p {
+        overflow-wrap: anywhere;
+        font-size: 12px;
+        line-height: 1.65;
+    }
+
+    .briefing-section-heading {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 4px;
+        margin-bottom: 9px;
+    }
+
+    .briefing-section-heading h3 {
+        overflow-wrap: anywhere;
+        font-size: 13px;
+    }
+
+    .briefing-section-note {
+        max-width: none;
+        font-size: 9px;
+        text-align: left;
+    }
+
+    .briefing-detail-kpis > div {
+        min-height: 94px;
+        align-content: start;
+        padding: 12px 10px;
+    }
+
+    .briefing-detail-kpis strong {
+        font-size: 18px;
+    }
+
+    .briefing-financial-grid,
+    .briefing-content-columns {
+        grid-template-columns: minmax(0, 1fr);
+    }
+
+    .briefing-financial-grid > div + div {
+        border-top: 1px solid #edf0f4;
+        border-left: 0;
+    }
+
+    .briefing-financial-grid > div {
+        padding: 13px 14px;
+    }
+
+    .briefing-financial-grid strong {
+        font-size: 16px;
+    }
+
+    .briefing-content-columns {
+        gap: 18px;
+    }
+
+    .briefing-item {
+        min-width: 0;
+        padding: 12px;
+    }
+
+    .briefing-item__heading {
+        flex-direction: column;
+        gap: 2px;
+    }
+
+    .briefing-item__heading strong,
+    .briefing-item p {
+        overflow-wrap: anywhere;
+    }
+
+    .briefing-item__heading > span {
+        align-self: flex-start;
+    }
+
+    .briefing-evidence {
+        min-width: 0;
+        max-width: 100%;
+    }
+
+    .briefing-plant-list__header {
+        display: none;
+    }
+
+    .briefing-plant-row {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        padding: 11px 12px;
+    }
+
+    .briefing-plant-row > div {
+        min-width: 0;
+        padding: 7px 4px;
+    }
+
+    .briefing-plant-row__name,
+    .briefing-plant-row__availability {
+        grid-column: 1 / -1;
+    }
+
+    .briefing-plant-row__name {
+        border-bottom: 1px solid #edf0f4;
+        padding-top: 0 !important;
+        padding-bottom: 9px !important;
+    }
+
+    .briefing-plant-row__name > span:last-child {
+        min-width: 0;
+    }
+
+    .briefing-plant-row__name strong,
+    .briefing-plant-row__name small {
+        overflow-wrap: anywhere;
+        white-space: normal;
+    }
+
+    .briefing-plant-row__availability {
+        padding-top: 10px !important;
+    }
+
+    .briefing-plant-row__metric:not(.briefing-plant-row__availability)::before {
+        display: block;
+        margin-bottom: 2px;
+        color: #8591a4;
+        content: attr(data-label);
+        font-size: 8px;
+    }
+
+    .briefing-ai-source,
+    .briefing-data-warning,
+    .briefing-data-ok {
+        padding: 13px 14px;
+    }
+
+    .briefing-ai-source > div,
+    .briefing-data-warning > div,
+    .briefing-data-ok > div {
+        min-width: 0;
+    }
+
+    .briefing-ai-source p,
+    .briefing-data-warning p,
+    .briefing-data-ok p,
+    .briefing-definition-list p {
+        overflow-wrap: anywhere;
+    }
+
+    .briefing-provenance dl {
+        grid-template-columns: minmax(0, 1fr);
+    }
+
+    .briefing-provenance dl > div {
+        min-width: 0;
+    }
+
+    .briefing-provenance dt,
+    .briefing-provenance dd {
+        min-width: 0;
+    }
+
+    .briefing-drawer-loading,
+    .briefing-drawer-empty {
+        padding: 24px 14px calc(24px + env(safe-area-inset-bottom));
+    }
+}
+
+@media (max-width: 430px) {
+    .dashboard-briefing-metric {
+        min-height: 110px;
+        padding: 11px 10px;
+    }
+
+    .dashboard-briefing-metric strong {
+        font-size: 17px;
+    }
+
+    .briefing-detail-kpis > div {
+        grid-template-columns: 21px minmax(0, 1fr);
+        gap: 2px 6px;
+        padding-inline: 9px;
+    }
+
+    .briefing-detail-kpis strong {
+        font-size: 17px;
+    }
+
+    .briefing-detail-kpis span,
+    .briefing-detail-kpis small {
+        font-size: 9px;
+    }
 }
 
 .dashboard-facility-mobile-list {
