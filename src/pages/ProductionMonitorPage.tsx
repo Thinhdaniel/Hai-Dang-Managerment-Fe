@@ -83,8 +83,15 @@ const ProductionMonitorPage = () => {
     const [mobileView, setMobileView] = useState<MobileView>('overview');
     const [alertFilter, setAlertFilter] = useState<AlertFilter>('all');
     const [isFullscreen, setIsFullscreen] = useState(false);
+    // Đồng hồ tick mỗi giây để màn điều hành luôn "sống", độc lập với chu kỳ tải dữ liệu.
+    const [now, setNow] = useState(() => Date.now());
     const productionDate = date.format('YYYY-MM-DD');
     const canSwitchPlant = isAdmin(role) || isDirector(role);
+
+    useEffect(() => {
+        const timer = window.setInterval(() => setNow(Date.now()), 1000);
+        return () => window.clearInterval(timer);
+    }, []);
 
     const plantsQuery = useQuery({
         queryKey: ['plants'],
@@ -102,7 +109,10 @@ const ProductionMonitorPage = () => {
         queryKey: ['production', 'monitor', plantId, productionDate],
         queryFn: () => productionService.getMonitor(plantId, productionDate),
         enabled: Boolean(plantId),
-        refetchInterval: 30_000,
+        // 15s: đủ nhạy cho các chỉ số phụ thuộc thời gian (khung đang chạy, "quá giờ X phút").
+        // Số liệu nhập tay đã đẩy tức thời qua socket production:updated nên đây chỉ là lưới an toàn.
+        refetchInterval: 15_000,
+        refetchIntervalInBackground: true,
     });
 
     useEffect(() => {
@@ -419,8 +429,11 @@ const ProductionMonitorPage = () => {
                                 </b>
                             </div>
                             <div className='pd-stat'>
-                                <span>Cập nhật</span>
-                                <b>{dayjs(monitor.asOf).format('HH:mm:ss')}</b>
+                                <span>Đồng hồ xưởng</span>
+                                <b className='pd-clock'>
+                                    <span className='pd-clock-dot' />
+                                    {dayjs(now).format('HH:mm:ss')}
+                                </b>
                             </div>
                         </>
                     ) : undefined

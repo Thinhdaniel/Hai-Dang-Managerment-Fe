@@ -535,6 +535,20 @@
     color: var(--pd-danger);
 }
 
+/* Đồng hồ realtime: bề rộng số cố định (tabular) nên không giật khi đổi giây */
+.pd-clock {
+    color: var(--pd-brand) !important;
+    font-variant-numeric: tabular-nums;
+}
+
+.pd-clock-dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: #12b76a;
+    animation: pd-pulse 1.6s ease-out infinite;
+}
+
 .pd-meter {
     display: inline-block;
     width: 56px;
