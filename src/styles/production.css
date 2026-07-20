@@ -1871,7 +1871,8 @@
     transform: translateY(-1px);
 }
 
-.production-monitor-kpis span {
+/* Chỉ nhãn (span con trực tiếp) — KHÔNG nhắm .anticon (cũng là span) kẻo dính padding lệch icon */
+.production-monitor-kpis > div > span {
     padding-right: 40px;
     color: var(--pd-ink-3);
     font-size: 10.5px;
