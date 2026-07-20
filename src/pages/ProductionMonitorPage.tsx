@@ -1,28 +1,29 @@
 import {
+    AimOutlined,
     AlertOutlined,
     ArrowDownOutlined,
     ArrowUpOutlined,
     CheckCircleFilled,
-    ClockCircleOutlined,
+    CheckCircleOutlined,
     ExpandOutlined,
     EyeOutlined,
+    FieldTimeOutlined,
     FullscreenExitOutlined,
     LineChartOutlined,
     ReloadOutlined,
     RocketOutlined,
     TeamOutlined,
+    ThunderboltOutlined,
     WarningFilled,
 } from '@ant-design/icons';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
     Alert,
     Button,
-    DatePicker,
     Empty,
     Grid,
     Progress,
     Segmented,
-    Select,
     Skeleton,
     Table,
     Tag,
@@ -33,13 +34,13 @@ import {
 import dayjs, { type Dayjs } from 'dayjs';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import ProductionCommandRibbon from '../components/production/ProductionCommandRibbon';
 import { useAuth } from '../core/contexts/AuthContext';
 import { useSocket } from '../core/hooks/useSocket';
 import { isAdmin, isDirector } from '../core/lib/permissions';
 import { plantService } from '../core/services/plant.service';
 import { productionService } from '../core/services/production.service';
 import type {
-    ProductionDayStatus,
     ProductionMonitorAlert,
     ProductionMonitorAlertSeverity,
     ProductionMonitorLine,
@@ -52,12 +53,6 @@ const errorMessage = (error: unknown) => (error instanceof Error ? error.message
 
 type MobileView = 'overview' | 'alerts' | 'lines';
 type AlertFilter = 'all' | ProductionMonitorAlertSeverity;
-
-const dayStatusMeta: Record<ProductionDayStatus, { label: string; color: string }> = {
-    draft: { label: 'Đang nhập', color: 'gold' },
-    submitted: { label: 'Chờ duyệt', color: 'blue' },
-    locked: { label: 'Đã khóa sổ', color: 'green' },
-};
 
 const lineStatusMeta: Record<ProductionMonitorLineStatus, { label: string; color: string; rank: number }> = {
     critical: { label: 'Nghiêm trọng', color: 'red', rank: 0 },
@@ -131,7 +126,6 @@ const ProductionMonitorPage = () => {
     const data = monitorQuery.data;
     const day = data?.day;
     const monitor = data?.monitor;
-    const status = day ? dayStatusMeta[day.status] : undefined;
 
     const filteredAlerts = useMemo(
         () => (monitor?.alerts || []).filter((alert) => alertFilter === 'all' || alert.severity === alertFilter),
@@ -149,7 +143,6 @@ const ProductionMonitorPage = () => {
         [monitor?.linePerformance]
     );
 
-    const lineRecordById = useMemo(() => new Map((day?.lines || []).map((line) => [line.lineId, line])), [day?.lines]);
     const slotMonitorByKey = useMemo(
         () => new Map((monitor?.slotPerformance || []).map((slot) => [slot.key, slot])),
         [monitor?.slotPerformance]
@@ -311,14 +304,22 @@ const ProductionMonitorPage = () => {
                         </tr>
                     </thead>
                     <tbody>
-                        {sortedLines.map((line) => {
-                            const record = lineRecordById.get(line.lineId);
+                        {/* Ma trận giữ thứ tự chuyền cố định (theo sortOrder) — người xem dò theo vị trí quen,
+                            sort theo mức độ chỉ dành cho bảng "Tình trạng theo chuyền" bên dưới. */}
+                        {day.lines.map((record) => {
                             return (
-                                <tr key={line.lineId}>
+                                <tr key={record.lineId}>
                                     <th>
-                                        <button type='button' onClick={() => openEntry(line.lineId)}>
-                                            <strong>{line.lineCode}</strong>
-                                            <small>{line.leaderName || 'Chưa có tổ trưởng'}</small>
+                                        <button
+                                            type='button'
+                                            className='mx-line'
+                                            onClick={() => openEntry(record.lineId)}
+                                        >
+                                            <span className='mx-line-code'>{record.lineCode}</span>
+                                            <span className='mx-line-info'>
+                                                <small>{record.leaderName || 'Chưa có tổ trưởng'}</small>
+                                                <em>{record.workerCount} người</em>
+                                            </span>
                                         </button>
                                     </th>
                                     {activeSlots.map((slot) => {
@@ -339,36 +340,39 @@ const ProductionMonitorPage = () => {
                                                 <Tooltip
                                                     title={
                                                         value?.runId
-                                                            ? `${line.lineCode} · ${slot.label}: ${number(value.actual)}/${number(value.target)} SP`
-                                                            : `${line.lineCode} không chạy tại ${slot.label}`
+                                                            ? `${record.lineCode} · ${slot.label}: ${number(value.actual)}/${number(value.target)} SP`
+                                                            : `${record.lineCode} không chạy tại ${slot.label}`
                                                     }
                                                 >
                                                     <button
                                                         type='button'
                                                         className={`production-monitor-matrix-cell state-${cellState}`}
-                                                        onClick={() => openEntry(line.lineId, slot.key)}
+                                                        onClick={() => openEntry(record.lineId, slot.key)}
                                                     >
                                                         {cellState === 'missing' ? (
-                                                            <>
-                                                                <WarningFilled />
-                                                                <small>Thiếu</small>
-                                                            </>
+                                                            <span className='mx-tag'>Thiếu</span>
                                                         ) : value?.reported ? (
-                                                            <>
-                                                                <strong>{number(value.actual)}</strong>
-                                                                <small>
-                                                                    {value.target
-                                                                        ? `${Math.round(percent)}%`
-                                                                        : 'Đã báo'}
-                                                                </small>
-                                                            </>
+                                                            <span className='mx-val'>
+                                                                <b>{number(value.actual)}</b>
+                                                                {value.target ? (
+                                                                    <i className='mx-bar'>
+                                                                        <em
+                                                                            style={{
+                                                                                width: `${Math.min(100, Math.round(percent))}%`,
+                                                                            }}
+                                                                        />
+                                                                    </i>
+                                                                ) : (
+                                                                    <s>đã báo</s>
+                                                                )}
+                                                            </span>
                                                         ) : cellState === 'current' ? (
-                                                            <>
-                                                                <ClockCircleOutlined />
-                                                                <small>Đang chạy</small>
-                                                            </>
+                                                            <span className='mx-run'>
+                                                                <span className='mx-run-dot' />
+                                                                chạy
+                                                            </span>
                                                         ) : (
-                                                            <span>—</span>
+                                                            <span className='mx-dash' />
                                                         )}
                                                     </button>
                                                 </Tooltip>
@@ -386,42 +390,61 @@ const ProductionMonitorPage = () => {
 
     return (
         <div ref={pageRef} className='production-page production-monitor-page'>
-            <section className='production-workbench-header'>
-                <div className='production-workbench-title'>
-                    <span className='production-kicker'>Điều hành realtime</span>
-                    <Title level={2}>Trung tâm sản lượng</Title>
-                    <Text type='secondary'>Nhịp báo giờ, sai lệch khoán và tình trạng từng chuyền.</Text>
-                </div>
-                <div className='production-monitor-controls'>
-                    <Select
-                        value={plantId || undefined}
-                        onChange={setPlantId}
-                        disabled={!canSwitchPlant}
-                        loading={plantsQuery.isLoading}
-                        options={(plantsQuery.data || []).map((plant) => ({ value: plant.id, label: plant.name }))}
-                        placeholder='Chọn cơ sở'
-                    />
-                    <DatePicker
-                        value={date}
-                        allowClear={false}
-                        format='DD/MM/YYYY'
-                        onChange={(value) => setDate(value || dayjs())}
-                    />
-                    <Tooltip title='Tải lại dữ liệu'>
-                        <Button
-                            icon={<ReloadOutlined />}
-                            loading={monitorQuery.isFetching}
-                            onClick={() => monitorQuery.refetch()}
-                        />
-                    </Tooltip>
-                    <Tooltip title={isFullscreen ? 'Thoát toàn màn hình' : 'Toàn màn hình'}>
-                        <Button
-                            icon={isFullscreen ? <FullscreenExitOutlined /> : <ExpandOutlined />}
-                            onClick={() => void toggleFullscreen()}
-                        />
-                    </Tooltip>
-                </div>
-            </section>
+            <ProductionCommandRibbon
+                date={date}
+                onDateChange={setDate}
+                plantId={plantId}
+                plants={plantsQuery.data || []}
+                plantsLoading={plantsQuery.isLoading}
+                canSwitchPlant={canSwitchPlant}
+                onPlantChange={setPlantId}
+                day={day}
+                canManage
+                kpis={
+                    day && monitor ? (
+                        <>
+                            <div className='pd-stat'>
+                                <span>Khung hiện tại</span>
+                                <b>
+                                    {monitor.currentSlotKey
+                                        ? day.timeSlots.find((slot) => slot.key === monitor.currentSlotKey)?.label ||
+                                          monitor.currentSlotKey
+                                        : 'Ngoài giờ'}
+                                </b>
+                            </div>
+                            <div className='pd-stat'>
+                                <span>Độ phủ báo giờ</span>
+                                <b className={monitor.summary.reportingRate < 90 ? 'tone-danger' : 'tone-success'}>
+                                    {monitor.summary.reportingRate.toFixed(0)}%
+                                </b>
+                            </div>
+                            <div className='pd-stat'>
+                                <span>Cập nhật</span>
+                                <b>{dayjs(monitor.asOf).format('HH:mm:ss')}</b>
+                            </div>
+                        </>
+                    ) : undefined
+                }
+                onRefresh={() => monitorQuery.refetch()}
+                refreshing={monitorQuery.isFetching}
+                extraActions={
+                    <>
+                        <Tooltip title='Tải lại dữ liệu'>
+                            <Button
+                                icon={<ReloadOutlined />}
+                                loading={monitorQuery.isFetching}
+                                onClick={() => monitorQuery.refetch()}
+                            />
+                        </Tooltip>
+                        <Tooltip title={isFullscreen ? 'Thoát toàn màn hình' : 'Toàn màn hình'}>
+                            <Button
+                                icon={isFullscreen ? <FullscreenExitOutlined /> : <ExpandOutlined />}
+                                onClick={() => void toggleFullscreen()}
+                            />
+                        </Tooltip>
+                    </>
+                }
+            />
 
             {isMobile && data ? (
                 <Segmented<MobileView>
@@ -466,22 +489,6 @@ const ProductionMonitorPage = () => {
                 </section>
             ) : (
                 <>
-                    <section className='production-monitor-livebar'>
-                        <div>
-                            <span className='production-monitor-live-dot' />
-                            <strong>{day.plantName}</strong>
-                            {status ? <Tag color={status.color}>{status.label}</Tag> : null}
-                        </div>
-                        <div>
-                            <span>
-                                {monitor.currentSlotKey
-                                    ? `Khung ${day.timeSlots.find((slot) => slot.key === monitor.currentSlotKey)?.label || monitor.currentSlotKey}`
-                                    : 'Ngoài khung sản xuất'}
-                            </span>
-                            <small>Cập nhật {dayjs(monitor.asOf).format('HH:mm:ss')}</small>
-                        </div>
-                    </section>
-
                     {monitor.forecast && (!isMobile || mobileView === 'overview') ? (
                         <section className='production-monitor-forecastbar'>
                             <div className='production-monitor-forecastbar__signal'>
@@ -545,11 +552,17 @@ const ProductionMonitorPage = () => {
                         <>
                             <section className='production-monitor-kpis'>
                                 <div className='production-monitor-kpi-primary'>
+                                    <i className='pd-kpi-ico'>
+                                        <ThunderboltOutlined />
+                                    </i>
                                     <span>Sản lượng đến hiện tại</span>
                                     <strong>{number(monitor.summary.actualToNow)}</strong>
-                                    <small>/ {number(monitor.summary.targetToNow)} SP</small>
+                                    <small>/ {number(monitor.summary.targetToNow)} SP theo khoán</small>
                                 </div>
                                 <div>
+                                    <i className='pd-kpi-ico'>
+                                        <AimOutlined />
+                                    </i>
                                     <span>Nhịp đạt</span>
                                     <strong className={`tone-${achievementTone(monitor.summary.achievementToNow)}`}>
                                         {monitor.summary.achievementToNow.toFixed(1)}%
@@ -561,6 +574,9 @@ const ProductionMonitorPage = () => {
                                     </small>
                                 </div>
                                 <div>
+                                    <i className='pd-kpi-ico'>
+                                        <FieldTimeOutlined />
+                                    </i>
                                     <span>Độ phủ báo giờ</span>
                                     <strong>{monitor.summary.reportingRate.toFixed(1)}%</strong>
                                     <small>
@@ -568,11 +584,17 @@ const ProductionMonitorPage = () => {
                                     </small>
                                 </div>
                                 <div>
+                                    <i className='pd-kpi-ico'>
+                                        <CheckCircleOutlined />
+                                    </i>
                                     <span>Đúng nhịp</span>
                                     <strong>{monitor.summary.onTrackLines}</strong>
-                                    <small>{monitor.summary.totalLines} chuyền</small>
+                                    <small>trên {monitor.summary.totalLines} chuyền</small>
                                 </div>
                                 <div className={monitor.summary.atRiskLines ? 'has-risk' : ''}>
+                                    <i className='pd-kpi-ico'>
+                                        <AlertOutlined />
+                                    </i>
                                     <span>Cần xử lý</span>
                                     <strong>{monitor.summary.atRiskLines}</strong>
                                     <small>

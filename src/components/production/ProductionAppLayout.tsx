@@ -1,4 +1,4 @@
-import { App, Avatar, Button, ConfigProvider, Dropdown, Grid, Typography, type MenuProps } from 'antd';
+import { App, Avatar, Button, ConfigProvider, Dropdown, Grid, Tooltip, Typography, type MenuProps } from 'antd';
 import {
     AppstoreOutlined,
     CalendarOutlined,
@@ -16,8 +16,11 @@ import { NavLink, Outlet, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../core/contexts/AuthContext';
 import { useSocket } from '../../core/hooks/useSocket';
 import { can } from '../../core/lib/permissions';
+import '../../styles/production.css';
 
 const { Text } = Typography;
+
+const PRODUCTION_FONT = "'Be Vietnam Pro', 'Segoe UI', system-ui, -apple-system, sans-serif";
 
 const ProductionAppLayout = () => {
     const navigate = useNavigate();
@@ -51,6 +54,15 @@ const ProductionAppLayout = () => {
             socket.off('disconnect', onDisconnect);
         };
     }, [socket]);
+
+    const manage = can(role, 'production.manage');
+    const navItems = [
+        manage ? { to: '/production/planning', end: false, icon: <CalendarOutlined />, label: 'Kế hoạch' } : null,
+        { to: '/production', end: true, icon: <EditOutlined />, label: 'Nhập sản lượng', short: 'Nhập liệu' },
+        manage ? { to: '/production/monitor', end: false, icon: <LineChartOutlined />, label: 'Điều hành' } : null,
+        manage ? { to: '/production/reports', end: false, icon: <PieChartOutlined />, label: 'Báo cáo' } : null,
+        { to: '/production/history', end: false, icon: <HistoryOutlined />, label: 'Lịch sử' },
+    ].filter((item): item is NonNullable<typeof item> => Boolean(item));
 
     const menuItems: MenuProps['items'] = [
         {
@@ -89,73 +101,61 @@ const ProductionAppLayout = () => {
         }
     };
 
+    const realtimeOk = online && realtimeConnected;
+
     return (
         <ConfigProvider
             theme={{
                 token: {
-                    colorPrimary: '#147a4b',
-                    colorSuccess: '#168a52',
-                    colorWarning: '#c87816',
-                    borderRadius: 6,
+                    colorPrimary: '#2f51d9',
+                    colorInfo: '#2f51d9',
+                    colorSuccess: '#067647',
+                    colorWarning: '#b54708',
+                    colorError: '#b42318',
+                    colorText: '#171a20',
+                    colorTextSecondary: '#5b6472',
+                    colorBorder: '#d2d7e0',
+                    colorBorderSecondary: '#e5e8ee',
+                    borderRadius: 8,
+                    fontFamily: PRODUCTION_FONT,
                 },
             }}
         >
             <div className='production-app-shell'>
-                <header className='production-app-header'>
-                    <button type='button' className='production-brand' onClick={() => navigate('/production')}>
+                <header className='pd-header'>
+                    <button type='button' className='pd-brand' onClick={() => navigate('/production')}>
                         <img src='/brand/company-logo.png' alt='' />
-                        <span className='production-brand__copy'>
-                            <strong>Hải Đăng Production</strong>
-                            <small>Điều hành sản lượng</small>
-                        </span>
+                        <strong>
+                            Hải Đăng <em>Production</em>
+                        </strong>
                     </button>
 
-                    <nav className='production-app-nav' aria-label='Điều hướng sản xuất'>
-                        {can(role, 'production.manage') ? (
-                            <NavLink to='/production/planning'>
-                                <CalendarOutlined />
-                                <span>Kế hoạch</span>
+                    <nav className='pd-nav' aria-label='Điều hướng sản xuất'>
+                        {navItems.map((item) => (
+                            <NavLink key={item.to} to={item.to} end={item.end}>
+                                {item.icon}
+                                <span>{item.label}</span>
                             </NavLink>
-                        ) : null}
-                        <NavLink to='/production' end>
-                            <EditOutlined />
-                            <span>Nhập sản lượng</span>
-                        </NavLink>
-                        {can(role, 'production.manage') ? (
-                            <NavLink to='/production/monitor'>
-                                <LineChartOutlined />
-                                <span>Điều hành</span>
-                            </NavLink>
-                        ) : null}
-                        {can(role, 'production.manage') ? (
-                            <NavLink to='/production/reports'>
-                                <PieChartOutlined />
-                                <span>Báo cáo</span>
-                            </NavLink>
-                        ) : null}
-                        <NavLink to='/production/history'>
-                            <HistoryOutlined />
-                            <span>Lịch sử & báo cáo</span>
-                        </NavLink>
+                        ))}
                     </nav>
 
-                    <div className='production-app-header__right'>
+                    <div className='pd-header__right'>
                         <div
-                            className={`production-connection ${online && realtimeConnected ? 'is-online' : 'is-offline'}`}
-                            title={online && realtimeConnected ? 'Đồng bộ thời gian thực' : 'Đang chờ kết nối'}
+                            className={`pd-live ${realtimeOk ? 'is-online' : ''}`}
+                            title={realtimeOk ? 'Đồng bộ thời gian thực' : 'Đang chờ kết nối'}
                         >
-                            {screens.sm ? (online && realtimeConnected ? 'Realtime' : 'Chờ đồng bộ') : null}
+                            {screens.sm ? (realtimeOk ? 'Realtime' : 'Chờ đồng bộ') : null}
                         </div>
 
                         {screens.md ? (
-                            <Button icon={<SwapOutlined />} onClick={() => navigate('/dashboard')}>
-                                Đổi ứng dụng
-                            </Button>
+                            <Tooltip title='Về Quản lý máy & vật tư'>
+                                <Button icon={<SwapOutlined />} onClick={() => navigate('/dashboard')} />
+                            </Tooltip>
                         ) : null}
 
                         <Dropdown menu={{ items: menuItems, onClick: handleMenuClick }} trigger={['click']}>
-                            <button type='button' className='production-account-button'>
-                                <Avatar size={34} src={user?.avatarUrl} icon={<UserOutlined />} />
+                            <button type='button' className='pd-account'>
+                                <Avatar size={30} src={user?.avatarUrl} icon={<UserOutlined />} />
                                 {screens.sm ? <Text strong>{user?.name || 'Tài khoản'}</Text> : null}
                                 <DownOutlined />
                             </button>
@@ -163,9 +163,18 @@ const ProductionAppLayout = () => {
                     </div>
                 </header>
 
-                <main className='production-app-main'>
+                <main className='pd-main'>
                     <Outlet />
                 </main>
+
+                <nav className='pd-tabbar' aria-label='Điều hướng sản xuất'>
+                    {navItems.map((item) => (
+                        <NavLink key={item.to} to={item.to} end={item.end}>
+                            {item.icon}
+                            <span>{item.short || item.label}</span>
+                        </NavLink>
+                    ))}
+                </nav>
             </div>
         </ConfigProvider>
     );

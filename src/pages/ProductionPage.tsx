@@ -1,52 +1,26 @@
 import {
-    Alert,
-    App,
-    Button,
-    DatePicker,
-    Empty,
-    Grid,
-    Input,
-    Progress,
-    Segmented,
-    Select,
-    Skeleton,
-    Table,
-    Tag,
-    Tooltip,
-    Typography,
-    type TableColumnsType,
-} from 'antd';
-import {
     CheckCircleFilled,
+    CheckOutlined,
     ClockCircleOutlined,
-    EditOutlined,
-    ReloadOutlined,
     SearchOutlined,
     SettingOutlined,
+    TeamOutlined,
 } from '@ant-design/icons';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { Alert, App, Button, Empty, Grid, Input, Skeleton, Table, type TableColumnsType } from 'antd';
 import dayjs, { type Dayjs } from 'dayjs';
 import { useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import ProductionDayStatusBar from '../components/production/ProductionDayStatusBar';
+import ProductionCommandRibbon from '../components/production/ProductionCommandRibbon';
 import ProductionEntryDrawer from '../components/production/ProductionEntryDrawer';
+import ProductionMissingDock from '../components/production/ProductionMissingDock';
 import ProductionSetupDrawer from '../components/production/ProductionSetupDrawer';
 import { useAuth } from '../core/contexts/AuthContext';
 import { useSocket } from '../core/hooks/useSocket';
 import { can, hasManagerAccess, isAdmin, isDirector } from '../core/lib/permissions';
-import { productionService } from '../core/services/production.service';
 import { plantService } from '../core/services/plant.service';
-import type {
-    ProductionDay,
-    ProductionLineRecord,
-    ProductionSlotValue,
-    ProductionTimeSlot,
-} from '../core/types/production';
-
-const { Text, Title } = Typography;
-const { useBreakpoint } = Grid;
-
-type MobileView = 'entry' | 'summary';
+import { productionService } from '../core/services/production.service';
+import type { ProductionDay, ProductionLineRecord, ProductionTimeSlot } from '../core/types/production';
 
 const errorMessage = (error: unknown) => (error instanceof Error ? error.message : 'Không thể tải dữ liệu');
 const number = (value = 0) => new Intl.NumberFormat('vi-VN').format(value);
@@ -77,8 +51,16 @@ const lineSearchText = (line: ProductionLineRecord) =>
 const getSlotValue = (line: ProductionLineRecord, slotKey: string) =>
     line.slotValues.find((slot) => slot.key === slotKey);
 
+// Chuyền chỉ "còn thiếu" khi khung giờ đó THỰC SỰ có mã đang chạy (runId) mà chưa báo.
+// Thiếu check runId thì allocation kết thúc giữa ngày sẽ bị đòi báo cả buổi chiều.
+const isMissingAtSlot = (line: ProductionLineRecord, slotKey: string) => {
+    if (!line.configured) return false;
+    const value = getSlotValue(line, slotKey);
+    return Boolean(value?.runId) && !value?.reported;
+};
+
 const ProductionPage = () => {
-    const screens = useBreakpoint();
+    const screens = Grid.useBreakpoint();
     const isMobile = !screens.lg;
     const { message } = App.useApp();
     const { user, role } = useAuth();
@@ -95,7 +77,6 @@ const ProductionPage = () => {
     const [selectedLineId, setSelectedLineId] = useState<string | null>(() => searchParams.get('lineId'));
     const [setupOpen, setSetupOpen] = useState(false);
     const [search, setSearch] = useState('');
-    const [mobileView, setMobileView] = useState<MobileView>('entry');
     const productionDate = date.format('YYYY-MM-DD');
     const canManage = can(role, 'production.manage');
     const canSwitchPlant = isAdmin(role) || isDirector(role);
@@ -180,10 +161,14 @@ const ProductionPage = () => {
         [day?.lines, normalizedSearch]
     );
     const missingLines = useMemo(
-        () => filteredLines.filter((line) => line.configured && !getSlotValue(line, selectedSlotKey)?.reported),
+        () => filteredLines.filter((line) => isMissingAtSlot(line, selectedSlotKey)),
         [filteredLines, selectedSlotKey]
     );
     const selectedLine = day?.lines.find((line) => line.lineId === selectedLineId);
+    const isToday = date.isSame(dayjs(), 'day');
+    const isPastDate = date.isBefore(dayjs(), 'day');
+    const nowMinute = dayjs().hour() * 60 + dayjs().minute();
+    const readOnly = day ? day.status !== 'draft' : true;
 
     const openLine = (line: ProductionLineRecord, slotKey = selectedSlotKey) => {
         setSelectedSlotKey(slotKey);
@@ -197,32 +182,80 @@ const ProductionPage = () => {
         }
         const currentIndex = filteredLines.findIndex((line) => line.lineId === selectedLineId);
         const ordered = [...filteredLines.slice(currentIndex + 1), ...filteredLines.slice(0, currentIndex)];
-        const nextLine = ordered.find((line) => line.configured && !getSlotValue(line, selectedSlotKey)?.reported);
+        const nextLine = ordered.find((line) => isMissingAtSlot(line, selectedSlotKey));
         setSelectedLineId(nextLine?.lineId || null);
         if (!nextLine) message.success('Đã hoàn tất tất cả chuyền trong khung giờ này');
     };
 
+    const refreshDayQueries = async () => {
+        setSetupOpen(false);
+        setSelectedLineId(null);
+        await queryClient.invalidateQueries({ queryKey: ['production', 'day', plantId, productionDate] });
+        await queryClient.invalidateQueries({ queryKey: ['production', 'history', plantId] });
+    };
+
+    const renderSlotChip = (slot: ProductionTimeSlot, compact = false) => {
+        const summary = day?.slotSummaries.find((item) => item.key === slot.key);
+        const due = summary?.totalLines || 0;
+        const reported = summary?.reportedLines || 0;
+        const missing = Math.max(0, due - reported);
+        const complete = due > 0 && missing === 0;
+        const isCurrent = isToday && nowMinute >= slot.startMinute && nowMinute < slot.endMinute;
+        const isFuture = !isPastDate && (isToday ? slot.startMinute > nowMinute : true);
+        const selected = selectedSlotKey === slot.key;
+        return (
+            <button
+                type='button'
+                key={`${compact ? 'm-' : ''}${slot.key}`}
+                className={[
+                    'pd-slot',
+                    selected ? 'is-selected' : '',
+                    isCurrent ? 'is-current' : '',
+                    !selected && !isCurrent && isFuture && !complete ? 'is-future' : '',
+                ]
+                    .filter(Boolean)
+                    .join(' ')}
+                onClick={() => setSelectedSlotKey(slot.key)}
+            >
+                <span className='pd-slot__head'>
+                    {slot.label}
+                    {slot.kind === 'overtime' ? <span className='pd-slot-ot'>TC</span> : null}
+                    {complete ? <CheckOutlined className='pd-slot__check' /> : null}
+                    {missing > 0 && !isFuture ? <span className='pd-slot__badge'>{missing}</span> : null}
+                </span>
+                <span className='pd-slot__sub'>
+                    {due > 0 ? `${reported}/${due} chuyền` : '—'}
+                </span>
+            </button>
+        );
+    };
+
     const renderSlotCell = (line: ProductionLineRecord, slot: ProductionTimeSlot) => {
         const value = getSlotValue(line, slot.key);
-        const readOnly = day?.status !== 'draft';
+        // Khung giờ chưa bắt đầu thì không giục "Nhập" — tránh cả bảng nhuộm vàng vào buổi sáng.
+        const slotStarted = isPastDate || (isToday && slot.startMinute <= nowMinute);
         if (!line.configured) {
             return (
                 <button
                     type='button'
-                    className='production-grid-cell is-unconfigured'
+                    className='pd-cell is-unconfigured'
                     onClick={() => openLine(line, slot.key)}
+                    aria-label={`Thiết lập ${line.lineCode}`}
                 >
                     {readOnly ? <span>—</span> : <SettingOutlined />}
                 </button>
             );
         }
         if (!value?.reported) {
+            if (!value?.runId || !slotStarted) {
+                return (
+                    <button type='button' className='pd-cell is-idle' onClick={() => openLine(line, slot.key)}>
+                        <span>–</span>
+                    </button>
+                );
+            }
             return (
-                <button
-                    type='button'
-                    className='production-grid-cell is-missing'
-                    onClick={() => openLine(line, slot.key)}
-                >
+                <button type='button' className='pd-cell is-missing' onClick={() => openLine(line, slot.key)}>
                     <span>—</span>
                     <small>{readOnly ? 'Chưa báo' : 'Nhập'}</small>
                 </button>
@@ -232,11 +265,15 @@ const ProductionPage = () => {
         return (
             <button
                 type='button'
-                className={`production-grid-cell is-reported tone-${achievementTone(percent)}`}
+                className={`pd-cell tone-${achievementTone(percent)}`}
                 onClick={() => openLine(line, slot.key)}
             >
                 <strong>{number(value.actual)}</strong>
-                <small>{value.target ? `${Math.round(percent)}%` : 'Đã báo'}</small>
+                {value.target > 0 ? (
+                    <span className='pd-cell__bar'>
+                        <i style={{ width: `${Math.min(100, Math.round(percent))}%` }} />
+                    </span>
+                ) : null}
             </button>
         );
     };
@@ -246,38 +283,35 @@ const ProductionPage = () => {
             title: 'Chuyền',
             key: 'line',
             fixed: 'left',
-            width: 176,
+            width: 186,
             render: (_, line) => (
-                <button type='button' className='production-line-identity' onClick={() => openLine(line)}>
+                <button type='button' className='pd-line' onClick={() => openLine(line)}>
                     <strong>{line.lineCode}</strong>
-                    <span>{line.leaderName || line.lineName || 'Chưa có tổ trưởng'}</span>
+                    <span className='pd-line__meta'>
+                        <span>{line.leaderName || line.lineName || 'Chưa có tổ trưởng'}</span>
+                        <span className='pd-line-workers'>
+                            <TeamOutlined />
+                            {line.workerCountConfirmed ? line.workerCount : '—'}
+                        </span>
+                    </span>
                 </button>
             ),
         },
         {
-            title: 'CN',
-            dataIndex: 'workerCount',
-            width: 68,
-            align: 'center',
-            render: (value, line) => (
-                <button type='button' className='production-worker-count' onClick={() => openLine(line)}>
-                    {line.workerCountConfirmed ? value : '—'}
-                </button>
-            ),
-        },
-        {
-            title: 'Mã đang chạy',
+            title: 'Mã hàng',
             key: 'item',
-            width: 148,
+            width: 128,
             render: (_, line) => {
                 const active = [...line.runs].reverse().find((run) => run.status === 'active');
                 return active ? (
-                    <div className='production-item-cell'>
+                    <div className='pd-item-cell'>
                         <strong>{active.itemCode}</strong>
-                        <span>Khoán {number(active.hourlyQuota)}</span>
+                        <span>Khoán {number(active.hourlyQuota)}/giờ</span>
                     </div>
                 ) : (
-                    <Text type='secondary'>Chưa cấu hình</Text>
+                    <div className='pd-item-cell'>
+                        <span>Chưa cấu hình</span>
+                    </div>
                 );
             },
         },
@@ -285,7 +319,7 @@ const ProductionPage = () => {
             title: (
                 <button
                     type='button'
-                    className={`production-slot-column-title ${selectedSlotKey === slot.key ? 'is-selected' : ''}`}
+                    className={`pd-slot-column-title ${selectedSlotKey === slot.key ? 'is-selected' : ''}`}
                     onClick={() => setSelectedSlotKey(slot.key)}
                 >
                     {slot.label}
@@ -293,7 +327,7 @@ const ProductionPage = () => {
                 </button>
             ),
             key: slot.key,
-            width: 88,
+            width: 86,
             align: 'center' as const,
             className: selectedSlotKey === slot.key ? 'production-selected-column' : undefined,
             render: (_: unknown, line: ProductionLineRecord) => renderSlotCell(line, slot),
@@ -302,10 +336,10 @@ const ProductionPage = () => {
             title: 'Tổng',
             dataIndex: 'totalActual',
             fixed: 'right',
-            width: 104,
+            width: 100,
             align: 'right',
             render: (value, line) => (
-                <div className='production-total-cell'>
+                <div className='pd-total-cell'>
                     <strong>{number(value)}</strong>
                     <span>/ {number(line.totalTarget)}</span>
                 </div>
@@ -315,37 +349,34 @@ const ProductionPage = () => {
             title: '% đạt',
             dataIndex: 'achievementPercent',
             fixed: 'right',
-            width: 90,
+            width: 86,
             align: 'center',
-            render: (value) => (
-                <Tag
-                    color={
-                        achievementTone(value) === 'success'
-                            ? 'green'
-                            : achievementTone(value) === 'warning'
-                              ? 'gold'
-                              : 'red'
-                    }
-                >
-                    {value.toFixed(1)}%
-                </Tag>
-            ),
+            render: (value, line) =>
+                line.configured && line.totalTarget > 0 ? (
+                    <span className={`pd-pill tone-${achievementTone(value)}`}>{value.toFixed(1)}%</span>
+                ) : (
+                    <span className='pd-pill tone-neutral'>—</span>
+                ),
         },
     ];
 
     const renderMobileLine = (line: ProductionLineRecord) => {
-        const value: ProductionSlotValue | undefined = getSlotValue(line, selectedSlotKey);
+        const value = getSlotValue(line, selectedSlotKey);
         const run = line.runs.find((item) => item.id === value?.runId) || [...line.runs].reverse()[0];
         const percent = value?.target ? (value.actual / value.target) * 100 : value?.reported ? 100 : 0;
         const tone = achievementTone(percent);
+        const cardTone = !line.configured
+            ? 'is-unconfigured'
+            : value?.reported
+              ? `tone-${tone}`
+              : value?.runId
+                ? 'tone-warning'
+                : '';
         return (
-            <article
-                key={line.lineId}
-                className={`production-mobile-line ${!line.configured ? 'is-unconfigured' : value?.reported ? `tone-${tone}` : 'is-missing'}`}
-            >
-                <button type='button' className='production-mobile-line__main' onClick={() => openLine(line)}>
-                    <div className='production-mobile-line__top'>
-                        <div className='production-mobile-line__identity'>
+            <article key={line.lineId} className={`pd-mline ${cardTone}`}>
+                <button type='button' className='pd-mline__main' onClick={() => openLine(line)}>
+                    <div className='pd-mline__top'>
+                        <div className='pd-mline__identity'>
                             <span>{line.lineCode}</span>
                             <div>
                                 <strong>{run?.itemCode || 'Chưa chọn mã hàng'}</strong>
@@ -353,23 +384,25 @@ const ProductionPage = () => {
                             </div>
                         </div>
                         {value?.reported ? (
-                            <span className='production-reported-mark'>
+                            <span className='pd-mark pd-mark--ok'>
                                 <CheckCircleFilled /> Đã báo
                             </span>
                         ) : (
-                            <span className='production-missing-mark'>
-                                {line.configured ? 'Chưa báo' : 'Cần thiết lập'}
+                            <span
+                                className={`pd-mark ${!line.configured ? 'pd-mark--muted' : value?.runId ? 'pd-mark--missing' : 'pd-mark--muted'}`}
+                            >
+                                {!line.configured ? 'Cần thiết lập' : value?.runId ? 'Chưa báo' : 'Không chạy giờ này'}
                             </span>
                         )}
                     </div>
 
-                    <div className='production-mobile-line__numbers'>
+                    <div className='pd-mline__numbers'>
                         <div>
                             <small>Thực tế</small>
                             <strong>{value?.reported ? number(value.actual) : '—'}</strong>
                         </div>
                         <div>
-                            <small>Khoán giờ</small>
+                            <small>Khoán</small>
                             <strong>{number(value?.target || run?.hourlyQuota || 0)}</strong>
                         </div>
                         <div>
@@ -377,87 +410,96 @@ const ProductionPage = () => {
                             <strong>{line.workerCountConfirmed ? line.workerCount : '—'}</strong>
                         </div>
                     </div>
-                    {line.configured ? (
-                        <Progress
-                            percent={Math.min(100, Math.round(percent))}
-                            showInfo={false}
-                            size='small'
-                            strokeColor={tone === 'success' ? '#15803d' : tone === 'warning' ? '#d97706' : '#dc2626'}
-                            trailColor='#e8edf3'
-                        />
-                    ) : null}
                 </button>
                 <Button
-                    type={day?.status === 'draft' && !value?.reported ? 'primary' : 'default'}
-                    icon={<EditOutlined />}
+                    type={!readOnly && isMissingAtSlot(line, selectedSlotKey) ? 'primary' : 'default'}
                     onClick={() => openLine(line)}
                 >
-                    {day?.status !== 'draft' ? 'Xem' : value?.reported ? 'Sửa' : line.configured ? 'Nhập' : 'Thiết lập'}
+                    {readOnly ? 'Xem' : value?.reported ? 'Sửa' : line.configured ? 'Nhập' : 'Thiết lập'}
                 </Button>
             </article>
         );
     };
 
+    const kpis =
+        day && day.lines.length ? (
+            <>
+                <div className='pd-stat'>
+                    <span>Sản lượng</span>
+                    <b>
+                        {number(day.summary.totalActual)}
+                        <small>/ {number(day.summary.totalTarget)} SP</small>
+                    </b>
+                </div>
+                <div className='pd-stat'>
+                    <span>Mức đạt</span>
+                    <b className={`tone-${achievementTone(day.summary.achievementPercent)}`}>
+                        {day.summary.achievementPercent.toFixed(1)}%{' '}
+                        <span className={`pd-meter tone-${achievementTone(day.summary.achievementPercent)}`}>
+                            <i
+                                style={{
+                                    width: `${Math.min(100, Math.round(day.summary.achievementPercent))}%`,
+                                }}
+                            />
+                        </span>
+                    </b>
+                </div>
+                <div className='pd-stat'>
+                    <span>Nhân sự</span>
+                    <b>
+                        {number(day.summary.totalWorkers)}
+                        <small>
+                            {day.summary.configuredLineCount}/{day.summary.lineCount} chuyền
+                        </small>
+                    </b>
+                </div>
+                {canSeeFinancials ? (
+                    <div className='pd-stat'>
+                        <span>Giá trị</span>
+                        <b>
+                            {number(day.summary.totalAmount)}
+                            <small>đ</small>
+                        </b>
+                    </div>
+                ) : null}
+            </>
+        ) : undefined;
+
     return (
         <div className='production-page'>
-            <section className='production-workbench-header'>
-                <div className='production-workbench-title'>
-                    <span className='production-kicker'>Điều hành tại xưởng</span>
-                    <Title level={2}>Báo sản lượng theo giờ</Title>
-                    <Text type='secondary'>Nhập một lần, toàn bộ màn hình quản lý cập nhật ngay.</Text>
-                </div>
-                <div className='production-workbench-controls'>
-                    <Select
-                        value={plantId || undefined}
-                        onChange={(value) => {
-                            setPlantId(value);
-                            setSelectedLineId(null);
-                            setSelectedSlotKey('');
-                        }}
-                        disabled={!canSwitchPlant}
-                        loading={plantsQuery.isLoading}
-                        placeholder='Chọn cơ sở'
-                        options={(plantsQuery.data || []).map((plant) => ({ value: plant.id, label: plant.name }))}
-                    />
-                    <DatePicker
-                        value={date}
-                        allowClear={false}
-                        format='DD/MM/YYYY'
-                        onChange={(value) => {
-                            setDate(value || dayjs());
-                            setSelectedSlotKey('');
-                            setSelectedLineId(null);
-                        }}
-                    />
-                    <Tooltip title='Tải lại dữ liệu'>
-                        <Button
-                            icon={<ReloadOutlined />}
-                            loading={dayQuery.isFetching}
-                            onClick={() => dayQuery.refetch()}
-                        />
-                    </Tooltip>
-                    {canManage && (!day || day.status === 'draft') ? (
-                        <Button icon={<SettingOutlined />} onClick={() => setSetupOpen(true)}>
-                            {screens.sm ? 'Thiết lập' : null}
-                        </Button>
-                    ) : null}
-                </div>
-            </section>
+            <ProductionCommandRibbon
+                date={date}
+                onDateChange={(value) => {
+                    setDate(value);
+                    setSelectedSlotKey('');
+                    setSelectedLineId(null);
+                }}
+                plantId={plantId}
+                plants={plantsQuery.data || []}
+                plantsLoading={plantsQuery.isLoading}
+                canSwitchPlant={canSwitchPlant}
+                onPlantChange={(value) => {
+                    setPlantId(value);
+                    setSelectedLineId(null);
+                    setSelectedSlotKey('');
+                }}
+                day={day}
+                kpis={kpis}
+                workflow
+                canManage={canManage}
+                canReopenLocked={canReopenLocked}
+                onSetup={canManage ? () => setSetupOpen(true) : undefined}
+                onRefresh={() => dayQuery.refetch()}
+                refreshing={dayQuery.isFetching}
+                onUpdated={refreshDayQueries}
+            />
 
-            {day ? (
-                <ProductionDayStatusBar
-                    day={day}
-                    canManage={canManage}
-                    canReopenLocked={canReopenLocked}
-                    onUpdated={async () => {
-                        setSetupOpen(false);
-                        setSelectedLineId(null);
-                        await queryClient.invalidateQueries({
-                            queryKey: ['production', 'day', plantId, productionDate],
-                        });
-                        await queryClient.invalidateQueries({ queryKey: ['production', 'history', plantId] });
-                    }}
-                />
+            {day && day.lines.length && isMobile ? (
+                <div className='pd-pulse'>
+                    <b>{number(day.summary.totalActual)}</b>/{number(day.summary.totalTarget)} SP ·{' '}
+                    <b>{day.summary.achievementPercent.toFixed(1)}%</b> · {day.summary.configuredLineCount}/
+                    {day.summary.lineCount} chuyền
+                </div>
             ) : null}
 
             {dayQuery.isLoading ? (
@@ -537,80 +579,9 @@ const ProductionPage = () => {
                 </section>
             ) : (
                 <>
-                    <section className='production-kpi-strip'>
-                        <div>
-                            <span>Sản lượng</span>
-                            <strong>{number(day.summary.totalActual)}</strong>
-                            <small>/ {number(day.summary.totalTarget)} SP</small>
-                        </div>
-                        <div>
-                            <span>Mức đạt</span>
-                            <strong className={`tone-${achievementTone(day.summary.achievementPercent)}`}>
-                                {day.summary.achievementPercent.toFixed(1)}%
-                            </strong>
-                            <small>toàn xưởng</small>
-                        </div>
-                        <div>
-                            <span>Nhân sự</span>
-                            <strong>{number(day.summary.totalWorkers)}</strong>
-                            <small>
-                                {day.summary.configuredLineCount}/{day.summary.lineCount} chuyền đã xác nhận
-                            </small>
-                        </div>
-                        <div>
-                            <span>Mã hàng</span>
-                            <strong>{day.summary.itemCount}</strong>
-                            <small>đang ghi nhận</small>
-                        </div>
-                        {canSeeFinancials ? (
-                            <div className='production-kpi-financial'>
-                                <span>Giá trị sản lượng</span>
-                                <strong>{number(day.summary.totalAmount)} đ</strong>
-                                <small>theo đơn giá snapshot</small>
-                            </div>
-                        ) : null}
-                    </section>
-
-                    <section className='production-slot-rail' aria-label='Chọn khung giờ'>
-                        {activeSlots.map((slot) => {
-                            const summary = day.slotSummaries.find((item) => item.key === slot.key);
-                            const complete = summary?.totalLines && summary.reportedLines === summary.totalLines;
-                            return (
-                                <button
-                                    type='button'
-                                    key={slot.key}
-                                    className={`${selectedSlotKey === slot.key ? 'is-selected' : ''} ${complete ? 'is-complete' : ''}`}
-                                    onClick={() => setSelectedSlotKey(slot.key)}
-                                >
-                                    <span>{slot.label}</span>
-                                    <strong>{number(summary?.actual || 0)}</strong>
-                                    <small>
-                                        {summary?.reportedLines || 0}/{summary?.totalLines || 0} chuyền
-                                    </small>
-                                </button>
-                            );
-                        })}
-                    </section>
-
-                    <section className='production-toolbar'>
-                        <div>
-                            <Title level={4}>{selectedSlot?.label || 'Khung giờ'}</Title>
-                            <Text type='secondary'>
-                                Đã báo {selectedSlotSummary?.reportedLines || 0}/{selectedSlotSummary?.totalLines || 0}{' '}
-                                chuyền
-                            </Text>
-                        </div>
-                        <div className='production-toolbar__actions'>
-                            {isMobile ? (
-                                <Segmented<MobileView>
-                                    value={mobileView}
-                                    onChange={setMobileView}
-                                    options={[
-                                        { value: 'entry', label: 'Nhập liệu' },
-                                        { value: 'summary', label: 'Tổng quan' },
-                                    ]}
-                                />
-                            ) : null}
+                    {isMobile ? (
+                        <>
+                            <div className='pd-mobile-slots'>{activeSlots.map((slot) => renderSlotChip(slot, true))}</div>
                             <Input
                                 allowClear
                                 prefix={<SearchOutlined />}
@@ -618,11 +589,6 @@ const ProductionPage = () => {
                                 onChange={(event) => setSearch(event.target.value)}
                                 placeholder='Tìm chuyền, mã hàng...'
                             />
-                        </div>
-                    </section>
-
-                    {isMobile ? (
-                        mobileView === 'entry' ? (
                             <section className='production-mobile-list'>
                                 {filteredLines.length ? (
                                     filteredLines.map(renderMobileLine)
@@ -630,110 +596,49 @@ const ProductionPage = () => {
                                     <Empty description='Không có chuyền phù hợp' />
                                 )}
                             </section>
-                        ) : (
-                            <section className='production-mobile-summary'>
-                                <div className='production-hour-summary'>
-                                    <div>
-                                        <span>Thực tế {selectedSlot?.label}</span>
-                                        <strong>{number(selectedSlotSummary?.actual || 0)} SP</strong>
-                                    </div>
-                                    <Progress
-                                        type='circle'
-                                        size={92}
-                                        percent={
-                                            selectedSlotSummary?.target
-                                                ? Math.min(
-                                                      100,
-                                                      Math.round(
-                                                          (selectedSlotSummary.actual / selectedSlotSummary.target) *
-                                                              100
-                                                      )
-                                                  )
-                                                : 0
-                                        }
-                                    />
-                                </div>
-                                <div className='production-missing-panel'>
-                                    <div className='production-panel-heading'>
-                                        <strong>Còn thiếu {missingLines.length} chuyền</strong>
-                                        <span>Chạm để nhập ngay</span>
-                                    </div>
-                                    {missingLines.length ? (
-                                        missingLines.map((line) => (
-                                            <button key={line.lineId} type='button' onClick={() => openLine(line)}>
-                                                <span>{line.lineCode}</span>
-                                                <small>{line.leaderName || 'Chưa có tổ trưởng'}</small>
-                                                <EditOutlined />
-                                            </button>
-                                        ))
-                                    ) : (
-                                        <div className='production-all-reported'>
-                                            <CheckCircleFilled /> Tất cả chuyền đã báo
-                                        </div>
-                                    )}
-                                </div>
-                            </section>
-                        )
+                        </>
                     ) : (
-                        <div className='production-desktop-workspace'>
-                            <section className='production-grid-panel'>
-                                <Table<ProductionLineRecord>
-                                    rowKey='lineId'
-                                    columns={columns}
-                                    dataSource={filteredLines}
-                                    pagination={false}
-                                    size='middle'
-                                    sticky
-                                    scroll={{
-                                        x: Math.max(900, 486 + activeSlots.length * 88),
-                                        y: 'calc(100vh - 430px)',
-                                    }}
-                                    rowClassName={(line) => (!line.configured ? 'production-row-unconfigured' : '')}
-                                />
-                            </section>
-                            <aside className='production-missing-panel'>
-                                <div className='production-panel-heading'>
-                                    <strong>
-                                        {missingLines.length ? `${missingLines.length} chuyền chưa báo` : 'Đã báo đủ'}
-                                    </strong>
-                                    <span>{selectedSlot?.label}</span>
-                                </div>
-                                <div className='production-hour-progress'>
-                                    <Progress
-                                        percent={
-                                            selectedSlotSummary?.totalLines
-                                                ? Math.round(
-                                                      (selectedSlotSummary.reportedLines /
-                                                          selectedSlotSummary.totalLines) *
-                                                          100
-                                                  )
-                                                : 0
-                                        }
-                                        showInfo={false}
-                                        strokeColor='#0f766e'
-                                    />
+                        <section className='pd-board'>
+                            <div className='pd-timeline'>{activeSlots.map((slot) => renderSlotChip(slot))}</div>
+                            <div className='pd-board__bar'>
+                                <div className='pd-board__bar-title'>
+                                    <strong>Khung {selectedSlot?.label || '—'}</strong>
                                     <span>
-                                        {selectedSlotSummary?.reportedLines || 0}/{selectedSlotSummary?.totalLines || 0}
+                                        đã báo {selectedSlotSummary?.reportedLines || 0}/
+                                        {selectedSlotSummary?.totalLines || 0} chuyền
                                     </span>
                                 </div>
-                                <div className='production-missing-list'>
-                                    {missingLines.map((line) => (
-                                        <button key={line.lineId} type='button' onClick={() => openLine(line)}>
-                                            <span>{line.lineCode}</span>
-                                            <small>{line.leaderName || line.lineName || 'Chưa có tổ trưởng'}</small>
-                                            <EditOutlined />
-                                        </button>
-                                    ))}
-                                    {!missingLines.length ? (
-                                        <div className='production-all-reported'>
-                                            <CheckCircleFilled />
-                                            <span>Khung giờ đã hoàn tất</span>
-                                        </div>
-                                    ) : null}
-                                </div>
-                            </aside>
-                        </div>
+                                <Input
+                                    allowClear
+                                    prefix={<SearchOutlined />}
+                                    value={search}
+                                    onChange={(event) => setSearch(event.target.value)}
+                                    placeholder='Tìm chuyền, mã hàng...'
+                                />
+                            </div>
+                            <Table<ProductionLineRecord>
+                                rowKey='lineId'
+                                columns={columns}
+                                dataSource={filteredLines}
+                                pagination={false}
+                                size='middle'
+                                sticky
+                                scroll={{
+                                    x: Math.max(880, 500 + activeSlots.length * 86),
+                                    y: 'calc(100vh - 380px)',
+                                }}
+                                rowClassName={(line) => (!line.configured ? 'production-row-unconfigured' : '')}
+                            />
+                        </section>
                     )}
+
+                    <ProductionMissingDock
+                        slotLabel={selectedSlot?.label || ''}
+                        missingLines={missingLines}
+                        dueCount={selectedSlotSummary?.totalLines || 0}
+                        readOnly={readOnly}
+                        onOpenLine={(line) => openLine(line)}
+                    />
                 </>
             )}
 
