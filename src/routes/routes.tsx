@@ -2,6 +2,7 @@ import { lazy } from 'react';
 import type { ReactNode } from 'react';
 import { Navigate, createBrowserRouter } from 'react-router-dom';
 import AppLayout from '../components/layout/AppLayout';
+import ProductionAppLayout from '../components/production/ProductionAppLayout';
 import LazyBoundary from '../components/shared/LazyBoundary';
 import ProtectedRoute, { RequireAccess } from './guard';
 import { ROUTE_ACCESS } from '../core/constants/navAccess';
@@ -40,6 +41,11 @@ const IncidentReplayCasePage = lazy(() => import('../pages/IncidentReplayCasePag
 const DataQualityDashboard = lazy(() => import('../pages/DataQualityDashboard'));
 const AiAssistantQualityPage = lazy(() => import('../pages/AiAssistantQualityPage'));
 const LuckyWheelPage = lazy(() => import('../pages/LuckyWheelPage'));
+const ProductionPage = lazy(() => import('../pages/ProductionPage'));
+const ProductionHistoryPage = lazy(() => import('../pages/ProductionHistoryPage'));
+const ProductionMonitorPage = lazy(() => import('../pages/ProductionMonitorPage'));
+const ProductionPlanningPage = lazy(() => import('../pages/ProductionPlanningPage'));
+const ProductionReportPage = lazy(() => import('../pages/ProductionReportPage'));
 const LoginPage = lazy(() => import('../pages/LoginPage'));
 const ForgotPasswordPage = lazy(() => import('../pages/ForgotPasswordPage'));
 const ResetPasswordPage = lazy(() => import('../pages/ResetPasswordPage'));
@@ -152,6 +158,18 @@ export const router = createBrowserRouter([
                 element: guarded('/admin/assistant-quality', <AiAssistantQualityPage />),
             },
             { path: 'events/lucky-wheel', element: guarded('/events/lucky-wheel', <LuckyWheelPage />) },
+        ],
+    },
+    {
+        path: '/production',
+        element: guarded('/production', <ProductionAppLayout />),
+        errorElement: withSuspense(<RouteErrorPage />),
+        children: [
+            { index: true, element: withSuspense(<ProductionPage />) },
+            { path: 'planning', element: guarded('/production/planning', <ProductionPlanningPage />) },
+            { path: 'monitor', element: guarded('/production/monitor', <ProductionMonitorPage />) },
+            { path: 'reports', element: guarded('/production/reports', <ProductionReportPage />) },
+            { path: 'history', element: withSuspense(<ProductionHistoryPage />) },
         ],
     },
     {

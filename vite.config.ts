@@ -6,6 +6,25 @@ import tailwindcss from '@tailwindcss/vite';
 export default defineConfig({
     cacheDir: process.env.VITE_CACHE_DIR || '.vite-cache',
     plugins: [react(), tailwindcss()],
+    server: {
+        // Khóa cứng IPv4 + cổng: máy này hay dính 2 bẫy môi trường —
+        //  (1) `npm run dev` trần bind ::1 (IPv6) trong khi tab mở 127.0.0.1 → HMR không nối được,
+        //      @vite/client rơi vào vòng lặp sendError "reading 'send'" hàng chục nghìn lỗi, tràn RAM;
+        //  (2) nhiều terminal cùng `npm run dev` → server thứ 2 lặng lẽ nhảy sang 5174/5175 rồi tranh nhau.
+        // host cố định = luôn IPv4; strictPort = instance thứ 2 CHẾT NGAY với lỗi rõ ràng thay vì đổi cổng.
+        host: '127.0.0.1',
+        port: 5173,
+        strictPort: true,
+        // Vite 8 tự bật console forwarding trong môi trường agent. Khi HMR mất kết nối,
+        // cơ chế này có thể tự phát sinh vòng lặp unhandled-rejection qua WebSocket.
+        forwardConsole: false,
+    },
+    resolve: {
+        dedupe: ['react', 'react-dom'],
+    },
+    optimizeDeps: {
+        include: ['react', 'react-dom', 'react-dom/client', 'react-router-dom'],
+    },
     build: {
         rollupOptions: {
             output: {

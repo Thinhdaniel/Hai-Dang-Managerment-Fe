@@ -24,6 +24,7 @@ import {
     MenuUnfoldOutlined,
     SearchOutlined,
     SettingOutlined,
+    LineChartOutlined,
     ToolOutlined,
     UserOutlined,
     WarningOutlined,
@@ -32,7 +33,7 @@ import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import usePageMeta from '../navigation/usePageMeta';
 import { normalizeSearchTerm } from '../../core/lib/search';
 import { useAuth } from '../../core/contexts/AuthContext';
-import { hasManagerAccess } from '../../core/lib/permissions';
+import { can, hasManagerAccess } from '../../core/lib/permissions';
 import { useNotificationContext } from '../../core/contexts/NotificationContext';
 import PushNotificationToggle from '../notifications/PushNotificationToggle';
 import NotificationSoundToggle from '../notifications/NotificationSoundToggle';
@@ -73,6 +74,7 @@ const AppHeader: React.FC<AppHeaderProps> = ({ collapsed, isDesktop, mobileOpen,
     const pageMeta = usePageMeta();
     const supportsSearch = pathname.startsWith('/assets');
     const canViewUsers = hasManagerAccess(role);
+    const canOpenProduction = can(role, 'production.view');
     const useNotificationDrawer = !isDesktop;
 
     const quickAction = useMemo(() => {
@@ -162,6 +164,12 @@ const AppHeader: React.FC<AppHeaderProps> = ({ collapsed, isDesktop, mobileOpen,
         label: 'Cài đặt thông báo',
     };
 
+    const productionAppItem: NonNullable<MenuProps['items']>[number] = {
+        key: 'production-app',
+        icon: <LineChartOutlined />,
+        label: 'Mở Quản lý sản xuất',
+    };
+
     const logoutItem: NonNullable<MenuProps['items']>[number] = {
         key: 'logout',
         icon: <LogoutOutlined />,
@@ -179,10 +187,18 @@ const AppHeader: React.FC<AppHeaderProps> = ({ collapsed, isDesktop, mobileOpen,
                   label: 'Profile',
               },
               notificationSettingsItem,
+              ...(canOpenProduction ? [productionAppItem] : []),
               { type: 'divider' },
               logoutItem,
           ]
-        : [userSummaryItem, { type: 'divider' }, notificationSettingsItem, { type: 'divider' }, logoutItem];
+        : [
+              userSummaryItem,
+              { type: 'divider' },
+              notificationSettingsItem,
+              ...(canOpenProduction ? [productionAppItem] : []),
+              { type: 'divider' },
+              logoutItem,
+          ];
 
     const handleUserMenuClick: MenuProps['onClick'] = ({ key }) => {
         if (key === 'profile') {
@@ -192,6 +208,11 @@ const AppHeader: React.FC<AppHeaderProps> = ({ collapsed, isDesktop, mobileOpen,
 
         if (key === 'notification-settings') {
             setNotificationSettingsOpen(true);
+            return;
+        }
+
+        if (key === 'production-app') {
+            navigate('/production');
             return;
         }
 

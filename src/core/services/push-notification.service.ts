@@ -82,6 +82,7 @@ type SerializedPushSubscription = {
 
 const SERVICE_WORKER_PATH = '/sw.js';
 const PUSH_EVER_ENABLED_KEY = 'hd-web-push-ever-enabled';
+const serviceWorkerEnabled = !import.meta.env.DEV || import.meta.env.VITE_ENABLE_DEV_SERVICE_WORKER === 'true';
 
 const urlBase64ToUint8Array = (base64String: string) => {
     const padding = '='.repeat((4 - (base64String.length % 4)) % 4);
@@ -98,6 +99,7 @@ const urlBase64ToUint8Array = (base64String: string) => {
 
 const isSupported = () =>
     typeof window !== 'undefined' &&
+    serviceWorkerEnabled &&
     'serviceWorker' in navigator &&
     'PushManager' in window &&
     'Notification' in window &&

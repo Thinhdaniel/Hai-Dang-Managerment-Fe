@@ -37,7 +37,10 @@ export type Capability =
     | 'user.manage'
     | 'storage.view'
     | 'dataQuality.view'
-    | 'assistantQuality.view';
+    | 'assistantQuality.view'
+    | 'production.view'
+    | 'production.write'
+    | 'production.manage';
 
 const ALL_VIEW: Capability[] = ['asset.view', 'transfer.view', 'borrowing.view', 'maintenance.view'];
 
@@ -65,6 +68,9 @@ const ROLE_CAPS: Record<Exclude<UserRole, UserRole.ADMIN>, Capability[]> = {
         'procurement.operate',
         'procurement.approve',
         'report.view',
+        'production.view',
+        'production.write',
+        'production.manage',
         'plant.view',
         'user.view',
     ],
@@ -89,6 +95,9 @@ const ROLE_CAPS: Record<Exclude<UserRole, UserRole.ADMIN>, Capability[]> = {
         'technicalPurchase.manage',
         'procurement.operate',
         'report.view',
+        'production.view',
+        'production.write',
+        'production.manage',
     ],
     [UserRole.STAFF]: [
         'asset.view',
@@ -99,6 +108,8 @@ const ROLE_CAPS: Record<Exclude<UserRole, UserRole.ADMIN>, Capability[]> = {
         'maintenance.view',
         'maintenance.create',
         'technicalPurchase.manage',
+        'production.view',
+        'production.write',
     ],
 };
 

@@ -15,10 +15,33 @@ const sendSkipWaiting = (worker: ServiceWorker) => {
     worker.postMessage({ type: 'SKIP_WAITING' });
 };
 
+const cleanupDevelopmentPwa = async () => {
+    if (!('serviceWorker' in navigator)) return;
+
+    try {
+        const registrations = await navigator.serviceWorker.getRegistrations();
+        await Promise.allSettled(registrations.map((registration) => registration.unregister()));
+
+        if ('caches' in window) {
+            const cacheNames = await caches.keys();
+            await Promise.allSettled(
+                cacheNames.filter((name) => name.startsWith('hai-dang-manager')).map((name) => caches.delete(name))
+            );
+        }
+    } catch {
+        // Dọn cache dev là best-effort; không được cản ứng dụng khởi động.
+    }
+};
+
 const ServiceWorkerManager = () => {
     const { notification } = App.useApp();
 
     useEffect(() => {
+        if (import.meta.env.DEV) {
+            void cleanupDevelopmentPwa();
+            return;
+        }
+
         if (!canRegisterServiceWorker()) return;
 
         let refreshing = false;

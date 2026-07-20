@@ -9,6 +9,9 @@ const STALE_ASSET_PATTERNS = [
     'error loading dynamically imported module',
     "Unexpected token '<'",
     'is not a valid JavaScript MIME type',
+    // Hai thế hệ dependency Vite cùng tồn tại sau khi optimizer/HMR đổi phiên bản.
+    "Cannot read properties of null (reading 'useContext')",
+    'Invalid hook call',
 ];
 
 const hasStaleAssetMessage = (value: unknown) => {

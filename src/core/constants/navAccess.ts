@@ -57,4 +57,8 @@ export const ROUTE_ACCESS: Record<string, AccessCheck> = {
     '/admin/data-quality': requireCap('dataQuality.view'),
     '/admin/assistant-quality': requireCap('assistantQuality.view'),
     '/events/lucky-wheel': requireDirectorUp,
+    '/production': requireCap('production.view'),
+    '/production/planning': requireCap('production.manage'),
+    '/production/monitor': requireCap('production.manage'),
+    '/production/reports': requireCap('production.manage'),
 };

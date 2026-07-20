@@ -1,23 +1,29 @@
-import React from 'react';
-import { Button, Result } from 'antd';
-import { useNavigate } from 'react-router-dom';
-
-const NotFoundPage: React.FC = () => {
-    const navigate = useNavigate();
-
+const NotFoundPage = () => {
     return (
-        <div className="flex h-screen w-full flex-col items-center justify-center bg-slate-50">
-            <Result
-                status="404"
-                title={<span className="text-3xl font-black text-slate-800">404</span>}
-                subTitle={<span className="text-base text-slate-500">Xin lỗi, trang bạn đang tìm kiếm không tồn tại hoặc đã bị gỡ bỏ.</span>}
-                extra={
-                    <Button type="primary" size="large" onClick={() => navigate('/')} className="mt-4 bg-blue-600 font-medium hover:bg-blue-700">
+        <main className='flex min-h-screen w-full items-center justify-center bg-slate-50 px-5'>
+            <section className='w-full max-w-lg text-center'>
+                <p className='text-sm font-semibold text-blue-600'>Không tìm thấy trang</p>
+                <h1 className='mt-2 text-7xl font-black text-slate-900'>404</h1>
+                <p className='mt-4 text-base leading-7 text-slate-500'>
+                    Đường dẫn không tồn tại hoặc ứng dụng vừa được cập nhật. Hãy tải lại để nhận phiên bản mới nhất.
+                </p>
+                <div className='mt-7 flex flex-wrap justify-center gap-3'>
+                    <button
+                        type='button'
+                        className='min-h-11 rounded-md border border-slate-300 bg-white px-5 font-semibold text-slate-700 shadow-sm'
+                        onClick={() => window.location.reload()}
+                    >
+                        Tải lại
+                    </button>
+                    <a
+                        href='/dashboard'
+                        className='inline-flex min-h-11 items-center rounded-md bg-blue-600 px-5 font-semibold text-white shadow-sm'
+                    >
                         Về trang chủ
-                    </Button>
-                }
-            />
-        </div>
+                    </a>
+                </div>
+            </section>
+        </main>
     );
 };
 
