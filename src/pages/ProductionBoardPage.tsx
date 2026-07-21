@@ -19,7 +19,12 @@ import { useSocket } from '../core/hooks/useSocket';
 import { isAdmin, isDirector } from '../core/lib/permissions';
 import { plantService } from '../core/services/plant.service';
 import { productionService } from '../core/services/production.service';
-import type { ProductionBoard, ProductionBoardLine, ProductionBoardLineStatus } from '../core/types/production';
+import type {
+    ProductionBoard,
+    ProductionBoardLine,
+    ProductionBoardLineStatus,
+    ProductionBoardSlot,
+} from '../core/types/production';
 
 const { Text, Title } = Typography;
 const number = (value = 0) => new Intl.NumberFormat('vi-VN', { maximumFractionDigits: 1 }).format(value);
@@ -155,8 +160,17 @@ const LineCard = ({ line, onOpen }: { line: ProductionBoardLine; onOpen: () => v
     );
 };
 
+const rateTone = (percent: number) => (percent >= 95 ? 'is-ok' : percent >= 80 ? 'is-warn' : 'is-danger');
+
+// Nhãn cột dạng dải giờ "8-9h" như bảng Excel của xưởng, rõ hơn nhãn điểm "8h".
+const slotRangeLabel = (slot: ProductionBoardSlot) => {
+    const hour = (minute: number) => Math.floor(minute / 60);
+    return `${hour(slot.startMinute)}-${hour(slot.endMinute)}h`;
+};
+
 // Sổ khoán theo giờ — trình bày quen thuộc như bảng Excel của xưởng:
 // mỗi chuyền 3 dòng (Khoán / Thực tế / Tỉ lệ) chạy ngang các khung giờ.
+// Phân cấp thị giác: Thực tế là dòng chính, Khoán là nền tham chiếu, Tỉ lệ kèm micro-bar.
 const BoardLedger = ({ board, onOpenLine }: { board: ProductionBoard; onOpenLine: (lineId: string) => void }) => {
     const slotColumns = board.lines.find((line) => line.slots.length)?.slots || [];
     if (!slotColumns.length) return null;
@@ -172,7 +186,8 @@ const BoardLedger = ({ board, onOpenLine }: { board: ProductionBoard; onOpenLine
                         <th className='lg-kind' aria-label='Chỉ tiêu' />
                         {slotColumns.map((slot) => (
                             <th key={slot.key} className={slot.current ? 'is-current' : undefined}>
-                                {slot.label}
+                                {slotRangeLabel(slot)}
+                                {slot.current ? <i aria-label='đang chạy' /> : null}
                             </th>
                         ))}
                         <th className='lg-total'>Tổng</th>
@@ -194,9 +209,18 @@ const BoardLedger = ({ board, onOpenLine }: { board: ProductionBoard; onOpenLine
                                     <td rowSpan={3} className='lg-item'>
                                         {line.activeItem?.itemCode || '—'}
                                     </td>
-                                    <td rowSpan={3}>{line.workerCount || '—'}</td>
+                                    <td rowSpan={3} className='lg-worker'>
+                                        {line.workerCount || '—'}
+                                    </td>
                                     <td rowSpan={3} className='lg-price'>
-                                        {line.activeItem ? `${number(line.activeItem.unitPrice)} đ` : '—'}
+                                        {line.activeItem ? (
+                                            <>
+                                                {number(line.activeItem.unitPrice)}
+                                                <i>đ</i>
+                                            </>
+                                        ) : (
+                                            '—'
+                                        )}
                                     </td>
                                     <th className='lg-kind'>Khoán</th>
                                     {line.slots.map((slot) => (
@@ -206,19 +230,35 @@ const BoardLedger = ({ board, onOpenLine }: { board: ProductionBoard; onOpenLine
                                     ))}
                                     <td className='lg-total'>{number(line.day.target)}</td>
                                     <td rowSpan={3} className='lg-income'>
-                                        {number(line.day.actualAmount)} đ
+                                        {number(line.day.actualAmount)}
+                                        <i>đ</i>
                                     </td>
                                 </tr>
                                 <tr className='lg-row-actual'>
                                     <th className='lg-kind'>Thực tế</th>
-                                    {line.slots.map((slot) => (
-                                        <td
-                                            key={slot.key}
-                                            className={`${slot.due && !slot.reported && slot.state !== 'not_planned' ? 'is-missing' : ''} ${slot.current ? 'is-current' : ''}`}
-                                        >
-                                            {slot.reported ? number(slot.actual) : slot.due ? '—' : ''}
-                                        </td>
-                                    ))}
+                                    {line.slots.map((slot) => {
+                                        const missing = slot.due && !slot.reported && slot.state !== 'not_planned';
+                                        return (
+                                            <td
+                                                key={slot.key}
+                                                className={[
+                                                    missing ? 'is-missing' : '',
+                                                    slot.current ? 'is-current' : '',
+                                                    !slot.due && !slot.current ? 'is-future' : '',
+                                                ]
+                                                    .filter(Boolean)
+                                                    .join(' ')}
+                                            >
+                                                {slot.reported ? (
+                                                    number(slot.actual)
+                                                ) : missing ? (
+                                                    <span className='lg-missing-dot' />
+                                                ) : (
+                                                    ''
+                                                )}
+                                            </td>
+                                        );
+                                    })}
                                     <td className='lg-total'>{number(line.day.actual)}</td>
                                 </tr>
                                 <tr className='lg-row-rate'>
@@ -226,25 +266,30 @@ const BoardLedger = ({ board, onOpenLine }: { board: ProductionBoard; onOpenLine
                                     {line.slots.map((slot) => {
                                         const percent =
                                             slot.reported && slot.target > 0 ? (slot.actual / slot.target) * 100 : null;
-                                        const tone =
-                                            percent === null
-                                                ? ''
-                                                : percent >= 95
-                                                  ? 'is-ok'
-                                                  : percent >= 80
-                                                    ? 'is-warn'
-                                                    : 'is-danger';
                                         return (
                                             <td
                                                 key={slot.key}
-                                                className={`${tone} ${slot.current ? 'is-current' : ''}`}
+                                                className={[
+                                                    percent === null ? '' : `${rateTone(percent)} has-bar`,
+                                                    slot.current ? 'is-current' : '',
+                                                    !slot.due && !slot.current ? 'is-future' : '',
+                                                ]
+                                                    .filter(Boolean)
+                                                    .join(' ')}
+                                                style={
+                                                    percent === null
+                                                        ? undefined
+                                                        : ({
+                                                              '--lg-rate': Math.min(1, percent / 100),
+                                                          } as React.CSSProperties)
+                                                }
                                             >
                                                 {percent === null ? '' : `${Math.round(percent)}%`}
                                             </td>
                                         );
                                     })}
                                     <td
-                                        className={`lg-total ${dayPercent === null ? '' : dayPercent >= 95 ? 'is-ok' : dayPercent >= 80 ? 'is-warn' : 'is-danger'}`}
+                                        className={`lg-total ${dayPercent === null ? '' : rateTone(dayPercent)}`}
                                     >
                                         {dayPercent === null ? '' : `${Math.round(dayPercent)}%`}
                                     </td>
@@ -843,7 +888,10 @@ const ProductionBoardPage = () => {
                                         <span>
                                             <b>Sổ khoán theo giờ</b>
                                         </span>
-                                        <small>Khoán · Thực tế · Tỉ lệ từng khung giờ của mỗi chuyền</small>
+                                        <small className='production-board-ledger-legend'>
+                                            <span className='lg-missing-dot' /> chưa báo · Khoán / Thực tế / Tỉ lệ
+                                            từng khung giờ
+                                        </small>
                                     </div>
                                     <BoardLedger board={board} onOpenLine={openLine} />
                                 </div>

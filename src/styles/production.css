@@ -718,15 +718,30 @@
     background: var(--pd-surface);
 }
 
+.production-board-ledger-panel .production-board-section-title b {
+    font-size: 14px;
+    font-weight: 750;
+}
+
+/* Chú thích ký hiệu: 9px mặc định của section-title quá nhỏ để đọc */
+.production-board-ledger-panel .production-board-ledger-legend {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    color: var(--pd-ink-3);
+    font-size: 10.5px;
+}
+
 .production-board-ledger-wrap {
-    overflow-x: auto;
+    max-height: 68vh;
+    overflow: auto;
     border: 1px solid var(--pd-border);
     border-radius: 8px;
 }
 
 .production-board-ledger {
     width: 100%;
-    min-width: 980px;
+    min-width: 1020px;
     border-collapse: separate;
     border-spacing: 0;
     font-size: 12px;
@@ -735,9 +750,8 @@
 
 .production-board-ledger th,
 .production-board-ledger td {
-    padding: 5px 8px;
+    padding: 4px 8px;
     border-right: 1px solid var(--pd-border);
-    border-bottom: 1px solid var(--pd-border);
     text-align: center;
     white-space: nowrap;
 }
@@ -747,17 +761,18 @@
     border-right: 0;
 }
 
-.production-board-ledger tr:last-child th,
-.production-board-ledger tr:last-child td {
-    border-bottom: 0;
-}
-
+/* ---- Header: dính trên khi cuộn, dùng shadow thay border để không mất nét ---- */
 .production-board-ledger thead th {
-    background: #f7f8fb;
+    position: sticky;
+    top: 0;
+    z-index: 2;
+    height: 34px;
+    background: #f4f6fa;
+    box-shadow: inset 0 -1px 0 var(--pd-border-strong);
     color: var(--pd-ink-2);
-    font-size: 10.5px;
+    font-size: 10px;
     font-weight: 700;
-    letter-spacing: 0.04em;
+    letter-spacing: 0.05em;
     text-transform: uppercase;
 }
 
@@ -766,18 +781,33 @@
     color: var(--pd-brand);
 }
 
+/* Chấm nhịp cho khung giờ đang chạy */
+.production-board-ledger thead th.is-current i {
+    display: block;
+    width: 5px;
+    height: 5px;
+    margin: 2px auto 0;
+    border-radius: 50%;
+    background: var(--pd-brand);
+    animation: production-board-live 2.4s ease-out infinite;
+}
+
 .production-board-ledger .lg-line {
     position: sticky;
     left: 0;
-    z-index: 2;
-    min-width: 122px;
+    z-index: 1;
+    min-width: 128px;
     background: var(--pd-surface);
+    box-shadow: 1px 0 0 var(--pd-border);
     text-align: left;
 }
 
 .production-board-ledger thead .lg-line {
     z-index: 3;
-    background: #f7f8fb;
+    background: #f4f6fa;
+    box-shadow:
+        inset 0 -1px 0 var(--pd-border-strong),
+        1px 0 0 var(--pd-border);
 }
 
 .production-board-ledger .lg-line button {
@@ -791,95 +821,172 @@
     text-align: left;
 }
 
+.production-board-ledger .lg-line button:hover b {
+    color: var(--pd-brand);
+}
+
 .production-board-ledger .lg-line button b {
-    font-size: 13px;
+    font-size: 13.5px;
     font-weight: 750;
+    letter-spacing: -0.01em;
+    transition: color 140ms ease;
 }
 
 .production-board-ledger .lg-line button small {
-    color: var(--pd-ink-2);
+    color: var(--pd-ink-3);
     font-size: 10.5px;
 }
 
+/* ---- Cột nhãn 3 dòng: nhấn "Thực tế" vì đó là dòng người đọc bám vào ---- */
 .production-board-ledger .lg-kind {
-    min-width: 64px;
-    background: #f7f8fb;
-    color: var(--pd-ink-2);
-    font-size: 10px;
+    min-width: 66px;
+    padding-left: 10px;
+    background: #f9fafc;
+    color: var(--pd-ink-3);
+    font-size: 9.5px;
     font-weight: 700;
+    letter-spacing: 0.04em;
     text-align: left;
+    text-transform: uppercase;
+}
+
+.production-board-ledger .lg-row-actual .lg-kind {
+    background: #eef1f7;
+    color: var(--pd-ink);
 }
 
 .production-board-ledger .lg-item {
     color: var(--pd-ink);
-    font-weight: 650;
+    font-weight: 700;
 }
 
+.production-board-ledger .lg-worker,
 .production-board-ledger .lg-price {
     color: var(--pd-ink-2);
 }
 
+.production-board-ledger .lg-price i,
+.production-board-ledger .lg-income i {
+    margin-left: 2px;
+    font-size: 0.82em;
+    font-style: normal;
+    opacity: 0.55;
+}
+
+/* ---- Ba dòng, ba trọng số: Khoán mờ · Thực tế đậm · Tỉ lệ kèm bar ---- */
 .production-board-ledger .lg-row-quota td {
-    color: var(--pd-ink-2);
+    color: var(--pd-ink-3);
+    font-size: 11.5px;
 }
 
 .production-board-ledger .lg-row-actual td {
     color: var(--pd-ink);
-    font-weight: 700;
+    font-size: 13.5px;
+    font-weight: 750;
+    letter-spacing: -0.01em;
 }
 
 .production-board-ledger .lg-row-rate td {
-    color: var(--pd-ink-2);
-    font-size: 11px;
+    position: relative;
+    height: 22px;
+    padding-bottom: 8px;
+    color: var(--pd-ink-3);
+    font-size: 10.5px;
+    font-weight: 650;
+    vertical-align: top;
+}
+
+/* Micro-bar dưới số % — thấy được hình dạng cả ngày mà không cần đọc từng ô */
+.production-board-ledger .lg-row-rate td.has-bar::before,
+.production-board-ledger .lg-row-rate td.has-bar::after {
+    position: absolute;
+    bottom: 4px;
+    left: 8px;
+    height: 2px;
+    border-radius: 999px;
+    content: '';
+}
+
+.production-board-ledger .lg-row-rate td.has-bar::before {
+    right: 8px;
+    background: var(--pd-border);
+}
+
+.production-board-ledger .lg-row-rate td.has-bar::after {
+    width: calc((100% - 16px) * var(--lg-rate, 0));
+    background: currentcolor;
 }
 
 .production-board-ledger td.is-ok {
     color: var(--pd-ok);
-    font-weight: 650;
 }
 
 .production-board-ledger td.is-warn {
     color: var(--pd-warn);
-    font-weight: 650;
 }
 
 .production-board-ledger td.is-danger {
     color: var(--pd-danger);
-    font-weight: 700;
 }
 
+/* Đến giờ mà chưa báo: chấm rỗng đỏ trên nền nhạt, không nhầm với "làm được 0" */
 .production-board-ledger td.is-missing {
     background: var(--pd-danger-bg);
 }
 
-.production-board-ledger td.is-current,
-.production-board-ledger .lg-row-quota td.is-current {
+.production-board-ledger .lg-missing-dot {
+    display: inline-block;
+    width: 6px;
+    height: 6px;
+    border: 1.5px solid var(--pd-danger-line);
+    border-radius: 50%;
+    vertical-align: middle;
+}
+
+/* Chưa tới giờ: nền chìm để ô trống đọc là "chưa đến", không phải lỗi bảng */
+.production-board-ledger td.is-future {
+    background: #fbfcfd;
+}
+
+.production-board-ledger td.is-current {
     background: var(--pd-brand-tint);
+    box-shadow:
+        inset 1px 0 0 #dfe6fb,
+        inset -1px 0 0 #dfe6fb;
 }
 
 .production-board-ledger .lg-total {
-    background: #fafbfd;
-    font-weight: 700;
+    min-width: 62px;
+    border-left: 1px solid var(--pd-border-strong);
+    background: #f7f9fc;
+    font-weight: 750;
 }
 
 .production-board-ledger .lg-row-quota .lg-total {
-    color: var(--pd-ink-2);
+    color: var(--pd-ink-3);
     font-weight: 650;
 }
 
 .production-board-ledger .lg-income {
-    min-width: 108px;
-    background: var(--pd-warn-bg);
+    min-width: 112px;
+    border-left: 1px solid var(--pd-warn-line);
+    background: #fffbf0;
     color: var(--pd-ink);
+    font-size: 13px;
     font-weight: 750;
 }
 
-/* Vạch ngăn đậm hơn giữa các chuyền để nhóm 3 dòng đọc thành khối */
+/* ---- Vạch ngăn giữa các chuyền: nhóm 3 dòng đọc thành một khối ---- */
+.production-board-ledger tbody th,
+.production-board-ledger tbody td {
+    border-bottom: 1px solid #f0f2f6;
+}
+
 .production-board-ledger .lg-row-rate th,
 .production-board-ledger .lg-row-rate td,
 .production-board-ledger .lg-row-quota th[rowspan],
 .production-board-ledger .lg-row-quota td[rowspan] {
-    border-bottom: 2px solid var(--pd-border-strong);
+    border-bottom: 1px solid var(--pd-border-strong);
 }
 
 .production-board-ledger tbody tr:nth-last-child(-n + 3) th[rowspan],
@@ -887,6 +994,12 @@
 .production-board-ledger tbody tr:last-child th,
 .production-board-ledger tbody tr:last-child td {
     border-bottom: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .production-board-ledger thead th.is-current i {
+        animation: none;
+    }
 }
 
 .production-board-focus {
