@@ -12,7 +12,7 @@ import {
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Alert, Button, DatePicker, Empty, Grid, Segmented, Select, Skeleton, Tooltip, Typography } from 'antd';
 import dayjs, { type Dayjs } from 'dayjs';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useAuth } from '../core/contexts/AuthContext';
 import { useSocket } from '../core/hooks/useSocket';
@@ -29,11 +29,14 @@ const money = (value = 0) =>
         currency: 'VND',
         maximumFractionDigits: 0,
     }).format(value);
-const shortMoney = (value = 0) =>
-    new Intl.NumberFormat('vi-VN', {
-        notation: 'compact',
-        maximumFractionDigits: 1,
-    }).format(value) + 'đ';
+// Tiền rút gọn theo quy ước Việt: dưới 1 triệu ghi đủ, trên thì "triệu"/"tỷ".
+// KHÔNG dùng Intl notation:compact vì vi-VN sinh "114 N" (N = nghìn) gây khó hiểu.
+const shortMoney = (value = 0) => {
+    const abs = Math.abs(value);
+    if (abs >= 1e9) return `${new Intl.NumberFormat('vi-VN', { maximumFractionDigits: 2 }).format(value / 1e9)} tỷ`;
+    if (abs >= 1e6) return `${new Intl.NumberFormat('vi-VN', { maximumFractionDigits: 1 }).format(value / 1e6)} triệu`;
+    return `${new Intl.NumberFormat('vi-VN', { maximumFractionDigits: 0 }).format(value)} đ`;
+};
 const clampPercent = (value: number) => Math.min(Math.max(value, 0), 100);
 const cacheKey = (plantId: string, date: string) => `production-board:${plantId}:${date}`;
 
@@ -71,12 +74,18 @@ const ProgressTrack = ({ value, tone }: { value: number; tone: string }) => (
 const LineCard = ({ line, onOpen }: { line: ProductionBoardLine; onOpen: () => void }) => {
     const meta = statusMeta[line.status];
     const incomeGap = line.day.projectedIncomeGap;
+    // Con số quản trị quan tâm nhất: hụt/vượt bao nhiêu SP so với khoán các giờ đã chốt.
+    const hasCheckpoint = line.checkpoint.target > 0;
+    const gap = line.checkpoint.gap;
+    const gapTone = !hasCheckpoint ? 'neutral' : gap < 0 ? 'behind' : 'ahead';
     return (
         <button type='button' className={`production-board-line-card tone-${meta.tone}`} onClick={onOpen}>
             <span className='production-board-line-card__header'>
                 <span>
                     <strong>{line.lineCode}</strong>
-                    <small>{line.lineName || line.leaderName || 'Chưa đặt tên chuyền'}</small>
+                    <small>
+                        {line.leaderName || line.lineName || 'Chưa đặt tên chuyền'} · {line.workerCount} CN
+                    </small>
                 </span>
                 <em className={`production-board-status tone-${meta.tone}`}>
                     {meta.tone === 'success' ? (
@@ -88,35 +97,49 @@ const LineCard = ({ line, onOpen }: { line: ProductionBoardLine; onOpen: () => v
                 </em>
             </span>
 
-            <span className='production-board-line-card__item'>
-                <b>{line.activeItem?.itemCode || 'Chưa có mã hàng'}</b>
-                {line.activeItem?.orderCode ? <small>{line.activeItem.orderCode}</small> : null}
-                <small>{line.workerCount} công nhân</small>
-            </span>
-
-            <span className='production-board-line-card__pace'>
-                <span>
-                    <small>Đã chốt theo giờ</small>
+            <span className='production-board-line-card__hero'>
+                <span className={`production-board-line-card__gap is-${gapTone}`}>
+                    <small>So với khoán đến giờ</small>
                     <strong>
-                        {number(line.checkpoint.actual)} <i>/ {number(line.checkpoint.target)} SP</i>
+                        {hasCheckpoint ? (
+                            <>
+                                {gap < 0 ? '−' : gap > 0 ? '+' : ''}
+                                {number(Math.abs(gap))} <i>SP</i>
+                            </>
+                        ) : (
+                            '—'
+                        )}
                     </strong>
                 </span>
-                <b>{number(line.checkpoint.achievementPercent)}%</b>
+                <span className='production-board-line-card__percent'>
+                    <small>Mức đạt</small>
+                    <b>{hasCheckpoint ? `${number(line.checkpoint.achievementPercent)}%` : '—'}</b>
+                </span>
             </span>
             <ProgressTrack value={line.checkpoint.achievementPercent} tone={meta.tone} />
+            <span className='production-board-line-card__meta'>
+                <span>
+                    Đã chốt <b>{number(line.checkpoint.actual)}</b> / {number(line.checkpoint.target)} SP
+                </span>
+                <span>{line.activeItem ? `Mã ${line.activeItem.itemCode}` : 'Chưa có mã hàng'}</span>
+            </span>
 
             <span className='production-board-line-card__money'>
                 <span>
-                    <small>Khoán hiện tại</small>
+                    <small>Giá trị đã làm</small>
                     <strong>{shortMoney(line.day.actualAmount)}</strong>
                 </span>
                 <span>
-                    <small>Bình quân/người</small>
+                    <small>TN BQ/người</small>
                     <strong>{shortMoney(line.day.averageIncome)}</strong>
                 </span>
                 <span>
-                    <small>Dự kiến cuối ngày</small>
-                    <strong className={incomeGap !== undefined && incomeGap < 0 ? 'is-behind' : 'is-on-track'}>
+                    <small>Cuối ngày/người</small>
+                    <strong
+                        className={
+                            incomeGap === undefined ? 'is-pending' : incomeGap < 0 ? 'is-behind' : 'is-on-track'
+                        }
+                    >
                         {line.day.projectedAverageIncome === undefined
                             ? 'Chờ số liệu'
                             : shortMoney(line.day.projectedAverageIncome)}
@@ -129,6 +152,109 @@ const LineCard = ({ line, onOpen }: { line: ProductionBoardLine; onOpen: () => v
                 <small>{line.guidance.description}</small>
             </span>
         </button>
+    );
+};
+
+// Sổ khoán theo giờ — trình bày quen thuộc như bảng Excel của xưởng:
+// mỗi chuyền 3 dòng (Khoán / Thực tế / Tỉ lệ) chạy ngang các khung giờ.
+const BoardLedger = ({ board, onOpenLine }: { board: ProductionBoard; onOpenLine: (lineId: string) => void }) => {
+    const slotColumns = board.lines.find((line) => line.slots.length)?.slots || [];
+    if (!slotColumns.length) return null;
+    return (
+        <div className='production-board-ledger-wrap'>
+            <table className='production-board-ledger'>
+                <thead>
+                    <tr>
+                        <th className='lg-line'>Chuyền</th>
+                        <th>Mã hàng</th>
+                        <th>CN</th>
+                        <th>Đơn giá</th>
+                        <th className='lg-kind' aria-label='Chỉ tiêu' />
+                        {slotColumns.map((slot) => (
+                            <th key={slot.key} className={slot.current ? 'is-current' : undefined}>
+                                {slot.label}
+                            </th>
+                        ))}
+                        <th className='lg-total'>Tổng</th>
+                        <th className='lg-income'>TN lũy kế</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {board.lines.map((line) => {
+                        const dayPercent = line.day.target > 0 ? (line.day.actual / line.day.target) * 100 : null;
+                        return (
+                            <Fragment key={line.lineId}>
+                                <tr className='lg-row-quota'>
+                                    <th rowSpan={3} className='lg-line'>
+                                        <button type='button' onClick={() => onOpenLine(line.lineId)}>
+                                            <b>{line.lineCode}</b>
+                                            <small>{line.leaderName || line.lineName || '—'}</small>
+                                        </button>
+                                    </th>
+                                    <td rowSpan={3} className='lg-item'>
+                                        {line.activeItem?.itemCode || '—'}
+                                    </td>
+                                    <td rowSpan={3}>{line.workerCount || '—'}</td>
+                                    <td rowSpan={3} className='lg-price'>
+                                        {line.activeItem ? `${number(line.activeItem.unitPrice)} đ` : '—'}
+                                    </td>
+                                    <th className='lg-kind'>Khoán</th>
+                                    {line.slots.map((slot) => (
+                                        <td key={slot.key} className={slot.current ? 'is-current' : undefined}>
+                                            {slot.state === 'not_planned' ? '' : number(slot.target)}
+                                        </td>
+                                    ))}
+                                    <td className='lg-total'>{number(line.day.target)}</td>
+                                    <td rowSpan={3} className='lg-income'>
+                                        {number(line.day.actualAmount)} đ
+                                    </td>
+                                </tr>
+                                <tr className='lg-row-actual'>
+                                    <th className='lg-kind'>Thực tế</th>
+                                    {line.slots.map((slot) => (
+                                        <td
+                                            key={slot.key}
+                                            className={`${slot.due && !slot.reported && slot.state !== 'not_planned' ? 'is-missing' : ''} ${slot.current ? 'is-current' : ''}`}
+                                        >
+                                            {slot.reported ? number(slot.actual) : slot.due ? '—' : ''}
+                                        </td>
+                                    ))}
+                                    <td className='lg-total'>{number(line.day.actual)}</td>
+                                </tr>
+                                <tr className='lg-row-rate'>
+                                    <th className='lg-kind'>Tỉ lệ</th>
+                                    {line.slots.map((slot) => {
+                                        const percent =
+                                            slot.reported && slot.target > 0 ? (slot.actual / slot.target) * 100 : null;
+                                        const tone =
+                                            percent === null
+                                                ? ''
+                                                : percent >= 95
+                                                  ? 'is-ok'
+                                                  : percent >= 80
+                                                    ? 'is-warn'
+                                                    : 'is-danger';
+                                        return (
+                                            <td
+                                                key={slot.key}
+                                                className={`${tone} ${slot.current ? 'is-current' : ''}`}
+                                            >
+                                                {percent === null ? '' : `${Math.round(percent)}%`}
+                                            </td>
+                                        );
+                                    })}
+                                    <td
+                                        className={`lg-total ${dayPercent === null ? '' : dayPercent >= 95 ? 'is-ok' : dayPercent >= 80 ? 'is-warn' : 'is-danger'}`}
+                                    >
+                                        {dayPercent === null ? '' : `${Math.round(dayPercent)}%`}
+                                    </td>
+                                </tr>
+                            </Fragment>
+                        );
+                    })}
+                </tbody>
+            </table>
+        </div>
     );
 };
 
@@ -646,8 +772,17 @@ const ProductionBoardPage = () => {
                                 <div className='is-primary'>
                                     <small>Nhịp đã chốt toàn cơ sở</small>
                                     <strong>{number(board.summary.checkpointAchievementPercent)}%</strong>
-                                    <span>
-                                        {number(board.summary.checkpointActual)} /{' '}
+                                    <span
+                                        className={
+                                            board.summary.checkpointGap < 0
+                                                ? 'production-board-gap is-behind'
+                                                : 'production-board-gap is-ahead'
+                                        }
+                                    >
+                                        {board.summary.checkpointGap < 0
+                                            ? `Hụt ${number(Math.abs(board.summary.checkpointGap))} SP`
+                                            : `Vượt ${number(board.summary.checkpointGap)} SP`}{' '}
+                                        · {number(board.summary.checkpointActual)}/
                                         {number(board.summary.checkpointTarget)} SP
                                     </span>
                                 </div>
@@ -699,6 +834,18 @@ const ProductionBoardPage = () => {
                                             aria-label={`Trang ${index + 1}`}
                                         />
                                     ))}
+                                </div>
+                            ) : null}
+
+                            {!isFullscreen && lines.length ? (
+                                <div className='production-board-ledger-panel'>
+                                    <div className='production-board-section-title'>
+                                        <span>
+                                            <b>Sổ khoán theo giờ</b>
+                                        </span>
+                                        <small>Khoán · Thực tế · Tỉ lệ từng khung giờ của mỗi chuyền</small>
+                                    </div>
+                                    <BoardLedger board={board} onOpenLine={openLine} />
                                 </div>
                             ) : null}
                         </>
