@@ -1,6 +1,7 @@
 import api from '../lib/api';
 import type {
     ConfigureProductionLinePayload,
+    ProductionBoard,
     ProductionDay,
     ProductionDayPage,
     ProductionDayStatus,
@@ -58,6 +59,9 @@ export const productionService = {
 
     getMonitor: (plantId: string, date: string): Promise<ProductionMonitorResponse | null> =>
         api.get(`${BASE}/monitor`, { params: { plantId, date } }),
+
+    getBoard: (plantId: string, date: string): Promise<ProductionBoard | null> =>
+        api.get(`${BASE}/board`, { params: { plantId, date } }),
 
     getReport: (params: {
         plantId: string;

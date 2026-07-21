@@ -4,6 +4,7 @@ import {
     CalendarOutlined,
     DownOutlined,
     EditOutlined,
+    FundProjectionScreenOutlined,
     HistoryOutlined,
     LineChartOutlined,
     LogoutOutlined,
@@ -60,6 +61,15 @@ const ProductionAppLayout = () => {
         manage ? { to: '/production/planning', end: false, icon: <CalendarOutlined />, label: 'Kế hoạch' } : null,
         { to: '/production', end: true, icon: <EditOutlined />, label: 'Nhập sản lượng', short: 'Nhập liệu' },
         manage ? { to: '/production/monitor', end: false, icon: <LineChartOutlined />, label: 'Điều hành' } : null,
+        manage
+            ? {
+                  to: '/production/board',
+                  end: false,
+                  icon: <FundProjectionScreenOutlined />,
+                  label: 'Bảng chuyền',
+                  short: 'Bảng',
+              }
+            : null,
         manage ? { to: '/production/reports', end: false, icon: <PieChartOutlined />, label: 'Báo cáo' } : null,
         { to: '/production/history', end: false, icon: <HistoryOutlined />, label: 'Lịch sử' },
     ].filter((item): item is NonNullable<typeof item> => Boolean(item));

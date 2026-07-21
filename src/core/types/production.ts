@@ -273,6 +273,154 @@ export interface ProductionMonitorResponse {
     plan?: ProductionPlan;
 }
 
+export type ProductionBoardLineStatus =
+    | 'not_configured'
+    | 'waiting'
+    | 'missing'
+    | 'critical'
+    | 'at_risk'
+    | 'on_track'
+    | 'ahead';
+
+export type ProductionBoardGuidanceTone = 'neutral' | 'info' | 'warning' | 'danger' | 'success';
+
+export interface ProductionBoardSlot {
+    key: string;
+    label: string;
+    startMinute: number;
+    endMinute: number;
+    target: number;
+    actual: number;
+    targetAmount: number;
+    actualAmount: number;
+    achievementPercent: number;
+    reported: boolean;
+    due: boolean;
+    current: boolean;
+    elapsedMinutes: number;
+    remainingMinutes: number;
+    itemCode?: string;
+    itemName?: string;
+    orderCode?: string;
+    state: 'not_planned' | 'missing' | 'current' | 'complete' | 'upcoming';
+}
+
+export interface ProductionBoardCurrentSlot {
+    key: string;
+    label: string;
+    startMinute: number;
+    endMinute: number;
+    elapsedMinutes: number;
+    remainingMinutes: number;
+    target: number;
+    actual: number;
+    reported: boolean;
+    carryShortfall: number;
+    requiredQuantity: number;
+    basePer15: number;
+    requiredPer15: number;
+}
+
+export interface ProductionBoardLine {
+    lineId: string;
+    lineCode: string;
+    lineName?: string;
+    leaderName?: string;
+    workerCount: number;
+    configured: boolean;
+    status: ProductionBoardLineStatus;
+    activeItem?: {
+        runId: string;
+        itemCode: string;
+        itemName?: string;
+        orderCode?: string;
+        unitPrice: number;
+        hourlyQuota: number;
+    };
+    checkpoint: {
+        target: number;
+        actual: number;
+        gap: number;
+        achievementPercent: number;
+        targetAmount: number;
+        actualAmount: number;
+        amountGap: number;
+    };
+    live: {
+        targetToNow: number;
+        actualToNow: number;
+        gapToNow: number;
+        targetAmountToNow: number;
+        actualAmountToNow: number;
+    };
+    day: {
+        target: number;
+        actual: number;
+        remaining: number;
+        achievementPercent: number;
+        targetAmount: number;
+        actualAmount: number;
+        averageIncome: number;
+        targetAverageIncome: number;
+        projectedQuantity?: number;
+        projectedAmount?: number;
+        projectedAverageIncome?: number;
+        projectedIncomeGap?: number;
+        requiredPer15: number;
+        overQuotaQuantity: number;
+        overQuotaAmount: number;
+    };
+    currentSlot?: ProductionBoardCurrentSlot;
+    guidance: {
+        tone: ProductionBoardGuidanceTone;
+        title: string;
+        description: string;
+    };
+    missingSlots: string[];
+    slots: ProductionBoardSlot[];
+    updatedAt?: string;
+}
+
+export interface ProductionBoard {
+    asOf: string;
+    localDate: string;
+    productionDate: string;
+    plantId: string;
+    plantName?: string;
+    plantCode?: string;
+    dayStatus: ProductionDayStatus;
+    currentSlot?: {
+        key: string;
+        label: string;
+        startMinute: number;
+        endMinute: number;
+        remainingMinutes: number;
+    };
+    summary: {
+        totalLines: number;
+        configuredLines: number;
+        totalWorkers: number;
+        checkpointTarget: number;
+        checkpointActual: number;
+        checkpointGap: number;
+        checkpointAchievementPercent: number;
+        target: number;
+        actual: number;
+        achievementPercent: number;
+        targetAmount: number;
+        actualAmount: number;
+        averageIncome: number;
+        targetAverageIncome: number;
+        projectedAmount?: number;
+        projectedAverageIncome?: number;
+        onTrackLines: number;
+        attentionLines: number;
+        missingLines: number;
+    };
+    lines: ProductionBoardLine[];
+    updatedAt?: string;
+}
+
 export type ProductionPlanStatus = 'draft' | 'published';
 export type ProductionPlanPriority = 'low' | 'normal' | 'high' | 'urgent';
 export type ProductionPlanSourceType = 'manual' | 'carry_over';

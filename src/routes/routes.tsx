@@ -44,6 +44,7 @@ const LuckyWheelPage = lazy(() => import('../pages/LuckyWheelPage'));
 const ProductionPage = lazy(() => import('../pages/ProductionPage'));
 const ProductionHistoryPage = lazy(() => import('../pages/ProductionHistoryPage'));
 const ProductionMonitorPage = lazy(() => import('../pages/ProductionMonitorPage'));
+const ProductionBoardPage = lazy(() => import('../pages/ProductionBoardPage'));
 const ProductionPlanningPage = lazy(() => import('../pages/ProductionPlanningPage'));
 const ProductionReportPage = lazy(() => import('../pages/ProductionReportPage'));
 const LoginPage = lazy(() => import('../pages/LoginPage'));
@@ -168,6 +169,7 @@ export const router = createBrowserRouter([
             { index: true, element: withSuspense(<ProductionPage />) },
             { path: 'planning', element: guarded('/production/planning', <ProductionPlanningPage />) },
             { path: 'monitor', element: guarded('/production/monitor', <ProductionMonitorPage />) },
+            { path: 'board', element: guarded('/production/board', <ProductionBoardPage />) },
             { path: 'reports', element: guarded('/production/reports', <ProductionReportPage />) },
             { path: 'history', element: withSuspense(<ProductionHistoryPage />) },
         ],
