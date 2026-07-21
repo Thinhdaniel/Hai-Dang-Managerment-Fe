@@ -20,7 +20,7 @@ import { ClockCircleOutlined, EditOutlined, PlusOutlined, SaveOutlined } from '@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import dayjs, { type Dayjs } from 'dayjs';
 import { useEffect, useMemo, useState } from 'react';
-import { slotRangeLabelShort } from '../../core/lib/productionSlot';
+import { buildSlotLabel, slotRangeLabelShort } from '../../core/lib/productionSlot';
 import { productionService } from '../../core/services/production.service';
 import type { ProductionDay, ProductionItem, ProductionLine, ProductionTimeSlot } from '../../core/types/production';
 
@@ -48,7 +48,6 @@ type ItemFormValues = {
 };
 
 type SlotFormValues = {
-    label: string;
     start: Dayjs;
     end: Dayjs;
     kind: ProductionTimeSlot['kind'];
@@ -184,7 +183,6 @@ const ProductionSetupDrawer = ({ open, plantId, day, onClose }: Props) => {
     const editSlot = (slot: ProductionTimeSlot) => {
         setEditingSlotKey(slot.key);
         slotForm.setFieldsValue({
-            label: slot.label,
             start: minuteToTime(slot.startMinute),
             end: minuteToTime(slot.endMinute),
             kind: slot.kind,
@@ -205,7 +203,8 @@ const ProductionSetupDrawer = ({ open, plantId, day, onClose }: Props) => {
         }
         const nextSlot: ProductionTimeSlot = {
             key,
-            label: values.label.trim(),
+            // Nhãn sinh tự động; server cũng sinh lại y hệt khi lưu (buildTimeSlotLabel).
+            label: buildSlotLabel(startMinute, endMinute),
             startMinute,
             endMinute,
             kind: values.kind,
@@ -395,14 +394,11 @@ const ProductionSetupDrawer = ({ open, plantId, day, onClose }: Props) => {
             <Form form={slotForm} layout='vertical' onFinish={saveSlotDraft}>
                 <div className='production-slot-form-grid'>
                     <Form.Item
-                        label='Nhãn nội bộ'
-                        name='label'
-                        rules={[{ required: true, message: 'Nhập nhãn' }]}
-                        extra='Các màn hình hiển thị theo dải giờ bắt đầu–kết thúc'
+                        label='Bắt đầu'
+                        name='start'
+                        rules={[{ required: true, message: 'Chọn giờ' }]}
+                        extra='Nhãn khung giờ được đặt tự động theo giờ bắt đầu–kết thúc'
                     >
-                        <Input placeholder='VD: 8h' />
-                    </Form.Item>
-                    <Form.Item label='Bắt đầu' name='start' rules={[{ required: true, message: 'Chọn giờ' }]}>
                         <TimePicker format='HH:mm' minuteStep={15} className='w-full' />
                     </Form.Item>
                     <Form.Item label='Kết thúc' name='end' rules={[{ required: true, message: 'Chọn giờ' }]}>
@@ -463,7 +459,7 @@ const ProductionSetupDrawer = ({ open, plantId, day, onClose }: Props) => {
                                     </Tag>
                                 </span>
                             }
-                            description={`${minuteToTime(slot.startMinute).format('HH:mm')}–${minuteToTime(slot.endMinute).format('HH:mm')} · nhãn nội bộ "${slot.label}"`}
+                            description={`${minuteToTime(slot.startMinute).format('HH:mm')}–${minuteToTime(slot.endMinute).format('HH:mm')}`}
                         />
                     </List.Item>
                 )}

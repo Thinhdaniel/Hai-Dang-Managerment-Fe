@@ -30,6 +30,16 @@ export const slotRangeLabel = (slot?: SlotLike | null): string => {
     return `${hourText(startMinute)}-${hourText(endMinute)}`;
 };
 
+/**
+ * Nhãn lưu kèm khung giờ. Server luôn sinh lại y hệt bằng `buildTimeSlotLabel`
+ * nên người dùng không phải nhập nhãn; hàm này chỉ để bản nháp trên máy hiển thị
+ * đúng ngay trước khi lưu.
+ */
+export const buildSlotLabel = (startMinute: number, endMinute: number) =>
+    startMinute % 60 === 0 && endMinute % 60 === 0
+        ? `${Math.floor(startMinute / 60)}-${Math.floor(endMinute / 60)}h`
+        : `${hourText(startMinute)}-${hourText(endMinute)}`;
+
 /** Dạng ngắn cho ô hẹp: "7-8h" (bỏ chữ h ở vế đầu khi cả hai đều tròn giờ). */
 export const slotRangeLabelShort = (slot?: SlotLike | null): string => {
     if (!slot) return '';
