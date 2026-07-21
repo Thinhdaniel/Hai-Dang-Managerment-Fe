@@ -196,11 +196,28 @@ const ProductionSetupDrawer = ({ open, plantId, day, onClose }: Props) => {
             message.warning('Giờ kết thúc phải sau giờ bắt đầu');
             return;
         }
-        const key = editingSlotKey || values.start.format('HH:mm');
-        if (!editingSlotKey && draftSlots.some((slot) => slot.key === key)) {
-            message.warning('Khung giờ này đã tồn tại');
+        // Quy tắc thật là KHÔNG ĐƯỢC CHỒNG GIỜ, không phải trùng mã. Kiểm tra chồng giờ
+        // trên các khung đang bật (khung đã tắt không chiếm chỗ) và nói rõ đụng khung nào.
+        const others = draftSlots.filter((slot) => slot.key !== editingSlotKey && slot.isActive !== false);
+        const clash = others.find((slot) => startMinute < slot.endMinute && endMinute > slot.startMinute);
+        if (clash) {
+            message.warning(`Khung giờ bị chồng lên ${slotRangeLabelShort(clash)}`);
             return;
         }
+        // Mã khung giờ chỉ là định danh nội bộ và dữ liệu cũ đặt mã theo giờ KẾT THÚC
+        // (mã "18:00" là ca 17-18h). Nếu lấy thẳng giờ bắt đầu làm mã thì khung nối
+        // ngay sau khung cuối luôn đụng mã. Vì vậy phải dò tới khi được mã còn trống.
+        const buildKey = () => {
+            const start = values.start.format('HH:mm');
+            const taken = new Set(draftSlots.map((slot) => slot.key));
+            if (!taken.has(start)) return start;
+            const withEnd = `${start}-${values.end.format('HH:mm')}`;
+            if (!taken.has(withEnd)) return withEnd;
+            let index = 2;
+            while (taken.has(`${start}_${index}`)) index += 1;
+            return `${start}_${index}`;
+        };
+        const key = editingSlotKey || buildKey();
         const nextSlot: ProductionTimeSlot = {
             key,
             // Nhãn sinh tự động; server cũng sinh lại y hệt khi lưu (buildTimeSlotLabel).
