@@ -17,6 +17,7 @@ import { useSearchParams } from 'react-router-dom';
 import { useAuth } from '../core/contexts/AuthContext';
 import { useSocket } from '../core/hooks/useSocket';
 import { isAdmin, isDirector } from '../core/lib/permissions';
+import { slotRangeLabel, slotRangeLabelShort } from '../core/lib/productionSlot';
 import { plantService } from '../core/services/plant.service';
 import { productionService } from '../core/services/production.service';
 import type {
@@ -162,12 +163,6 @@ const LineCard = ({ line, onOpen }: { line: ProductionBoardLine; onOpen: () => v
 
 const rateTone = (percent: number) => (percent >= 95 ? 'is-ok' : percent >= 80 ? 'is-warn' : 'is-danger');
 
-// Nhãn cột dạng dải giờ "8-9h" như bảng Excel của xưởng, rõ hơn nhãn điểm "8h".
-const slotRangeLabel = (slot: ProductionBoardSlot) => {
-    const hour = (minute: number) => Math.floor(minute / 60);
-    return `${hour(slot.startMinute)}-${hour(slot.endMinute)}h`;
-};
-
 // Sổ khoán theo giờ — trình bày quen thuộc như bảng Excel của xưởng:
 // mỗi chuyền 3 dòng (Khoán / Thực tế / Tỉ lệ) chạy ngang các khung giờ.
 // Phân cấp thị giác: Thực tế là dòng chính, Khoán là nền tham chiếu, Tỉ lệ kèm micro-bar.
@@ -186,7 +181,7 @@ const BoardLedger = ({ board, onOpenLine }: { board: ProductionBoard; onOpenLine
                         <th className='lg-kind' aria-label='Chỉ tiêu' />
                         {slotColumns.map((slot) => (
                             <th key={slot.key} className={slot.current ? 'is-current' : undefined}>
-                                {slotRangeLabel(slot)}
+                                {slotRangeLabelShort(slot)}
                                 {slot.current ? <i aria-label='đang chạy' /> : null}
                             </th>
                         ))}
@@ -470,7 +465,7 @@ const FocusLineBoard = ({ line }: { line: ProductionBoardLine }) => {
                             <ClockCircleOutlined />
                             <b>Khung hiện tại</b>
                         </span>
-                        <small>{line.currentSlot?.label || 'Ngoài giờ sản xuất'}</small>
+                        <small>{slotRangeLabel(line.currentSlot) || 'Ngoài giờ sản xuất'}</small>
                     </div>
                     {line.currentSlot ? (
                         <>
@@ -508,7 +503,7 @@ const FocusLineBoard = ({ line }: { line: ProductionBoardLine }) => {
             <section className='production-board-timeline' aria-label='Tiến độ theo khung giờ'>
                 {line.slots.map((slot) => (
                     <div key={slot.key} className={`production-board-timeline__slot state-${slot.state}`}>
-                        <span>{slot.label}</span>
+                        <span>{slotRangeLabelShort(slot)}</span>
                         <strong>{slot.reported ? number(slot.actual) : slot.current ? 'Đang chạy' : '—'}</strong>
                         <small>Khoán {number(slot.target)}</small>
                     </div>
@@ -791,7 +786,9 @@ const ProductionBoardPage = () => {
                         <div className='production-board-stage__session'>
                             <span>
                                 Ngày {dayjs(board.productionDate).format('DD/MM/YYYY')}
-                                {board.currentSlot ? ` · ${board.currentSlot.label}` : ' · Ngoài khung sản xuất'}
+                                {board.currentSlot
+                                    ? ` · ${slotRangeLabel(board.currentSlot)}`
+                                    : ' · Ngoài khung sản xuất'}
                             </span>
                             <strong>{currentClock}</strong>
                             <em className={stale ? 'is-stale' : 'is-live'}>

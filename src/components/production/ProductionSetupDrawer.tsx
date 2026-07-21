@@ -19,7 +19,8 @@ import {
 import { ClockCircleOutlined, EditOutlined, PlusOutlined, SaveOutlined } from '@ant-design/icons';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import dayjs, { type Dayjs } from 'dayjs';
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import { slotRangeLabelShort } from '../../core/lib/productionSlot';
 import { productionService } from '../../core/services/production.service';
 import type { ProductionDay, ProductionItem, ProductionLine, ProductionTimeSlot } from '../../core/types/production';
 
@@ -59,7 +60,7 @@ const minuteToTime = (minute: number) => dayjs().startOf('day').add(minute, 'min
 
 const ProductionSetupDrawer = ({ open, plantId, day, onClose }: Props) => {
     const screens = Grid.useBreakpoint();
-    const { message } = App.useApp();
+    const { message, modal } = App.useApp();
     const queryClient = useQueryClient();
     const [lineForm] = Form.useForm<LineFormValues>();
     const [itemForm] = Form.useForm<ItemFormValues>();
@@ -83,6 +84,36 @@ const ProductionSetupDrawer = ({ open, plantId, day, onClose }: Props) => {
     useEffect(() => {
         setDraftSlots(day?.timeSlots.map((slot) => ({ ...slot })) || []);
     }, [day?.id, day?.timeSlots]);
+
+    // Khung giờ sửa trên bản nháp cục bộ — phải bấm "Lưu toàn bộ khung giờ" mới áp dụng.
+    // Theo dõi dirty để cảnh báo trước khi người dùng đóng drawer và mất thay đổi.
+    const slotsDirty = useMemo(() => {
+        const strip = (slots: ProductionTimeSlot[]) =>
+            slots.map(({ key, label, startMinute, endMinute, kind, isActive }) => ({
+                key,
+                label,
+                startMinute,
+                endMinute,
+                kind,
+                isActive,
+            }));
+        return JSON.stringify(strip(draftSlots)) !== JSON.stringify(strip(day?.timeSlots || []));
+    }, [day?.timeSlots, draftSlots]);
+
+    const handleClose = () => {
+        if (!slotsDirty) {
+            onClose();
+            return;
+        }
+        modal.confirm({
+            title: 'Khung giờ chưa được lưu',
+            content: 'Danh sách khung giờ đã thay đổi nhưng chưa bấm "Lưu toàn bộ khung giờ". Đóng bây giờ sẽ mất thay đổi.',
+            okText: 'Vẫn đóng',
+            okButtonProps: { danger: true },
+            cancelText: 'Ở lại để lưu',
+            onOk: onClose,
+        });
+    };
 
     const invalidateCatalog = async () => {
         await Promise.all([
@@ -190,6 +221,8 @@ const ProductionSetupDrawer = ({ open, plantId, day, onClose }: Props) => {
         setEditingSlotKey(null);
         slotForm.resetFields();
         slotForm.setFieldValue('kind', 'regular');
+        // Chỉ sửa bản nháp — không nhắc thì người dùng tưởng đã áp dụng và đóng drawer mất luôn.
+        message.info('Đã thêm vào danh sách. Bấm "Lưu toàn bộ khung giờ" để áp dụng cho ngày.');
     };
 
     const lineTab = (
@@ -361,7 +394,12 @@ const ProductionSetupDrawer = ({ open, plantId, day, onClose }: Props) => {
             </div>
             <Form form={slotForm} layout='vertical' onFinish={saveSlotDraft}>
                 <div className='production-slot-form-grid'>
-                    <Form.Item label='Nhãn' name='label' rules={[{ required: true, message: 'Nhập nhãn' }]}>
+                    <Form.Item
+                        label='Nhãn nội bộ'
+                        name='label'
+                        rules={[{ required: true, message: 'Nhập nhãn' }]}
+                        extra='Các màn hình hiển thị theo dải giờ bắt đầu–kết thúc'
+                    >
                         <Input placeholder='VD: 8h' />
                     </Form.Item>
                     <Form.Item label='Bắt đầu' name='start' rules={[{ required: true, message: 'Chọn giờ' }]}>
@@ -419,18 +457,19 @@ const ProductionSetupDrawer = ({ open, plantId, day, onClose }: Props) => {
                             avatar={<ClockCircleOutlined />}
                             title={
                                 <span className='production-master-title'>
-                                    {slot.label}
+                                    {slotRangeLabelShort(slot)}
                                     <Tag color={slot.kind === 'overtime' ? 'gold' : 'blue'}>
                                         {slot.kind === 'overtime' ? 'Tăng ca' : 'Giờ thường'}
                                     </Tag>
                                 </span>
                             }
-                            description={`${minuteToTime(slot.startMinute).format('HH:mm')}–${minuteToTime(slot.endMinute).format('HH:mm')}`}
+                            description={`${minuteToTime(slot.startMinute).format('HH:mm')}–${minuteToTime(slot.endMinute).format('HH:mm')} · nhãn nội bộ "${slot.label}"`}
                         />
                     </List.Item>
                 )}
             />
             <div className='production-setup-sticky-action'>
+                {slotsDirty ? <Tag color='warning'>Có thay đổi chưa lưu</Tag> : null}
                 <Button
                     type='primary'
                     size='large'
@@ -450,7 +489,7 @@ const ProductionSetupDrawer = ({ open, plantId, day, onClose }: Props) => {
     return (
         <Drawer
             open={open}
-            onClose={onClose}
+            onClose={handleClose}
             title='Thiết lập sản xuất'
             width={screens.md ? 760 : '100%'}
             className='production-setup-drawer'

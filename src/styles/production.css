@@ -3395,10 +3395,25 @@
     position: sticky;
     z-index: 3;
     bottom: -14px;
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 10px;
     margin: 12px -14px -14px;
     padding: 12px 14px 14px;
     border-top: 1px solid var(--pd-border);
     background: var(--pd-surface);
+}
+
+/* Hàng nút form thiết lập trong drawer nhập liệu (Lưu thay đổi + Quay lại) */
+.production-setup-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.production-setup-actions .ant-btn-primary {
+    flex: 1;
 }
 
 /* Popover lịch sử trạng thái */

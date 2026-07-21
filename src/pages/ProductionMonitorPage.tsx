@@ -38,6 +38,7 @@ import ProductionCommandRibbon from '../components/production/ProductionCommandR
 import { useAuth } from '../core/contexts/AuthContext';
 import { useSocket } from '../core/hooks/useSocket';
 import { isAdmin, isDirector } from '../core/lib/permissions';
+import { slotRangeLabel, slotRangeLabelShort } from '../core/lib/productionSlot';
 import { plantService } from '../core/services/plant.service';
 import { productionService } from '../core/services/production.service';
 import type {
@@ -300,7 +301,7 @@ const ProductionMonitorPage = () => {
                                         key={slot.key}
                                         className={monitor.currentSlotKey === slot.key ? 'is-current' : undefined}
                                     >
-                                        <strong>{slot.label}</strong>
+                                        <strong>{slotRangeLabelShort(slot)}</strong>
                                         <small>
                                             {monitor.currentSlotKey === slot.key
                                                 ? 'Đang chạy'
@@ -350,8 +351,8 @@ const ProductionMonitorPage = () => {
                                                 <Tooltip
                                                     title={
                                                         value?.runId
-                                                            ? `${record.lineCode} · ${slot.label}: ${number(value.actual)}/${number(value.target)} SP`
-                                                            : `${record.lineCode} không chạy tại ${slot.label}`
+                                                            ? `${record.lineCode} · ${slotRangeLabel(slot)}: ${number(value.actual)}/${number(value.target)} SP`
+                                                            : `${record.lineCode} không chạy tại ${slotRangeLabel(slot)}`
                                                     }
                                                 >
                                                     <button
@@ -417,8 +418,9 @@ const ProductionMonitorPage = () => {
                                 <span>Khung hiện tại</span>
                                 <b>
                                     {monitor.currentSlotKey
-                                        ? day.timeSlots.find((slot) => slot.key === monitor.currentSlotKey)?.label ||
-                                          monitor.currentSlotKey
+                                        ? slotRangeLabel(
+                                              day.timeSlots.find((slot) => slot.key === monitor.currentSlotKey)
+                                          ) || monitor.currentSlotKey
                                         : 'Ngoài giờ'}
                                 </b>
                             </div>
@@ -623,7 +625,7 @@ const ProductionMonitorPage = () => {
                                         key={slot.key}
                                         className={`${slot.due ? 'is-due' : 'is-future'} ${monitor.currentSlotKey === slot.key ? 'is-current' : ''}`}
                                     >
-                                        <span>{slot.label}</span>
+                                        <span>{slotRangeLabelShort(slot)}</span>
                                         <strong>{slot.due ? number(slot.actual) : '—'}</strong>
                                         <small>
                                             {monitor.currentSlotKey === slot.key

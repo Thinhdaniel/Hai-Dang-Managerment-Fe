@@ -38,6 +38,7 @@ import { useSearchParams } from 'react-router-dom';
 import { useAuth } from '../core/contexts/AuthContext';
 import { useSocket } from '../core/hooks/useSocket';
 import { isAdmin, isDirector } from '../core/lib/permissions';
+import { slotRangeLabelShort } from '../core/lib/productionSlot';
 import { plantService } from '../core/services/plant.service';
 import { productionService } from '../core/services/production.service';
 import type {
@@ -448,8 +449,9 @@ const ProductionPlanningPage = () => {
                 <div className='production-plan-window'>
                     <CalendarOutlined />
                     <span>
-                        {slotByKey.get(draft.startSlotKey)?.label || draft.startSlotKey}–
-                        {slotByKey.get(draft.endSlotKey)?.label || draft.endSlotKey}
+                        {slotRangeLabelShort(slotByKey.get(draft.startSlotKey)) || draft.startSlotKey}
+                        {' → '}
+                        {slotRangeLabelShort(slotByKey.get(draft.endSlotKey)) || draft.endSlotKey}
                     </span>
                 </div>
             ),
@@ -698,8 +700,9 @@ const ProductionPlanningPage = () => {
                                                 <span>
                                                     <small>Khung chạy</small>
                                                     <strong>
-                                                        {slotByKey.get(draft.startSlotKey)?.label}–
-                                                        {slotByKey.get(draft.endSlotKey)?.label}
+                                                        {slotRangeLabelShort(slotByKey.get(draft.startSlotKey))}
+                                                        {' → '}
+                                                        {slotRangeLabelShort(slotByKey.get(draft.endSlotKey))}
                                                     </strong>
                                                 </span>
                                                 <span
@@ -842,14 +845,24 @@ const ProductionPlanningPage = () => {
                             name='startSlotKey'
                             rules={[{ required: true, message: 'Chọn giờ bắt đầu' }]}
                         >
-                            <Select options={activeSlots.map((slot) => ({ value: slot.key, label: slot.label }))} />
+                            <Select
+                                options={activeSlots.map((slot) => ({
+                                    value: slot.key,
+                                    label: slotRangeLabelShort(slot),
+                                }))}
+                            />
                         </Form.Item>
                         <Form.Item
                             label='Kết thúc tại'
                             name='endSlotKey'
                             rules={[{ required: true, message: 'Chọn giờ kết thúc' }]}
                         >
-                            <Select options={activeSlots.map((slot) => ({ value: slot.key, label: slot.label }))} />
+                            <Select
+                                options={activeSlots.map((slot) => ({
+                                    value: slot.key,
+                                    label: slotRangeLabelShort(slot),
+                                }))}
+                            />
                         </Form.Item>
                     </div>
                     <div className='production-form-two-columns'>

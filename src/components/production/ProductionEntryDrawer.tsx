@@ -5,10 +5,12 @@ import {
     EditOutlined,
     RetweetOutlined,
     SaveOutlined,
+    SettingOutlined,
     TeamOutlined,
 } from '@ant-design/icons';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useMemo, useState } from 'react';
+import { slotRangeLabel } from '../../core/lib/productionSlot';
 import { productionService } from '../../core/services/production.service';
 import type { ProductionDay, ProductionItem, ProductionLineRecord } from '../../core/types/production';
 
@@ -59,6 +61,8 @@ const ProductionEntryDrawer = ({ open, day, line, items, slotKey, onClose, onSav
     const slotValue = line?.slotValues.find((item) => item.key === slotKey);
     const isReadOnly = day.status !== 'draft';
     const hasPlannedRuns = Boolean(line?.runs.some((run) => run.source === 'plan'));
+    // Đã có sản lượng: chỉ sửa được số CN + khoán giờ; đổi mã hàng phải dùng chức năng riêng (BE chặn).
+    const hasEntries = Boolean(line?.entries.length);
 
     const eligibleRuns = useMemo(() => {
         if (!line) return [];
@@ -185,7 +189,7 @@ const ProductionEntryDrawer = ({ open, day, line, items, slotKey, onClose, onSav
             title={
                 <div className='production-entry-title'>
                     <span>{line.lineCode}</span>
-                    <small>{slot?.label || slotKey}</small>
+                    <small>{slotRangeLabel(slot) || slotKey}</small>
                 </div>
             }
             destroyOnHidden
@@ -259,8 +263,12 @@ const ProductionEntryDrawer = ({ open, day, line, items, slotKey, onClose, onSav
                 <section className='production-drawer-section production-drawer-section--setup'>
                     <div className='production-section-title'>
                         <div>
-                            <Title level={5}>Thông tin đầu ngày</Title>
-                            <Text type='secondary'>Số công nhân được xác nhận riêng cho ngày này.</Text>
+                            <Title level={5}>{line.configured ? 'Sửa thiết lập chuyền' : 'Thông tin đầu ngày'}</Title>
+                            <Text type='secondary'>
+                                {hasEntries
+                                    ? 'Đã có sản lượng — sửa được số công nhân và khoán giờ; đổi mã hàng dùng chức năng "Đổi mã hàng".'
+                                    : 'Số công nhân được xác nhận riêng cho ngày này.'}
+                            </Text>
                         </div>
                     </div>
                     <Form form={setupForm} layout='vertical' onFinish={(values) => setupMutation.mutate(values)}>
@@ -272,12 +280,12 @@ const ProductionEntryDrawer = ({ open, day, line, items, slotKey, onClose, onSav
                             >
                                 <InputNumber min={0} max={1000} precision={0} className='w-full' />
                             </Form.Item>
-                            {!hasPlannedRuns ? (
+                            {!hasPlannedRuns && !hasEntries ? (
                                 <Form.Item label='Bắt đầu từ' name='startSlotKey'>
                                     <Select
                                         options={day.timeSlots
                                             .filter((item) => item.isActive)
-                                            .map((item) => ({ value: item.key, label: item.label }))}
+                                            .map((item) => ({ value: item.key, label: slotRangeLabel(item) }))}
                                     />
                                 </Form.Item>
                             ) : null}
@@ -298,6 +306,7 @@ const ProductionEntryDrawer = ({ open, day, line, items, slotKey, onClose, onSav
                                 >
                                     <Select
                                         showSearch
+                                        disabled={hasEntries}
                                         optionFilterProp='label'
                                         placeholder='Chọn mã hàng'
                                         options={items.map((item) => ({
@@ -315,15 +324,20 @@ const ProductionEntryDrawer = ({ open, day, line, items, slotKey, onClose, onSav
                                 </Form.Item>
                             </>
                         )}
-                        <Button
-                            type='primary'
-                            htmlType='submit'
-                            icon={<CheckOutlined />}
-                            loading={setupMutation.isPending}
-                            block
-                        >
-                            Xác nhận thông tin chuyền
-                        </Button>
+                        <div className='production-setup-actions'>
+                            <Button
+                                type='primary'
+                                htmlType='submit'
+                                icon={<CheckOutlined />}
+                                loading={setupMutation.isPending}
+                                block={!line.configured}
+                            >
+                                {line.configured ? 'Lưu thay đổi' : 'Xác nhận thông tin chuyền'}
+                            </Button>
+                            {line.configured ? (
+                                <Button onClick={() => setShowSetup(false)}>Quay lại nhập liệu</Button>
+                            ) : null}
+                        </div>
                     </Form>
                 </section>
             ) : null}
@@ -343,7 +357,7 @@ const ProductionEntryDrawer = ({ open, day, line, items, slotKey, onClose, onSav
                     <section className='production-drawer-section production-drawer-section--entry'>
                         <div className='production-entry-item-line'>
                             <div>
-                                <Text type='secondary'>Mã hàng tại {slot?.label}</Text>
+                                <Text type='secondary'>Mã hàng tại {slotRangeLabel(slot)}</Text>
                                 <strong>
                                     {selectedRun?.itemCode || 'Chưa có mã hàng'}
                                     {selectedRun?.itemName ? ` · ${selectedRun.itemName}` : ''}
@@ -353,6 +367,13 @@ const ProductionEntryDrawer = ({ open, day, line, items, slotKey, onClose, onSav
                                 <div className='production-entry-plan-tags'>
                                     {selectedRun.source === 'plan' ? <Tag color='green'>Theo kế hoạch</Tag> : null}
                                     <Tag color='blue'>Khoán {selectedRun.hourlyQuota}/giờ</Tag>
+                                    <Button
+                                        size='small'
+                                        icon={<SettingOutlined />}
+                                        onClick={() => setShowSetup(true)}
+                                    >
+                                        Sửa thiết lập
+                                    </Button>
                                 </div>
                             ) : null}
                         </div>
@@ -449,7 +470,7 @@ const ProductionEntryDrawer = ({ open, day, line, items, slotKey, onClose, onSav
                                         <Select
                                             options={day.timeSlots
                                                 .filter((item) => item.isActive)
-                                                .map((item) => ({ value: item.key, label: item.label }))}
+                                                .map((item) => ({ value: item.key, label: slotRangeLabel(item) }))}
                                         />
                                     </Form.Item>
                                 </div>

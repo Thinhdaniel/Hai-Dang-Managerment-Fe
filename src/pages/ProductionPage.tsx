@@ -18,6 +18,7 @@ import ProductionSetupDrawer from '../components/production/ProductionSetupDrawe
 import { useAuth } from '../core/contexts/AuthContext';
 import { useSocket } from '../core/hooks/useSocket';
 import { can, hasManagerAccess, isAdmin, isDirector } from '../core/lib/permissions';
+import { slotRangeLabel, slotRangeLabelShort } from '../core/lib/productionSlot';
 import { plantService } from '../core/services/plant.service';
 import { productionService } from '../core/services/production.service';
 import type { ProductionDay, ProductionLineRecord, ProductionTimeSlot } from '../core/types/production';
@@ -218,7 +219,7 @@ const ProductionPage = () => {
                 onClick={() => setSelectedSlotKey(slot.key)}
             >
                 <span className='pd-slot__head'>
-                    {slot.label}
+                    {slotRangeLabelShort(slot)}
                     {slot.kind === 'overtime' ? <span className='pd-slot-ot'>TC</span> : null}
                     {complete ? <CheckOutlined className='pd-slot__check' /> : null}
                     {missing > 0 && !isFuture ? <span className='pd-slot__badge'>{missing}</span> : null}
@@ -322,7 +323,7 @@ const ProductionPage = () => {
                     className={`pd-slot-column-title ${selectedSlotKey === slot.key ? 'is-selected' : ''}`}
                     onClick={() => setSelectedSlotKey(slot.key)}
                 >
-                    {slot.label}
+                    {slotRangeLabelShort(slot)}
                     {slot.kind === 'overtime' ? <small>TC</small> : null}
                 </button>
             ),
@@ -602,7 +603,7 @@ const ProductionPage = () => {
                             <div className='pd-timeline'>{activeSlots.map((slot) => renderSlotChip(slot))}</div>
                             <div className='pd-board__bar'>
                                 <div className='pd-board__bar-title'>
-                                    <strong>Khung {selectedSlot?.label || '—'}</strong>
+                                    <strong>Khung {slotRangeLabel(selectedSlot) || '—'}</strong>
                                     <span>
                                         đã báo {selectedSlotSummary?.reportedLines || 0}/
                                         {selectedSlotSummary?.totalLines || 0} chuyền
@@ -633,7 +634,7 @@ const ProductionPage = () => {
                     )}
 
                     <ProductionMissingDock
-                        slotLabel={selectedSlot?.label || ''}
+                        slotLabel={slotRangeLabel(selectedSlot)}
                         missingLines={missingLines}
                         dueCount={selectedSlotSummary?.totalLines || 0}
                         readOnly={readOnly}
