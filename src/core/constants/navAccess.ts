@@ -62,4 +62,5 @@ export const ROUTE_ACCESS: Record<string, AccessCheck> = {
     '/production/monitor': requireCap('production.manage'),
     '/production/board': requireCap('production.manage'),
     '/production/reports': requireCap('production.manage'),
+    '/production/reports/day': requireCap('production.manage'),
 };

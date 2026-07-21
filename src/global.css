@@ -13188,15 +13188,22 @@ button.machine-map-stat:hover {
     margin-top: 3px;
 }
 
+/* antd v6 đổi tên phần tử thanh đã tô: .ant-progress-bg -> .ant-progress-track.
+   Giữ cả hai để không vỡ nếu hạ version. Thiếu .ant-progress-track thì mọi thanh
+   đều ra màu brand, mất hết tín hiệu đạt/hụt trên trang Báo cáo. */
+.production-report-achievement.tone-success .ant-progress-track,
 .production-report-achievement.tone-success .ant-progress-bg,
+.production-report-mobile-card > .ant-progress .ant-progress-track,
 .production-report-mobile-card > .ant-progress .ant-progress-bg {
     background: #147a4b !important;
 }
 
+.production-report-achievement.tone-warning .ant-progress-track,
 .production-report-achievement.tone-warning .ant-progress-bg {
     background: #c87816 !important;
 }
 
+.production-report-achievement.tone-danger .ant-progress-track,
 .production-report-achievement.tone-danger .ant-progress-bg {
     background: #b42318 !important;
 }

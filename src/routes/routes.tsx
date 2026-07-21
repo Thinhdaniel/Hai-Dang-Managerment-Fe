@@ -47,6 +47,7 @@ const ProductionMonitorPage = lazy(() => import('../pages/ProductionMonitorPage'
 const ProductionBoardPage = lazy(() => import('../pages/ProductionBoardPage'));
 const ProductionPlanningPage = lazy(() => import('../pages/ProductionPlanningPage'));
 const ProductionReportPage = lazy(() => import('../pages/ProductionReportPage'));
+const ProductionDayReportPage = lazy(() => import('../pages/ProductionDayReportPage'));
 const LoginPage = lazy(() => import('../pages/LoginPage'));
 const ForgotPasswordPage = lazy(() => import('../pages/ForgotPasswordPage'));
 const ResetPasswordPage = lazy(() => import('../pages/ResetPasswordPage'));
@@ -171,6 +172,10 @@ export const router = createBrowserRouter([
             { path: 'monitor', element: guarded('/production/monitor', <ProductionMonitorPage />) },
             { path: 'board', element: guarded('/production/board', <ProductionBoardPage />) },
             { path: 'reports', element: guarded('/production/reports', <ProductionReportPage />) },
+            {
+                path: 'reports/:date',
+                element: guarded('/production/reports/day', <ProductionDayReportPage />),
+            },
             { path: 'history', element: withSuspense(<ProductionHistoryPage />) },
         ],
     },

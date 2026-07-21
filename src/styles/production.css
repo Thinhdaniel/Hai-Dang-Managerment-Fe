@@ -3130,6 +3130,336 @@
     margin-bottom: 12px;
 }
 
+/* ---- Tab "Theo ngày" ở Báo cáo ---- */
+/* Ngày chưa khóa sổ: nền vàng cực nhạt để nhắc "số chưa chính thức" */
+.production-app-shell .ant-table-tbody > tr.production-report-day-open > td {
+    background: #fffcf3;
+}
+
+.production-app-shell .ant-table-tbody > tr.production-report-day-open:hover > td {
+    background: #fff8e4;
+}
+
+.production-report-output-cell.is-right {
+    text-align: right;
+}
+
+/* ================= Báo cáo chi tiết một ngày ================= */
+.production-day-report {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+}
+
+.production-day-report__bar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 14px 16px;
+    border: 1px solid var(--pd-border);
+    border-radius: var(--pd-radius-lg);
+    background: var(--pd-surface);
+    box-shadow: var(--pd-shadow-1);
+}
+
+.production-day-report__back {
+    display: flex;
+    min-width: 0;
+    align-items: center;
+    gap: 12px;
+}
+
+.production-day-report__back h3.ant-typography {
+    margin: 0;
+    font-size: 19px;
+    font-weight: 750;
+    letter-spacing: -0.01em;
+}
+
+.production-day-report__actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.production-day-report__kpis {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+    gap: 10px;
+}
+
+.production-day-report__kpis > div {
+    display: flex;
+    min-width: 0;
+    flex-direction: column;
+    gap: 2px;
+    padding: 13px 16px;
+    border: 1px solid var(--pd-border);
+    border-radius: var(--pd-radius);
+    background: var(--pd-surface);
+}
+
+.production-day-report__kpis > div.is-primary {
+    border-color: #c3d1f5;
+    background: var(--pd-brand-tint);
+}
+
+.production-day-report__kpis span {
+    color: var(--pd-ink-3);
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+}
+
+.production-day-report__kpis strong {
+    color: var(--pd-ink);
+    font-size: 23px;
+    font-weight: 750;
+    font-variant-numeric: tabular-nums;
+    letter-spacing: -0.02em;
+}
+
+.production-day-report__kpis small {
+    color: var(--pd-ink-2);
+    font-size: 11px;
+}
+
+.production-day-report-tone.tone-success {
+    color: var(--pd-ok);
+}
+
+.production-day-report-tone.tone-warning {
+    color: var(--pd-warn);
+}
+
+.production-day-report-tone.tone-danger {
+    color: var(--pd-danger);
+}
+
+/* Trang báo cáo là để đọc/in: mở hết bảng, không cuộn lồng bên trong */
+.production-day-report .production-board-ledger-wrap {
+    max-height: none;
+    overflow-x: auto;
+    overflow-y: visible;
+}
+
+.production-day-report .lg-line-static {
+    display: flex;
+    flex-direction: column;
+}
+
+.production-day-report .lg-line-static b {
+    font-size: 13.5px;
+    font-weight: 750;
+}
+
+.production-day-report .lg-line-static small {
+    color: var(--pd-ink-3);
+    font-size: 10.5px;
+}
+
+.production-day-report__card {
+    padding: 16px;
+    border: 1px solid var(--pd-border);
+    border-radius: var(--pd-radius-lg);
+    background: var(--pd-surface);
+    box-shadow: var(--pd-shadow-1);
+}
+
+.production-day-report__heading {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 8px;
+    margin-bottom: 12px;
+}
+
+.production-day-report__heading h4.ant-typography {
+    margin: 0;
+    font-size: 15px;
+    font-weight: 750;
+}
+
+.production-app-shell .production-day-report__total-row > td {
+    background: #f7f9fc;
+    font-weight: 700;
+}
+
+/* Dòng tổng toàn xưởng theo giờ: tách hẳn khỏi khối các chuyền */
+.production-day-report__slot-total th,
+.production-day-report__slot-total td {
+    border-top: 2px solid var(--pd-border-strong);
+    background: #f7f9fc;
+}
+
+.production-day-report__split {
+    display: grid;
+    grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr);
+    gap: 14px;
+}
+
+.production-day-report__alerts,
+.production-day-report__notes,
+.production-day-report__history {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+.production-day-report__alerts li {
+    display: flex;
+    align-items: flex-start;
+    gap: 9px;
+    padding: 9px 11px;
+    border-left: 3px solid var(--pd-border-strong);
+    border-radius: 6px;
+    background: #f7f8fb;
+}
+
+.production-day-report__alerts li.severity-critical {
+    border-left-color: var(--pd-danger);
+    background: var(--pd-danger-bg);
+}
+
+.production-day-report__alerts li.severity-warning {
+    border-left-color: var(--pd-warn);
+    background: var(--pd-warn-bg);
+}
+
+.production-day-report__alerts li .anticon {
+    margin-top: 2px;
+    color: var(--pd-ink-3);
+}
+
+.production-day-report__alerts li.severity-critical .anticon {
+    color: var(--pd-danger);
+}
+
+.production-day-report__alerts li.severity-warning .anticon {
+    color: var(--pd-warn);
+}
+
+.production-day-report__alerts span {
+    display: flex;
+    min-width: 0;
+    flex-direction: column;
+}
+
+.production-day-report__alerts strong {
+    font-size: 12.5px;
+}
+
+.production-day-report__alerts small {
+    color: var(--pd-ink-2);
+    font-size: 11px;
+}
+
+.production-day-report__notes li {
+    padding: 9px 11px;
+    border: 1px solid var(--pd-border);
+    border-radius: 6px;
+}
+
+.production-day-report__note-meta {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 8px;
+    margin-bottom: 3px;
+}
+
+.production-day-report__note-meta b {
+    font-size: 12.5px;
+    font-weight: 750;
+}
+
+.production-day-report__note-meta em,
+.production-day-report__note-meta i {
+    color: var(--pd-ink-3);
+    font-size: 11px;
+    font-style: normal;
+}
+
+.production-day-report__notes p {
+    margin: 0;
+    color: var(--pd-ink);
+    font-size: 12.5px;
+}
+
+.production-day-report__history li {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+    padding: 7px 0;
+    border-bottom: 1px solid var(--pd-border);
+    font-size: 12.5px;
+}
+
+.production-day-report__history li:last-child {
+    border-bottom: 0;
+}
+
+.production-day-report__history em {
+    color: var(--pd-ink-3);
+    font-size: 11px;
+    font-style: normal;
+    margin-left: auto;
+}
+
+.production-day-report__history p {
+    width: 100%;
+    margin: 0;
+    color: var(--pd-ink-2);
+    font-size: 11.5px;
+}
+
+.production-day-report__foot {
+    padding-bottom: 8px;
+    font-size: 11px;
+    text-align: right;
+}
+
+@media (max-width: 991px) {
+    .production-day-report__split {
+        grid-template-columns: minmax(0, 1fr);
+    }
+
+    .production-day-report__bar {
+        align-items: stretch;
+        flex-direction: column;
+    }
+}
+
+/* Bản in: bỏ khung app, mở hết bảng, không cắt ngang khối */
+@media print {
+    .production-app-shell .pd-header,
+    .production-app-shell .pd-tabbar,
+    .production-day-report__actions,
+    .production-day-report__back .ant-btn {
+        display: none !important;
+    }
+
+    .production-day-report__card,
+    .production-day-report__bar {
+        border-color: #d0d5dd;
+        box-shadow: none;
+        break-inside: avoid;
+    }
+
+    .production-board-ledger-wrap {
+        max-height: none;
+        overflow: visible;
+    }
+}
+
 .production-drawer-section--setup .ant-alert-warning {
     margin-bottom: 12px;
 }

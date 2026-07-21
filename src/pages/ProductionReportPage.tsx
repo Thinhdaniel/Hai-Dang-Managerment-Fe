@@ -44,12 +44,13 @@ import type {
     ProductionReportItem,
     ProductionReportLine,
     ProductionReportScope,
+    ProductionReportTrendPoint,
 } from '../core/types/production';
 
 const { RangePicker } = DatePicker;
 const { Text, Title } = Typography;
 
-type ReportTab = 'lines' | 'items' | 'exceptions';
+type ReportTab = 'lines' | 'items' | 'days' | 'exceptions';
 type ReportPreset = 'month' | 'last-month' | '7-days' | '30-days' | 'custom';
 
 const number = (value = 0, digits = 0) =>
@@ -63,6 +64,11 @@ const statusLabels = {
     submitted: 'Chờ duyệt',
     locked: 'Đã khóa sổ',
 };
+
+// Ngày chưa khóa sổ = số chưa chính thức, phải nhìn ra ngay trong bảng theo ngày
+const statusTagColor = { draft: 'blue', submitted: 'gold', locked: 'green' } as const;
+
+const weekdayFormatter = new Intl.DateTimeFormat('vi-VN', { weekday: 'short' });
 
 const exceptionLabels = {
     missing_report: 'Thiếu báo',
@@ -429,6 +435,116 @@ const ProductionReportPage = () => {
         [report?.meta.financialsVisible]
     );
 
+    const dayColumns = useMemo<TableColumnsType<ProductionReportTrendPoint>>(
+        () => [
+            {
+                title: 'Ngày',
+                key: 'date',
+                width: 130,
+                fixed: 'left',
+                render: (_, point) => (
+                    <div className='production-report-identity'>
+                        <strong>{dayjs(point.productionDate).format('DD/MM/YYYY')}</strong>
+                        <span>{weekdayFormatter.format(new Date(point.productionDate))}</span>
+                    </div>
+                ),
+            },
+            {
+                title: 'Trạng thái',
+                dataIndex: 'status',
+                width: 112,
+                render: (value: keyof typeof statusLabels) => (
+                    <Tag color={statusTagColor[value] || 'default'}>{statusLabels[value] || value}</Tag>
+                ),
+            },
+            {
+                title: 'Sản lượng',
+                key: 'output',
+                width: 160,
+                sorter: (left, right) => left.actualQuantity - right.actualQuantity,
+                render: (_, point) => (
+                    <div className='production-report-output-cell'>
+                        <strong>{number(point.actualQuantity)} SP</strong>
+                        <span>/ {number(point.targetQuantity)} khoán</span>
+                    </div>
+                ),
+            },
+            {
+                title: '% đạt',
+                dataIndex: 'achievementPercent',
+                width: 135,
+                sorter: (left, right) => left.achievementPercent - right.achievementPercent,
+                render: (value) => <Achievement value={value} />,
+            },
+            {
+                title: 'Kế hoạch',
+                key: 'plan',
+                width: 140,
+                render: (_, point) =>
+                    point.plannedQuantity > 0 ? (
+                        <div className='production-report-output-cell'>
+                            <strong>{number(point.planAttainmentPercent, 1)}%</strong>
+                            <span>/ {number(point.plannedQuantity)} SP ban hành</span>
+                        </div>
+                    ) : (
+                        <Text type='secondary'>—</Text>
+                    ),
+            },
+            {
+                title: 'Báo đủ',
+                dataIndex: 'reportingRate',
+                width: 95,
+                align: 'right',
+                sorter: (left, right) => left.reportingRate - right.reportingRate,
+                render: (value) => `${number(value, 1)}%`,
+            },
+            {
+                title: 'Nhân sự',
+                key: 'workers',
+                width: 120,
+                align: 'right',
+                render: (_, point) => (
+                    <div className='production-report-output-cell is-right'>
+                        <strong>{number(point.workers)} CN</strong>
+                        <span>
+                            {number(point.configuredLines)}/{number(point.totalLines)} chuyền
+                        </span>
+                    </div>
+                ),
+            },
+            ...(report?.meta.financialsVisible
+                ? [
+                      {
+                          title: 'Giá trị',
+                          dataIndex: 'totalAmount',
+                          width: 140,
+                          align: 'right' as const,
+                          sorter: (left: ProductionReportTrendPoint, right: ProductionReportTrendPoint) =>
+                              Number(left.totalAmount || 0) - Number(right.totalAmount || 0),
+                          render: (value: number) => money(value),
+                      },
+                  ]
+                : []),
+            {
+                title: '',
+                key: 'action',
+                width: 110,
+                fixed: 'right',
+                render: (_, point) => (
+                    <Button
+                        type='link'
+                        onClick={() =>
+                            navigate(`/production/reports/${point.productionDate}?plantId=${plantId}`)
+                        }
+                    >
+                        Xem chi tiết
+                    </Button>
+                ),
+            },
+        ],
+        [navigate, plantId, report?.meta.financialsVisible]
+    );
+
     const exceptionColumns = useMemo<TableColumnsType<ProductionReportException>>(
         () => [
             {
@@ -547,6 +663,47 @@ const ProductionReportPage = () => {
                 </div>
             </div>
             <Progress percent={Math.min(100, Math.round(item.achievementPercent))} showInfo={false} size='small' />
+        </article>
+    );
+
+    const renderMobileDay = (point: ProductionReportTrendPoint) => (
+        <article
+            key={point.productionDate}
+            className='production-report-mobile-card'
+            onClick={() => navigate(`/production/reports/${point.productionDate}?plantId=${plantId}`)}
+        >
+            <div className='production-report-mobile-card__head'>
+                <div className='production-report-identity'>
+                    <strong>{dayjs(point.productionDate).format('DD/MM/YYYY')}</strong>
+                    <span>
+                        <Tag color={statusTagColor[point.status] || 'default'}>
+                            {statusLabels[point.status] || point.status}
+                        </Tag>
+                    </span>
+                </div>
+                <span className={`production-report-score tone-${percentTone(point.achievementPercent)}`}>
+                    {number(point.achievementPercent, 1)}%
+                </span>
+            </div>
+            <div className='production-report-mobile-card__metrics'>
+                <div>
+                    <span>Thực tế</span>
+                    <strong>{number(point.actualQuantity)} SP</strong>
+                </div>
+                <div>
+                    <span>Khoán</span>
+                    <strong>{number(point.targetQuantity)} SP</strong>
+                </div>
+                <div>
+                    <span>Báo đủ</span>
+                    <strong>{number(point.reportingRate, 1)}%</strong>
+                </div>
+                <div>
+                    <span>Nhân sự</span>
+                    <strong>{number(point.workers)} CN</strong>
+                </div>
+            </div>
+            <Progress percent={Math.min(100, Math.round(point.achievementPercent))} showInfo={false} size='small' />
         </article>
     );
 
@@ -779,6 +936,7 @@ const ProductionReportPage = () => {
                                 options={[
                                     { value: 'lines', label: `Theo chuyền (${report.lines.length})` },
                                     { value: 'items', label: `Mã hàng (${report.items.length})` },
+                                    { value: 'days', label: `Theo ngày (${report.trend.length})` },
                                     { value: 'exceptions', label: `Ngoại lệ (${report.exceptionSummary.total})` },
                                 ]}
                             />
@@ -820,6 +978,26 @@ const ProductionReportPage = () => {
                                     dataSource={report.items}
                                     pagination={{ pageSize: 15, showSizeChanger: false }}
                                     scroll={{ x: 1000 }}
+                                    size='middle'
+                                />
+                            )
+                        ) : null}
+                        {tab === 'days' ? (
+                            isMobile ? (
+                                <div className='production-report-mobile-list'>
+                                    {[...report.trend].reverse().map(renderMobileDay)}
+                                </div>
+                            ) : (
+                                <Table
+                                    rowKey='productionDate'
+                                    columns={dayColumns}
+                                    dataSource={report.trend}
+                                    // Ngày chưa khóa sổ tô nền nhẹ: số trên dòng đó chưa phải số chính thức
+                                    rowClassName={(point) =>
+                                        point.status !== 'locked' ? 'production-report-day-open' : ''
+                                    }
+                                    pagination={{ pageSize: 31, showSizeChanger: false }}
+                                    scroll={{ x: 1080 }}
                                     size='middle'
                                 />
                             )
