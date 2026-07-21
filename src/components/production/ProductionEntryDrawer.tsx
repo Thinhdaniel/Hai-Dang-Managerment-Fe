@@ -57,12 +57,14 @@ const ProductionEntryDrawer = ({ open, day, line, items, slotKey, onClose, onSav
     const [showSetup, setShowSetup] = useState(false);
     const [showChangeItem, setShowChangeItem] = useState(false);
     const selectedRunId = Form.useWatch('runId', entryForm);
+    const runDraftSlotKey = Form.useWatch('startedSlotKey', runForm);
     const slot = day.timeSlots.find((item) => item.key === slotKey);
     const slotValue = line?.slotValues.find((item) => item.key === slotKey);
     const isReadOnly = day.status !== 'draft';
     const hasPlannedRuns = Boolean(line?.runs.some((run) => run.source === 'plan'));
     // Đã có sản lượng: chỉ sửa được số CN + khoán giờ; đổi mã hàng phải dùng chức năng riêng (BE chặn).
     const hasEntries = Boolean(line?.entries.length);
+    const runDraftSlot = day.timeSlots.find((item) => item.key === runDraftSlotKey);
 
     const eligibleRuns = useMemo(() => {
         if (!line) return [];
@@ -103,9 +105,13 @@ const ProductionEntryDrawer = ({ open, day, line, items, slotKey, onClose, onSav
             quantity: entry?.quantity,
             note: entry?.note,
         });
+        // Điền sẵn mã hàng + khoán đang chạy: đa số trường hợp người dùng chỉ đổi
+        // mức khoán từ giờ này trở đi, không đổi mã hàng.
+        const currentRun = eligibleRuns[eligibleRuns.length - 1];
         runForm.setFieldsValue({
             startedSlotKey: slotKey,
-            hourlyQuota: eligibleRuns[eligibleRuns.length - 1]?.hourlyQuota,
+            itemId: currentRun?.itemId,
+            hourlyQuota: currentRun?.hourlyQuota,
         });
     }, [eligibleRuns, entryForm, line, open, runForm, slotKey, slotValue?.runId]);
 
@@ -266,11 +272,19 @@ const ProductionEntryDrawer = ({ open, day, line, items, slotKey, onClose, onSav
                             <Title level={5}>{line.configured ? 'Sửa thiết lập chuyền' : 'Thông tin đầu ngày'}</Title>
                             <Text type='secondary'>
                                 {hasEntries
-                                    ? 'Đã có sản lượng — sửa được số công nhân và khoán giờ; đổi mã hàng dùng chức năng "Đổi mã hàng".'
+                                    ? 'Đã có sản lượng — sửa được số công nhân và khoán giờ.'
                                     : 'Số công nhân được xác nhận riêng cho ngày này.'}
                             </Text>
                         </div>
                     </div>
+                    {hasEntries ? (
+                        <Alert
+                            type='warning'
+                            showIcon
+                            message='Sửa khoán ở đây tính lại cả những giờ đã báo'
+                            description='Chỉ dùng khi đặt sai khoán từ đầu ngày. Nếu khoán thay đổi giữa ngày, hãy dùng "Đổi mã hàng hoặc mức khoán từ khung giờ này" để giữ nguyên số của các giờ trước.'
+                        />
+                    ) : null}
                     <Form form={setupForm} layout='vertical' onFinish={(values) => setupMutation.mutate(values)}>
                         <div className='production-form-two-columns'>
                             <Form.Item
@@ -436,8 +450,8 @@ const ProductionEntryDrawer = ({ open, day, line, items, slotKey, onClose, onSav
                     >
                         <RetweetOutlined />
                         <span>
-                            <strong>Đổi mã hàng từ khung giờ này</strong>
-                            <small>Mã cũ được giữ nguyên trong lịch sử</small>
+                            <strong>Đổi mã hàng hoặc mức khoán từ khung giờ này</strong>
+                            <small>Các giờ trước giữ nguyên mã và khoán cũ</small>
                         </span>
                     </button>
 
@@ -445,9 +459,10 @@ const ProductionEntryDrawer = ({ open, day, line, items, slotKey, onClose, onSav
                         <section className='production-drawer-section production-drawer-section--change'>
                             <Form form={runForm} layout='vertical' onFinish={(values) => runMutation.mutate(values)}>
                                 <Form.Item
-                                    label='Mã hàng mới'
+                                    label='Mã hàng'
                                     name='itemId'
                                     rules={[{ required: true, message: 'Chọn mã hàng' }]}
+                                    extra='Giữ nguyên mã đang chạy nếu chỉ đổi mức khoán'
                                 >
                                     <Select
                                         showSearch
@@ -464,9 +479,14 @@ const ProductionEntryDrawer = ({ open, day, line, items, slotKey, onClose, onSav
                                         name='hourlyQuota'
                                         rules={[{ required: true, message: 'Nhập khoán giờ' }]}
                                     >
-                                        <InputNumber min={0} precision={0} className='w-full' />
+                                        <InputNumber
+                                            min={0}
+                                            precision={0}
+                                            className='w-full'
+                                            addonAfter='SP/giờ'
+                                        />
                                     </Form.Item>
-                                    <Form.Item label='Bắt đầu từ' name='startedSlotKey' rules={[{ required: true }]}>
+                                    <Form.Item label='Áp dụng từ' name='startedSlotKey' rules={[{ required: true }]}>
                                         <Select
                                             options={day.timeSlots
                                                 .filter((item) => item.isActive)
@@ -474,6 +494,17 @@ const ProductionEntryDrawer = ({ open, day, line, items, slotKey, onClose, onSav
                                         />
                                     </Form.Item>
                                 </div>
+                                <Alert
+                                    type='info'
+                                    showIcon
+                                    className='production-run-hint'
+                                    message={
+                                        runDraftSlot
+                                            ? `Áp dụng từ khung ${slotRangeLabel(runDraftSlot)} trở đi`
+                                            : 'Chọn khung giờ bắt đầu áp dụng'
+                                    }
+                                    description='Các khung giờ trước đó giữ nguyên mã hàng và mức khoán cũ, số đã báo không bị tính lại.'
+                                />
                                 <Button
                                     type='primary'
                                     htmlType='submit'
@@ -481,7 +512,7 @@ const ProductionEntryDrawer = ({ open, day, line, items, slotKey, onClose, onSav
                                     loading={runMutation.isPending}
                                     block
                                 >
-                                    Xác nhận đổi mã hàng
+                                    Xác nhận áp dụng
                                 </Button>
                             </Form>
                         </section>

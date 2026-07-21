@@ -3125,6 +3125,15 @@
     border-top: 0;
 }
 
+/* Nhắc phạm vi áp dụng trước khi bấm — đặt sát nút để đọc được ngay lúc quyết định */
+.production-run-hint {
+    margin-bottom: 12px;
+}
+
+.production-drawer-section--setup .ant-alert-warning {
+    margin-bottom: 12px;
+}
+
 .production-section-title,
 .production-setup-heading {
     display: flex;
