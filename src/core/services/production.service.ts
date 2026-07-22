@@ -123,6 +123,13 @@ export const productionService = {
     updateTimeSlots: (dayId: string, timeSlots: ProductionTimeSlot[]): Promise<ProductionDay> =>
         api.patch(`${BASE}/days/${dayId}/time-slots`, { timeSlots }),
 
+    // Biên chế chuyền của riêng một ngày — không đụng danh mục chuyền chung.
+    addDayLine: (dayId: string, lineId: string): Promise<ProductionDay> =>
+        api.post(`${BASE}/days/${dayId}/lines`, { lineId }),
+
+    removeDayLine: (dayId: string, lineId: string): Promise<ProductionDay> =>
+        api.delete(`${BASE}/days/${dayId}/lines/${lineId}`),
+
     configureLine: (
         dayId: string,
         lineId: string,

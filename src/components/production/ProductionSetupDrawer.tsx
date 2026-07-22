@@ -241,12 +241,116 @@ const ProductionSetupDrawer = ({ open, plantId, day, onClose }: Props) => {
         message.info('Đã thêm vào danh sách. Bấm "Lưu toàn bộ khung giờ" để áp dụng cho ngày.');
     };
 
+    // Biên chế chuyền theo NGÀY: gộp/tách chuyền là việc thay đổi từng ngày, nên chuyền mới
+    // thêm vào danh mục sẽ không tự nhảy vào các ngày đã khởi tạo — phải đưa vào từ đây.
+    const dayLines = day?.lines || [];
+    const dayLineIds = new Set(dayLines.map((line) => line.lineId));
+    const addableLines = (linesQuery.data || []).filter((line) => line.isActive && !dayLineIds.has(line.id));
+
+    const addDayLineMutation = useMutation({
+        mutationFn: (lineId: string) => productionService.addDayLine(day!.id, lineId),
+        onSuccess: async () => {
+            message.success('Đã đưa chuyền vào ngày sản xuất');
+            await queryClient.invalidateQueries({ queryKey: ['production', 'day', plantId] });
+        },
+        onError: (error) => message.error(errorMessage(error)),
+    });
+
+    const removeDayLineMutation = useMutation({
+        mutationFn: (lineId: string) => productionService.removeDayLine(day!.id, lineId),
+        onSuccess: async () => {
+            message.success('Đã gỡ chuyền khỏi ngày sản xuất');
+            await queryClient.invalidateQueries({ queryKey: ['production', 'day', plantId] });
+        },
+        onError: (error) => message.error(errorMessage(error)),
+    });
+
+    const dayLinesTab = day ? (
+        <div className='production-setup-section'>
+            <div className='production-setup-heading'>
+                <div>
+                    <Title level={5}>Chuyền chạy ngày {dayjs(day.productionDate).format('DD/MM/YYYY')}</Title>
+                    <Text type='secondary'>
+                        Danh sách này chốt riêng cho ngày đang xem. Gộp hai chuyền thì gỡ chuyền thừa ra, tách chuyền
+                        thì thêm vào — các ngày khác không bị ảnh hưởng.
+                    </Text>
+                </div>
+            </div>
+
+            <Select
+                className='w-full'
+                placeholder={addableLines.length ? 'Chọn chuyền để đưa vào ngày' : 'Mọi chuyền đang bật đã có trong ngày'}
+                value={null as unknown as string}
+                disabled={!addableLines.length || addDayLineMutation.isPending}
+                loading={addDayLineMutation.isPending}
+                onSelect={(value) => addDayLineMutation.mutate(String(value))}
+                options={addableLines.map((line) => ({
+                    value: line.id,
+                    label: [line.code, line.name, line.leaderName].filter(Boolean).join(' · '),
+                }))}
+            />
+
+            <List
+                className='production-master-list'
+                dataSource={dayLines}
+                locale={{ emptyText: <Empty description='Ngày này chưa có chuyền nào' /> }}
+                renderItem={(line) => {
+                    const locked = Boolean(line.entries.length || line.runs.length);
+                    return (
+                        <List.Item
+                            actions={[
+                                <Popconfirm
+                                    key='remove'
+                                    title={`Gỡ ${line.lineCode} khỏi ngày này?`}
+                                    description='Danh mục chuyền và các ngày khác giữ nguyên.'
+                                    disabled={locked}
+                                    onConfirm={() => removeDayLineMutation.mutate(line.lineId)}
+                                >
+                                    <Button type='text' danger disabled={locked}>
+                                        Gỡ khỏi ngày
+                                    </Button>
+                                </Popconfirm>,
+                            ]}
+                        >
+                            <List.Item.Meta
+                                title={
+                                    <span className='production-master-title'>
+                                        {line.lineCode}
+                                        {locked ? (
+                                            <Tag color='blue'>
+                                                {line.entries.length ? 'Đã có sản lượng' : 'Đã gán mã hàng'}
+                                            </Tag>
+                                        ) : (
+                                            <Tag>Chưa có dữ liệu</Tag>
+                                        )}
+                                    </span>
+                                }
+                                description={[
+                                    line.lineName,
+                                    line.leaderName ? `Tổ trưởng: ${line.leaderName}` : '',
+                                    `${line.workerCount || 0} CN`,
+                                ]
+                                    .filter(Boolean)
+                                    .join(' · ')}
+                            />
+                        </List.Item>
+                    );
+                }}
+            />
+        </div>
+    ) : (
+        <Empty description='Khởi tạo ngày sản xuất trước khi sắp chuyền' />
+    );
+
     const lineTab = (
         <div className='production-setup-section'>
             <div className='production-setup-heading'>
                 <div>
                     <Title level={5}>{editingLine ? `Sửa ${editingLine.code}` : 'Thêm chuyền sản xuất'}</Title>
-                    <Text type='secondary'>Số công nhân sẽ được xác nhận riêng trong từng ngày.</Text>
+                    <Text type='secondary'>
+                        Đây là danh mục dùng chung. Thêm chuyền ở đây chưa đưa nó vào ngày nào — sang tab "Chuyền
+                        trong ngày" để xếp cho ngày đang xem. Số công nhân cũng xác nhận riêng từng ngày.
+                    </Text>
                 </div>
                 {editingLine ? (
                     <Button
@@ -510,7 +614,8 @@ const ProductionSetupDrawer = ({ open, plantId, day, onClose }: Props) => {
         >
             <Tabs
                 items={[
-                    { key: 'lines', label: 'Chuyền', children: lineTab },
+                    { key: 'day-lines', label: 'Chuyền trong ngày', children: dayLinesTab },
+                    { key: 'lines', label: 'Danh mục chuyền', children: lineTab },
                     { key: 'items', label: 'Mã hàng', children: itemTab },
                     { key: 'slots', label: 'Khung giờ', children: slotsTab },
                 ]}
