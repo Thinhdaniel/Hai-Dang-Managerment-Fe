@@ -1,9 +1,10 @@
-import { App, Avatar, Button, ConfigProvider, Dropdown, Tooltip, Typography, type MenuProps } from 'antd';
+import { App, Avatar, Button, ConfigProvider, Drawer, Dropdown, Tooltip, Typography, type MenuProps } from 'antd';
 import {
     AppstoreOutlined,
     CalendarOutlined,
     DownOutlined,
     EditOutlined,
+    EllipsisOutlined,
     FundProjectionScreenOutlined,
     HistoryOutlined,
     LineChartOutlined,
@@ -13,7 +14,7 @@ import {
     UserOutlined,
 } from '@ant-design/icons';
 import { useEffect, useState } from 'react';
-import { NavLink, Outlet, useNavigate } from 'react-router-dom';
+import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../core/contexts/AuthContext';
 import { useResponsive } from '../../core/hooks/useResponsive';
 import { useSocket } from '../../core/hooks/useSocket';
@@ -26,12 +27,14 @@ const PRODUCTION_FONT = "'Be Vietnam Pro', 'Segoe UI', system-ui, -apple-system,
 
 const ProductionAppLayout = () => {
     const navigate = useNavigate();
+    const location = useLocation();
     const { isPhone } = useResponsive();
     const { modal } = App.useApp();
     const { user, role, logout } = useAuth();
     const { socket } = useSocket();
     const [online, setOnline] = useState(() => navigator.onLine);
     const [realtimeConnected, setRealtimeConnected] = useState(() => Boolean(socket?.connected));
+    const [moreOpen, setMoreOpen] = useState(false);
 
     useEffect(() => {
         const onOnline = () => setOnline(true);
@@ -74,6 +77,17 @@ const ProductionAppLayout = () => {
         manage ? { to: '/production/reports', end: false, icon: <PieChartOutlined />, label: 'Báo cáo' } : null,
         { to: '/production/history', end: false, icon: <HistoryOutlined />, label: 'Lịch sử' },
     ].filter((item): item is NonNullable<typeof item> => Boolean(item));
+
+    // Thanh tab dưới chia đều chiều ngang: quá 5 mục thì mỗi mục còn ~62px ở
+    // 390px, chữ dính nhau và bấm dễ trượt. Giữ 4 mục hay dùng, phần còn lại
+    // gom vào "Khác" mở bảng chọn từ đáy.
+    const MAX_TABS = 5;
+    const needsOverflow = isPhone && navItems.length > MAX_TABS;
+    const primaryNav = needsOverflow ? navItems.slice(0, MAX_TABS - 1) : navItems;
+    const overflowNav = needsOverflow ? navItems.slice(MAX_TABS - 1) : [];
+    const overflowActive = overflowNav.some((item) =>
+        item.end ? location.pathname === item.to : location.pathname.startsWith(item.to)
+    );
 
     const menuItems: MenuProps['items'] = [
         {
@@ -179,13 +193,42 @@ const ProductionAppLayout = () => {
                 </main>
 
                 <nav className='pd-tabbar' aria-label='Điều hướng sản xuất'>
-                    {navItems.map((item) => (
-                        <NavLink key={item.to} to={item.to} end={item.end}>
+                    {primaryNav.map((item) => (
+                        <NavLink key={item.to} to={item.to} end={item.end} onClick={() => setMoreOpen(false)}>
                             {item.icon}
                             <span>{item.short || item.label}</span>
                         </NavLink>
                     ))}
+                    {overflowNav.length ? (
+                        <button
+                            type='button'
+                            className={`pd-tabbar__more ${overflowActive ? 'is-active' : ''}`}
+                            aria-expanded={moreOpen}
+                            onClick={() => setMoreOpen(true)}
+                        >
+                            <EllipsisOutlined />
+                            <span>Khác</span>
+                        </button>
+                    ) : null}
                 </nav>
+
+                <Drawer
+                    open={moreOpen}
+                    onClose={() => setMoreOpen(false)}
+                    placement='bottom'
+                    height='auto'
+                    title='Chuyển trang'
+                    className='pd-more-sheet'
+                >
+                    <div className='pd-more-list'>
+                        {overflowNav.map((item) => (
+                            <NavLink key={item.to} to={item.to} end={item.end} onClick={() => setMoreOpen(false)}>
+                                {item.icon}
+                                <span>{item.label}</span>
+                            </NavLink>
+                        ))}
+                    </div>
+                </Drawer>
             </div>
         </ConfigProvider>
     );

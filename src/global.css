@@ -11810,7 +11810,7 @@ button.machine-map-stat:hover {
 
 .production-history-kpis span {
     color: #6f7b73;
-    font-size: 11px;
+    font-size: var(--pd-fs-11);
     font-weight: 650;
     text-transform: uppercase;
 }
@@ -11828,7 +11828,7 @@ button.machine-map-stat:hover {
 .production-history-kpis small {
     margin-top: 2px;
     color: #89938c;
-    font-size: 10px;
+    font-size: var(--pd-fs-10);
 }
 
 .production-history-table,
@@ -11855,7 +11855,7 @@ button.machine-map-stat:hover {
 .production-history-table .ant-table-thead > tr > th {
     color: #526057;
     background: #f4f7f5;
-    font-size: 11px;
+    font-size: var(--pd-fs-11);
     text-transform: uppercase;
 }
 
@@ -11889,7 +11889,7 @@ button.machine-map-stat:hover {
 .production-history-output small {
     margin-top: 2px;
     color: #828d85;
-    font-size: 10px;
+    font-size: var(--pd-fs-10);
 }
 
 .production-history-output {
@@ -11914,7 +11914,7 @@ button.machine-map-stat:hover {
     align-items: center;
     gap: 7px;
     color: #68756c;
-    font-size: 11px;
+    font-size: var(--pd-fs-11);
 }
 
 .production-history-footnote .anticon {
@@ -11981,7 +11981,7 @@ button.machine-map-stat:hover {
 .production-history-card__heading > span small {
     margin-top: 3px;
     color: #7d8881;
-    font-size: 9px;
+    font-size: var(--pd-fs-9);
 }
 
 .production-history-card__heading > div {
@@ -12011,7 +12011,7 @@ button.machine-map-stat:hover {
 
 .production-history-card__metrics small {
     color: #828d85;
-    font-size: 10px;
+    font-size: var(--pd-fs-10);
 }
 
 .production-history-card__metrics strong {
@@ -12033,7 +12033,7 @@ button.machine-map-stat:hover {
     border-top: 1px solid #e7ece9;
     color: #6f7b73;
     background: #fafcfb;
-    font-size: 11px;
+    font-size: var(--pd-fs-11);
 }
 
 @media (max-width: 1100px) {
@@ -12087,7 +12087,7 @@ button.machine-map-stat:hover {
         justify-content: center;
         gap: 7px;
         padding: 0 8px;
-        font-size: 12px;
+        font-size: var(--pd-fs-12);
     }
 
     .production-app-nav a span {
@@ -12249,13 +12249,13 @@ button.machine-map-stat:hover {
 
 .production-plan-statusbar strong {
     color: #26342b;
-    font-size: 13px;
+    font-size: var(--pd-fs-13);
 }
 
 .production-plan-statusbar small {
     overflow: hidden;
     color: #77837b;
-    font-size: 10px;
+    font-size: var(--pd-fs-10);
     text-overflow: ellipsis;
     white-space: nowrap;
 }
@@ -12308,7 +12308,7 @@ button.machine-map-stat:hover {
 
 .production-plan-kpis span {
     color: #6e7a72;
-    font-size: 10px;
+    font-size: var(--pd-fs-10);
     font-weight: 700;
     text-transform: uppercase;
 }
@@ -12331,7 +12331,7 @@ button.machine-map-stat:hover {
 .production-plan-kpis small {
     margin-top: 2px;
     color: #879189;
-    font-size: 9px;
+    font-size: var(--pd-fs-9);
 }
 
 .production-plan-allocation-panel {
@@ -12346,7 +12346,7 @@ button.machine-map-stat:hover {
 .production-plan-allocation-panel .ant-table-thead > tr > th {
     color: #556158;
     background: #f4f7f5;
-    font-size: 10px;
+    font-size: var(--pd-fs-10);
     text-transform: uppercase;
 }
 
@@ -12370,7 +12370,7 @@ button.machine-map-stat:hover {
 
 .production-plan-line-cell strong {
     color: #126c42;
-    font-size: 13px;
+    font-size: var(--pd-fs-13);
 }
 
 .production-plan-line-cell small,
@@ -12379,7 +12379,7 @@ button.machine-map-stat:hover {
     margin-top: 2px;
     overflow: hidden;
     color: #818c84;
-    font-size: 9px;
+    font-size: var(--pd-fs-9);
     text-overflow: ellipsis;
     white-space: nowrap;
 }
@@ -12394,12 +12394,12 @@ button.machine-map-stat:hover {
 .production-plan-item-cell strong,
 .production-plan-number-cell strong {
     color: #29372e;
-    font-size: 12px;
+    font-size: var(--pd-fs-12);
 }
 
 .production-plan-item-cell .ant-tag {
     margin: 0;
-    font-size: 8px;
+    font-size: var(--pd-fs-8);
 }
 
 .production-plan-window,
@@ -12409,7 +12409,7 @@ button.machine-map-stat:hover {
     justify-content: flex-end;
     gap: 6px;
     color: #5c6960;
-    font-size: 11px;
+    font-size: var(--pd-fs-11);
     font-variant-numeric: tabular-nums;
 }
 
@@ -12456,7 +12456,7 @@ button.machine-map-stat:hover {
 .production-plan-savebar small {
     margin: 3px 3px 0;
     color: #7f8a83;
-    font-size: 9px;
+    font-size: var(--pd-fs-9);
 }
 
 .production-plan-drawer .ant-drawer-body {
@@ -12532,7 +12532,7 @@ button.machine-map-stat:hover {
 
 .production-monitor-forecastbar small {
     color: #7e8a82;
-    font-size: 9px;
+    font-size: var(--pd-fs-9);
 }
 
 .production-monitor-forecastbar__signal strong {
@@ -12546,7 +12546,7 @@ button.machine-map-stat:hover {
 
 .production-monitor-forecastbar__progress span {
     color: #435148;
-    font-size: 11px;
+    font-size: var(--pd-fs-11);
     font-weight: 700;
 }
 
@@ -12617,7 +12617,7 @@ button.machine-map-stat:hover {
         border-radius: 6px;
         color: #126d43;
         background: #eef7f1;
-        font-size: 10px;
+        font-size: var(--pd-fs-10);
         font-weight: 800;
     }
 
@@ -12636,13 +12636,13 @@ button.machine-map-stat:hover {
 
     .production-plan-mobile-card__head strong {
         color: #27362d;
-        font-size: 13px;
+        font-size: var(--pd-fs-13);
     }
 
     .production-plan-mobile-card__head small {
         margin-top: 2px;
         color: #849087;
-        font-size: 9px;
+        font-size: var(--pd-fs-9);
     }
 
     .production-plan-mobile-card__head .ant-tag {
@@ -12663,7 +12663,7 @@ button.machine-map-stat:hover {
 
     .production-plan-mobile-card__metrics small {
         color: #879188;
-        font-size: 8px;
+        font-size: var(--pd-fs-8);
         text-transform: uppercase;
     }
 
@@ -12671,7 +12671,7 @@ button.machine-map-stat:hover {
         margin-top: 2px;
         overflow: hidden;
         color: #2b3930;
-        font-size: 12px;
+        font-size: var(--pd-fs-12);
         text-overflow: ellipsis;
         white-space: nowrap;
     }
@@ -12684,7 +12684,7 @@ button.machine-map-stat:hover {
         border-left: 3px solid #8060bd;
         color: #694aa2;
         background: #f7f3fd;
-        font-size: 9px;
+        font-size: var(--pd-fs-9);
     }
 
     .production-plan-mobile-card__actions {
@@ -12724,7 +12724,7 @@ button.machine-map-stat:hover {
     .production-app-nav a span {
         width: 100%;
         text-align: center;
-        font-size: 9px;
+        font-size: var(--pd-fs-9);
     }
 
     .production-planning-controls {
@@ -12958,7 +12958,7 @@ button.machine-map-stat:hover {
 
 .production-report-commandbar__signal small {
     color: #77837b;
-    font-size: 10px;
+    font-size: var(--pd-fs-10);
     font-weight: 700;
     text-transform: uppercase;
 }
@@ -12973,7 +12973,7 @@ button.machine-map-stat:hover {
     max-width: 590px;
     margin: 3px 0 0;
     color: #657269;
-    font-size: 12px;
+    font-size: var(--pd-fs-12);
     line-height: 1.45;
 }
 
@@ -12990,7 +12990,7 @@ button.machine-map-stat:hover {
 
 .production-report-commandbar__facts span {
     color: #7c8880;
-    font-size: 9px;
+    font-size: var(--pd-fs-9);
     font-weight: 650;
 }
 
@@ -13036,7 +13036,7 @@ button.machine-map-stat:hover {
     border-radius: 50%;
     color: #315b76;
     background: #edf3f7;
-    font-size: 12px;
+    font-size: var(--pd-fs-12);
     font-weight: 800;
 }
 
@@ -13044,7 +13044,7 @@ button.machine-map-stat:hover {
     padding-right: 24px;
     overflow: hidden;
     color: #718078;
-    font-size: 10px;
+    font-size: var(--pd-fs-10);
     font-weight: 650;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -13064,7 +13064,7 @@ button.machine-map-stat:hover {
 .production-report-kpi-foot {
     margin-top: 7px;
     color: #7a867e;
-    font-size: 10px;
+    font-size: var(--pd-fs-10);
     font-weight: 650;
 }
 
@@ -13107,7 +13107,7 @@ button.machine-map-stat:hover {
 }
 
 .production-report-section-heading .ant-typography {
-    font-size: 11px;
+    font-size: var(--pd-fs-11);
 }
 
 .production-report-detail-band {
@@ -13128,7 +13128,7 @@ button.machine-map-stat:hover {
     padding-block: 10px;
     color: #59675e;
     background: #f3f6f4;
-    font-size: 11px;
+    font-size: var(--pd-fs-11);
     font-weight: 750;
 }
 
@@ -13136,7 +13136,7 @@ button.machine-map-stat:hover {
     padding-block: 10px;
     border-bottom-color: #e8edea;
     color: #334139;
-    font-size: 12px;
+    font-size: var(--pd-fs-12);
 }
 
 .production-report-detail-band .ant-pagination {
@@ -13150,7 +13150,7 @@ button.machine-map-stat:hover {
 .production-report-identity strong {
     overflow: hidden;
     color: #203128;
-    font-size: 12px;
+    font-size: var(--pd-fs-12);
     text-overflow: ellipsis;
     white-space: nowrap;
 }
@@ -13159,20 +13159,20 @@ button.machine-map-stat:hover {
     margin-top: 2px;
     overflow: hidden;
     color: #7a867e;
-    font-size: 10px;
+    font-size: var(--pd-fs-10);
     text-overflow: ellipsis;
     white-space: nowrap;
 }
 
 .production-report-output-cell strong {
     color: #203128;
-    font-size: 12px;
+    font-size: var(--pd-fs-12);
 }
 
 .production-report-output-cell span {
     margin-top: 1px;
     color: #849087;
-    font-size: 10px;
+    font-size: var(--pd-fs-10);
 }
 
 .production-report-achievement {
@@ -13181,7 +13181,7 @@ button.machine-map-stat:hover {
 
 .production-report-achievement strong {
     color: #26362d;
-    font-size: 11px;
+    font-size: var(--pd-fs-11);
 }
 
 .production-report-achievement .ant-progress {
@@ -13220,13 +13220,13 @@ button.machine-map-stat:hover {
 
 .production-report-exception-copy strong {
     color: #29372f;
-    font-size: 12px;
+    font-size: var(--pd-fs-12);
 }
 
 .production-report-exception-copy span {
     margin-top: 2px;
     color: #77837b;
-    font-size: 10px;
+    font-size: var(--pd-fs-10);
 }
 
 .production-report-loading,
@@ -13249,7 +13249,7 @@ button.machine-map-stat:hover {
 .production-report-empty p {
     margin: 4px 0 0;
     color: #758179;
-    font-size: 12px;
+    font-size: var(--pd-fs-12);
 }
 
 .production-report-mobile-list {
@@ -13280,7 +13280,7 @@ button.machine-map-stat:hover {
     flex: 0 0 auto;
     padding: 4px 7px;
     border-radius: 4px;
-    font-size: 11px;
+    font-size: var(--pd-fs-11);
     font-weight: 750;
 }
 
@@ -13315,14 +13315,14 @@ button.machine-map-stat:hover {
 
 .production-report-mobile-card__metrics span {
     color: #7d8981;
-    font-size: 9px;
+    font-size: var(--pd-fs-9);
 }
 
 .production-report-mobile-card__metrics strong {
     margin-top: 2px;
     overflow: hidden;
     color: #26362d;
-    font-size: 12px;
+    font-size: var(--pd-fs-12);
     text-overflow: ellipsis;
     white-space: nowrap;
 }
@@ -13378,7 +13378,7 @@ button.machine-map-stat:hover {
 .production-report-mobile-exception__copy strong {
     overflow: hidden;
     color: #29372f;
-    font-size: 11px;
+    font-size: var(--pd-fs-11);
     text-overflow: ellipsis;
     white-space: nowrap;
 }
@@ -13386,7 +13386,7 @@ button.machine-map-stat:hover {
 .production-report-mobile-exception__copy small {
     margin-top: 3px;
     color: #768279;
-    font-size: 9px;
+    font-size: var(--pd-fs-9);
     line-height: 1.4;
 }
 
@@ -13555,7 +13555,7 @@ button.machine-map-stat:hover {
     .production-report-detail-toolbar .ant-segmented-item-label {
         min-height: 34px;
         padding-inline: 5px;
-        font-size: 10px;
+        font-size: var(--pd-fs-10);
         line-height: 34px;
     }
 
@@ -13580,6 +13580,6 @@ button.machine-map-stat:hover {
     }
 
     .production-report-detail-toolbar .ant-segmented-item-label {
-        font-size: 9px;
+        font-size: var(--pd-fs-9);
     }
 }

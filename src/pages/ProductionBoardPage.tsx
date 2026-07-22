@@ -857,7 +857,7 @@ const ProductionBoardPage = () => {
                         <>
                             <div className='production-board-overview-kpis'>
                                 <div className='is-primary'>
-                                    <small>Nhịp đã chốt toàn cơ sở</small>
+                                    <small>{isPhone ? 'Nhịp đã chốt' : 'Nhịp đã chốt toàn cơ sở'}</small>
                                     <strong>{number(board.summary.checkpointAchievementPercent)}%</strong>
                                     <span
                                         className={
@@ -874,17 +874,17 @@ const ProductionBoardPage = () => {
                                     </span>
                                 </div>
                                 <div>
-                                    <small>Sản lượng hôm nay</small>
+                                    <small>{isPhone ? 'Sản lượng' : 'Sản lượng hôm nay'}</small>
                                     <strong>{number(board.summary.actual)} SP</strong>
                                     <span>Khoán ngày {number(board.summary.target)} SP</span>
                                 </div>
                                 <div>
-                                    <small>Giá trị khoán hiện tại</small>
+                                    <small>{isPhone ? 'Giá trị khoán' : 'Giá trị khoán hiện tại'}</small>
                                     <strong>{money(board.summary.actualAmount)}</strong>
                                     <span>Mục tiêu {money(board.summary.targetAmount)}</span>
                                 </div>
                                 <div>
-                                    <small>Bình quân hiện tại</small>
+                                    <small>{isPhone ? 'Bình quân' : 'Bình quân hiện tại'}</small>
                                     <strong>{money(board.summary.averageIncome)}</strong>
                                     <span>
                                         Dự kiến{' '}

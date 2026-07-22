@@ -5037,6 +5037,10 @@
         padding-inline: 8px;
     }
 
+    .pd-brand {
+        min-height: var(--pd-tap);
+    }
+
     .pd-brand strong {
         max-width: 150px;
         overflow: hidden;
@@ -5389,4 +5393,68 @@
     font-size: var(--pd-fs-12);
     font-weight: 650;
     cursor: pointer;
+}
+
+/* ---- Tab "Khác" khi thanh dưới quá 5 mục ---- */
+
+.pd-tabbar__more {
+    display: flex;
+    min-height: 54px;
+    flex: 1 1 0;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 3px;
+    border: 0;
+    color: var(--pd-ink-3);
+    background: transparent;
+    font-family: inherit;
+    font-size: var(--pd-fs-10-5);
+    font-weight: 600;
+    cursor: pointer;
+}
+
+.pd-tabbar__more .anticon {
+    font-size: 20px;
+}
+
+.pd-tabbar__more.is-active {
+    color: var(--pd-brand);
+}
+
+.pd-more-sheet .ant-drawer-body {
+    padding: 8px 12px calc(12px + env(safe-area-inset-bottom));
+}
+
+.pd-more-list {
+    display: flex;
+    flex-direction: column;
+}
+
+.pd-more-list a {
+    display: flex;
+    min-height: var(--pd-tap);
+    align-items: center;
+    padding: 12px 4px;
+    gap: 12px;
+    color: var(--pd-ink);
+    font-size: var(--pd-fs-13-5);
+    font-weight: 600;
+}
+
+.pd-more-list a + a {
+    border-top: 1px solid var(--pd-border);
+}
+
+.pd-more-list a .anticon {
+    color: var(--pd-ink-3);
+    font-size: 18px;
+}
+
+.pd-more-list a.active {
+    color: var(--pd-brand);
+}
+
+.pd-more-list a.active .anticon {
+    color: var(--pd-brand);
 }
