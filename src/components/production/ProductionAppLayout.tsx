@@ -1,4 +1,4 @@
-import { App, Avatar, Button, ConfigProvider, Dropdown, Grid, Tooltip, Typography, type MenuProps } from 'antd';
+import { App, Avatar, Button, ConfigProvider, Dropdown, Tooltip, Typography, type MenuProps } from 'antd';
 import {
     AppstoreOutlined,
     CalendarOutlined,
@@ -15,6 +15,7 @@ import {
 import { useEffect, useState } from 'react';
 import { NavLink, Outlet, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../core/contexts/AuthContext';
+import { useResponsive } from '../../core/hooks/useResponsive';
 import { useSocket } from '../../core/hooks/useSocket';
 import { can } from '../../core/lib/permissions';
 import '../../styles/production.css';
@@ -25,7 +26,7 @@ const PRODUCTION_FONT = "'Be Vietnam Pro', 'Segoe UI', system-ui, -apple-system,
 
 const ProductionAppLayout = () => {
     const navigate = useNavigate();
-    const screens = Grid.useBreakpoint();
+    const { isPhone } = useResponsive();
     const { modal } = App.useApp();
     const { user, role, logout } = useAuth();
     const { socket } = useSocket();
@@ -154,19 +155,19 @@ const ProductionAppLayout = () => {
                             className={`pd-live ${realtimeOk ? 'is-online' : ''}`}
                             title={realtimeOk ? 'Đồng bộ thời gian thực' : 'Đang chờ kết nối'}
                         >
-                            {screens.sm ? (realtimeOk ? 'Realtime' : 'Chờ đồng bộ') : null}
+                            {isPhone ? null : realtimeOk ? 'Realtime' : 'Chờ đồng bộ'}
                         </div>
 
-                        {screens.md ? (
+                        {isPhone ? null : (
                             <Tooltip title='Về Quản lý máy & vật tư'>
                                 <Button icon={<SwapOutlined />} onClick={() => navigate('/dashboard')} />
                             </Tooltip>
-                        ) : null}
+                        )}
 
                         <Dropdown menu={{ items: menuItems, onClick: handleMenuClick }} trigger={['click']}>
                             <button type='button' className='pd-account'>
                                 <Avatar size={30} src={user?.avatarUrl} icon={<UserOutlined />} />
-                                {screens.sm ? <Text strong>{user?.name || 'Tài khoản'}</Text> : null}
+                                {isPhone ? null : <Text strong>{user?.name || 'Tài khoản'}</Text>}
                                 <DownOutlined />
                             </button>
                         </Dropdown>

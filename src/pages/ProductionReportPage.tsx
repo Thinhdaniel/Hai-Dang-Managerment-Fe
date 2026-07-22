@@ -18,7 +18,6 @@ import {
     Button,
     DatePicker,
     Empty,
-    Grid,
     Progress,
     Segmented,
     Select,
@@ -37,6 +36,7 @@ import { useAuth } from '../core/contexts/AuthContext';
 import { useSocket } from '../core/hooks/useSocket';
 import { isAdmin, isDirector } from '../core/lib/permissions';
 import { plantService } from '../core/services/plant.service';
+import { useResponsive } from '../core/hooks/useResponsive';
 import { productionService } from '../core/services/production.service';
 import type {
     ProductionReport,
@@ -112,8 +112,7 @@ const Achievement = ({ value }: { value: number }) => {
 };
 
 const ProductionReportPage = () => {
-    const screens = Grid.useBreakpoint();
-    const isMobile = !screens.md;
+    const { isCompact: isMobile } = useResponsive();
     const navigate = useNavigate();
     const { message } = App.useApp();
     const queryClient = useQueryClient();

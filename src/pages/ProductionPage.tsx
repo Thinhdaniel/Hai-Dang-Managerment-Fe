@@ -7,9 +7,9 @@ import {
     TeamOutlined,
 } from '@ant-design/icons';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Alert, App, Button, Empty, Grid, Input, Skeleton, Table, type TableColumnsType } from 'antd';
+import { Alert, App, Button, Empty, Input, Skeleton, Table, type TableColumnsType } from 'antd';
 import dayjs, { type Dayjs } from 'dayjs';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import ProductionCommandRibbon from '../components/production/ProductionCommandRibbon';
 import ProductionEntryDrawer from '../components/production/ProductionEntryDrawer';
@@ -20,6 +20,7 @@ import { useSocket } from '../core/hooks/useSocket';
 import { can, hasManagerAccess, isAdmin, isDirector } from '../core/lib/permissions';
 import { slotRangeLabel, slotRangeLabelShort } from '../core/lib/productionSlot';
 import { plantService } from '../core/services/plant.service';
+import { useResponsive } from '../core/hooks/useResponsive';
 import { productionService } from '../core/services/production.service';
 import type { ProductionDay, ProductionLineRecord, ProductionTimeSlot } from '../core/types/production';
 
@@ -61,8 +62,7 @@ const isMissingAtSlot = (line: ProductionLineRecord, slotKey: string) => {
 };
 
 const ProductionPage = () => {
-    const screens = Grid.useBreakpoint();
-    const isMobile = !screens.lg;
+    const { isCompact: isMobile } = useResponsive();
     const { message } = App.useApp();
     const { user, role } = useAuth();
     const { socket } = useSocket();
@@ -78,6 +78,7 @@ const ProductionPage = () => {
     const [selectedLineId, setSelectedLineId] = useState<string | null>(() => searchParams.get('lineId'));
     const [setupOpen, setSetupOpen] = useState(false);
     const [search, setSearch] = useState('');
+    const slotRailRef = useRef<HTMLDivElement>(null);
     const productionDate = date.format('YYYY-MM-DD');
     const canManage = can(role, 'production.manage');
     const canSwitchPlant = isAdmin(role) || isDirector(role);
@@ -132,6 +133,24 @@ const ProductionPage = () => {
             setSelectedSlotKey(selectDefaultSlot(activeSlots, date));
         }
     }, [activeSlots, date, selectedSlotKey]);
+
+    // Dải khung giờ trên điện thoại cuộn ngang và khung đang chọn thường là
+    // khung hiện tại — nằm cuối dải. Không tự kéo vào thì tổ trưởng mở máy ra
+    // thấy dải đứng ở 7-8h và tưởng mình đang nhập cho giờ đó.
+    useEffect(() => {
+        if (!isMobile || !selectedSlotKey) return;
+        // Đợi hết khung hình: scroll-snap sẽ kéo về chip đầu nếu căn ngay trong
+        // lúc trình duyệt còn đang dựng layout của dải.
+        const frame = requestAnimationFrame(() => {
+            const chip = slotRailRef.current?.querySelector<HTMLElement>('.pd-slot.is-selected');
+            chip?.scrollIntoView({
+                inline: 'center',
+                block: 'nearest',
+                behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth',
+            });
+        });
+        return () => cancelAnimationFrame(frame);
+    }, [isMobile, selectedSlotKey, activeSlots.length]);
 
     useEffect(() => {
         if (!socket) return;
@@ -410,11 +429,13 @@ const ProductionPage = () => {
                             <strong>{value?.reported ? number(value.actual) : '—'}</strong>
                         </div>
                         <div>
-                            <small>{overtime ? 'Tăng ca' : 'Khoán'}</small>
-                            <strong>{overtime ? 'Không khoán' : number(value?.target || run?.hourlyQuota || 0)}</strong>
+                            {/* Nhãn ngắn để 3 ô đứng vừa một hàng ở 390px; khung tăng ca
+                                không có khoán nên ghi "TC" thay vì số 0 gây hiểu nhầm. */}
+                            <small>Khoán</small>
+                            <strong>{overtime ? 'TC' : number(value?.target || run?.hourlyQuota || 0)}</strong>
                         </div>
                         <div>
-                            <small>Công nhân</small>
+                            <small>CN</small>
                             <strong>{line.workerCountConfirmed ? line.workerCount : '—'}</strong>
                         </div>
                     </div>
@@ -589,7 +610,9 @@ const ProductionPage = () => {
                 <>
                     {isMobile ? (
                         <>
-                            <div className='pd-mobile-slots'>{activeSlots.map((slot) => renderSlotChip(slot, true))}</div>
+                            <div className='pd-mobile-slots' ref={slotRailRef}>
+                                {activeSlots.map((slot) => renderSlotChip(slot, true))}
+                            </div>
                             <Input
                                 allowClear
                                 prefix={<SearchOutlined />}

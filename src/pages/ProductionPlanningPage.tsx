@@ -20,7 +20,6 @@ import {
     Drawer,
     Empty,
     Form,
-    Grid,
     Input,
     InputNumber,
     Modal,
@@ -40,6 +39,7 @@ import { useSocket } from '../core/hooks/useSocket';
 import { isAdmin, isDirector } from '../core/lib/permissions';
 import { slotRangeLabelShort } from '../core/lib/productionSlot';
 import { plantService } from '../core/services/plant.service';
+import { useResponsive } from '../core/hooks/useResponsive';
 import { productionService } from '../core/services/production.service';
 import type {
     ProductionItem,
@@ -110,8 +110,7 @@ const toPayload = ({
 }: AllocationDraft) => draft;
 
 const ProductionPlanningPage = () => {
-    const screens = Grid.useBreakpoint();
-    const isMobile = !screens.lg;
+    const { isPhone, isCompact: isMobile } = useResponsive();
     const { message, modal } = App.useApp();
     const queryClient = useQueryClient();
     const { user, role } = useAuth();
@@ -790,9 +789,9 @@ const ProductionPlanningPage = () => {
             <Drawer
                 open={drawerOpen}
                 onClose={() => setDrawerOpen(false)}
-                placement={screens.md ? 'right' : 'bottom'}
-                width={screens.md ? 520 : undefined}
-                height={screens.md ? undefined : '92dvh'}
+                placement={isPhone ? 'bottom' : 'right'}
+                width={isPhone ? undefined : 520}
+                height={isPhone ? '92dvh' : undefined}
                 title={editingClientId ? 'Sửa phân bổ sản xuất' : 'Thêm phân bổ sản xuất'}
                 className='production-plan-drawer'
                 destroyOnHidden

@@ -4,7 +4,6 @@ import {
     Drawer,
     Empty,
     Form,
-    Grid,
     Input,
     InputNumber,
     List,
@@ -21,6 +20,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import dayjs, { type Dayjs } from 'dayjs';
 import { useEffect, useMemo, useState } from 'react';
 import { buildSlotLabel, slotRangeLabelShort } from '../../core/lib/productionSlot';
+import { useResponsive } from '../../core/hooks/useResponsive';
 import { productionService } from '../../core/services/production.service';
 import type { ProductionDay, ProductionItem, ProductionLine, ProductionTimeSlot } from '../../core/types/production';
 
@@ -58,7 +58,7 @@ const money = (value = 0) => new Intl.NumberFormat('vi-VN').format(value);
 const minuteToTime = (minute: number) => dayjs().startOf('day').add(minute, 'minute');
 
 const ProductionSetupDrawer = ({ open, plantId, day, onClose }: Props) => {
-    const screens = Grid.useBreakpoint();
+    const { isPhone } = useResponsive();
     const { message, modal } = App.useApp();
     const queryClient = useQueryClient();
     const [lineForm] = Form.useForm<LineFormValues>();
@@ -593,7 +593,7 @@ const ProductionSetupDrawer = ({ open, plantId, day, onClose }: Props) => {
                     icon={<SaveOutlined />}
                     loading={timeSlotsMutation.isPending}
                     onClick={() => timeSlotsMutation.mutate()}
-                    block={!screens.sm}
+                    block={isPhone}
                 >
                     Lưu toàn bộ khung giờ
                 </Button>
@@ -608,7 +608,7 @@ const ProductionSetupDrawer = ({ open, plantId, day, onClose }: Props) => {
             open={open}
             onClose={handleClose}
             title='Thiết lập sản xuất'
-            width={screens.md ? 760 : '100%'}
+            width={isPhone ? '100%' : 760}
             className='production-setup-drawer'
             destroyOnHidden
         >

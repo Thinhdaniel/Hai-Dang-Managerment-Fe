@@ -10,7 +10,7 @@ import {
     WarningFilled,
 } from '@ant-design/icons';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Alert, Button, DatePicker, Empty, Grid, Segmented, Select, Skeleton, Tooltip, Typography } from 'antd';
+import { Alert, Button, DatePicker, Empty, Segmented, Select, Skeleton, Tooltip, Typography } from 'antd';
 import dayjs, { type Dayjs } from 'dayjs';
 import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
@@ -19,6 +19,8 @@ import { useSocket } from '../core/hooks/useSocket';
 import { isAdmin, isDirector } from '../core/lib/permissions';
 import { slotRangeLabel, slotRangeLabelShort } from '../core/lib/productionSlot';
 import { plantService } from '../core/services/plant.service';
+import ProductionLedgerCards, { type LedgerRow } from '../components/production/ProductionLedgerCards';
+import { useResponsive } from '../core/hooks/useResponsive';
 import { productionService } from '../core/services/production.service';
 import type {
     ProductionBoard,
@@ -166,9 +168,43 @@ const rateTone = (percent: number) => (percent >= 95 ? 'is-ok' : percent >= 80 ?
 // Sổ khoán theo giờ — trình bày quen thuộc như bảng Excel của xưởng:
 // mỗi chuyền 3 dòng (Khoán / Thực tế / Tỉ lệ) chạy ngang các khung giờ.
 // Phân cấp thị giác: Thực tế là dòng chính, Khoán là nền tham chiếu, Tỉ lệ kèm micro-bar.
-const BoardLedger = ({ board, onOpenLine }: { board: ProductionBoard; onOpenLine: (lineId: string) => void }) => {
+const BoardLedger = ({
+    board,
+    onOpenLine,
+    isPhone,
+}: {
+    board: ProductionBoard;
+    onOpenLine: (lineId: string) => void;
+    isPhone: boolean;
+}) => {
     const slotColumns = board.lines.find((line) => line.slots.length)?.slots || [];
     if (!slotColumns.length) return null;
+
+    if (isPhone) {
+        const rows: LedgerRow[] = board.lines.map((line) => ({
+            id: line.lineId,
+            code: line.lineCode,
+            sub: line.leaderName || line.lineName,
+            itemCode: line.activeItem?.itemCode,
+            workerCount: line.workerCount,
+            totalTarget: line.day.target,
+            totalActual: line.day.actual,
+            percent: line.day.target > 0 ? (line.day.actual / line.day.target) * 100 : null,
+            income: line.day.actualAmount,
+            cells: line.slots.map((slot) => ({
+                key: slot.key,
+                label: slotRangeLabelShort(slot),
+                overtime: Boolean(slot.overtime),
+                planned: slot.state !== 'not_planned',
+                reported: slot.reported,
+                missing: slot.due && !slot.reported && slot.state !== 'not_planned',
+                target: slot.target,
+                actual: slot.actual,
+            })),
+        }));
+        return <ProductionLedgerCards rows={rows} onOpenLine={onOpenLine} />;
+    }
+
     return (
         <div className='production-board-ledger-wrap'>
             <table className='production-board-ledger'>
@@ -523,7 +559,7 @@ const FocusLineBoard = ({ line }: { line: ProductionBoardLine }) => {
 };
 
 const ProductionBoardPage = () => {
-    const screens = Grid.useBreakpoint();
+    const { isPhone, isCompact, isWide } = useResponsive();
     const pageRef = useRef<HTMLDivElement>(null);
     const queryClient = useQueryClient();
     const [searchParams, setSearchParams] = useSearchParams();
@@ -629,7 +665,7 @@ const ProductionBoardPage = () => {
     const board = boardQuery.data === undefined ? matchingCachedBoard : boardQuery.data;
     const lines = board?.lines || [];
     const selectedLine = lines.find((line) => line.lineId === selectedLineId) || lines[0];
-    const pageSize = screens.lg ? (screens.xl ? 8 : 6) : Math.max(lines.length, 1);
+    const pageSize = isCompact ? Math.max(lines.length, 1) : isWide ? 8 : 6;
     const pageCount = Math.max(1, Math.ceil(lines.length / pageSize));
     const visibleLines = lines.slice(pageIndex * pageSize, (pageIndex + 1) * pageSize);
 
@@ -899,7 +935,7 @@ const ProductionBoardPage = () => {
                                             từng khung giờ
                                         </small>
                                     </div>
-                                    <BoardLedger board={board} onOpenLine={openLine} />
+                                    <BoardLedger board={board} onOpenLine={openLine} isPhone={isPhone} />
                                 </div>
                             ) : null}
                         </>

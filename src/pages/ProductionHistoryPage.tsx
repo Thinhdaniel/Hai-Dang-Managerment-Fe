@@ -15,7 +15,6 @@ import {
     Button,
     DatePicker,
     Empty,
-    Grid,
     Pagination,
     Progress,
     Select,
@@ -32,6 +31,7 @@ import { useAuth } from '../core/contexts/AuthContext';
 import { useSocket } from '../core/hooks/useSocket';
 import { can, hasManagerAccess, isAdmin, isDirector } from '../core/lib/permissions';
 import { plantService } from '../core/services/plant.service';
+import { useResponsive } from '../core/hooks/useResponsive';
 import { productionService } from '../core/services/production.service';
 import type { ProductionDay, ProductionDayStatus } from '../core/types/production';
 
@@ -48,8 +48,7 @@ const statusMeta: Record<ProductionDayStatus, { label: string; color: string; ic
 };
 
 const ProductionHistoryPage = () => {
-    const screens = Grid.useBreakpoint();
-    const isMobile = !screens.md;
+    const { isCompact: isMobile } = useResponsive();
     const navigate = useNavigate();
     const { message } = App.useApp();
     const queryClient = useQueryClient();

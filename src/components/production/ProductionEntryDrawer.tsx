@@ -1,4 +1,4 @@
-import { Alert, App, Button, Drawer, Form, Grid, Input, InputNumber, Popconfirm, Select, Tag, Typography } from 'antd';
+import { Alert, App, Button, Drawer, Form, Input, InputNumber, Popconfirm, Select, Tag, Typography } from 'antd';
 import {
     CheckOutlined,
     DeleteOutlined,
@@ -11,6 +11,7 @@ import {
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useMemo, useState } from 'react';
 import { slotRangeLabel } from '../../core/lib/productionSlot';
+import { useResponsive } from '../../core/hooks/useResponsive';
 import { productionService } from '../../core/services/production.service';
 import type { ProductionDay, ProductionItem, ProductionLineRecord } from '../../core/types/production';
 
@@ -48,7 +49,7 @@ type RunValues = {
 const errorMessage = (error: unknown) => (error instanceof Error ? error.message : 'Không thể lưu dữ liệu');
 
 const ProductionEntryDrawer = ({ open, day, line, items, slotKey, onClose, onSaved }: Props) => {
-    const screens = Grid.useBreakpoint();
+    const { isPhone } = useResponsive();
     const { message } = App.useApp();
     const queryClient = useQueryClient();
     const [setupForm] = Form.useForm<SetupValues>();
@@ -188,9 +189,9 @@ const ProductionEntryDrawer = ({ open, day, line, items, slotKey, onClose, onSav
         <Drawer
             open={open}
             onClose={onClose}
-            placement={screens.md ? 'right' : 'bottom'}
-            width={screens.md ? 480 : undefined}
-            height={screens.md ? undefined : '88dvh'}
+            placement={isPhone ? 'bottom' : 'right'}
+            width={isPhone ? undefined : 480}
+            height={isPhone ? '88dvh' : undefined}
             className='production-entry-drawer'
             title={
                 <div className='production-entry-title'>
@@ -212,8 +213,15 @@ const ProductionEntryDrawer = ({ open, day, line, items, slotKey, onClose, onSav
                     </strong>
                 </div>
                 {!isReadOnly ? (
-                    <Button type='text' icon={<EditOutlined />} onClick={() => setShowSetup((value) => !value)}>
-                        Cấu hình
+                    <Button
+                        type='text'
+                        icon={<EditOutlined />}
+                        aria-label='Cấu hình chuyền'
+                        onClick={() => setShowSetup((value) => !value)}
+                    >
+                        {/* Trên điện thoại chỉ còn icon để nhường chỗ; nhãn vẫn có
+                            trong aria-label nên trình đọc màn hình không mất thông tin. */}
+                        {isPhone ? null : 'Cấu hình'}
                     </Button>
                 ) : (
                     <Tag color={day.status === 'locked' ? 'green' : 'blue'}>

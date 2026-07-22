@@ -6,12 +6,14 @@ import {
     WarningFilled,
 } from '@ant-design/icons';
 import { useMutation, useQuery } from '@tanstack/react-query';
-import { Alert, App, Button, Empty, Grid, Skeleton, Table, Tag, Typography, type TableColumnsType } from 'antd';
+import { Alert, App, Button, Empty, Skeleton, Table, Tag, Typography, type TableColumnsType } from 'antd';
 import dayjs from 'dayjs';
 import { Fragment, useMemo } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../core/contexts/AuthContext';
 import { slotRangeLabel, slotRangeLabelShort } from '../core/lib/productionSlot';
+import ProductionLedgerCards, { type LedgerRow } from '../components/production/ProductionLedgerCards';
+import { useResponsive } from '../core/hooks/useResponsive';
 import { productionService } from '../core/services/production.service';
 import type {
     HourlyProductionEntry,
@@ -37,8 +39,7 @@ const statusMeta = {
 const percentOf = (actual: number, target: number) => (target > 0 ? (actual / target) * 100 : 0);
 
 const ProductionDayReportPage = () => {
-    const screens = Grid.useBreakpoint();
-    const isMobile = !screens.lg;
+    const { isPhone, isCompact: isMobile } = useResponsive();
     const navigate = useNavigate();
     const { date = '' } = useParams();
     const [searchParams] = useSearchParams();
@@ -188,6 +189,36 @@ const ProductionDayReportPage = () => {
         });
         return [...byItem.values()].sort((left, right) => right.quantity - left.quantity);
     }, [day]);
+
+    // Cùng số liệu với bảng desktop, gom lại cho thẻ trên điện thoại.
+    const ledgerRows = useMemo<LedgerRow[]>(
+        () =>
+            (day?.lines || []).map((line) => ({
+                id: line.lineId,
+                code: line.lineCode,
+                sub: line.leaderName || line.lineName,
+                itemCode: [...new Set(line.runs.map((run) => run.itemCode))].join(', ') || undefined,
+                workerCount: line.workerCount,
+                totalTarget: line.totalTarget,
+                totalActual: line.totalActual,
+                percent: line.totalTarget > 0 ? line.achievementPercent : null,
+                income: financialsVisible ? line.totalAmount : undefined,
+                cells: activeSlots.map((slot) => {
+                    const value = line.slotValues.find((item) => item.key === slot.key);
+                    return {
+                        key: slot.key,
+                        label: slotRangeLabelShort(slot),
+                        overtime: Boolean(value?.overtime),
+                        planned: Boolean(value?.runId),
+                        reported: Boolean(value?.reported),
+                        missing: Boolean(value?.runId) && !value?.reported,
+                        target: Number(value?.target || 0),
+                        actual: Number(value?.actual || 0),
+                    };
+                }),
+            })),
+        [activeSlots, day?.lines, financialsVisible]
+    );
 
     const slotTotals = useMemo(
         () =>
@@ -376,6 +407,9 @@ const ProductionDayReportPage = () => {
                             <Title level={4}>Sổ khoán theo giờ</Title>
                             <Text type='secondary'>Khoán · Thực tế · Tỉ lệ từng khung giờ</Text>
                         </div>
+                        {isPhone ? (
+                            <ProductionLedgerCards rows={ledgerRows} />
+                        ) : (
                         <div className='production-board-ledger-wrap'>
                             <table className='production-board-ledger'>
                                 <thead>
@@ -488,6 +522,7 @@ const ProductionDayReportPage = () => {
                                 </tbody>
                             </table>
                         </div>
+                        )}
                     </section>
 
                     <div className='production-day-report__split'>

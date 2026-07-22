@@ -21,7 +21,6 @@ import {
     Alert,
     Button,
     Empty,
-    Grid,
     Progress,
     Segmented,
     Skeleton,
@@ -40,6 +39,7 @@ import { useSocket } from '../core/hooks/useSocket';
 import { isAdmin, isDirector } from '../core/lib/permissions';
 import { slotRangeLabel, slotRangeLabelShort } from '../core/lib/productionSlot';
 import { plantService } from '../core/services/plant.service';
+import { useResponsive } from '../core/hooks/useResponsive';
 import { productionService } from '../core/services/production.service';
 import type {
     ProductionMonitorAlert,
@@ -72,8 +72,7 @@ const achievementTone = (percent: number) => {
 };
 
 const ProductionMonitorPage = () => {
-    const screens = Grid.useBreakpoint();
-    const isMobile = !screens.lg;
+    const { isCompact: isMobile } = useResponsive();
     const navigate = useNavigate();
     const queryClient = useQueryClient();
     const pageRef = useRef<HTMLDivElement>(null);
