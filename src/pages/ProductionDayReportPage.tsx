@@ -405,8 +405,15 @@ const ProductionDayReportPage = () => {
                                                     {activeSlots.map((slot) => {
                                                         const value = line.slotValues.find((v) => v.key === slot.key);
                                                         return (
-                                                            <td key={slot.key}>
-                                                                {value?.runId ? number(value.target) : ''}
+                                                            <td
+                                                                key={slot.key}
+                                                                className={value?.overtime ? 'is-ot' : ''}
+                                                            >
+                                                                {!value?.runId
+                                                                    ? ''
+                                                                    : value.overtime
+                                                                      ? 'TC'
+                                                                      : number(value.target)}
                                                             </td>
                                                         );
                                                     })}

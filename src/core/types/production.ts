@@ -88,6 +88,8 @@ export interface HourlyProductionEntry {
 
 export interface ProductionSlotValue {
     key: string;
+    /** Khung tăng ca: không có khoán (target = 0), sản lượng là phần vượt để xét thưởng. */
+    overtime?: boolean;
     target: number;
     actual: number;
     reported: boolean;
@@ -138,6 +140,7 @@ export interface ProductionDaySummary {
 
 export interface ProductionSlotSummary {
     key: string;
+    overtime?: boolean;
     target: number;
     actual: number;
     reportedLines: number;
@@ -289,6 +292,8 @@ export interface ProductionBoardSlot {
     label: string;
     startMinute: number;
     endMinute: number;
+    /** Khung tăng ca: không có khoán, sản lượng là phần vượt để xét thưởng. */
+    overtime?: boolean;
     target: number;
     actual: number;
     targetAmount: number;

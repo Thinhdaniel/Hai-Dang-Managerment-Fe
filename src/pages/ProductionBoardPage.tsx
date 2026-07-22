@@ -219,8 +219,17 @@ const BoardLedger = ({ board, onOpenLine }: { board: ProductionBoard; onOpenLine
                                     </td>
                                     <th className='lg-kind'>Khoán</th>
                                     {line.slots.map((slot) => (
-                                        <td key={slot.key} className={slot.current ? 'is-current' : undefined}>
-                                            {slot.state === 'not_planned' ? '' : number(slot.target)}
+                                        <td
+                                            key={slot.key}
+                                            className={[slot.current ? 'is-current' : '', slot.overtime ? 'is-ot' : '']
+                                                .filter(Boolean)
+                                                .join(' ')}
+                                        >
+                                            {slot.state === 'not_planned'
+                                                ? ''
+                                                : slot.overtime
+                                                  ? 'TC'
+                                                  : number(slot.target)}
                                         </td>
                                     ))}
                                     <td className='lg-total'>{number(line.day.target)}</td>
@@ -505,7 +514,7 @@ const FocusLineBoard = ({ line }: { line: ProductionBoardLine }) => {
                     <div key={slot.key} className={`production-board-timeline__slot state-${slot.state}`}>
                         <span>{slotRangeLabelShort(slot)}</span>
                         <strong>{slot.reported ? number(slot.actual) : slot.current ? 'Đang chạy' : '—'}</strong>
-                        <small>Khoán {number(slot.target)}</small>
+                        <small>{slot.overtime ? 'Tăng ca' : `Khoán ${number(slot.target)}`}</small>
                     </div>
                 ))}
             </section>

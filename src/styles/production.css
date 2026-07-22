@@ -879,6 +879,14 @@
     font-size: 11.5px;
 }
 
+/* Khung tăng ca không có khoán — ghi "TC" mờ thay vì số 0 gây hiểu nhầm là khoán bằng 0. */
+.production-board-ledger .lg-row-quota td.is-ot {
+    color: var(--pd-ink-3);
+    font-size: 10px;
+    font-weight: 650;
+    letter-spacing: 0.4px;
+}
+
 .production-board-ledger .lg-row-actual td {
     color: var(--pd-ink);
     font-size: 13.5px;
@@ -2702,6 +2710,14 @@
 
 .pd-cell.is-missing:hover {
     border-color: var(--pd-warn-line);
+}
+
+/* Khung tăng ca: không có khoán nên không tô tone đạt/hụt, chỉ đánh dấu "TC". */
+.pd-cell.is-overtime small {
+    color: var(--pd-ink-3);
+    font-size: 10px;
+    font-weight: 650;
+    letter-spacing: 0.4px;
 }
 
 .pd-cell.is-idle {

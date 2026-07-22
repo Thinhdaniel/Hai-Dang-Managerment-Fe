@@ -262,19 +262,23 @@ const ProductionPage = () => {
                 </button>
             );
         }
-        const percent = value.target > 0 ? (value.actual / value.target) * 100 : 100;
+        // Tăng ca không có khoán nên không có tỉ lệ để tô màu — hàng làm ra là phần vượt.
+        const overtime = Boolean(value.overtime) || value.target <= 0;
+        const percent = value.target > 0 ? (value.actual / value.target) * 100 : 0;
         return (
             <button
                 type='button'
-                className={`pd-cell tone-${achievementTone(percent)}`}
+                className={`pd-cell ${overtime ? 'is-overtime' : `tone-${achievementTone(percent)}`}`}
                 onClick={() => openLine(line, slot.key)}
             >
                 <strong>{number(value.actual)}</strong>
-                {value.target > 0 ? (
+                {overtime ? (
+                    <small>TC</small>
+                ) : (
                     <span className='pd-cell__bar'>
                         <i style={{ width: `${Math.min(100, Math.round(percent))}%` }} />
                     </span>
-                ) : null}
+                )}
             </button>
         );
     };
@@ -364,15 +368,18 @@ const ProductionPage = () => {
     const renderMobileLine = (line: ProductionLineRecord) => {
         const value = getSlotValue(line, selectedSlotKey);
         const run = line.runs.find((item) => item.id === value?.runId) || [...line.runs].reverse()[0];
+        const overtime = Boolean(value?.overtime);
         const percent = value?.target ? (value.actual / value.target) * 100 : value?.reported ? 100 : 0;
         const tone = achievementTone(percent);
         const cardTone = !line.configured
             ? 'is-unconfigured'
-            : value?.reported
-              ? `tone-${tone}`
-              : value?.runId
-                ? 'tone-warning'
-                : '';
+            : overtime
+              ? ''
+              : value?.reported
+                ? `tone-${tone}`
+                : value?.runId
+                  ? 'tone-warning'
+                  : '';
         return (
             <article key={line.lineId} className={`pd-mline ${cardTone}`}>
                 <button type='button' className='pd-mline__main' onClick={() => openLine(line)}>
@@ -403,8 +410,8 @@ const ProductionPage = () => {
                             <strong>{value?.reported ? number(value.actual) : '—'}</strong>
                         </div>
                         <div>
-                            <small>Khoán</small>
-                            <strong>{number(value?.target || run?.hourlyQuota || 0)}</strong>
+                            <small>{overtime ? 'Tăng ca' : 'Khoán'}</small>
+                            <strong>{overtime ? 'Không khoán' : number(value?.target || run?.hourlyQuota || 0)}</strong>
                         </div>
                         <div>
                             <small>Công nhân</small>
