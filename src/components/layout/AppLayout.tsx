@@ -1,10 +1,12 @@
 import React, { lazy, Suspense, useEffect, useState } from 'react';
 import { Grid, Layout } from 'antd';
-import { Outlet } from 'react-router-dom';
+import { Navigate, Outlet } from 'react-router-dom';
 import AppHeader from './AppHeader';
 import AppSidebar from './AppSidebar';
 import MobileBottomNav from '../pwa/MobileBottomNav';
 import AssistantLauncher from '../AssistantLauncher';
+import { useAuth } from '../../core/contexts/AuthContext';
+import { isLineLeader } from '../../core/lib/permissions';
 
 const AssetAssistantDrawer = lazy(() => import('../AssetAssistantDrawer'));
 
@@ -17,6 +19,7 @@ const SIDEBAR_WIDTH = 296;
 const SIDEBAR_COLLAPSED_WIDTH = 104;
 
 const AppLayout: React.FC = () => {
+    const { role } = useAuth();
     const screens = useBreakpoint();
     const isDesktop = Boolean(screens.lg);
     const headerHeight = isDesktop ? DESKTOP_HEADER_HEIGHT : MOBILE_HEADER_HEIGHT;
@@ -38,6 +41,13 @@ const AppLayout: React.FC = () => {
 
         setMobileSidebarOpen((value) => !value);
     };
+
+    // Tổ trưởng không có phần mềm quản lý máy/vật tư — mọi đường vào cây "/"
+    // đều đẩy thẳng về màn nhập sản lượng theo giờ (một chốt chặn duy nhất).
+    // Đặt sau toàn bộ hook để không phá thứ tự hook (rules-of-hooks).
+    if (isLineLeader(role)) {
+        return <Navigate to='/production' replace />;
+    }
 
     return (
         <Layout className='min-h-screen bg-transparent'>

@@ -41,6 +41,7 @@ const roleOptions = [
     { value: UserRole.DIRECTOR, label: USER_ROLE_LABEL[UserRole.DIRECTOR] },
     { value: UserRole.MANAGER, label: USER_ROLE_LABEL[UserRole.MANAGER] },
     { value: UserRole.STAFF, label: USER_ROLE_LABEL[UserRole.STAFF] },
+    { value: UserRole.LINE_LEADER, label: USER_ROLE_LABEL[UserRole.LINE_LEADER] },
 ];
 
 const sanitizeValue = (value?: string | null) => (value || '').trim().replace(/\s+/g, ' ');
@@ -51,6 +52,10 @@ const UserFormModal = (props: UserFormModalProps) => {
     const isEditMode = mode === 'edit';
     const initialValues = isEditMode ? props.initialValues : null;
     const isCurrentUser = isEditMode ? (props.isCurrentUser ?? false) : false;
+    // Tổ trưởng bị khóa theo cơ sở và không tự đổi được (chỉ admin/giám đốc đổi
+    // cơ sở), nên phải gán cơ sở ngay khi tạo — nếu không họ rơi vào cơ sở bất kỳ.
+    const selectedRole = Form.useWatch('role', form);
+    const plantRequired = selectedRole === UserRole.LINE_LEADER;
 
     useEffect(() => {
         if (!open) {
@@ -174,11 +179,21 @@ const UserFormModal = (props: UserFormModalProps) => {
                 <Form.Item
                     name='plantId'
                     label='Cơ sở làm việc'
+                    rules={
+                        plantRequired
+                            ? [{ required: true, message: 'Tổ trưởng phải được gán cơ sở để nhập sản lượng' }]
+                            : undefined
+                    }
+                    extra={
+                        plantRequired
+                            ? 'Tổ trưởng chỉ nhập sản lượng cho cơ sở này và không tự đổi được.'
+                            : undefined
+                    }
                 >
                     <Select
                         size='large'
-                        allowClear
-                        placeholder='Chọn cơ sở (tùy chọn)'
+                        allowClear={!plantRequired}
+                        placeholder={plantRequired ? 'Chọn cơ sở của tổ trưởng' : 'Chọn cơ sở (tùy chọn)'}
                         options={props.plants.map((p) => ({ value: p.id, label: p.name }))}
                     />
                 </Form.Item>

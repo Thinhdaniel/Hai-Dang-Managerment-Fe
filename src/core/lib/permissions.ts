@@ -111,11 +111,22 @@ const ROLE_CAPS: Record<Exclude<UserRole, UserRole.ADMIN>, Capability[]> = {
         'production.view',
         'production.write',
     ],
+    // Tổ trưởng: CHỈ báo sản lượng theo giờ, không đụng bất kỳ module nào khác.
+    [UserRole.LINE_LEADER]: ['production.view', 'production.write'],
 };
 
 export const isSuperAdmin = (role: Role) => role === UserRole.ADMIN;
 export const isDirector = (role: Role) => role === UserRole.DIRECTOR;
 export const isFieldStaff = (role: Role) => role === UserRole.STAFF;
+
+/** Tổ trưởng chuyền — chỉ có màn nhập sản lượng theo giờ. */
+export const isLineLeader = (role: Role) => role === UserRole.LINE_LEADER;
+
+/**
+ * Trang đích sau khi đăng nhập / khi vào "/". Tổ trưởng đi thẳng màn nhập sản
+ * lượng theo giờ; các role khác về Dashboard quản lý máy & vật tư như cũ.
+ */
+export const getLandingPath = (role: Role) => (role === UserRole.LINE_LEADER ? '/production' : '/dashboard');
 
 /** Quản lý trở lên (Super Admin + Giám đốc + Quản lý) — đã gồm Giám đốc. */
 export const hasManagerAccess = (role: Role) =>

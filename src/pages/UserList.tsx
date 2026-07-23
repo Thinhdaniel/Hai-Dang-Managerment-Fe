@@ -22,6 +22,7 @@ const ROLE_PILL: Record<User['role'], { bg: string; text: string; label: string 
     manager:  { bg: 'oklch(0.95 0.05 255)', text: 'oklch(0.36 0.16 255)', label: USER_ROLE_LABEL.manager },
     staff:    { bg: 'oklch(0.96 0.04 145)', text: 'oklch(0.32 0.14 145)', label: USER_ROLE_LABEL.staff },
     director: { bg: 'oklch(0.95 0.06 300)', text: 'oklch(0.36 0.18 300)', label: USER_ROLE_LABEL.director },
+    line_leader: { bg: 'oklch(0.95 0.05 265)', text: 'oklch(0.34 0.17 265)', label: USER_ROLE_LABEL.line_leader },
 };
 
 const PAGE_ANIM = `
@@ -191,6 +192,7 @@ const UserList: React.FC = () => {
                     manager: 0,
                     staff: 0,
                     director: 0,
+                    line_leader: 0,
                 }
             ),
         [userResponse?.statsSource]
@@ -446,9 +448,10 @@ const UserList: React.FC = () => {
                     value={draftFilters.role}
                     onChange={(value) => setDraftFilters((current) => ({ ...current, role: value }))}
                     options={[
-                        { value: 'admin',   label: USER_ROLE_LABEL.admin },
-                        { value: 'manager', label: USER_ROLE_LABEL.manager },
-                        { value: 'staff',   label: USER_ROLE_LABEL.staff },
+                        { value: 'admin',       label: USER_ROLE_LABEL.admin },
+                        { value: 'manager',     label: USER_ROLE_LABEL.manager },
+                        { value: 'staff',       label: USER_ROLE_LABEL.staff },
+                        { value: 'line_leader', label: USER_ROLE_LABEL.line_leader },
                     ]}
                 />
                 <Select

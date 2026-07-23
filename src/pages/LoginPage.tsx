@@ -5,14 +5,15 @@ import { Link, Navigate, useNavigate, useSearchParams } from 'react-router-dom';
 import AuthPageShell from '../components/auth/AuthPageShell';
 import { useAuth } from '../core/contexts/AuthContext';
 import { resolveAuthErrorMessage } from '../core/lib/auth';
+import { getLandingPath } from '../core/lib/permissions';
 
 const { Text } = Typography;
 
-const getSafeRedirectPath = (value: string | null) => {
+/** Chỉ nhận redirect nội bộ hợp lệ; nếu không có thì để null để rơi về trang đích theo role. */
+const getSafeRedirect = (value: string | null) => {
     if (!value || !value.startsWith('/') || value.startsWith('//')) {
-        return '/dashboard';
+        return null;
     }
-
     return value;
 };
 
@@ -20,22 +21,24 @@ const LoginPage: React.FC = () => {
     const navigate = useNavigate();
     const [searchParams] = useSearchParams();
     const { message } = App.useApp();
-    const { login, isAuthenticated } = useAuth();
+    const { login, isAuthenticated, role } = useAuth();
     const [submitting, setSubmitting] = useState(false);
     const [errorMessage, setErrorMessage] = useState<string | null>(null);
-    const redirectPath = getSafeRedirectPath(searchParams.get('redirect'));
+    const safeRedirect = getSafeRedirect(searchParams.get('redirect'));
 
     if (isAuthenticated) {
-        return <Navigate to={redirectPath} replace />;
+        // Có redirect hợp lệ thì ưu tiên; không thì về trang đích theo role
+        // (tổ trưởng → màn nhập sản lượng, còn lại → dashboard).
+        return <Navigate to={safeRedirect ?? getLandingPath(role)} replace />;
     }
 
     const handleSubmit = async (values: { email: string; password: string }) => {
         try {
             setSubmitting(true);
             setErrorMessage(null);
-            await login(values.email, values.password);
+            const result = await login(values.email, values.password);
             message.success('Đăng nhập thành công');
-            navigate(redirectPath, { replace: true });
+            navigate(safeRedirect ?? getLandingPath(result.user.role), { replace: true });
         } catch (error) {
             setErrorMessage(
                 resolveAuthErrorMessage(error, 'Đăng nhập thất bại. Vui lòng kiểm tra lại email và mật khẩu.')

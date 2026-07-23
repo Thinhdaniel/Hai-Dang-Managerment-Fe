@@ -1931,6 +1931,24 @@
     font-weight: 650;
 }
 
+/* Tổ trưởng chỉ có 1 màn — thay dải điều hướng bằng nhãn tĩnh cho gọn. */
+.pd-leader-tag {
+    margin-inline: auto;
+    padding: 5px 14px;
+    border-radius: 999px;
+    background: var(--pd-brand-soft);
+    color: var(--pd-brand);
+    font-size: var(--pd-fs-13);
+    font-weight: 650;
+    letter-spacing: 0.01em;
+    white-space: nowrap;
+}
+
+/* Không có tabbar dưới thì trả lại khoảng trống đáy đã chừa cho nó. */
+.production-app-shell.is-leader .pd-main {
+    padding-bottom: 40px;
+}
+
 .pd-header__right {
     display: flex;
     flex: 0 0 auto;
@@ -3605,6 +3623,51 @@
     text-align: center;
 }
 
+/* Hàng nút bước nhanh dưới ô sản lượng — nhập bằng ngón cái, tối thiểu 44px. */
+.pd-qty-steps {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin: -4px 0 14px;
+}
+
+.pd-qty-steps button {
+    min-height: 44px;
+    flex: 1 1 0;
+    border: 1px solid var(--pd-border-strong);
+    border-radius: var(--pd-radius);
+    background: var(--pd-surface);
+    color: var(--pd-ink);
+    font-size: 15px;
+    font-weight: 650;
+    font-variant-numeric: tabular-nums;
+    cursor: pointer;
+    transition:
+        background-color 120ms ease,
+        border-color 120ms ease,
+        color 120ms ease;
+}
+
+.pd-qty-steps button:active {
+    background: var(--pd-brand-soft);
+    border-color: var(--pd-brand);
+    color: var(--pd-brand);
+}
+
+/* Nút "= Khoán" chiếm trọn hàng trên để làm hành động chính khi ca đạt khoán. */
+.pd-qty-quota {
+    flex: 1 1 100% !important;
+    border-color: rgba(47, 81, 217, 0.25) !important;
+    background: var(--pd-brand-soft) !important;
+    color: var(--pd-brand) !important;
+}
+
+.pd-qty-reset {
+    flex: 0 0 44px !important;
+    color: var(--pd-ink-3) !important;
+    font-size: 18px !important;
+}
+
 .production-change-item-trigger {
     display: flex;
     width: 100%;
@@ -4889,6 +4952,11 @@
 
     .pd-main {
         padding: 12px 14px calc(76px + env(safe-area-inset-bottom));
+    }
+
+    /* Tổ trưởng không có tabbar dưới → bỏ phần chừa 76px, chỉ giữ safe-area. */
+    .production-app-shell.is-leader .pd-main {
+        padding-bottom: calc(20px + env(safe-area-inset-bottom));
     }
 
     .pd-ribbon {

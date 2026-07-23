@@ -69,6 +69,8 @@ export enum UserRole {
     MANAGER = 'manager',
     STAFF = 'staff',
     DIRECTOR = 'director',
+    // Tổ trưởng chuyền: chỉ báo sản lượng theo giờ.
+    LINE_LEADER = 'line_leader',
 }
 
 // ===== BASE =====

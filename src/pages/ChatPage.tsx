@@ -99,6 +99,7 @@ const roleLabel: Record<UserRole, string> = {
     director: 'Giám đốc',
     manager: 'Quản lý',
     staff: 'Nhân viên',
+    line_leader: 'Tổ trưởng',
 };
 
 // Avatar màu + icon theo loại phiếu để phân biệt hội thoại nghiệp vụ với chat thường

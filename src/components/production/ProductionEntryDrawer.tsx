@@ -181,6 +181,16 @@ const ProductionEntryDrawer = ({ open, day, line, items, slotKey, onClose, onSav
         }
     };
 
+    // Nút bước nhanh cho ngón cái tổ trưởng — cộng dồn hoặc điền đúng mức khoán,
+    // đỡ phải gõ bàn phím số dài từng con giữa xưởng.
+    const adjustQuantity = (delta: number) => {
+        const current = Number(entryForm.getFieldValue('quantity') || 0);
+        entryForm.setFieldsValue({ quantity: Math.max(0, current + delta) });
+    };
+    const fillQuantity = (value: number) => {
+        entryForm.setFieldsValue({ quantity: Math.max(0, Math.round(value)) });
+    };
+
     if (!line) return null;
 
     const selectedRun = line.runs.find((run) => run.id === selectedRunId);
@@ -433,6 +443,34 @@ const ProductionEntryDrawer = ({ open, day, line, items, slotKey, onClose, onSav
                                         autoFocus
                                     />
                                 </Form.Item>
+                                <div className='pd-qty-steps'>
+                                    {selectedRun?.hourlyQuota ? (
+                                        <button
+                                            type='button'
+                                            className='pd-qty-quota'
+                                            onClick={() => fillQuantity(selectedRun.hourlyQuota)}
+                                        >
+                                            = Khoán {selectedRun.hourlyQuota.toLocaleString('vi-VN')}
+                                        </button>
+                                    ) : null}
+                                    <button type='button' onClick={() => adjustQuantity(10)}>
+                                        +10
+                                    </button>
+                                    <button type='button' onClick={() => adjustQuantity(50)}>
+                                        +50
+                                    </button>
+                                    <button type='button' onClick={() => adjustQuantity(100)}>
+                                        +100
+                                    </button>
+                                    <button
+                                        type='button'
+                                        className='pd-qty-reset'
+                                        onClick={() => fillQuantity(0)}
+                                        aria-label='Đặt lại về 0'
+                                    >
+                                        ↺
+                                    </button>
+                                </div>
                                 <Form.Item label='Ghi chú' name='note'>
                                     <Input.TextArea
                                         rows={2}

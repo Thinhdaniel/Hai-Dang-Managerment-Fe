@@ -18,7 +18,7 @@ import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../core/contexts/AuthContext';
 import { useResponsive } from '../../core/hooks/useResponsive';
 import { useSocket } from '../../core/hooks/useSocket';
-import { can } from '../../core/lib/permissions';
+import { can, isLineLeader } from '../../core/lib/permissions';
 import '../../styles/production.css';
 
 const { Text } = Typography;
@@ -61,6 +61,9 @@ const ProductionAppLayout = () => {
     }, [socket]);
 
     const manage = can(role, 'production.manage');
+    // Tổ trưởng chỉ có đúng màn nhập sản lượng — không hiện điều hướng nào khác,
+    // không lối sang app quản lý máy/vật tư.
+    const leaderOnly = isLineLeader(role);
     const navItems = [
         manage ? { to: '/production/planning', end: false, icon: <CalendarOutlined />, label: 'Kế hoạch' } : null,
         { to: '/production', end: true, icon: <EditOutlined />, label: 'Nhập sản lượng', short: 'Nhập liệu' },
@@ -101,8 +104,13 @@ const ProductionAppLayout = () => {
             ),
         },
         { type: 'divider' },
-        { key: 'management', icon: <AppstoreOutlined />, label: 'Quản lý máy & vật tư' },
-        { type: 'divider' },
+        // Tổ trưởng không có quyền vào app quản lý máy/vật tư nên bỏ hẳn lối này.
+        ...(leaderOnly
+            ? []
+            : ([
+                  { key: 'management', icon: <AppstoreOutlined />, label: 'Quản lý máy & vật tư' },
+                  { type: 'divider' },
+              ] as NonNullable<MenuProps['items']>)),
         { key: 'logout', icon: <LogoutOutlined />, label: 'Đăng xuất', danger: true },
     ];
 
@@ -146,7 +154,7 @@ const ProductionAppLayout = () => {
                 },
             }}
         >
-            <div className='production-app-shell'>
+            <div className={`production-app-shell${leaderOnly ? ' is-leader' : ''}`}>
                 <header className='pd-header'>
                     <button type='button' className='pd-brand' onClick={() => navigate('/production')}>
                         <img src='/brand/company-logo.png' alt='' />
@@ -155,14 +163,18 @@ const ProductionAppLayout = () => {
                         </strong>
                     </button>
 
-                    <nav className='pd-nav' aria-label='Điều hướng sản xuất'>
-                        {navItems.map((item) => (
-                            <NavLink key={item.to} to={item.to} end={item.end}>
-                                {item.icon}
-                                <span>{item.label}</span>
-                            </NavLink>
-                        ))}
-                    </nav>
+                    {leaderOnly ? (
+                        <div className='pd-leader-tag'>Báo sản lượng theo giờ</div>
+                    ) : (
+                        <nav className='pd-nav' aria-label='Điều hướng sản xuất'>
+                            {navItems.map((item) => (
+                                <NavLink key={item.to} to={item.to} end={item.end}>
+                                    {item.icon}
+                                    <span>{item.label}</span>
+                                </NavLink>
+                            ))}
+                        </nav>
+                    )}
 
                     <div className='pd-header__right'>
                         <div
@@ -172,7 +184,7 @@ const ProductionAppLayout = () => {
                             {isPhone ? null : realtimeOk ? 'Realtime' : 'Chờ đồng bộ'}
                         </div>
 
-                        {isPhone ? null : (
+                        {isPhone || leaderOnly ? null : (
                             <Tooltip title='Về Quản lý máy & vật tư'>
                                 <Button icon={<SwapOutlined />} onClick={() => navigate('/dashboard')} />
                             </Tooltip>
@@ -192,7 +204,12 @@ const ProductionAppLayout = () => {
                     <Outlet />
                 </main>
 
-                <nav className='pd-tabbar' aria-label='Điều hướng sản xuất'>
+                <nav
+                    className='pd-tabbar'
+                    aria-label='Điều hướng sản xuất'
+                    hidden={leaderOnly}
+                    style={leaderOnly ? { display: 'none' } : undefined}
+                >
                     {primaryNav.map((item) => (
                         <NavLink key={item.to} to={item.to} end={item.end} onClick={() => setMoreOpen(false)}>
                             {item.icon}
