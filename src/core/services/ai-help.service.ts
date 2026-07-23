@@ -783,6 +783,35 @@ export type SupplyRequestOcrResponse = {
     latencyMs?: number;
 };
 
+export type DistributionOcrItem = {
+    materialName: string;
+    unit?: string;
+    quantity?: number;
+    quantityRequested?: number;
+    unitPrice?: number;
+    vatRate?: number;
+    note?: string;
+    verify?: OcrVerifyStatus;
+    verifyNote?: string;
+};
+
+export type DistributionOcrResponse = {
+    header: {
+        requesterName?: string;
+        department?: string;
+        line?: string;
+        note?: string;
+    };
+    items: DistributionOcrItem[];
+    count: number;
+    available: boolean;
+    usedFallback: boolean;
+    verification?: OcrVerification;
+    provider?: string;
+    model?: string;
+    latencyMs?: number;
+};
+
 export type MachineLabelOcrResponse = {
     fields: {
         brand?: string;
@@ -822,6 +851,15 @@ export const aiOcrService = {
         const formData = new FormData();
         formData.append('image', image);
         return api.post<SupplyRequestOcrResponse, FormData>('/ai/ocr/supply-request', formData, {
+            headers: { 'Content-Type': 'multipart/form-data' },
+            timeout: 90000,
+        });
+    },
+    // Phiếu cấp phát nội bộ: đọc ĐỦ số lượng + đơn giá + VAT cho từng dòng.
+    scanDistribution: (image: File): Promise<DistributionOcrResponse> => {
+        const formData = new FormData();
+        formData.append('image', image);
+        return api.post<DistributionOcrResponse, FormData>('/ai/ocr/distribution', formData, {
             headers: { 'Content-Type': 'multipart/form-data' },
             timeout: 90000,
         });

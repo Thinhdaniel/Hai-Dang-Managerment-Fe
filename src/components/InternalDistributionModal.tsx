@@ -115,7 +115,7 @@ const InternalDistributionModal: React.FC<Props> = ({ open, plantId, existingDra
     // khớp tên với DANH MỤC (aiMaterialMatch) và lọc tiếp theo TỒN KHO cơ sở: chỉ vật
     // tư còn tồn mới điền sẵn; còn lại để người dùng chọn tay kèm gợi ý tên đã quét.
     const scanOneFile = async (file: File) => {
-        const result = await aiOcrService.scanSupplyRequest(file);
+        const result = await aiOcrService.scanDistribution(file);
         if (!result.items.length) {
             message.warning('Chưa đọc được dòng vật tư nào từ phiếu');
             return;
@@ -151,18 +151,20 @@ const InternalDistributionModal: React.FC<Props> = ({ open, plantId, existingDra
             // Chỉ tự điền khi danh mục khớp CHẮC và vật tư CÒN TỒN ở cơ sở.
             const autofill = inStock && match!.status === 'matched' && (match!.confidence ?? 0) >= 90;
             const inv = autofill ? inventoryMap.get(match!.materialId!) : undefined;
-            const noteFromOcr = [item.verifyNote ? `⚠ ${item.verifyNote}` : '', item.purpose, item.note]
+            const noteFromOcr = [item.verifyNote ? `⚠ ${item.verifyNote}` : '', item.note]
                 .filter(Boolean)
                 .join(' · ');
             if (autofill) autofilled += 1;
             else manual += 1;
-            const qty = item.quantityRequested && Number(item.quantityRequested) > 0 ? Number(item.quantityRequested) : 1;
+            const rawQty = item.quantity ?? item.quantityRequested;
+            const qty = rawQty && Number(rawQty) > 0 ? Number(rawQty) : 1;
             return {
                 key: rowKey(),
                 materialId: autofill ? match!.materialId : undefined,
                 quantity: autofill ? Math.min(qty, inv?.currentStock ?? qty) : qty,
-                unitPrice: 0,
-                vatRate: 0,
+                // Đọc đủ đơn giá + VAT từ phiếu (không có thì để 0 cho người sửa).
+                unitPrice: item.unitPrice != null && Number(item.unitPrice) >= 0 ? Number(item.unitPrice) : 0,
+                vatRate: item.vatRate != null && Number(item.vatRate) >= 0 ? Number(item.vatRate) : 0,
                 note: noteFromOcr,
                 scanName: autofill ? undefined : item.materialName,
             };
@@ -177,8 +179,9 @@ const InternalDistributionModal: React.FC<Props> = ({ open, plantId, existingDra
         // Điền thông tin chung (chỉ ở chế độ tạo mới, không phải thêm vào nháp).
         if (!isDraftMode) {
             if (result.header?.requesterName) setRequesterName((v) => v || result.header!.requesterName!);
-            const headerNote = [result.header?.purpose, result.header?.note].filter(Boolean).join(' · ');
-            if (headerNote) setNoteGeneral((v) => v || headerNote);
+            if (result.header?.department) setTargetDepartment((v) => v || result.header!.department!);
+            if (result.header?.line) setTargetLine((v) => v || result.header!.line!);
+            if (result.header?.note) setNoteGeneral((v) => v || result.header!.note!);
         }
 
         setScanReview({
