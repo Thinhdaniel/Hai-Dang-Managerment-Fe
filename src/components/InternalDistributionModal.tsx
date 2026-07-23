@@ -1,18 +1,19 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import dayjs, { type Dayjs } from 'dayjs';
 import {
-    App, Button, DatePicker, Divider, Input, InputNumber,
+    Alert, App, Button, DatePicker, Divider, Input, InputNumber,
     Modal, Select, Space, Tag, Tooltip,
 } from 'antd';
 import {
     CheckCircleOutlined, ClockCircleOutlined, DeleteOutlined,
-    PlusOutlined, SaveOutlined, SendOutlined,
+    PlusOutlined, SaveOutlined, ScanOutlined, SendOutlined,
 } from '@ant-design/icons';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
     distributionService, inventoryService,
     type Distribution, type MaterialInventory,
 } from '../core/services/material.service';
+import { aiMaterialMatchService, aiOcrService } from '../core/services/ai-help.service';
 
 const fmt = (v?: number) => (v ?? 0).toLocaleString('vi-VN');
 
@@ -23,12 +24,28 @@ type ItemRow = {
     unitPrice: number;
     vatRate: number;
     note: string;
+    /** Tên vật tư AI quét được nhưng CHƯA khớp tồn kho — gợi ý để người dùng chọn tay. */
+    scanName?: string;
 };
 
 const newRow = (): ItemRow => ({
     key: `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
     materialId: undefined, quantity: 1, unitPrice: 0, vatRate: 0, note: '',
 });
+
+const rowKey = () => `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+
+type ScanReview = {
+    fileName: string;
+    total: number;
+    /** khớp chắc + còn tồn → đã điền sẵn vật tư */
+    autofilled: number;
+    /** đọc được nhưng phải chọn vật tư tay (chưa khớp / ngoài tồn kho) */
+    manual: number;
+    verifyFlagged: number;
+    verifyStatus?: 'verified' | 'skipped';
+    provider?: string;
+};
 
 type Props = {
     open: boolean;
@@ -48,12 +65,17 @@ const InternalDistributionModal: React.FC<Props> = ({ open, plantId, existingDra
     const [distributedAt, setDistributedAt] = useState<Dayjs>(dayjs());
     const [noteGeneral, setNoteGeneral] = useState('');
     const [rows, setRows] = useState<ItemRow[]>([newRow()]);
+    const [scanning, setScanning] = useState(false);
+    const [scanReview, setScanReview] = useState<ScanReview | null>(null);
+    const scanInputRef = useRef<HTMLInputElement>(null);
+    const scanBusyRef = useRef(false);
 
     const isDraftMode = Boolean(existingDraft);
 
     useEffect(() => {
         if (!open) return;
         setRows([newRow()]);
+        setScanReview(null);
         if (!existingDraft) {
             setRequesterName('');
             setTargetDepartment('');
@@ -87,6 +109,135 @@ const InternalDistributionModal: React.FC<Props> = ({ open, plantId, existingDra
         })),
         [inventoryRows]
     );
+
+    // ── AI quét phiếu cấp phát ────────────────────────────────────────────────
+    // Tái dùng OCR "phiếu đề xuất cấp" (đọc 2 lần đối chiếu) → trích dòng vật tư, rồi
+    // khớp tên với DANH MỤC (aiMaterialMatch) và lọc tiếp theo TỒN KHO cơ sở: chỉ vật
+    // tư còn tồn mới điền sẵn; còn lại để người dùng chọn tay kèm gợi ý tên đã quét.
+    const scanOneFile = async (file: File) => {
+        const result = await aiOcrService.scanSupplyRequest(file);
+        if (!result.items.length) {
+            message.warning('Chưa đọc được dòng vật tư nào từ phiếu');
+            return;
+        }
+
+        // Khớp tên vật tư quét được với danh mục (trả materialId của danh mục).
+        let matchByIndex: Record<number, { materialId?: string; status: string; confidence: number }> = {};
+        try {
+            const match = await aiMaterialMatchService.match(
+                result.items.map((item, index) => ({
+                    key: `dist-scan-${index}`,
+                    materialName: item.materialName ?? '',
+                    unit: item.unit,
+                    note: item.note,
+                }))
+            );
+            match.items.forEach((item, index) => {
+                matchByIndex[index] = {
+                    materialId: item.materialId,
+                    status: item.status,
+                    confidence: item.confidence,
+                };
+            });
+        } catch {
+            matchByIndex = {};
+        }
+
+        let autofilled = 0;
+        let manual = 0;
+        const scannedRows: ItemRow[] = result.items.map((item, index) => {
+            const match = matchByIndex[index];
+            const inStock = Boolean(match?.materialId && inventoryMap.has(match.materialId));
+            // Chỉ tự điền khi danh mục khớp CHẮC và vật tư CÒN TỒN ở cơ sở.
+            const autofill = inStock && match!.status === 'matched' && (match!.confidence ?? 0) >= 90;
+            const inv = autofill ? inventoryMap.get(match!.materialId!) : undefined;
+            const noteFromOcr = [item.verifyNote ? `⚠ ${item.verifyNote}` : '', item.purpose, item.note]
+                .filter(Boolean)
+                .join(' · ');
+            if (autofill) autofilled += 1;
+            else manual += 1;
+            const qty = item.quantityRequested && Number(item.quantityRequested) > 0 ? Number(item.quantityRequested) : 1;
+            return {
+                key: rowKey(),
+                materialId: autofill ? match!.materialId : undefined,
+                quantity: autofill ? Math.min(qty, inv?.currentStock ?? qty) : qty,
+                unitPrice: 0,
+                vatRate: 0,
+                note: noteFromOcr,
+                scanName: autofill ? undefined : item.materialName,
+            };
+        });
+
+        // Gộp vào các dòng đã nhập có ý nghĩa (bỏ dòng trống mặc định).
+        setRows((prev) => {
+            const meaningful = prev.filter((r) => r.materialId || r.scanName || r.note.trim() || r.quantity !== 1);
+            return [...meaningful, ...scannedRows];
+        });
+
+        // Điền thông tin chung (chỉ ở chế độ tạo mới, không phải thêm vào nháp).
+        if (!isDraftMode) {
+            if (result.header?.requesterName) setRequesterName((v) => v || result.header!.requesterName!);
+            const headerNote = [result.header?.purpose, result.header?.note].filter(Boolean).join(' · ');
+            if (headerNote) setNoteGeneral((v) => v || headerNote);
+        }
+
+        setScanReview({
+            fileName: file.name,
+            total: scannedRows.length,
+            autofilled,
+            manual,
+            verifyFlagged: result.verification?.flagged ?? 0,
+            verifyStatus: result.verification?.status,
+            provider: result.provider,
+        });
+
+        const flagged = result.verification?.flagged ?? 0;
+        if (result.verification?.status === 'verified') {
+            if (flagged) {
+                message.warning(`Đã quét ${scannedRows.length} dòng — ${flagged} dòng 2 lần đọc lệch nhau, xem cảnh báo ⚠.`);
+            } else {
+                message.success(`Đã quét ${scannedRows.length} dòng — 2 lần đọc khớp nhau. Rà lại vật tư & số lượng trước khi chốt.`);
+            }
+        } else {
+            message.warning(`Đã quét ${scannedRows.length} dòng nhưng CHƯA đối chiếu chéo được — rà kỹ số lượng.`);
+        }
+    };
+
+    const handleScanFiles = async (files?: File | File[] | FileList | null) => {
+        const list = (!files ? [] : files instanceof FileList ? Array.from(files) : Array.isArray(files) ? files : [files]).filter(
+            (file) => file.type.startsWith('image/')
+        );
+        if (!list.length || scanBusyRef.current) return;
+        scanBusyRef.current = true;
+        setScanning(true);
+        setScanReview(null);
+        try {
+            for (const file of list) await scanOneFile(file);
+        } catch {
+            message.error('Không quét được phiếu. Hãy dùng ảnh rõ nét JPG/PNG/WebP và thử lại.');
+        } finally {
+            scanBusyRef.current = false;
+            setScanning(false);
+            if (scanInputRef.current) scanInputRef.current.value = '';
+        }
+    };
+
+    // Dán ảnh chụp màn hình (Ctrl+V) khi modal mở là quét luôn — hỗ trợ nhiều ảnh.
+    const scanFilesRef = useRef(handleScanFiles);
+    scanFilesRef.current = handleScanFiles;
+    useEffect(() => {
+        if (!open) return;
+        const onPaste = (event: ClipboardEvent) => {
+            const images = Array.from(event.clipboardData?.files ?? []).filter((file) =>
+                file.type.startsWith('image/')
+            );
+            if (!images.length) return;
+            event.preventDefault();
+            void scanFilesRef.current(images);
+        };
+        document.addEventListener('paste', onPaste);
+        return () => document.removeEventListener('paste', onPaste);
+    }, [open]);
 
     const patchRow = (key: string, changes: Partial<ItemRow>) =>
         setRows((p) => p.map((r) => (r.key === key ? { ...r, ...changes } : r)));
@@ -332,14 +483,57 @@ const InternalDistributionModal: React.FC<Props> = ({ open, plantId, existingDra
 
                 {/* ── Section 2: Danh sách vật tư ── */}
                 <div className="px-6 py-4">
-                    <div className="mb-3 flex items-center justify-between">
+                    <div className="mb-3 flex items-center justify-between gap-2">
                         <span className="text-[11px] font-semibold uppercase tracking-widest text-slate-400">
                             Danh sách vật tư cấp phát
                         </span>
-                        <Button size="small" icon={<PlusOutlined />} onClick={() => setRows((p) => [...p, newRow()])}>
-                            Thêm dòng
-                        </Button>
+                        <Space size={8}>
+                            <input
+                                ref={scanInputRef}
+                                type="file"
+                                accept="image/*"
+                                multiple
+                                className="hidden"
+                                onChange={(e) => void handleScanFiles(e.target.files)}
+                            />
+                            <Tooltip title="Chụp/chọn ảnh phiếu cấp phát — AI đọc rồi điền sẵn danh sách vật tư. Có thể dán ảnh (Ctrl+V).">
+                                <Button
+                                    size="small"
+                                    icon={<ScanOutlined />}
+                                    loading={scanning}
+                                    onClick={() => scanInputRef.current?.click()}
+                                    className="border-violet-400 text-violet-600 hover:!border-violet-500 hover:!text-violet-700"
+                                >
+                                    {scanning ? 'Đang quét...' : 'Quét phiếu (AI)'}
+                                </Button>
+                            </Tooltip>
+                            <Button size="small" icon={<PlusOutlined />} onClick={() => setRows((p) => [...p, newRow()])}>
+                                Thêm dòng
+                            </Button>
+                        </Space>
                     </div>
+
+                    {scanReview && (
+                        <Alert
+                            type={scanReview.verifyStatus === 'skipped' || scanReview.verifyFlagged ? 'warning' : 'success'}
+                            showIcon
+                            className="mb-3"
+                            closable
+                            onClose={() => setScanReview(null)}
+                            message={
+                                <span className="text-xs">
+                                    Đã quét <b>{scanReview.total}</b> dòng từ “{scanReview.fileName}”:{' '}
+                                    <b className="text-emerald-700">{scanReview.autofilled}</b> khớp tồn kho (điền sẵn) ·{' '}
+                                    <b className="text-orange-600">{scanReview.manual}</b> cần chọn tay
+                                    {scanReview.verifyFlagged ? (
+                                        <> · <b className="text-red-600">{scanReview.verifyFlagged}</b> dòng lệch 2 lần đọc ⚠</>
+                                    ) : null}
+                                    {scanReview.verifyStatus === 'skipped' ? ' · CHƯA đối chiếu chéo — rà kỹ' : ''}
+                                    . Kiểm tra lại vật tư, số lượng và đơn giá trước khi chốt.
+                                </span>
+                            }
+                        />
+                    )}
 
                     <div className="overflow-hidden rounded-lg border border-slate-200">
                         {/* Table layout - tránh vỡ cột với Ant Design components */}
@@ -370,7 +564,9 @@ const InternalDistributionModal: React.FC<Props> = ({ open, plantId, existingDra
                                             <td className="px-3 py-2">
                                                 <Select
                                                     showSearch optionFilterProp="label"
-                                                    placeholder="Chọn vật tư..." size="small"
+                                                    placeholder={row.scanName ? '📷 Chọn vật tư khớp...' : 'Chọn vật tư...'}
+                                                    size="small"
+                                                    status={row.scanName ? 'warning' : undefined}
                                                     loading={invLoading} style={{ width: '100%' }}
                                                     value={row.materialId}
                                                     options={materialOptions}
@@ -385,8 +581,17 @@ const InternalDistributionModal: React.FC<Props> = ({ open, plantId, existingDra
                                                             </div>
                                                         );
                                                     }}
-                                                    onChange={(v) => patchRow(row.key, { materialId: v })}
+                                                    onChange={(v) => patchRow(row.key, { materialId: v, scanName: undefined })}
                                                 />
+                                                {row.scanName && !row.materialId && (
+                                                    <div
+                                                        className="mt-1 flex items-center gap-1 truncate text-[11px] text-violet-600"
+                                                        title={`AI đọc: ${row.scanName}`}
+                                                    >
+                                                        <ScanOutlined className="shrink-0" />
+                                                        <span className="truncate">AI đọc: {row.scanName}</span>
+                                                    </div>
+                                                )}
                                             </td>
                                             <td className="px-2 py-2 text-center text-xs text-slate-500">{unit || '—'}</td>
                                             <td className={`px-2 py-2 text-right text-xs font-medium ${isOver ? 'text-red-500' : 'text-slate-400'}`}>
