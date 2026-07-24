@@ -10,6 +10,7 @@ import {
 } from '@ant-design/icons';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useMemo, useState } from 'react';
+import { createProductionMutationId } from '../../core/lib/productionOutbox';
 import { slotRangeLabel } from '../../core/lib/productionSlot';
 import { useResponsive } from '../../core/hooks/useResponsive';
 import { productionService } from '../../core/services/production.service';
@@ -47,6 +48,8 @@ type RunValues = {
 };
 
 const errorMessage = (error: unknown) => (error instanceof Error ? error.message : 'Không thể lưu dữ liệu');
+const errorStatus = (error: unknown) =>
+    typeof error === 'object' && error && 'status' in error ? Number(error.status) : undefined;
 
 const ProductionEntryDrawer = ({ open, day, line, items, slotKey, onClose, onSaved }: Props) => {
     const { isPhone } = useResponsive();
@@ -142,12 +145,24 @@ const ProductionEntryDrawer = ({ open, day, line, items, slotKey, onClose, onSav
     });
 
     const entryMutation = useMutation({
-        mutationFn: (values: EntryValues) => productionService.saveEntry(day.id, line!.lineId, slotKey, values),
+        mutationFn: (values: EntryValues) =>
+            productionService.saveEntry(day.id, line!.lineId, slotKey, {
+                ...values,
+                clientMutationId: createProductionMutationId(),
+                expectedUpdatedAt: existingEntry?.updatedAt || null,
+            }),
         onSuccess: async (_, variables) => {
             message.success(`Đã lưu ${variables.quantity.toLocaleString('vi-VN')} sản phẩm`);
             await refreshDay();
         },
-        onError: (error) => message.error(errorMessage(error)),
+        onError: async (error) => {
+            if (errorStatus(error) === 409) {
+                await refreshDay();
+                message.warning('Ô này vừa được cập nhật ở thiết bị khác. Dữ liệu mới nhất đã được tải lại.');
+                return;
+            }
+            message.error(errorMessage(error));
+        },
     });
 
     const runMutation = useMutation({
@@ -399,11 +414,7 @@ const ProductionEntryDrawer = ({ open, day, line, items, slotKey, onClose, onSav
                                 <div className='production-entry-plan-tags'>
                                     {selectedRun.source === 'plan' ? <Tag color='green'>Theo kế hoạch</Tag> : null}
                                     <Tag color='blue'>Khoán {selectedRun.hourlyQuota}/giờ</Tag>
-                                    <Button
-                                        size='small'
-                                        icon={<SettingOutlined />}
-                                        onClick={() => setShowSetup(true)}
-                                    >
+                                    <Button size='small' icon={<SettingOutlined />} onClick={() => setShowSetup(true)}>
                                         Sửa thiết lập
                                     </Button>
                                 </div>
@@ -525,12 +536,7 @@ const ProductionEntryDrawer = ({ open, day, line, items, slotKey, onClose, onSav
                                         name='hourlyQuota'
                                         rules={[{ required: true, message: 'Nhập khoán giờ' }]}
                                     >
-                                        <InputNumber
-                                            min={0}
-                                            precision={0}
-                                            className='w-full'
-                                            addonAfter='SP/giờ'
-                                        />
+                                        <InputNumber min={0} precision={0} className='w-full' addonAfter='SP/giờ' />
                                     </Form.Item>
                                     <Form.Item label='Áp dụng từ' name='startedSlotKey' rules={[{ required: true }]}>
                                         <Select

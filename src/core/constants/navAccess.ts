@@ -1,5 +1,5 @@
 import type { Capability } from '../lib/permissions';
-import { can, isAdmin, isDirector } from '../lib/permissions';
+import { can, isAdmin, isDirector, isLineLeader } from '../lib/permissions';
 import type { User } from '../types';
 
 const mainPlantId = import.meta.env.VITE_MAIN_PLANT_ID as string | undefined;
@@ -27,6 +27,8 @@ export const requireProcurement: AccessCheck = (user) =>
 /** Giám đốc trở lên (Super Admin + Giám đốc). */
 export const requireDirectorUp: AccessCheck = (user) =>
     Boolean(user?.role) && (isAdmin(user!.role) || isDirector(user!.role));
+
+const requireProductionHistory: AccessCheck = (user) => can(user?.role, 'production.view') && !isLineLeader(user?.role);
 
 /**
  * Bản đồ quyền truy cập theo route (dùng cho RequireAccess trong router).
@@ -63,4 +65,5 @@ export const ROUTE_ACCESS: Record<string, AccessCheck> = {
     '/production/board': requireCap('production.manage'),
     '/production/reports': requireCap('production.manage'),
     '/production/reports/day': requireCap('production.manage'),
+    '/production/history': requireProductionHistory,
 };

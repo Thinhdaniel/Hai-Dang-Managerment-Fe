@@ -2048,6 +2048,26 @@
     font-size: var(--pd-fs-11-5);
 }
 
+.production-logout-warning {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.production-logout-warning p {
+    margin: 0;
+    color: var(--pd-ink);
+    font-size: 13px;
+    line-height: 1.45;
+}
+
+.production-logout-warning small {
+    margin-top: 4px;
+    color: var(--pd-ink-2);
+    font-size: 12px;
+    line-height: 1.5;
+}
+
 /* ================= Bottom tab bar (mobile) ================= */
 
 .pd-tabbar {

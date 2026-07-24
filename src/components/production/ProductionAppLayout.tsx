@@ -19,6 +19,8 @@ import { useAuth } from '../../core/contexts/AuthContext';
 import { useResponsive } from '../../core/hooks/useResponsive';
 import { useSocket } from '../../core/hooks/useSocket';
 import { can, isLineLeader } from '../../core/lib/permissions';
+import { countProductionEntryDrafts } from '../../core/lib/productionDraft';
+import { listProductionOutbox } from '../../core/lib/productionOutbox';
 import '../../styles/production.css';
 
 const { Text } = Typography;
@@ -114,16 +116,37 @@ const ProductionAppLayout = () => {
         { key: 'logout', icon: <LogoutOutlined />, label: 'Đăng xuất', danger: true },
     ];
 
-    const handleMenuClick: MenuProps['onClick'] = ({ key }) => {
+    const handleMenuClick: MenuProps['onClick'] = async ({ key }) => {
         if (key === 'management') {
             navigate('/dashboard');
             return;
         }
         if (key === 'logout') {
+            const queuedEntries = user?.id
+                ? (await listProductionOutbox()).filter((item) => item.actorId === user.id)
+                : [];
+            const waitingCount = queuedEntries.filter(
+                (item) => item.status === 'pending' || item.status === 'syncing'
+            ).length;
+            const conflictCount = queuedEntries.filter((item) => item.status === 'conflict').length;
+            const draftCount = user?.id ? countProductionEntryDrafts(user.id) : 0;
+            const hasLocalData = waitingCount + conflictCount + draftCount > 0;
             modal.confirm({
-                title: 'Đăng xuất khỏi hệ thống?',
-                content: 'Các số liệu đã lưu trên máy chủ không bị ảnh hưởng.',
-                okText: 'Đăng xuất',
+                title: hasLocalData ? 'Còn dữ liệu trên điện thoại' : 'Đăng xuất khỏi hệ thống?',
+                content: hasLocalData ? (
+                    <div className='production-logout-warning'>
+                        {waitingCount ? <p>{waitingCount} bản ghi đang chờ đồng bộ lên hệ thống.</p> : null}
+                        {conflictCount ? <p>{conflictCount} bản ghi cần kiểm tra do trùng cập nhật.</p> : null}
+                        {draftCount ? <p>{draftCount} bản nhập dở chưa bấm lưu.</p> : null}
+                        <small>
+                            Dữ liệu vẫn được giữ trên điện thoại, nhưng chỉ tự đồng bộ khi đăng nhập lại đúng tài khoản
+                            này.
+                        </small>
+                    </div>
+                ) : (
+                    'Các số liệu đã lưu trên máy chủ không bị ảnh hưởng.'
+                ),
+                okText: hasLocalData ? 'Vẫn đăng xuất' : 'Đăng xuất',
                 cancelText: 'Ở lại',
                 okButtonProps: { danger: true },
                 onOk: async () => {
@@ -154,7 +177,7 @@ const ProductionAppLayout = () => {
                 },
             }}
         >
-            <div className={`production-app-shell${leaderOnly ? ' is-leader' : ''}`}>
+            <div className={['production-app-shell', leaderOnly ? 'is-leader' : ''].filter(Boolean).join(' ')}>
                 <header className='pd-header'>
                     <button type='button' className='pd-brand' onClick={() => navigate('/production')}>
                         <img src='/brand/company-logo.png' alt='' />

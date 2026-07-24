@@ -154,6 +154,8 @@ export interface ProductionDay {
     plantCode?: string;
     productionDate: string;
     status: ProductionDayStatus;
+    reportingState?: 'provisional' | 'official';
+    dataAsOf?: string;
     statusNote?: string;
     submittedAt?: string;
     submittedBy?: ProductionActor;
@@ -169,6 +171,18 @@ export interface ProductionDay {
     slotSummaries: ProductionSlotSummary[];
     createdAt?: string;
     updatedAt?: string;
+}
+
+export interface SaveProductionEntryPayload {
+    runId: string;
+    quantity: number;
+    note?: string;
+    clientMutationId?: string;
+    /**
+     * null: client tin ô chưa tồn tại; string: phiên bản client đã đọc;
+     * undefined: tương thích luồng cũ, không kiểm tra xung đột.
+     */
+    expectedUpdatedAt?: string | null;
 }
 
 export interface ProductionDayPage {

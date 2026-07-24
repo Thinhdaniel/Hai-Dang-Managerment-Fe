@@ -15,6 +15,7 @@ import type {
     ProductionPlanAllocationPayload,
     ProductionReport,
     ProductionReportScope,
+    SaveProductionEntryPayload,
     ProductionTimeSlot,
 } from '../types/production';
 
@@ -149,7 +150,7 @@ export const productionService = {
         dayId: string,
         lineId: string,
         slotKey: string,
-        payload: { runId: string; quantity: number; note?: string }
+        payload: SaveProductionEntryPayload
     ): Promise<ProductionLineRecord> =>
         api.put(`${BASE}/days/${dayId}/lines/${lineId}/entries/${encodeURIComponent(slotKey)}`, payload),
 

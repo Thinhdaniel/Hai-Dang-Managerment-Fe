@@ -3,6 +3,7 @@ import { Navigate } from 'react-router-dom';
 import { App, Spin } from 'antd';
 import { useAuth } from '../core/contexts/AuthContext';
 import type { AccessCheck } from '../core/constants/navAccess';
+import { getLandingPath } from '../core/lib/permissions';
 
 type Props = { children: ReactNode };
 
@@ -49,7 +50,7 @@ export const RequireAccess = ({ check, children }: RequireAccessProps) => {
     }
 
     if (!allowed) {
-        return <Navigate to='/dashboard' replace />;
+        return <Navigate to={getLandingPath(user?.role)} replace />;
     }
 
     return children;

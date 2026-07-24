@@ -6,6 +6,8 @@ import ProductionAppLayout from '../components/production/ProductionAppLayout';
 import LazyBoundary from '../components/shared/LazyBoundary';
 import ProtectedRoute, { RequireAccess } from './guard';
 import { ROUTE_ACCESS } from '../core/constants/navAccess';
+import { useAuth } from '../core/contexts/AuthContext';
+import { isLineLeader } from '../core/lib/permissions';
 
 const Dashboard = lazy(() => import('../pages/Dashboard'));
 const ChatPage = lazy(() => import('../pages/ChatPage'));
@@ -42,6 +44,7 @@ const DataQualityDashboard = lazy(() => import('../pages/DataQualityDashboard'))
 const AiAssistantQualityPage = lazy(() => import('../pages/AiAssistantQualityPage'));
 const LuckyWheelPage = lazy(() => import('../pages/LuckyWheelPage'));
 const ProductionPage = lazy(() => import('../pages/ProductionPage'));
+const ProductionLeaderPage = lazy(() => import('../pages/ProductionLeaderPage'));
 const ProductionHistoryPage = lazy(() => import('../pages/ProductionHistoryPage'));
 const ProductionMonitorPage = lazy(() => import('../pages/ProductionMonitorPage'));
 const ProductionBoardPage = lazy(() => import('../pages/ProductionBoardPage'));
@@ -61,6 +64,11 @@ const NotFoundPage = lazy(() => import('../pages/NotFoundPage'));
 const RouteErrorPage = lazy(() => import('../pages/RouteErrorPage'));
 
 const withSuspense = (element: ReactNode) => <LazyBoundary>{element}</LazyBoundary>;
+
+const ProductionIndexPage = () => {
+    const { role } = useAuth();
+    return isLineLeader(role) ? <ProductionLeaderPage /> : <ProductionPage />;
+};
 
 /** Bọc element trong RequireAccess nếu route đó cần quyền (theo ROUTE_ACCESS). */
 const guarded = (path: string, element: ReactNode) => {
@@ -167,7 +175,7 @@ export const router = createBrowserRouter([
         element: guarded('/production', <ProductionAppLayout />),
         errorElement: withSuspense(<RouteErrorPage />),
         children: [
-            { index: true, element: withSuspense(<ProductionPage />) },
+            { index: true, element: withSuspense(<ProductionIndexPage />) },
             { path: 'planning', element: guarded('/production/planning', <ProductionPlanningPage />) },
             { path: 'monitor', element: guarded('/production/monitor', <ProductionMonitorPage />) },
             { path: 'board', element: guarded('/production/board', <ProductionBoardPage />) },
@@ -176,7 +184,7 @@ export const router = createBrowserRouter([
                 path: 'reports/:date',
                 element: guarded('/production/reports/day', <ProductionDayReportPage />),
             },
-            { path: 'history', element: withSuspense(<ProductionHistoryPage />) },
+            { path: 'history', element: guarded('/production/history', <ProductionHistoryPage />) },
         ],
     },
     {
