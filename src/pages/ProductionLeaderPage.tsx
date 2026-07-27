@@ -17,7 +17,12 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import ProductionLeaderEntryView, {
     type LeaderEntrySaveInput,
 } from '../components/production/ProductionLeaderEntryView';
+import ProductionLeaderDesktopWorkspace, {
+    type LeaderDesktopLine,
+    type LeaderDesktopSlot,
+} from '../components/production/ProductionLeaderDesktopWorkspace';
 import { useAuth } from '../core/contexts/AuthContext';
+import { useResponsive } from '../core/hooks/useResponsive';
 import { useSocket } from '../core/hooks/useSocket';
 import {
     createProductionMutationId,
@@ -74,6 +79,7 @@ const ProductionLeaderPage = () => {
     const { message, modal } = App.useApp();
     const { user } = useAuth();
     const { socket } = useSocket();
+    const { isDesktop } = useResponsive();
     const queryClient = useQueryClient();
     const [date, setDate] = useState<Dayjs>(dayjs());
     const [slotKey, setSlotKey] = useState('');
@@ -492,8 +498,8 @@ const ProductionLeaderPage = () => {
             : undefined;
     const completionPercent = dueLines.length ? (effectiveReportedCount / dueLines.length) * 100 : 0;
 
-    if (selectedLine && day) {
-        return (
+    const selectedEntryView =
+        selectedLine && day ? (
             <ProductionLeaderEntryView
                 actorId={actorId}
                 day={day}
@@ -519,8 +525,81 @@ const ProductionLeaderPage = () => {
                 }}
                 onSave={saveEntry}
             />
-        );
-    }
+        ) : null;
+
+    if (!isDesktop && selectedEntryView) return selectedEntryView;
+
+    const desktopSlots: LeaderDesktopSlot[] =
+        day && activeSlots.length
+            ? activeSlots.map((slot) => {
+                  const summary = day.slotSummaries.find((item) => item.key === slot.key);
+                  const effectiveReported = lines.filter((line) => {
+                      const canonical = getSlotValue(line, slot.key);
+                      if (!line.configured || !canonical?.runId) return false;
+                      const queued = outboxByCell.get(cellKey(line.lineId, slot.key));
+                      return canonical.reported || Boolean(queued && queued.status !== 'conflict');
+                  }).length;
+                  const total = Number(summary?.totalLines || 0);
+                  return {
+                      key: slot.key,
+                      label: slot.label || slotRangeLabel(slot),
+                      shortLabel: slotRangeLabelShort(slot),
+                      reported: effectiveReported,
+                      total,
+                      complete: total > 0 && effectiveReported >= total,
+                      current: isToday && nowMinute >= slot.startMinute && nowMinute < slot.endMinute,
+                      selected: slot.key === slotKey,
+                  };
+              })
+            : [];
+
+    const desktopLines: LeaderDesktopLine[] = visibleLines.map((line) => {
+        const state = lineState(line);
+        const run =
+            line.runs.find((item) => item.id === (state.queued?.runId || state.canonical?.runId)) ||
+            [...line.runs].reverse()[0];
+        const slotDurationHours = selectedSlot
+            ? Math.max(0, selectedSlot.endMinute - selectedSlot.startMinute) / 60
+            : 0;
+        const runTarget = selectedSlot?.kind === 'overtime' ? 0 : Number(run?.hourlyQuota || 0) * slotDurationHours;
+        const target =
+            state.queued?.runId && state.queued.runId !== state.canonical?.runId
+                ? runTarget
+                : state.canonical?.target || runTarget;
+        const percent = target > 0 ? (state.effectiveActual / target) * 100 : 0;
+        const lastEntry = [...line.entries].reverse().find((entry) => entry.slotKey === slotKey);
+        const tone: LeaderDesktopLine['tone'] = state.conflict
+            ? 'conflict'
+            : state.pending
+              ? 'pending'
+              : state.effectiveReported
+                ? percent >= 95
+                    ? 'success'
+                    : 'warning'
+                : state.due
+                  ? 'missing'
+                  : 'idle';
+        return {
+            lineId: line.lineId,
+            lineCode: line.lineCode,
+            lineName: line.lineName,
+            itemCode: run?.itemCode,
+            itemName: run?.itemName,
+            workerCount: line.workerCount,
+            workerCountConfirmed: line.workerCountConfirmed,
+            actual: state.effectiveActual,
+            target,
+            percent,
+            effectiveReported: state.effectiveReported,
+            due: state.due,
+            pending: state.pending,
+            conflict: state.conflict,
+            configured: line.configured,
+            tone,
+            updatedBy: state.pending ? 'Dữ liệu trên thiết bị' : lastEntry?.enteredByName,
+            updatedAt: !state.pending && lastEntry?.updatedAt ? dayjs(lastEntry.updatedAt).format('HH:mm') : undefined,
+        };
+    });
 
     return (
         <div className='leader-workspace'>
@@ -533,7 +612,7 @@ const ProductionLeaderPage = () => {
                     <DatePicker
                         value={date}
                         allowClear={false}
-                        format='DD/MM'
+                        format={isDesktop ? 'DD/MM/YYYY' : 'DD/MM'}
                         inputReadOnly
                         disabledDate={(current) => Boolean(current?.isAfter(dayjs(), 'day'))}
                         onChange={(value) => {
@@ -654,6 +733,36 @@ const ProductionLeaderPage = () => {
                 </section>
             ) : !day.lines.length ? (
                 <Empty description='Cơ sở chưa có danh mục chuyền sản xuất' />
+            ) : isDesktop ? (
+                <ProductionLeaderDesktopWorkspace
+                    selectedSlotLabel={slotRangeLabel(selectedSlot)}
+                    remainingMinutes={slotRemainingMinutes}
+                    serverCount={reportedCount}
+                    pendingCount={currentPendingCount}
+                    missingCount={missingLines.length}
+                    effectiveCount={effectiveReportedCount}
+                    totalCount={dueLines.length}
+                    completionPercent={completionPercent}
+                    slots={desktopSlots}
+                    lines={desktopLines}
+                    filter={filter}
+                    search={search}
+                    selectedLineId={selectedLineId}
+                    editable={day.status === 'draft'}
+                    inspector={selectedEntryView}
+                    onSelectSlot={(nextSlotKey) => {
+                        setSlotKey(nextSlotKey);
+                        setSelectedLineId(null);
+                        setFilter('missing');
+                    }}
+                    onFilterChange={setFilter}
+                    onSearchChange={setSearch}
+                    onSelectLine={setSelectedLineId}
+                    onStartMissing={() => {
+                        const firstMissing = missingLines[0];
+                        if (firstMissing) setSelectedLineId(firstMissing.lineId);
+                    }}
+                />
             ) : (
                 <>
                     <section className='leader-current-slot'>
