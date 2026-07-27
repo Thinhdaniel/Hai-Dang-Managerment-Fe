@@ -37,6 +37,7 @@ import { slotRangeLabel, slotRangeLabelShort } from '../core/lib/productionSlot'
 import { productionService } from '../core/services/production.service';
 import type { ProductionDay, ProductionLineRecord, ProductionTimeSlot } from '../core/types/production';
 import '../styles/production-leader.css';
+import '../styles/production-leader-desktop.css';
 
 type FilterMode = 'missing' | 'reported' | 'all';
 type SaveResult = 'synced' | 'queued' | 'conflict' | 'failed';

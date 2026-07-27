@@ -129,218 +129,233 @@ const ProductionLeaderDesktopWorkspace = ({
     onSelectLine,
     onStartMissing,
 }: Props) => (
-    <div className={`leader-desktop-workspace ${inspector ? 'has-inspector' : ''}`}>
-        <aside className='leader-desktop-rail' aria-label='Tiến độ theo khung giờ'>
-            <section className='leader-desktop-summary'>
-                <div className='leader-desktop-summary__head'>
+    <div className={`leader-v2-workspace ${inspector ? 'has-inspector' : ''}`}>
+        <main className='leader-v2-main'>
+            <section className='leader-v2-overview' aria-label='Tiến độ khung giờ'>
+                <header className='leader-v2-overview__heading'>
                     <div>
-                        <span>Khung đang theo dõi</span>
-                        <strong>{selectedSlotLabel || 'Chưa chọn'}</strong>
+                        <span>Khung giờ đang theo dõi</span>
+                        <strong>{selectedSlotLabel || 'Chưa chọn khung giờ'}</strong>
                     </div>
                     {remainingMinutes !== undefined && remainingMinutes > 0 ? (
                         <Tag color={remainingMinutes <= 10 ? 'orange' : 'blue'}>Còn {remainingMinutes} phút</Tag>
                     ) : null}
-                </div>
+                </header>
 
-                <div className='leader-desktop-summary__numbers'>
+                <div className='leader-v2-metrics'>
                     <div>
-                        <strong>{serverCount}</strong>
-                        <span>Đã lên server</span>
+                        <span>Tổng chuyền</span>
+                        <strong>{totalCount}</strong>
                     </div>
                     <div>
-                        <strong>{pendingCount}</strong>
+                        <span>Đã lên hệ thống</span>
+                        <strong>{serverCount}</strong>
+                    </div>
+                    <div className={pendingCount ? 'is-pending' : ''}>
                         <span>Chờ đồng bộ</span>
+                        <strong>{pendingCount}</strong>
                     </div>
                     <div className={missingCount ? 'is-missing' : 'is-complete'}>
-                        <strong>{missingCount}</strong>
                         <span>Còn thiếu</span>
+                        <strong>{missingCount}</strong>
                     </div>
                 </div>
 
-                <div className='leader-desktop-summary__progress'>
-                    <span>
-                        <i style={{ width: `${Math.min(100, completionPercent)}%` }} />
-                    </span>
-                    <small>
-                        {totalCount ? `${effectiveCount}/${totalCount} chuyền đã được nhập` : 'Chưa có chuyền cần báo'}
-                    </small>
-                </div>
-
-                {editable && missingCount ? (
-                    <Button type='primary' block onClick={onStartMissing}>
-                        Nhập {missingCount} chuyền còn thiếu
-                    </Button>
-                ) : null}
+                <footer className='leader-v2-overview__footer'>
+                    <div className='leader-v2-overview__progress'>
+                        <div>
+                            <span>
+                                <i style={{ width: `${Math.min(100, completionPercent)}%` }} />
+                            </span>
+                            <strong>{Math.round(completionPercent)}%</strong>
+                        </div>
+                        <small>
+                            {totalCount
+                                ? `${effectiveCount}/${totalCount} chuyền đã hoàn thành báo số`
+                                : 'Khung giờ này chưa có chuyền cần báo'}
+                        </small>
+                    </div>
+                    {editable && missingCount ? (
+                        <Button type='primary' onClick={onStartMissing}>
+                            Nhập {missingCount} chuyền còn thiếu
+                        </Button>
+                    ) : null}
+                </footer>
             </section>
 
-            <nav className='leader-desktop-slots' aria-label='Chọn khung giờ'>
-                <div className='leader-desktop-slots__title'>
-                    <span>Tiến độ trong ngày</span>
+            <section className='leader-v2-slot-section'>
+                <header>
+                    <div>
+                        <strong>Tiến độ trong ngày</strong>
+                        <span>Chọn khung giờ để xem và nhập sản lượng</span>
+                    </div>
                     <small>{slots.length} khung giờ</small>
-                </div>
-                {slots.map((slot) => (
-                    <button
-                        key={slot.key}
-                        type='button'
-                        className={[
-                            'leader-desktop-slot',
-                            slot.selected ? 'is-selected' : '',
-                            slot.current ? 'is-current' : '',
-                            slot.complete ? 'is-complete' : '',
-                        ]
-                            .filter(Boolean)
-                            .join(' ')}
-                        aria-current={slot.selected ? 'true' : undefined}
-                        onClick={() => onSelectSlot(slot.key)}
-                    >
-                        <span className='leader-desktop-slot__marker' />
-                        <span className='leader-desktop-slot__content'>
-                            <strong>{slot.shortLabel}</strong>
-                            <small>{slot.label}</small>
-                        </span>
-                        <span className='leader-desktop-slot__count'>
-                            {slot.complete ? <CheckCircleFilled /> : `${slot.reported}/${slot.total}`}
-                        </span>
-                    </button>
-                ))}
-            </nav>
-        </aside>
+                </header>
+                <nav className='leader-v2-slots' aria-label='Chọn khung giờ'>
+                    {slots.map((slot) => (
+                        <button
+                            key={slot.key}
+                            type='button'
+                            className={[
+                                'leader-v2-slot',
+                                slot.selected ? 'is-selected' : '',
+                                slot.current ? 'is-current' : '',
+                                slot.complete ? 'is-complete' : '',
+                            ]
+                                .filter(Boolean)
+                                .join(' ')}
+                            aria-current={slot.selected ? 'true' : undefined}
+                            onClick={() => onSelectSlot(slot.key)}
+                        >
+                            <span className='leader-v2-slot__time'>
+                                {slot.current ? <i /> : null}
+                                <strong>{slot.shortLabel}</strong>
+                            </span>
+                            <span className='leader-v2-slot__state'>
+                                {slot.complete ? (
+                                    <>
+                                        <CheckCircleFilled /> Hoàn thành
+                                    </>
+                                ) : (
+                                    `${slot.reported}/${slot.total} chuyền`
+                                )}
+                            </span>
+                        </button>
+                    ))}
+                </nav>
+            </section>
 
-        <section className='leader-desktop-lines'>
-            <header className='leader-desktop-lines__toolbar'>
-                <div>
-                    <strong>Danh sách chuyền</strong>
-                    <span>{lines.length} kết quả trong khung đã chọn</span>
-                </div>
-                <Segmented<LeaderDesktopFilter>
-                    value={filter}
-                    onChange={onFilterChange}
-                    options={[
-                        { value: 'missing', label: `Cần nhập ${missingCount}` },
-                        { value: 'reported', label: `Đã nhập ${effectiveCount}` },
-                        { value: 'all', label: 'Tất cả' },
-                    ]}
-                />
-                <Input
-                    allowClear
-                    prefix={<SearchOutlined />}
-                    value={search}
-                    placeholder='Tìm chuyền hoặc mã hàng'
-                    aria-label='Tìm chuyền hoặc mã hàng'
-                    onChange={(event) => onSearchChange(event.target.value)}
-                />
-            </header>
+            <section className='leader-v2-lines'>
+                <header className='leader-v2-lines__toolbar'>
+                    <div>
+                        <strong>Danh sách chuyền</strong>
+                        <span>{lines.length} chuyền đang hiển thị</span>
+                    </div>
+                    <Segmented<LeaderDesktopFilter>
+                        value={filter}
+                        onChange={onFilterChange}
+                        options={[
+                            { value: 'missing', label: `Cần nhập ${missingCount}` },
+                            { value: 'reported', label: `Đã nhập ${effectiveCount}` },
+                            { value: 'all', label: 'Tất cả' },
+                        ]}
+                    />
+                    <Input
+                        allowClear
+                        prefix={<SearchOutlined />}
+                        value={search}
+                        placeholder='Tìm chuyền hoặc mã hàng'
+                        aria-label='Tìm chuyền hoặc mã hàng'
+                        onChange={(event) => onSearchChange(event.target.value)}
+                    />
+                </header>
 
-            <div className='leader-desktop-table' role='table' aria-label='Sản lượng các chuyền'>
-                <div className='leader-desktop-table__header' role='row'>
-                    <span role='columnheader'>Chuyền</span>
-                    <span role='columnheader'>Mã hàng</span>
-                    <span role='columnheader'>Nhân sự</span>
-                    <span role='columnheader'>Thực tế</span>
-                    <span role='columnheader'>Khoán</span>
-                    <span role='columnheader'>Mức đạt</span>
-                    <span role='columnheader'>Trạng thái</span>
-                    <span role='columnheader' aria-label='Thao tác' />
-                </div>
+                <div className='leader-v2-table' role='table' aria-label='Sản lượng các chuyền'>
+                    <div className='leader-v2-table__header' role='row'>
+                        <span role='columnheader'>Chuyền và mã hàng</span>
+                        <span role='columnheader'>Nhân sự</span>
+                        <span role='columnheader'>Sản lượng</span>
+                        <span role='columnheader'>Mức đạt</span>
+                        <span role='columnheader'>Trạng thái</span>
+                        <span role='columnheader' aria-label='Thao tác' />
+                    </div>
 
-                <div className='leader-desktop-table__body' role='rowgroup'>
-                    {lines.length ? (
-                        lines.map((line) => (
-                            <div
-                                key={line.lineId}
-                                role='row'
-                                className={[
-                                    'leader-desktop-line',
-                                    `tone-${line.tone}`,
-                                    selectedLineId === line.lineId ? 'is-selected' : '',
-                                ]
-                                    .filter(Boolean)
-                                    .join(' ')}
-                                onDoubleClick={() => onSelectLine(line.lineId)}
-                            >
-                                <button
-                                    type='button'
-                                    role='cell'
-                                    className='leader-desktop-line__identity'
-                                    onClick={() => onSelectLine(line.lineId)}
+                    <div className='leader-v2-table__body' role='rowgroup'>
+                        {lines.length ? (
+                            lines.map((line) => (
+                                <div
+                                    key={line.lineId}
+                                    role='row'
+                                    className={[
+                                        'leader-v2-line',
+                                        `tone-${line.tone}`,
+                                        selectedLineId === line.lineId ? 'is-selected' : '',
+                                    ]
+                                        .filter(Boolean)
+                                        .join(' ')}
                                 >
-                                    <span>{line.lineCode}</span>
-                                    <span>
-                                        <strong>{line.lineName || line.lineCode}</strong>
-                                        <small>
-                                            {line.updatedBy
-                                                ? `${line.updatedBy}${line.updatedAt ? ` · ${line.updatedAt}` : ''}`
-                                                : 'Chưa có người cập nhật'}
-                                        </small>
-                                    </span>
-                                </button>
-                                <button
-                                    type='button'
-                                    role='cell'
-                                    className='leader-desktop-line__item'
-                                    onClick={() => onSelectLine(line.lineId)}
-                                >
-                                    <strong>{line.itemCode || 'Chưa chọn mã'}</strong>
-                                    <small>{line.itemName || 'Chưa có thông tin mã hàng'}</small>
-                                </button>
-                                <span role='cell' className='leader-desktop-line__workers'>
-                                    <TeamOutlined />
-                                    <strong>{line.workerCountConfirmed ? number(line.workerCount) : '—'}</strong>
-                                </span>
-                                <strong role='cell' className='leader-desktop-line__number'>
-                                    {line.effectiveReported ? number(line.actual) : '—'}
-                                </strong>
-                                <strong role='cell' className='leader-desktop-line__number is-muted'>
-                                    {line.target ? number(line.target) : '—'}
-                                </strong>
-                                <span role='cell' className='leader-desktop-line__achievement'>
-                                    <strong>
-                                        {line.effectiveReported && line.target ? `${line.percent.toFixed(0)}%` : '—'}
-                                    </strong>
-                                    <span>
-                                        <i style={{ width: `${Math.min(100, line.percent)}%` }} />
-                                    </span>
-                                </span>
-                                <span role='cell' className='leader-desktop-line__status'>
-                                    {statusContent(line)}
-                                </span>
-                                <span role='cell' className='leader-desktop-line__action'>
-                                    <Button
-                                        type={editable && line.due && !line.effectiveReported ? 'primary' : 'default'}
+                                    <button
+                                        type='button'
+                                        role='cell'
+                                        className='leader-v2-line__identity'
+                                        title={`${line.lineName || line.lineCode} · ${line.itemCode || 'Chưa chọn mã hàng'}${line.itemName ? ` · ${line.itemName}` : ''}`}
                                         onClick={() => onSelectLine(line.lineId)}
                                     >
-                                        {actionLabel(line, editable)}
-                                    </Button>
-                                </span>
-                            </div>
-                        ))
-                    ) : (
-                        <div className='leader-desktop-table__empty'>
-                            <Empty
-                                image={Empty.PRESENTED_IMAGE_SIMPLE}
-                                description={
-                                    filter === 'missing'
-                                        ? 'Không còn chuyền cần nhập trong khung này'
-                                        : 'Không có chuyền phù hợp'
-                                }
-                            />
-                        </div>
-                    )}
-                </div>
-            </div>
-        </section>
+                                        <span className='leader-v2-line__code'>{line.lineCode}</span>
+                                        <span className='leader-v2-line__detail'>
+                                            <strong>{line.lineName || line.lineCode}</strong>
+                                            <span>
+                                                <b>{line.itemCode || 'Chưa chọn mã hàng'}</b>
+                                                {line.itemName ? ` · ${line.itemName}` : ''}
+                                            </span>
+                                            <small>
+                                                {line.updatedBy
+                                                    ? `Cập nhật bởi ${line.updatedBy}${line.updatedAt ? ` lúc ${line.updatedAt}` : ''}`
+                                                    : 'Chưa có dữ liệu cập nhật'}
+                                            </small>
+                                        </span>
+                                    </button>
 
-        <aside className='leader-desktop-inspector' aria-label='Nhập sản lượng chuyền'>
-            {inspector || (
-                <div className='leader-desktop-inspector__empty'>
-                    <span>
-                        <ClockCircleOutlined />
-                    </span>
-                    <strong>Chọn một chuyền để thao tác</strong>
-                    <p>Số liệu của khung giờ vẫn được giữ nguyên khi chuyển qua lại giữa các chuyền.</p>
+                                    <span role='cell' className='leader-v2-line__workers'>
+                                        <TeamOutlined />
+                                        <strong>{line.workerCountConfirmed ? number(line.workerCount) : '—'}</strong>
+                                        <small>{line.workerCountConfirmed ? 'công nhân' : 'chưa xác nhận'}</small>
+                                    </span>
+
+                                    <span role='cell' className='leader-v2-line__output'>
+                                        <strong>{line.effectiveReported ? number(line.actual) : '—'}</strong>
+                                        <small>/ {line.target ? number(line.target) : 'không khoán'} SP</small>
+                                    </span>
+
+                                    <span role='cell' className='leader-v2-line__achievement'>
+                                        <span>
+                                            <i style={{ width: `${Math.min(100, line.percent)}%` }} />
+                                        </span>
+                                        <strong>
+                                            {line.effectiveReported && line.target
+                                                ? `${line.percent.toFixed(0)}%`
+                                                : '—'}
+                                        </strong>
+                                    </span>
+
+                                    <span role='cell' className='leader-v2-line__status'>
+                                        {statusContent(line)}
+                                    </span>
+
+                                    <span role='cell' className='leader-v2-line__action'>
+                                        <Button
+                                            type={
+                                                editable && line.due && !line.effectiveReported ? 'primary' : 'default'
+                                            }
+                                            onClick={() => onSelectLine(line.lineId)}
+                                        >
+                                            {actionLabel(line, editable)}
+                                        </Button>
+                                    </span>
+                                </div>
+                            ))
+                        ) : (
+                            <div className='leader-v2-table__empty'>
+                                <Empty
+                                    image={Empty.PRESENTED_IMAGE_SIMPLE}
+                                    description={
+                                        filter === 'missing'
+                                            ? 'Không còn chuyền cần nhập trong khung này'
+                                            : 'Không có chuyền phù hợp'
+                                    }
+                                />
+                            </div>
+                        )}
+                    </div>
                 </div>
-            )}
-        </aside>
+            </section>
+        </main>
+
+        {inspector ? (
+            <aside className='leader-v2-inspector' aria-label='Nhập sản lượng chuyền'>
+                {inspector}
+            </aside>
+        ) : null}
     </div>
 );
 
