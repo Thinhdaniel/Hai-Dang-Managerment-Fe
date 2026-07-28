@@ -66,12 +66,15 @@ type Props = {
 
 const runsForSlot = (day: ProductionDay, line: ProductionLineRecord, slotKey: string) => {
     const slotIndex = day.timeSlots.findIndex((slot) => slot.key === slotKey);
+    const recordedRunIds = new Set(
+        line.entries.filter((entry) => entry.slotKey === slotKey).map((entry) => entry.runId)
+    );
     return line.runs.filter((run) => {
         const startIndex = day.timeSlots.findIndex((slot) => slot.key === run.startedSlotKey);
         const endIndex = run.endedSlotKey
             ? day.timeSlots.findIndex((slot) => slot.key === run.endedSlotKey)
             : day.timeSlots.length - 1;
-        return slotIndex >= startIndex && slotIndex <= endIndex;
+        return recordedRunIds.has(run.id) || (slotIndex >= startIndex && slotIndex <= endIndex);
     });
 };
 
@@ -109,6 +112,36 @@ const ProductionLeaderEntryView = ({
     const eligibleRuns = useMemo(() => runsForSlot(day, line, slotKey), [day, line, slotKey]);
     const slot = day.timeSlots.find((item) => item.key === slotKey);
     const slotValue = line.slotValues.find((item) => item.key === slotKey);
+    const latestReportedSlotIndex = useMemo(
+        () =>
+            line.entries.reduce(
+                (latest, entry) =>
+                    Math.max(
+                        latest,
+                        day.timeSlots.findIndex((item) => item.key === entry.slotKey)
+                    ),
+                -1
+            ),
+        [day.timeSlots, line.entries]
+    );
+    const changeRunSlotOptions = useMemo(
+        () =>
+            day.timeSlots.flatMap((item, index) =>
+                item.isActive
+                    ? [
+                          {
+                              value: item.key,
+                              label: slotRangeLabel(item),
+                              disabled: index <= latestReportedSlotIndex,
+                          },
+                      ]
+                    : []
+            ),
+        [day.timeSlots, latestReportedSlotIndex]
+    );
+    const defaultChangeRunSlotKey =
+        changeRunSlotOptions.find((item) => item.value === slotKey && !item.disabled)?.value ||
+        changeRunSlotOptions.find((item) => !item.disabled)?.value;
     const selectedRun = line.runs.find((run) => run.id === runId);
     const existingEntry = line.entries.find((entry) => entry.slotKey === slotKey && entry.runId === runId);
     const previousEntry = useMemo(() => {
@@ -187,9 +220,10 @@ const ProductionLeaderEntryView = ({
         const currentRun = line.runs.find((run) => run.id === defaultRunId) || eligibleRuns[eligibleRuns.length - 1];
         setNextItemId(currentRun?.itemId || '');
         setNextQuota(currentRun?.hourlyQuota ?? null);
-        setNextSlotKey(slotKey);
+        setNextSlotKey(defaultChangeRunSlotKey || slotKey);
     }, [
         actorId,
+        defaultChangeRunSlotKey,
         draftScope,
         eligibleRuns,
         hydrationKey,
@@ -836,7 +870,13 @@ const ProductionLeaderEntryView = ({
                         type='button'
                         className='leader-entry-change-run'
                         disabled={!online}
-                        onClick={() => setShowChangeRun((current) => !current)}
+                        onClick={() =>
+                            setShowChangeRun((current) => {
+                                const willOpen = !current;
+                                if (willOpen && defaultChangeRunSlotKey) setNextSlotKey(defaultChangeRunSlotKey);
+                                return willOpen;
+                            })
+                        }
                     >
                         <RetweetOutlined />
                         <span>
@@ -873,19 +913,18 @@ const ProductionLeaderEntryView = ({
                             </label>
                             <label>
                                 <span>Áp dụng từ</span>
-                                <Select
-                                    value={nextSlotKey}
-                                    onChange={setNextSlotKey}
-                                    options={day.timeSlots
-                                        .filter((item) => item.isActive)
-                                        .map((item) => ({ value: item.key, label: slotRangeLabel(item) }))}
-                                />
+                                <Select value={nextSlotKey} onChange={setNextSlotKey} options={changeRunSlotOptions} />
                             </label>
                             <Button
                                 type='primary'
                                 block
                                 icon={<RetweetOutlined />}
-                                disabled={!nextItemId || nextQuota === null || !online}
+                                disabled={
+                                    !nextItemId ||
+                                    nextQuota === null ||
+                                    !online ||
+                                    !changeRunSlotOptions.some((item) => item.value === nextSlotKey && !item.disabled)
+                                }
                                 loading={runMutation.isPending}
                                 onClick={() => runMutation.mutate()}
                             >

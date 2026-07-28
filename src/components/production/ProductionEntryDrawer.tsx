@@ -47,19 +47,27 @@ type RunValues = {
     startedSlotKey: string;
 };
 
+type CorrectionValues = {
+    itemId: string;
+    hourlyQuota: number;
+    reason: string;
+};
+
 const errorMessage = (error: unknown) => (error instanceof Error ? error.message : 'Không thể lưu dữ liệu');
 const errorStatus = (error: unknown) =>
     typeof error === 'object' && error && 'status' in error ? Number(error.status) : undefined;
 
 const ProductionEntryDrawer = ({ open, day, line, items, slotKey, onClose, onSaved }: Props) => {
     const { isPhone } = useResponsive();
-    const { message } = App.useApp();
+    const { message, modal } = App.useApp();
     const queryClient = useQueryClient();
     const [setupForm] = Form.useForm<SetupValues>();
     const [entryForm] = Form.useForm<EntryValues>();
     const [runForm] = Form.useForm<RunValues>();
+    const [correctionForm] = Form.useForm<CorrectionValues>();
     const [showSetup, setShowSetup] = useState(false);
     const [showChangeItem, setShowChangeItem] = useState(false);
+    const [showCorrection, setShowCorrection] = useState(false);
     const selectedRunId = Form.useWatch('runId', entryForm);
     const runDraftSlotKey = Form.useWatch('startedSlotKey', runForm);
     const slot = day.timeSlots.find((item) => item.key === slotKey);
@@ -69,16 +77,49 @@ const ProductionEntryDrawer = ({ open, day, line, items, slotKey, onClose, onSav
     // Đã có sản lượng: chỉ sửa được số CN + khoán giờ; đổi mã hàng phải dùng chức năng riêng (BE chặn).
     const hasEntries = Boolean(line?.entries.length);
     const runDraftSlot = day.timeSlots.find((item) => item.key === runDraftSlotKey);
+    const latestReportedSlotIndex = useMemo(
+        () =>
+            (line?.entries || []).reduce(
+                (latest, entry) =>
+                    Math.max(
+                        latest,
+                        day.timeSlots.findIndex((item) => item.key === entry.slotKey)
+                    ),
+                -1
+            ),
+        [day.timeSlots, line?.entries]
+    );
+    const changeRunSlotOptions = useMemo(
+        () =>
+            day.timeSlots.flatMap((item, index) =>
+                item.isActive
+                    ? [
+                          {
+                              value: item.key,
+                              label: slotRangeLabel(item),
+                              disabled: index <= latestReportedSlotIndex,
+                          },
+                      ]
+                    : []
+            ),
+        [day.timeSlots, latestReportedSlotIndex]
+    );
+    const defaultChangeRunSlotKey =
+        changeRunSlotOptions.find((item) => item.value === slotKey && !item.disabled)?.value ||
+        changeRunSlotOptions.find((item) => !item.disabled)?.value;
 
     const eligibleRuns = useMemo(() => {
         if (!line) return [];
         const slotIndex = day.timeSlots.findIndex((item) => item.key === slotKey);
+        const recordedRunIds = new Set(
+            line.entries.filter((entry) => entry.slotKey === slotKey).map((entry) => entry.runId)
+        );
         return line.runs.filter((run) => {
             const startIndex = day.timeSlots.findIndex((item) => item.key === run.startedSlotKey);
             const endIndex = run.endedSlotKey
                 ? day.timeSlots.findIndex((item) => item.key === run.endedSlotKey)
                 : day.timeSlots.length - 1;
-            return slotIndex >= startIndex && slotIndex <= endIndex;
+            return recordedRunIds.has(run.id) || (slotIndex >= startIndex && slotIndex <= endIndex);
         });
     }, [day.timeSlots, line, slotKey]);
 
@@ -98,7 +139,13 @@ const ProductionEntryDrawer = ({ open, day, line, items, slotKey, onClose, onSav
         });
         setShowSetup(!isReadOnly && !line.configured);
         setShowChangeItem(false);
-    }, [day.timeSlots, isReadOnly, line, open, setupForm]);
+        setShowCorrection(false);
+        correctionForm.setFieldsValue({
+            itemId: activeRun?.itemId,
+            hourlyQuota: activeRun?.hourlyQuota,
+            reason: '',
+        });
+    }, [correctionForm, day.timeSlots, isReadOnly, line, open, setupForm]);
 
     useEffect(() => {
         if (!open || !line) return;
@@ -113,11 +160,11 @@ const ProductionEntryDrawer = ({ open, day, line, items, slotKey, onClose, onSav
         // mức khoán từ giờ này trở đi, không đổi mã hàng.
         const currentRun = eligibleRuns[eligibleRuns.length - 1];
         runForm.setFieldsValue({
-            startedSlotKey: slotKey,
+            startedSlotKey: defaultChangeRunSlotKey,
             itemId: currentRun?.itemId,
             hourlyQuota: currentRun?.hourlyQuota,
         });
-    }, [eligibleRuns, entryForm, line, open, runForm, slotKey, slotValue?.runId]);
+    }, [defaultChangeRunSlotKey, eligibleRuns, entryForm, line, open, runForm, slotKey, slotValue?.runId]);
 
     useEffect(() => {
         if (!open || !line || !selectedRunId) return;
@@ -175,6 +222,33 @@ const ProductionEntryDrawer = ({ open, day, line, items, slotKey, onClose, onSav
         },
         onError: (error) => message.error(errorMessage(error)),
     });
+
+    const correctionMutation = useMutation({
+        mutationFn: (values: CorrectionValues) =>
+            productionService.correctLineSetup(day.id, line!.lineId, {
+                ...values,
+                confirmed: true,
+            }),
+        onSuccess: async () => {
+            message.success('Đã sửa mã cài nhầm và tính lại toàn bộ ngày');
+            setShowCorrection(false);
+            correctionForm.resetFields();
+            await refreshDay();
+        },
+        onError: (error) => message.error(errorMessage(error)),
+    });
+
+    const confirmCorrection = (values: CorrectionValues) => {
+        const selectedItem = items.find((item) => item.id === values.itemId);
+        modal.confirm({
+            title: 'Tính lại toàn bộ sản lượng trong ngày?',
+            content: `Toàn bộ sản lượng của ${line?.lineCode || 'chuyền này'} sẽ chuyển sang mã ${selectedItem?.code || 'đã chọn'} và tính lại theo đơn giá tương ứng. Chỉ tiếp tục khi mã ban đầu được cài nhầm.`,
+            okText: 'Sửa và tính lại',
+            cancelText: 'Kiểm tra lại',
+            okButtonProps: { danger: true },
+            onOk: () => correctionMutation.mutateAsync(values),
+        });
+    };
 
     const deleteEntryMutation = useMutation({
         mutationFn: (entryId: string) => productionService.deleteEntry(day.id, line!.lineId, entryId),
@@ -503,7 +577,13 @@ const ProductionEntryDrawer = ({ open, day, line, items, slotKey, onClose, onSav
                     <button
                         type='button'
                         className='production-change-item-trigger'
-                        onClick={() => setShowChangeItem((value) => !value)}
+                        onClick={() =>
+                            setShowChangeItem((value) => {
+                                const willOpen = !value;
+                                if (willOpen) runForm.setFieldValue('startedSlotKey', defaultChangeRunSlotKey);
+                                return willOpen;
+                            })
+                        }
                     >
                         <RetweetOutlined />
                         <span>
@@ -539,11 +619,7 @@ const ProductionEntryDrawer = ({ open, day, line, items, slotKey, onClose, onSav
                                         <InputNumber min={0} precision={0} className='w-full' addonAfter='SP/giờ' />
                                     </Form.Item>
                                     <Form.Item label='Áp dụng từ' name='startedSlotKey' rules={[{ required: true }]}>
-                                        <Select
-                                            options={day.timeSlots
-                                                .filter((item) => item.isActive)
-                                                .map((item) => ({ value: item.key, label: slotRangeLabel(item) }))}
-                                        />
+                                        <Select options={changeRunSlotOptions} />
                                     </Form.Item>
                                 </div>
                                 <Alert
@@ -562,12 +638,95 @@ const ProductionEntryDrawer = ({ open, day, line, items, slotKey, onClose, onSav
                                     htmlType='submit'
                                     icon={<RetweetOutlined />}
                                     loading={runMutation.isPending}
+                                    disabled={!defaultChangeRunSlotKey}
                                     block
                                 >
                                     Xác nhận áp dụng
                                 </Button>
                             </Form>
                         </section>
+                    ) : null}
+
+                    {hasEntries && !hasPlannedRuns ? (
+                        <>
+                            <button
+                                type='button'
+                                className='production-change-item-trigger production-correct-setup-trigger'
+                                onClick={() => {
+                                    setShowCorrection((value) => !value);
+                                    setShowChangeItem(false);
+                                }}
+                            >
+                                <EditOutlined />
+                                <span>
+                                    <strong>Sửa mã cài nhầm từ đầu ngày</strong>
+                                    <small>Giữ nguyên sản lượng, tính lại mã hàng, đơn giá và tiền khoán</small>
+                                </span>
+                            </button>
+
+                            {showCorrection ? (
+                                <section className='production-drawer-section production-drawer-section--change'>
+                                    <Alert
+                                        type='warning'
+                                        showIcon
+                                        message='Đây là thao tác sửa dữ liệu toàn ngày'
+                                        description='Không dùng khi chuyền thực sự đổi mã giữa ca. Hệ thống sẽ lưu lý do và lịch sử đơn giá trước khi sửa.'
+                                    />
+                                    <Form
+                                        form={correctionForm}
+                                        layout='vertical'
+                                        onFinish={confirmCorrection}
+                                        className='mt-3'
+                                    >
+                                        <Form.Item
+                                            label='Mã hàng đúng'
+                                            name='itemId'
+                                            rules={[{ required: true, message: 'Chọn mã hàng đúng' }]}
+                                        >
+                                            <Select
+                                                showSearch
+                                                optionFilterProp='label'
+                                                options={items.map((item) => ({
+                                                    value: item.id,
+                                                    label: `${item.code}${item.name ? ` · ${item.name}` : ''}`,
+                                                }))}
+                                            />
+                                        </Form.Item>
+                                        <Form.Item
+                                            label='Khoán đúng mỗi giờ'
+                                            name='hourlyQuota'
+                                            rules={[{ required: true, message: 'Nhập khoán giờ đúng' }]}
+                                        >
+                                            <InputNumber min={0} precision={0} className='w-full' addonAfter='SP/giờ' />
+                                        </Form.Item>
+                                        <Form.Item
+                                            label='Lý do điều chỉnh'
+                                            name='reason'
+                                            rules={[
+                                                { required: true, message: 'Nhập lý do điều chỉnh' },
+                                                { min: 5, message: 'Lý do cần ít nhất 5 ký tự' },
+                                            ]}
+                                        >
+                                            <Input.TextArea
+                                                rows={2}
+                                                maxLength={500}
+                                                placeholder='Ví dụ: Cài nhầm mã hàng khi xác nhận đầu ngày'
+                                            />
+                                        </Form.Item>
+                                        <Button
+                                            type='primary'
+                                            danger
+                                            htmlType='submit'
+                                            icon={<EditOutlined />}
+                                            loading={correctionMutation.isPending}
+                                            block
+                                        >
+                                            Kiểm tra và tính lại toàn ngày
+                                        </Button>
+                                    </Form>
+                                </section>
+                            ) : null}
+                        </>
                     ) : null}
                 </>
             ) : null}
