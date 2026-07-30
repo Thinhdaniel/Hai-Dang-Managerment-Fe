@@ -4,10 +4,12 @@ import {
     ArrowUpOutlined,
     CalendarOutlined,
     CheckCircleFilled,
+    DatabaseOutlined,
     DownloadOutlined,
     ExclamationCircleFilled,
     FileExcelOutlined,
     ReloadOutlined,
+    SafetyCertificateOutlined,
     TeamOutlined,
     ThunderboltOutlined,
 } from '@ant-design/icons';
@@ -32,6 +34,7 @@ import dayjs, { type Dayjs } from 'dayjs';
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import EChart, { type EChartsCoreOption } from '../components/charts/EChart';
+import ProductionOpeningBalanceDrawer from '../components/production/ProductionOpeningBalanceDrawer';
 import { useAuth } from '../core/contexts/AuthContext';
 import { useSocket } from '../core/hooks/useSocket';
 import { isAdmin, isDirector } from '../core/lib/permissions';
@@ -43,6 +46,7 @@ import type {
     ProductionReportException,
     ProductionReportItem,
     ProductionReportLine,
+    ProductionReportOrder,
     ProductionReportScope,
     ProductionReportTrendPoint,
 } from '../core/types/production';
@@ -50,7 +54,7 @@ import type {
 const { RangePicker } = DatePicker;
 const { Text, Title } = Typography;
 
-type ReportTab = 'lines' | 'items' | 'days' | 'exceptions';
+type ReportTab = 'lines' | 'items' | 'orders' | 'days' | 'exceptions';
 type ReportPreset = 'month' | 'last-month' | '7-days' | '30-days' | 'custom';
 
 const number = (value = 0, digits = 0) =>
@@ -123,6 +127,7 @@ const ProductionReportPage = () => {
     const [preset, setPreset] = useState<ReportPreset>('month');
     const [scope, setScope] = useState<ProductionReportScope>('all');
     const [tab, setTab] = useState<ReportTab>('lines');
+    const [openingBalanceOpen, setOpeningBalanceOpen] = useState(false);
     const canSwitchPlant = isAdmin(role) || isDirector(role);
 
     const plantsQuery = useQuery({
@@ -186,6 +191,16 @@ const ProductionReportPage = () => {
 
     const report = reportQuery.data;
     const summary = report?.summary;
+    const dataCoverage = report?.meta.dataCoverage || {
+        status: 'missing' as const,
+        openingBalanceAvailable: false,
+        batchCount: 0,
+        periodDetailComplete: true,
+        cumulativeAvailable: false,
+        amountCoveragePercent: 100,
+        unallocatedQuantity: 0,
+        unpricedQuantity: 0,
+    };
 
     const handlePreset = (value: ReportPreset) => {
         setPreset(value);
@@ -206,7 +221,7 @@ const ProductionReportPage = () => {
         const points = report?.trend || [];
         return {
             animationDuration: 650,
-            color: ['#147a4b', '#2f5d7c', '#c87816'],
+            color: ['#147a4b', '#2f5d7c', '#c87816', '#6b5aa6'],
             tooltip: {
                 trigger: 'axis',
                 backgroundColor: 'rgba(20, 29, 24, 0.94)',
@@ -222,12 +237,13 @@ const ProductionReportPage = () => {
                         `Thực tế: ${number(point.actualQuantity)} SP`,
                         `Mục tiêu: ${number(point.targetQuantity)} SP`,
                         `Kế hoạch: ${number(point.plannedQuantity)} SP`,
+                        `Lũy kế: ${number(point.cumulativeQuantity)} SP`,
                         `Đạt: ${number(point.achievementPercent, 1)}% · Báo đủ: ${number(point.reportingRate, 1)}%`,
                     ].join('<br/>');
                 },
             },
             legend: { top: 0, left: 0, itemWidth: 12, itemHeight: 7, textStyle: { color: '#5f6d64', fontSize: 11 } },
-            grid: { left: isMobile ? 44 : 58, right: 16, top: 42, bottom: points.length > 14 ? 48 : 28 },
+            grid: { left: isMobile ? 44 : 58, right: isMobile ? 40 : 62, top: 42, bottom: points.length > 14 ? 48 : 28 },
             xAxis: {
                 type: 'category',
                 data: points.map((point) => dayjs(point.productionDate).format('DD/MM')),
@@ -235,11 +251,18 @@ const ProductionReportPage = () => {
                 axisTick: { show: false },
                 axisLabel: { color: '#748078', fontSize: 10, hideOverlap: true },
             },
-            yAxis: {
-                type: 'value',
-                axisLabel: { color: '#748078', fontSize: 10, formatter: (value: number) => number(value) },
-                splitLine: { lineStyle: { color: '#e8edea' } },
-            },
+            yAxis: [
+                {
+                    type: 'value',
+                    axisLabel: { color: '#748078', fontSize: 10, formatter: (value: number) => number(value) },
+                    splitLine: { lineStyle: { color: '#e8edea' } },
+                },
+                {
+                    type: 'value',
+                    axisLabel: { color: '#6b5aa6', fontSize: 9, formatter: (value: number) => number(value) },
+                    splitLine: { show: false },
+                },
+            ],
             dataZoom:
                 points.length > 14
                     ? [
@@ -278,6 +301,16 @@ const ProductionReportPage = () => {
                     symbol: 'none',
                     lineStyle: { width: 1.5, type: 'dashed', color: '#c87816' },
                 },
+                {
+                    name: 'Lũy kế',
+                    type: 'line',
+                    yAxisIndex: 1,
+                    data: points.map((point) => point.cumulativeQuantity),
+                    symbol: 'none',
+                    smooth: 0.2,
+                    lineStyle: { width: 2.2, color: '#6b5aa6' },
+                    areaStyle: { color: 'rgba(107,90,166,.08)' },
+                },
             ],
         };
     }, [isMobile, report?.trend]);
@@ -297,15 +330,41 @@ const ProductionReportPage = () => {
                 ),
             },
             {
-                title: 'Sản lượng',
-                key: 'output',
-                width: 170,
+                title: 'Trước kỳ',
+                dataIndex: 'openingQuantity',
+                width: 125,
+                align: 'right',
+                render: (value, line) => (
+                    <div className='production-report-output-cell is-right'>
+                        <strong>{number(value)} SP</strong>
+                        {line.unallocatedOpeningQuantity > 0 ? (
+                            <span className='is-warning'>
+                                {number(line.unallocatedOpeningQuantity)} chưa phân bổ
+                            </span>
+                        ) : (
+                            <span>Đã đối soát</span>
+                        )}
+                    </div>
+                ),
+            },
+            {
+                title: 'Trong kỳ',
+                key: 'periodOutput',
+                width: 155,
                 render: (_, line) => (
                     <div className='production-report-output-cell'>
-                        <strong>{number(line.actualQuantity)} SP</strong>
+                        <strong>{number(line.periodQuantity)} SP</strong>
                         <span>/ {number(line.targetQuantity)} mục tiêu</span>
                     </div>
                 ),
+            },
+            {
+                title: 'Lũy kế',
+                dataIndex: 'cumulativeQuantity',
+                width: 135,
+                align: 'right',
+                sorter: (left, right) => left.cumulativeQuantity - right.cumulativeQuantity,
+                render: (value) => <strong className='production-report-cumulative-number'>{number(value)} SP</strong>,
             },
             {
                 title: '% đạt',
@@ -387,16 +446,35 @@ const ProductionReportPage = () => {
                 render: (value) => number(value),
             },
             {
-                title: 'Sản lượng',
-                key: 'output',
-                width: 180,
+                title: 'Trước kỳ',
+                dataIndex: 'openingQuantity',
+                width: 120,
+                align: 'right',
+                render: (value, item) => `${number(value)} ${item.unit}`,
+            },
+            {
+                title: 'Trong kỳ',
+                key: 'periodOutput',
+                width: 165,
                 render: (_, item) => (
                     <div className='production-report-output-cell'>
                         <strong>
-                            {number(item.actualQuantity)} {item.unit}
+                            {number(item.periodQuantity)} {item.unit}
                         </strong>
                         <span>/ {number(item.targetQuantity)} mục tiêu</span>
                     </div>
+                ),
+            },
+            {
+                title: 'Lũy kế',
+                dataIndex: 'cumulativeQuantity',
+                width: 135,
+                align: 'right',
+                sorter: (left, right) => left.cumulativeQuantity - right.cumulativeQuantity,
+                render: (value, item) => (
+                    <strong className='production-report-cumulative-number'>
+                        {number(value)} {item.unit}
+                    </strong>
                 ),
             },
             {
@@ -427,6 +505,93 @@ const ProductionReportPage = () => {
                           width: 150,
                           align: 'right' as const,
                           render: (value: number) => money(value),
+                      },
+                  ]
+                : []),
+        ],
+        [report?.meta.financialsVisible]
+    );
+
+    const orderColumns = useMemo<TableColumnsType<ProductionReportOrder>>(
+        () => [
+            {
+                title: 'Đơn hàng',
+                key: 'order',
+                width: 220,
+                fixed: 'left',
+                render: (_, order) => (
+                    <div className='production-report-identity'>
+                        <strong>{order.orderCode || 'Chưa gán đơn hàng'}</strong>
+                        <span>{order.itemCodes.length ? order.itemCodes.join(', ') : 'Chưa có mã hàng'}</span>
+                    </div>
+                ),
+            },
+            {
+                title: 'Mã hàng',
+                dataIndex: 'itemCount',
+                width: 90,
+                align: 'right',
+                render: (value) => number(value),
+            },
+            {
+                title: 'Số chuyền',
+                dataIndex: 'lineCount',
+                width: 95,
+                align: 'right',
+                render: (value) => number(value),
+            },
+            {
+                title: 'Trước kỳ',
+                dataIndex: 'openingQuantity',
+                width: 120,
+                align: 'right',
+                render: (value) => `${number(value)} SP`,
+            },
+            {
+                title: 'Trong kỳ',
+                key: 'period',
+                width: 155,
+                render: (_, order) => (
+                    <div className='production-report-output-cell'>
+                        <strong>{number(order.periodQuantity)} SP</strong>
+                        <span>/ {number(order.targetQuantity)} mục tiêu</span>
+                    </div>
+                ),
+            },
+            {
+                title: 'Lũy kế',
+                dataIndex: 'cumulativeQuantity',
+                width: 135,
+                align: 'right',
+                sorter: (left, right) => left.cumulativeQuantity - right.cumulativeQuantity,
+                render: (value) => <strong className='production-report-cumulative-number'>{number(value)} SP</strong>,
+            },
+            {
+                title: '% đạt kỳ',
+                dataIndex: 'achievementPercent',
+                width: 135,
+                render: (value) => <Achievement value={value} />,
+            },
+            {
+                title: 'KH phát hành',
+                dataIndex: 'plannedQuantity',
+                width: 125,
+                align: 'right',
+                render: (value) => number(value),
+            },
+            ...(report?.meta.financialsVisible
+                ? [
+                      {
+                          title: 'Giá trị lũy kế',
+                          dataIndex: 'cumulativeAmount',
+                          width: 155,
+                          align: 'right' as const,
+                          render: (value: number, order: ProductionReportOrder) => (
+                              <div className='production-report-output-cell is-right'>
+                                  <strong>{money(value)}</strong>
+                                  <span>{order.openingAmountComplete ? 'Đủ đơn giá' : 'Thiếu giá đầu kỳ'}</span>
+                              </div>
+                          ),
                       },
                   ]
                 : []),
@@ -474,6 +639,14 @@ const ProductionReportPage = () => {
                 width: 135,
                 sorter: (left, right) => left.achievementPercent - right.achievementPercent,
                 render: (value) => <Achievement value={value} />,
+            },
+            {
+                title: 'Lũy kế',
+                dataIndex: 'cumulativeQuantity',
+                width: 135,
+                align: 'right',
+                sorter: (left, right) => left.cumulativeQuantity - right.cumulativeQuantity,
+                render: (value) => <strong className='production-report-cumulative-number'>{number(value)} SP</strong>,
             },
             {
                 title: 'Kế hoạch',
@@ -610,8 +783,16 @@ const ProductionReportPage = () => {
             </div>
             <div className='production-report-mobile-card__metrics'>
                 <div>
-                    <span>Thực tế</span>
-                    <strong>{number(line.actualQuantity)} SP</strong>
+                    <span>Trước kỳ</span>
+                    <strong>{number(line.openingQuantity)} SP</strong>
+                </div>
+                <div>
+                    <span>Trong kỳ</span>
+                    <strong>{number(line.periodQuantity)} SP</strong>
+                </div>
+                <div className='is-cumulative'>
+                    <span>Lũy kế</span>
+                    <strong>{number(line.cumulativeQuantity)} SP</strong>
                 </div>
                 <div>
                     <span>Báo đủ</span>
@@ -624,6 +805,10 @@ const ProductionReportPage = () => {
                 <div>
                     <span>SP/người-ngày</span>
                     <strong>{number(line.outputPerWorkerDay, 1)}</strong>
+                </div>
+                <div>
+                    <span>Hụt khoán</span>
+                    <strong>{number(line.underTargetDays)} ngày</strong>
                 </div>
             </div>
             <Progress percent={Math.min(100, Math.round(line.achievementPercent))} showInfo={false} size='small' />
@@ -643,9 +828,21 @@ const ProductionReportPage = () => {
             </div>
             <div className='production-report-mobile-card__metrics'>
                 <div>
-                    <span>Thực tế</span>
+                    <span>Trước kỳ</span>
                     <strong>
-                        {number(item.actualQuantity)} {item.unit}
+                        {number(item.openingQuantity)} {item.unit}
+                    </strong>
+                </div>
+                <div>
+                    <span>Trong kỳ</span>
+                    <strong>
+                        {number(item.periodQuantity)} {item.unit}
+                    </strong>
+                </div>
+                <div className='is-cumulative'>
+                    <span>Lũy kế</span>
+                    <strong>
+                        {number(item.cumulativeQuantity)} {item.unit}
                     </strong>
                 </div>
                 <div>
@@ -660,8 +857,53 @@ const ProductionReportPage = () => {
                     <span>Số chuyền</span>
                     <strong>{number(item.lineCount)}</strong>
                 </div>
+                <div>
+                    <span>KH phát hành</span>
+                    <strong>{number(item.plannedQuantity)}</strong>
+                </div>
             </div>
             <Progress percent={Math.min(100, Math.round(item.achievementPercent))} showInfo={false} size='small' />
+        </article>
+    );
+
+    const renderMobileOrder = (order: ProductionReportOrder) => (
+        <article key={order.orderKey} className='production-report-mobile-card'>
+            <div className='production-report-mobile-card__head'>
+                <div className='production-report-identity'>
+                    <strong>{order.orderCode || 'Chưa gán đơn hàng'}</strong>
+                    <span>{order.itemCodes.length ? order.itemCodes.join(', ') : 'Chưa có mã hàng'}</span>
+                </div>
+                <span className={`production-report-score tone-${percentTone(order.achievementPercent)}`}>
+                    {number(order.achievementPercent, 1)}%
+                </span>
+            </div>
+            <div className='production-report-mobile-card__metrics'>
+                <div>
+                    <span>Trước kỳ</span>
+                    <strong>{number(order.openingQuantity)} SP</strong>
+                </div>
+                <div>
+                    <span>Trong kỳ</span>
+                    <strong>{number(order.periodQuantity)} SP</strong>
+                </div>
+                <div className='is-cumulative'>
+                    <span>Lũy kế</span>
+                    <strong>{number(order.cumulativeQuantity)} SP</strong>
+                </div>
+                <div>
+                    <span>Kế hoạch</span>
+                    <strong>{number(order.plannedQuantity)} SP</strong>
+                </div>
+                <div>
+                    <span>Số chuyền</span>
+                    <strong>{number(order.lineCount)}</strong>
+                </div>
+                <div>
+                    <span>Mã hàng</span>
+                    <strong>{number(order.itemCount)}</strong>
+                </div>
+            </div>
+            <Progress percent={Math.min(100, Math.round(order.achievementPercent))} showInfo={false} size='small' />
         </article>
     );
 
@@ -693,6 +935,10 @@ const ProductionReportPage = () => {
                     <span>Khoán</span>
                     <strong>{number(point.targetQuantity)} SP</strong>
                 </div>
+                <div className='is-cumulative'>
+                    <span>Lũy kế</span>
+                    <strong>{number(point.cumulativeQuantity)} SP</strong>
+                </div>
                 <div>
                     <span>Báo đủ</span>
                     <strong>{number(point.reportingRate, 1)}%</strong>
@@ -700,6 +946,10 @@ const ProductionReportPage = () => {
                 <div>
                     <span>Nhân sự</span>
                     <strong>{number(point.workers)} CN</strong>
+                </div>
+                <div>
+                    <span>Kế hoạch</span>
+                    <strong>{number(point.plannedQuantity)} SP</strong>
                 </div>
             </div>
             <Progress percent={Math.min(100, Math.round(point.achievementPercent))} showInfo={false} size='small' />
@@ -741,11 +991,14 @@ const ProductionReportPage = () => {
                             onClick={() => reportQuery.refetch()}
                         />
                     </Tooltip>
+                    <Button icon={<DatabaseOutlined />} onClick={() => setOpeningBalanceOpen(true)}>
+                        Sản lượng đầu kỳ
+                    </Button>
                     <Button
                         type='primary'
                         icon={<FileExcelOutlined />}
                         loading={exportMutation.isPending}
-                        disabled={!report?.summary.dayCount}
+                        disabled={!report || (!report.summary.dayCount && !report.summary.cumulativeQuantity)}
                         onClick={() => exportMutation.mutate()}
                     >
                         Xuất Excel
@@ -803,7 +1056,7 @@ const ProductionReportPage = () => {
                 <section className='production-report-loading'>
                     <Skeleton active paragraph={{ rows: 10 }} />
                 </section>
-            ) : report && summary?.dayCount ? (
+            ) : report && (summary?.dayCount || summary?.cumulativeQuantity) ? (
                 <>
                     {scope === 'all' && summary.statusCounts.locked < summary.dayCount ? (
                         <Alert
@@ -815,6 +1068,116 @@ const ProductionReportPage = () => {
                         />
                     ) : null}
 
+                    <section
+                        className={`production-report-coverage status-${dataCoverage.status}`}
+                    >
+                        <div className='production-report-coverage__main'>
+                            <span>
+                                {dataCoverage.openingBalanceAvailable ? (
+                                    <SafetyCertificateOutlined />
+                                ) : (
+                                    <DatabaseOutlined />
+                                )}
+                            </span>
+                            <div>
+                                <small>PHẠM VI VÀ NGUỒN SỐ LIỆU</small>
+                                <strong>
+                                    {dataCoverage.openingBalanceAvailable
+                                        ? `Đã có số chuyển tiếp đến ${dayjs(dataCoverage.cutoffDate).format('DD/MM/YYYY')}`
+                                        : 'Chưa khai báo sản lượng trước hệ thống'}
+                                </strong>
+                                <p>
+                                    {dataCoverage.trackingStartDate
+                                        ? `Dữ liệu theo giờ bắt đầu từ ${dayjs(dataCoverage.trackingStartDate).format('DD/MM/YYYY')}.`
+                                        : 'Chưa xác định ngày bắt đầu dữ liệu theo giờ.'}
+                                    {!dataCoverage.periodDetailComplete
+                                        ? ' Phần trước ngày này chỉ có tổng chuyển tiếp, không có chi tiết từng ngày.'
+                                        : ''}
+                                </p>
+                            </div>
+                        </div>
+                        <div className='production-report-coverage__facts'>
+                            <span>
+                                <small>Batch hiệu lực</small>
+                                <strong>{number(dataCoverage.batchCount)}</strong>
+                            </span>
+                            <span>
+                                <small>Chưa phân bổ</small>
+                                <strong>{number(dataCoverage.unallocatedQuantity)} SP</strong>
+                            </span>
+                            {report.meta.financialsVisible ? (
+                                <span>
+                                    <small>Phủ đơn giá</small>
+                                    <strong>{number(dataCoverage.amountCoveragePercent, 1)}%</strong>
+                                </span>
+                            ) : null}
+                            <Button type='link' onClick={() => setOpeningBalanceOpen(true)}>
+                                Quản lý đầu kỳ
+                            </Button>
+                        </div>
+                    </section>
+
+                    {!dataCoverage.openingBalanceAvailable ? (
+                        <Alert
+                            type='warning'
+                            showIcon
+                            message='Lũy kế hiện chưa gồm sản lượng trước khi dùng hệ thống'
+                            description='Sản lượng trong kỳ vẫn đúng, nhưng tổng lũy kế chưa đủ để đối chiếu toàn bộ sản lượng chuyền.'
+                            action={<Button onClick={() => setOpeningBalanceOpen(true)}>Bổ sung đầu kỳ</Button>}
+                        />
+                    ) : null}
+
+                    <section className='production-report-reconciliation'>
+                        <div className='production-report-reconciliation__title'>
+                            <small>ĐỐI SOÁT LŨY KẾ ĐẾN {dayjs(report.meta.to).format('DD/MM/YYYY')}</small>
+                            <strong>Một công thức, ba nguồn số rõ ràng</strong>
+                            <span>
+                                Trong kỳ vẫn được tính riêng để không làm sai hiệu suất và so sánh kỳ trước.
+                            </span>
+                        </div>
+                        <div className='production-report-reconciliation__equation'>
+                            <div>
+                                <span>Chuyển tiếp trước hệ thống</span>
+                                <strong>{number(summary.carryInQuantity)} SP</strong>
+                                <small>
+                                    {dataCoverage.cutoffDate
+                                        ? `Đến ${dayjs(dataCoverage.cutoffDate).format('DD/MM/YYYY')}`
+                                        : 'Chưa khai báo'}
+                                </small>
+                            </div>
+                            <i>+</i>
+                            <div>
+                                <span>Đã ghi nhận trên hệ thống</span>
+                                <strong>{number(summary.trackedToDateQuantity)} SP</strong>
+                                <small>Từ ngày bắt đầu số hóa</small>
+                            </div>
+                            <i>=</i>
+                            <div className='is-total'>
+                                <span>Lũy kế toàn bộ</span>
+                                <strong>{number(summary.cumulativeQuantity)} SP</strong>
+                                <small>{number(summary.cumulativeLineCount)} chuyền có sản lượng</small>
+                            </div>
+                        </div>
+                        <div className='production-report-reconciliation__period'>
+                            <span>
+                                <small>Trước kỳ lọc</small>
+                                <strong>{number(summary.openingQuantity)} SP</strong>
+                            </span>
+                            <span>
+                                <small>Riêng trong kỳ</small>
+                                <strong>{number(summary.periodQuantity)} SP</strong>
+                            </span>
+                            {report.meta.financialsVisible ? (
+                                <span>
+                                    <small>Giá trị lũy kế</small>
+                                    <strong>{money(summary.cumulativeAmount)}</strong>
+                                    {!summary.cumulativeAmountComplete ? <em>Chưa đủ đơn giá đầu kỳ</em> : null}
+                                </span>
+                            ) : null}
+                        </div>
+                    </section>
+
+                    {summary.dayCount ? (
                     <section className={`production-report-commandbar health-${summary.health}`}>
                         <div className='production-report-commandbar__signal'>
                             <span>
@@ -857,14 +1220,15 @@ const ProductionReportPage = () => {
                             </div>
                         </div>
                     </section>
+                    ) : null}
 
                     <section className='production-report-kpis'>
                         <div>
                             <span className='production-report-kpi-icon'>
                                 <ThunderboltOutlined />
                             </span>
-                            <small>Sản lượng thực tế</small>
-                            <strong>{number(summary.actualQuantity)} SP</strong>
+                            <small>Sản lượng trong kỳ</small>
+                            <strong>{number(summary.periodQuantity)} SP</strong>
                             <Delta value={report.comparison.delta?.actualPercent} />
                         </div>
                         <div>
@@ -906,8 +1270,8 @@ const ProductionReportPage = () => {
                         {report.meta.financialsVisible ? (
                             <div>
                                 <span className='production-report-kpi-icon'>₫</span>
-                                <small>Giá trị sản lượng</small>
-                                <strong>{money(summary.totalAmount)}</strong>
+                                <small>Giá trị trong kỳ</small>
+                                <strong>{money(summary.periodAmount)}</strong>
                                 <Delta value={report.comparison.delta?.amountPercent} />
                             </div>
                         ) : null}
@@ -918,7 +1282,7 @@ const ProductionReportPage = () => {
                             <div>
                                 <Title level={4}>Xu hướng sản lượng</Title>
                                 <Text type='secondary'>
-                                    Thực tế so với mục tiêu và kế hoạch đã phát hành theo ngày.
+                                    Sản lượng ngày so với mục tiêu, kế hoạch và đường lũy kế toàn bộ.
                                 </Text>
                             </div>
                             <Tag>{summary.dayCount} ngày dữ liệu</Tag>
@@ -933,10 +1297,20 @@ const ProductionReportPage = () => {
                                 value={tab}
                                 onChange={(value) => setTab(value as ReportTab)}
                                 options={[
-                                    { value: 'lines', label: `Theo chuyền (${report.lines.length})` },
+                                    {
+                                        value: 'lines',
+                                        label: `${isMobile ? 'Chuyền' : 'Theo chuyền'} (${report.lines.length})`,
+                                    },
                                     { value: 'items', label: `Mã hàng (${report.items.length})` },
-                                    { value: 'days', label: `Theo ngày (${report.trend.length})` },
-                                    { value: 'exceptions', label: `Ngoại lệ (${report.exceptionSummary.total})` },
+                                    { value: 'orders', label: `Đơn hàng (${report.orders.length})` },
+                                    {
+                                        value: 'days',
+                                        label: `${isMobile ? 'Ngày' : 'Theo ngày'} (${report.trend.length})`,
+                                    },
+                                    {
+                                        value: 'exceptions',
+                                        label: `${isMobile ? 'Lỗi' : 'Ngoại lệ'} (${report.exceptionSummary.total})`,
+                                    },
                                 ]}
                             />
                             {!isMobile ? (
@@ -977,6 +1351,22 @@ const ProductionReportPage = () => {
                                     dataSource={report.items}
                                     pagination={{ pageSize: 15, showSizeChanger: false }}
                                     scroll={{ x: 1000 }}
+                                    size='middle'
+                                />
+                            )
+                        ) : null}
+                        {tab === 'orders' ? (
+                            isMobile ? (
+                                <div className='production-report-mobile-list'>
+                                    {report.orders.map(renderMobileOrder)}
+                                </div>
+                            ) : (
+                                <Table
+                                    rowKey='orderKey'
+                                    columns={orderColumns}
+                                    dataSource={report.orders}
+                                    pagination={{ pageSize: 15, showSizeChanger: false }}
+                                    scroll={{ x: 1180 }}
                                     size='middle'
                                 />
                             )
@@ -1043,6 +1433,14 @@ const ProductionReportPage = () => {
                     </Empty>
                 </section>
             ) : null}
+            <ProductionOpeningBalanceDrawer
+                open={openingBalanceOpen}
+                plantId={plantId}
+                onClose={() => setOpeningBalanceOpen(false)}
+                onChanged={() => {
+                    void reportQuery.refetch();
+                }}
+            />
         </div>
     );
 };

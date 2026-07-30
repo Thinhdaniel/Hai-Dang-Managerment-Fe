@@ -11,6 +11,9 @@ import type {
     ProductionLinePayload,
     ProductionLineRecord,
     ProductionMonitorResponse,
+    ProductionOpeningBalanceBatch,
+    ProductionOpeningBalanceList,
+    ProductionOpeningBalancePreview,
     ProductionPlan,
     ProductionPlanAllocationPayload,
     ProductionReport,
@@ -77,6 +80,60 @@ export const productionService = {
         to: string;
         scope?: ProductionReportScope;
     }): Promise<Blob> => api.get(`${BASE}/reports/export`, { params, responseType: 'blob' }),
+
+    getOpeningBalances: (plantId: string): Promise<ProductionOpeningBalanceList> =>
+        api.get(`${BASE}/opening-balances`, { params: { plantId } }),
+
+    createManualOpeningBalance: (payload: {
+        plantId: string;
+        cutoffDate: string;
+        note: string;
+        entries: Array<{
+            lineId: string;
+            itemId?: string | null;
+            orderCode?: string;
+            quantity: number;
+            unitPrice?: number | null;
+        }>;
+    }): Promise<ProductionOpeningBalanceBatch> => api.post(`${BASE}/opening-balances/manual`, payload),
+
+    previewOpeningBalanceImport: (
+        file: File,
+        payload: { plantId: string; cutoffDate: string; note: string }
+    ): Promise<ProductionOpeningBalancePreview> => {
+        const formData = new FormData();
+        formData.append('file', file);
+        formData.append('plantId', payload.plantId);
+        formData.append('cutoffDate', payload.cutoffDate);
+        formData.append('note', payload.note);
+        return api.post<ProductionOpeningBalancePreview, FormData>(
+            `${BASE}/opening-balances/import/preview`,
+            formData,
+            { headers: { 'Content-Type': 'multipart/form-data' } }
+        );
+    },
+
+    confirmOpeningBalanceImport: (
+        file: File,
+        payload: { plantId: string; cutoffDate: string; note: string }
+    ): Promise<ProductionOpeningBalanceBatch> => {
+        const formData = new FormData();
+        formData.append('file', file);
+        formData.append('plantId', payload.plantId);
+        formData.append('cutoffDate', payload.cutoffDate);
+        formData.append('note', payload.note);
+        return api.post<ProductionOpeningBalanceBatch, FormData>(
+            `${BASE}/opening-balances/import/confirm`,
+            formData,
+            { headers: { 'Content-Type': 'multipart/form-data' } }
+        );
+    },
+
+    voidOpeningBalance: (id: string, reason: string): Promise<ProductionOpeningBalanceBatch> =>
+        api.post(`${BASE}/opening-balances/${id}/void`, { reason }),
+
+    downloadOpeningBalanceTemplate: (plantId: string): Promise<Blob> =>
+        api.get(`${BASE}/opening-balances/template`, { params: { plantId }, responseType: 'blob' }),
 
     lookupPlan: (plantId: string, date: string): Promise<ProductionPlan | null> =>
         api.get(`${BASE}/plans/lookup`, { params: { plantId, date } }),

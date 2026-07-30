@@ -624,6 +624,21 @@ export interface ProductionReportSummary {
     exceptionCount: number;
     health: ProductionReportHealth;
     totalAmount?: number;
+    periodQuantity: number;
+    carryInQuantity: number;
+    trackedBeforePeriodQuantity: number;
+    openingQuantity: number;
+    trackedToDateQuantity: number;
+    cumulativeQuantity?: number;
+    unallocatedOpeningQuantity: number;
+    unpricedOpeningQuantity: number;
+    cumulativeLineCount: number;
+    cumulativeItemCount: number;
+    orderCount: number;
+    periodAmount?: number;
+    openingAmount?: number;
+    cumulativeAmount?: number;
+    cumulativeAmountComplete?: boolean;
 }
 
 export interface ProductionReportTrendPoint {
@@ -642,6 +657,9 @@ export interface ProductionReportTrendPoint {
     configuredLines: number;
     totalLines: number;
     totalAmount?: number;
+    periodQuantity: number;
+    cumulativeQuantity: number;
+    cumulativeAmount?: number;
 }
 
 export interface ProductionReportLine {
@@ -661,6 +679,14 @@ export interface ProductionReportLine {
     outputPerWorkerDay: number;
     underTargetDays: number;
     totalAmount?: number;
+    periodQuantity: number;
+    openingQuantity: number;
+    cumulativeQuantity: number;
+    unallocatedOpeningQuantity: number;
+    openingAmountComplete: boolean;
+    periodAmount?: number;
+    openingAmount?: number;
+    cumulativeAmount?: number;
 }
 
 export interface ProductionReportItem {
@@ -677,6 +703,36 @@ export interface ProductionReportItem {
     plannedActualQuantity: number;
     planAttainmentPercent: number;
     totalAmount?: number;
+    periodQuantity: number;
+    openingQuantity: number;
+    cumulativeQuantity: number;
+    openingAmountComplete: boolean;
+    periodAmount?: number;
+    openingAmount?: number;
+    cumulativeAmount?: number;
+}
+
+export interface ProductionReportOrder {
+    orderKey: string;
+    orderCode?: string;
+    itemCodes: string[];
+    activeDays: number;
+    lineCount: number;
+    itemCount: number;
+    targetQuantity: number;
+    actualQuantity: number;
+    periodQuantity: number;
+    openingQuantity: number;
+    cumulativeQuantity: number;
+    achievementPercent: number;
+    plannedQuantity: number;
+    plannedActualQuantity: number;
+    planAttainmentPercent: number;
+    openingAmountComplete: boolean;
+    totalAmount?: number;
+    periodAmount?: number;
+    openingAmount?: number;
+    cumulativeAmount?: number;
 }
 
 export interface ProductionReportException {
@@ -703,6 +759,19 @@ export interface ProductionReport {
         scope: ProductionReportScope;
         generatedAt: string;
         financialsVisible: boolean;
+        dataCoverage: {
+            status: 'missing' | 'partial' | 'complete';
+            openingBalanceAvailable: boolean;
+            cutoffDate?: string;
+            trackingStartDate?: string;
+            batchCount: number;
+            periodDetailComplete: boolean;
+            cumulativeAvailable: boolean;
+            amountCoveragePercent: number;
+            unallocatedQuantity: number;
+            unpricedQuantity: number;
+            lastConfirmedAt?: string;
+        };
     };
     summary: ProductionReportSummary;
     comparison: {
@@ -726,6 +795,7 @@ export interface ProductionReport {
     trend: ProductionReportTrendPoint[];
     lines: ProductionReportLine[];
     items: ProductionReportItem[];
+    orders: ProductionReportOrder[];
     exceptionSummary: {
         total: number;
         critical: number;
@@ -738,4 +808,104 @@ export interface ProductionReport {
         openDays: number;
     };
     exceptions: ProductionReportException[];
+}
+
+export interface ProductionOpeningBalanceEntry {
+    id?: string;
+    lineId: string;
+    lineCode: string;
+    lineName?: string;
+    itemId?: string;
+    itemCode?: string;
+    itemName?: string;
+    orderCode?: string;
+    unit: string;
+    quantity: number;
+    unitPriceSnapshot?: number;
+    amountSnapshot?: number;
+    allocationState: 'exact' | 'unallocated';
+    sourceRow?: number;
+}
+
+export interface ProductionOpeningBalanceSummary {
+    entryCount: number;
+    totalQuantity: number;
+    exactQuantity: number;
+    unallocatedQuantity: number;
+    valuedQuantity: number;
+    totalAmount: number;
+}
+
+export interface ProductionOpeningBalanceCoverage extends ProductionOpeningBalanceSummary {
+    available: boolean;
+    cutoffDate?: string;
+    batchCount: number;
+    amountCoveragePercent: number;
+    lastConfirmedAt?: string;
+}
+
+export interface ProductionOpeningBalanceBatch {
+    id: string;
+    code: string;
+    plantId: string;
+    plantName: string;
+    plantCode?: string;
+    cutoffDate: string;
+    sourceType: 'manual' | 'excel';
+    sourceFileName?: string;
+    sourceFileSize?: number;
+    sourceSheet?: string;
+    note?: string;
+    status: 'confirmed' | 'voided';
+    summary: ProductionOpeningBalanceSummary;
+    entries: ProductionOpeningBalanceEntry[];
+    confirmedBy?: ProductionActor;
+    confirmedAt?: string;
+    voidedBy?: ProductionActor;
+    voidedAt?: string;
+    voidReason?: string;
+    history: Array<{
+        id?: string;
+        type: 'confirmed' | 'voided';
+        reason?: string;
+        actor?: ProductionActor;
+        at?: string;
+    }>;
+    createdAt?: string;
+    updatedAt?: string;
+}
+
+export interface ProductionOpeningBalanceList {
+    plant: { id: string; name: string; code?: string };
+    coverage: ProductionOpeningBalanceCoverage;
+    batches: ProductionOpeningBalanceBatch[];
+}
+
+export interface ProductionOpeningBalancePreviewRow {
+    rowNumber: number;
+    lineCode: string;
+    itemCode?: string;
+    orderCode?: string;
+    quantity?: number;
+    unitPrice?: number;
+    unit?: string;
+    lineName?: string;
+    itemName?: string;
+    allocationState: 'exact' | 'unallocated';
+    isValid: boolean;
+    errors: string[];
+}
+
+export interface ProductionOpeningBalancePreview {
+    plant: { id: string; name: string; code?: string };
+    cutoffDate: string;
+    fileName?: string;
+    sheetName: string;
+    headerRow: number;
+    summary: ProductionOpeningBalanceSummary & {
+        totalRows: number;
+        validRows: number;
+        invalidRows: number;
+    };
+    rows: ProductionOpeningBalancePreviewRow[];
 }
