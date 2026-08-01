@@ -81,8 +81,8 @@ export const productionService = {
         payload: UpdateProductionReminderSettingsPayload
     ): Promise<ProductionReminderSettings['rule']> => api.put(`${BASE}/reminders/settings`, payload),
 
-    sendReminderTest: (plantId: string): Promise<ProductionReminderTestResult> =>
-        api.post(`${BASE}/reminders/test`, { plantId }),
+    sendReminderTest: (plantId: string, recipientId?: string): Promise<ProductionReminderTestResult> =>
+        api.post(`${BASE}/reminders/test`, { plantId, ...(recipientId ? { recipientId } : {}) }),
 
     getReport: (params: {
         plantId: string;

@@ -989,4 +989,10 @@ export interface ProductionReminderTestResult {
     webPushSent: number;
     telegramSent: number;
     failedChannels: number;
+    recipient: ProductionReminderRecipient;
+    channel: {
+        pushDeviceCount: number;
+        telegramLinked: boolean;
+        ready: boolean;
+    };
 }

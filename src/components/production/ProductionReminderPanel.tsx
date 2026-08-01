@@ -83,9 +83,14 @@ const ProductionReminderPanel = ({ plantId, productionDate, day, canManage, onFo
     const testMutation = useMutation({
         mutationFn: () => productionService.sendReminderTest(plantId),
         onSuccess: (result) => {
-            if (result.webPushSent > 0) message.success('Đã gửi thử tới thiết bị Push');
-            else if (result.telegramSent > 0) message.success('Web Push chưa nhận; đã gửi thử qua Telegram');
-            else message.warning('Chỉ tạo được thông báo trong app. Hãy bật thông báo cho thiết bị này.');
+            const recipientName = result.recipient?.fullname || 'tài khoản hiện tại';
+            if (result.webPushSent > 0) {
+                message.success(`Đã gửi Push tới ${recipientName} (${result.webPushSent} thiết bị)`);
+            } else if (result.telegramSent > 0) {
+                message.success(`Web Push chưa nhận; đã gửi Telegram tới ${recipientName}`);
+            } else {
+                message.warning(`${recipientName} chưa có kênh ngoài app. Hãy bật thông báo trên điện thoại.`);
+            }
         },
         onError: (error) => message.error(error instanceof Error ? error.message : 'Không gửi được thông báo thử'),
     });
@@ -203,9 +208,9 @@ const ProductionReminderPanel = ({ plantId, productionDate, day, canManage, onFo
                         </Tooltip>
                     ) : null}
                     {!oldest && (currentDeviceReady || accountChannelReady) ? (
-                        <Tooltip title='Gửi một thông báo thử tới kênh đang hoạt động'>
+                        <Tooltip title='Gửi thử cho tài khoản đang đăng nhập trên thiết bị này'>
                             <Button
-                                aria-label='Gửi thông báo thử'
+                                aria-label='Gửi thử cho tài khoản hiện tại'
                                 icon={<SendOutlined />}
                                 loading={testMutation.isPending}
                                 onClick={() => testMutation.mutate()}

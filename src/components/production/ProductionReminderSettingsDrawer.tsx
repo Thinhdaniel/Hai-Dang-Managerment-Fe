@@ -9,7 +9,7 @@ import {
     WarningFilled,
 } from '@ant-design/icons';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Alert, App, Button, Drawer, Form, InputNumber, Select, Switch, Tag } from 'antd';
+import { Alert, App, Button, Drawer, Form, InputNumber, Select, Switch, Tag, Tooltip } from 'antd';
 import { useEffect } from 'react';
 import { useResponsive } from '../../core/hooks/useResponsive';
 import { productionService } from '../../core/services/production.service';
@@ -76,6 +76,25 @@ const ProductionReminderSettingsDrawer = ({ open, plantId, onClose }: Props) => 
             onClose();
         },
         onError: (error) => message.error(error instanceof Error ? error.message : 'Không thể lưu cấu hình nhắc giờ'),
+    });
+
+    const testRecipientMutation = useMutation({
+        mutationFn: (recipient: ProductionReminderRecipient) =>
+            productionService.sendReminderTest(plantId, recipient.id),
+        onSuccess: async (result) => {
+            const recipientName = result.recipient?.fullname || 'người nhận';
+            if (result.webPushSent > 0) {
+                message.success(`Đã gửi Push tới ${recipientName} (${result.webPushSent} thiết bị)`);
+            } else if (result.telegramSent > 0) {
+                message.success(`Đã gửi Telegram tới ${recipientName}; Web Push chưa khả dụng`);
+            } else {
+                message.warning(
+                    `${recipientName} chưa có kênh ngoài app. Cần bật Push trên điện thoại của tài khoản này.`
+                );
+            }
+            await queryClient.invalidateQueries({ queryKey: ['production', 'reminders', 'settings', plantId] });
+        },
+        onError: (error) => message.error(error instanceof Error ? error.message : 'Không gửi được thông báo thử'),
     });
 
     const recipients = settingsQuery.data?.recipients || [];
@@ -265,15 +284,33 @@ const ProductionReminderSettingsDrawer = ({ open, plantId, onClose }: Props) => 
                                         <span className={ready ? 'is-ready' : 'is-offline'}>
                                             {ready ? <CheckCircleFilled /> : <MobileOutlined />}
                                         </span>
-                                        <div>
+                                        <div className='pd-reminder-recipient__copy'>
                                             <strong>{recipient.fullname}</strong>
                                             <small>
                                                 {recipientType} · {recipientChannel(recipient)}
                                             </small>
                                         </div>
-                                        <Tag color={ready ? 'success' : 'warning'}>
-                                            {ready ? 'Sẵn sàng' : 'Cần bật'}
-                                        </Tag>
+                                        <div className='pd-reminder-recipient__actions'>
+                                            <Tag color={ready ? 'success' : 'warning'}>
+                                                {ready ? 'Sẵn sàng' : 'Cần bật'}
+                                            </Tag>
+                                            <Tooltip title={`Gửi thử riêng tới thiết bị của ${recipient.fullname}`}>
+                                                <Button
+                                                    size='small'
+                                                    icon={<SendOutlined />}
+                                                    aria-label={`Gửi thử cho ${recipient.fullname}`}
+                                                    loading={
+                                                        testRecipientMutation.isPending &&
+                                                        testRecipientMutation.variables?.id === recipient.id
+                                                    }
+                                                    disabled={
+                                                        testRecipientMutation.isPending &&
+                                                        testRecipientMutation.variables?.id !== recipient.id
+                                                    }
+                                                    onClick={() => testRecipientMutation.mutate(recipient)}
+                                                />
+                                            </Tooltip>
+                                        </div>
                                     </div>
                                 );
                             })}

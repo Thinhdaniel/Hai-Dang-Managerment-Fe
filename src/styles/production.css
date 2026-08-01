@@ -421,10 +421,28 @@
     color: #b54708;
 }
 
-.pd-reminder-recipient > div {
+.pd-reminder-recipient__copy {
     display: flex;
     min-width: 0;
     flex-direction: column;
+}
+
+.pd-reminder-recipient__actions {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.pd-reminder-recipient__actions .ant-tag {
+    margin-inline-end: 0;
+}
+
+.pd-reminder-recipient__actions .ant-btn {
+    display: inline-flex;
+    width: 32px;
+    height: 32px;
+    align-items: center;
+    justify-content: center;
 }
 
 .pd-reminder-recipient strong {
