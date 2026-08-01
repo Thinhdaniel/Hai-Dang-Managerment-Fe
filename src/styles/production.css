@@ -114,6 +114,414 @@
     min-height: var(--pd-tap);
 }
 
+/* Nhắc nhập sản theo giờ: một dải vận hành gọn, không cạnh tranh với bảng nhập. */
+.pd-reminder-bar {
+    position: relative;
+    display: grid;
+    min-width: 0;
+    grid-template-columns: 40px minmax(0, 1fr) auto;
+    align-items: center;
+    margin: 0 0 12px;
+    padding: 11px 12px;
+    overflow: hidden;
+    border: 1px solid var(--pd-border);
+    border-radius: var(--pd-radius-lg);
+    color: var(--pd-ink);
+    background: var(--pd-surface);
+    box-shadow: var(--pd-shadow-1);
+    gap: 11px;
+}
+
+.pd-reminder-bar::before {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: 0;
+    width: 3px;
+    background: var(--pd-ok);
+    content: '';
+}
+
+.pd-reminder-bar--warning {
+    border-color: var(--pd-warn-line);
+    background: linear-gradient(90deg, var(--pd-warn-bg) 0, #fff 42%);
+}
+
+.pd-reminder-bar--warning::before {
+    background: #f79009;
+}
+
+.pd-reminder-bar--danger {
+    border-color: var(--pd-danger-line);
+    background: linear-gradient(90deg, var(--pd-danger-bg) 0, #fff 42%);
+}
+
+.pd-reminder-bar--danger::before {
+    background: var(--pd-danger);
+}
+
+.pd-reminder-bar__signal {
+    display: inline-flex;
+    width: 38px;
+    height: 38px;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    color: var(--pd-ok);
+    background: var(--pd-ok-bg);
+    font-size: 17px;
+}
+
+.pd-reminder-bar--warning .pd-reminder-bar__signal {
+    color: var(--pd-warn);
+    background: #fff1cc;
+}
+
+.pd-reminder-bar--danger .pd-reminder-bar__signal {
+    color: var(--pd-danger);
+    background: #fee4e2;
+}
+
+.pd-reminder-bar--warning .pd-reminder-bar__signal .anticon,
+.pd-reminder-bar--danger .pd-reminder-bar__signal .anticon {
+    animation: pd-reminder-ring 2.4s ease-in-out infinite;
+    transform-origin: 50% 8%;
+}
+
+@keyframes pd-reminder-ring {
+    0%,
+    72%,
+    100% {
+        transform: rotate(0);
+    }
+    78% {
+        transform: rotate(13deg);
+    }
+    84% {
+        transform: rotate(-11deg);
+    }
+    90% {
+        transform: rotate(7deg);
+    }
+    96% {
+        transform: rotate(-3deg);
+    }
+}
+
+.pd-reminder-bar__copy {
+    display: flex;
+    min-width: 0;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.pd-reminder-bar__copy strong {
+    overflow: hidden;
+    color: var(--pd-ink);
+    font-size: var(--pd-fs-12-5);
+    font-weight: 700;
+    line-height: 1.35;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.pd-reminder-bar__copy span,
+.pd-reminder-bar__copy small {
+    color: var(--pd-ink-2);
+    font-size: var(--pd-fs-10-5);
+    line-height: 1.45;
+}
+
+.pd-reminder-bar__copy small {
+    overflow: hidden;
+    color: var(--pd-warn);
+    font-weight: 650;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.pd-reminder-bar__actions {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    gap: 6px;
+}
+
+.pd-reminder-bar__actions .ant-btn {
+    min-height: 34px;
+    border-radius: var(--pd-radius);
+    box-shadow: none;
+    font-size: var(--pd-fs-11);
+    font-weight: 650;
+}
+
+.pd-reminder-settings .ant-drawer-header,
+.pd-reminder-settings .ant-drawer-footer {
+    padding-right: 18px;
+    padding-left: 18px;
+}
+
+.pd-reminder-settings .ant-drawer-body {
+    padding: 0 18px 24px;
+}
+
+.pd-reminder-settings__title {
+    display: flex;
+    min-width: 0;
+    align-items: center;
+    gap: 10px;
+}
+
+.pd-reminder-settings__title-icon {
+    display: inline-flex;
+    width: 36px;
+    height: 36px;
+    flex: 0 0 auto;
+    align-items: center;
+    justify-content: center;
+    border-radius: 9px;
+    color: var(--pd-brand, #2f51d9);
+    background: var(--pd-brand-soft, #eef2fe);
+}
+
+.pd-reminder-settings__title > span:last-child {
+    display: flex;
+    min-width: 0;
+    flex-direction: column;
+}
+
+.pd-reminder-settings__title strong {
+    font-size: 14px;
+    line-height: 1.4;
+}
+
+.pd-reminder-settings__title small {
+    color: #8b93a1;
+    font-size: 11px;
+    font-weight: 500;
+}
+
+.pd-reminder-settings__section {
+    padding: 18px 0;
+    border-bottom: 1px solid #e5e8ee;
+}
+
+.pd-reminder-settings__section--lead {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+}
+
+.pd-reminder-settings__section--lead > div {
+    min-width: 0;
+}
+
+.pd-reminder-settings__section--lead strong,
+.pd-reminder-settings__section-head strong {
+    display: block;
+    color: #171a20;
+    font-size: 13px;
+    font-weight: 700;
+}
+
+.pd-reminder-settings__section--lead p {
+    margin: 3px 0 0;
+    color: #687181;
+    font-size: 11.5px;
+    line-height: 1.55;
+}
+
+.pd-reminder-settings__section-head {
+    display: flex;
+    align-items: flex-start;
+    margin-bottom: 14px;
+    gap: 9px;
+}
+
+.pd-reminder-settings__section-head > .anticon {
+    margin-top: 2px;
+    color: #596273;
+    font-size: 15px;
+}
+
+.pd-reminder-settings__section-head span {
+    display: flex;
+    min-width: 0;
+    flex-direction: column;
+}
+
+.pd-reminder-settings__section-head small {
+    margin-top: 2px;
+    color: #8b93a1;
+    font-size: 11px;
+    font-weight: 500;
+}
+
+.pd-reminder-settings__number-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 8px;
+}
+
+.pd-reminder-settings__number-grid .ant-input-number,
+.pd-reminder-settings__inline-control .ant-input-number {
+    width: 100%;
+}
+
+.pd-reminder-settings__number-grid .ant-form-item-label > label,
+.pd-reminder-settings .ant-form-item-label > label {
+    color: #5b6472;
+    font-size: 11.5px;
+    font-weight: 600;
+}
+
+.pd-reminder-settings__switch-label {
+    margin-left: 8px;
+    color: #4f5968;
+    font-size: 12px;
+}
+
+.pd-reminder-settings__inline-control {
+    display: grid;
+    grid-template-columns: auto auto minmax(112px, 1fr) auto;
+    align-items: center;
+    gap: 8px;
+    color: #4f5968;
+    font-size: 12px;
+}
+
+.pd-reminder-recipient-list {
+    display: flex;
+    max-height: 220px;
+    flex-direction: column;
+    margin-top: 14px;
+    overflow: auto;
+    border-top: 1px solid #eef0f4;
+}
+
+.pd-reminder-recipient {
+    display: grid;
+    min-height: 52px;
+    grid-template-columns: 24px minmax(0, 1fr) auto;
+    align-items: center;
+    border-bottom: 1px solid #eef0f4;
+    gap: 8px;
+}
+
+.pd-reminder-recipient > span {
+    font-size: 16px;
+}
+
+.pd-reminder-recipient > span.is-ready {
+    color: #067647;
+}
+
+.pd-reminder-recipient > span.is-offline {
+    color: #b54708;
+}
+
+.pd-reminder-recipient > div {
+    display: flex;
+    min-width: 0;
+    flex-direction: column;
+}
+
+.pd-reminder-recipient strong {
+    overflow: hidden;
+    color: #252a34;
+    font-size: 12px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.pd-reminder-recipient small {
+    color: #8b93a1;
+    font-size: 10.5px;
+}
+
+.pd-reminder-settings__warning {
+    margin: 12px 0 0;
+    padding: 9px 10px;
+    border-left: 3px solid #f79009;
+    color: #8f3f0a;
+    background: #fffaeb;
+    font-size: 11px;
+    line-height: 1.5;
+}
+
+.pd-reminder-settings__footer {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 8px;
+}
+
+@media (max-width: 767px) {
+    .pd-reminder-bar {
+        grid-template-columns: 38px minmax(0, 1fr);
+        padding: 11px 10px 10px;
+        gap: 9px;
+    }
+
+    .pd-reminder-bar__copy strong {
+        white-space: normal;
+    }
+
+    .pd-reminder-bar__copy span {
+        display: -webkit-box;
+        overflow: hidden;
+        -webkit-box-orient: vertical;
+        -webkit-line-clamp: 2;
+    }
+
+    .pd-reminder-bar__actions {
+        grid-column: 1 / -1;
+        justify-content: stretch;
+        padding-top: 2px;
+    }
+
+    .pd-reminder-bar__actions .ant-btn:not(.ant-btn-icon-only) {
+        min-width: 0;
+        flex: 1 1 auto;
+    }
+
+    .pd-reminder-bar__actions .ant-btn {
+        min-height: var(--pd-tap);
+    }
+
+    .pd-reminder-settings .ant-drawer-body {
+        padding: 0 14px 24px;
+    }
+
+    .pd-reminder-settings__number-grid {
+        grid-template-columns: 1fr 1fr;
+    }
+
+    .pd-reminder-settings__number-grid .ant-form-item:last-child {
+        grid-column: 1 / -1;
+    }
+
+    .pd-reminder-settings__inline-control {
+        grid-template-columns: auto 1fr minmax(106px, 1fr);
+    }
+
+    .pd-reminder-settings__inline-control > span:last-child {
+        grid-column: 2 / -1;
+    }
+
+    .pd-reminder-settings__footer .ant-btn {
+        min-height: var(--pd-tap);
+        flex: 1 1 0;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .pd-reminder-bar__signal .anticon {
+        animation: none !important;
+    }
+}
+
 /* Production board: read-only shop-floor display, isolated from management screens. */
 .production-board-page {
     min-width: 0;

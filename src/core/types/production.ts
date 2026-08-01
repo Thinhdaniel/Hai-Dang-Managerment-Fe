@@ -909,3 +909,84 @@ export interface ProductionOpeningBalancePreview {
     };
     rows: ProductionOpeningBalancePreviewRow[];
 }
+
+export interface ProductionReminderRule {
+    id: string;
+    plantId: string;
+    enabled: boolean;
+    graceMinutes: number;
+    repeatMinutes: number;
+    escalationMinutes: number;
+    escalateToManagers: boolean;
+    telegramFallback: boolean;
+    underTargetEnabled: boolean;
+    underTargetThreshold: number;
+    additionalRecipientIds: string[];
+    updatedAt?: string;
+}
+
+export interface ProductionReminderDelivery {
+    attemptedRecipients?: number;
+    inAppCreated?: number;
+    webPushSent?: number;
+    telegramSent?: number;
+    failedChannels?: number;
+    at?: string;
+}
+
+export interface ProductionReminderEvent {
+    id: string;
+    plantId: string;
+    dayId: string;
+    productionDate: string;
+    slotKey: string;
+    slotLabel: string;
+    state: 'open' | 'resolved' | 'expired';
+    dueAt: string;
+    missingLineCodes: string[];
+    underTargetLineCodes: string[];
+    reminderCount: number;
+    lastNotifiedAt?: string;
+    nextNotifyAt?: string;
+    escalatedAt?: string;
+    performanceNotifiedAt?: string;
+    resolvedAt?: string;
+    lastDelivery?: ProductionReminderDelivery;
+}
+
+export interface ProductionReminderStatus {
+    plant: { id: string; name: string; code?: string };
+    productionDate: string;
+    serverTime: string;
+    rule: ProductionReminderRule;
+    channel: {
+        pushDeviceCount: number;
+        telegramLinked: boolean;
+        ready: boolean;
+    };
+    events: ProductionReminderEvent[];
+}
+
+export interface ProductionReminderRecipient {
+    id: string;
+    fullname: string;
+    username?: string;
+    role: string;
+    pushDeviceCount: number;
+    telegramLinked: boolean;
+}
+
+export interface ProductionReminderSettings {
+    plant: { id: string; name: string; code?: string };
+    rule: ProductionReminderRule;
+    recipients: ProductionReminderRecipient[];
+}
+
+export type UpdateProductionReminderSettingsPayload = Omit<ProductionReminderRule, 'id' | 'updatedAt'>;
+
+export interface ProductionReminderTestResult {
+    inAppCreated: number;
+    webPushSent: number;
+    telegramSent: number;
+    failedChannels: number;
+}

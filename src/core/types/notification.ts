@@ -15,6 +15,7 @@ export type NotificationActionType =
     | 'floor_map'
     | 'digest'
     | 'briefing'
+    | 'production'
     | 'system';
 
 export interface Notification {
@@ -25,6 +26,15 @@ export interface Notification {
     type: NotificationType;
     actionType: NotificationActionType;
     actionId?: string;
+    actionData?: {
+        plantId?: string;
+        productionDate?: string;
+        slotKey?: string;
+        focus?: string;
+        [key: string]: unknown;
+    };
+    dedupeKey?: string;
+    deliveryTag?: string;
     isRead: boolean;
     createdAt: string;
     readAt?: string;

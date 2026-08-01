@@ -14,6 +14,7 @@ import { useSearchParams } from 'react-router-dom';
 import ProductionCommandRibbon from '../components/production/ProductionCommandRibbon';
 import ProductionEntryDrawer from '../components/production/ProductionEntryDrawer';
 import ProductionMissingDock from '../components/production/ProductionMissingDock';
+import ProductionReminderPanel from '../components/production/ProductionReminderPanel';
 import ProductionSetupDrawer from '../components/production/ProductionSetupDrawer';
 import { useAuth } from '../core/contexts/AuthContext';
 import { useSocket } from '../core/hooks/useSocket';
@@ -84,6 +85,20 @@ const ProductionPage = () => {
     const canSwitchPlant = isAdmin(role) || isDirector(role);
     const canReopenLocked = isAdmin(role) || isDirector(role);
     const canSeeFinancials = hasManagerAccess(role);
+
+    // Khi mở từ Web Push/in-app notification, đồng bộ lại state kể cả khi
+    // người dùng đang đứng sẵn ở /production và chỉ query string thay đổi.
+    useEffect(() => {
+        const requestedDate = searchParams.get('date');
+        const requestedPlant = searchParams.get('plantId');
+        const requestedSlot = searchParams.get('slot');
+        if (requestedDate) {
+            const parsed = dayjs(requestedDate, 'YYYY-MM-DD', true);
+            if (parsed.isValid()) setDate(parsed);
+        }
+        if (requestedPlant) setPlantId(requestedPlant);
+        if (requestedSlot) setSelectedSlotKey(requestedSlot);
+    }, [searchParams]);
 
     const plantsQuery = useQuery({
         queryKey: ['plants'],
@@ -157,6 +172,9 @@ const ProductionPage = () => {
         const handleProductionUpdate = (payload: { plantId: string; productionDate: string; dayId: string }) => {
             if (payload.plantId !== plantId || payload.productionDate !== productionDate) return;
             void queryClient.invalidateQueries({ queryKey: ['production', 'day', plantId, productionDate] });
+            void queryClient.invalidateQueries({
+                queryKey: ['production', 'reminders', 'status', plantId, productionDate],
+            });
         };
         socket.on('production:updated', handleProductionUpdate);
         return () => {
@@ -243,9 +261,7 @@ const ProductionPage = () => {
                     {complete ? <CheckOutlined className='pd-slot__check' /> : null}
                     {missing > 0 && !isFuture ? <span className='pd-slot__badge'>{missing}</span> : null}
                 </span>
-                <span className='pd-slot__sub'>
-                    {due > 0 ? `${reported}/${due} chuyền` : '—'}
-                </span>
+                <span className='pd-slot__sub'>{due > 0 ? `${reported}/${due} chuyền` : '—'}</span>
             </button>
         );
     };
@@ -521,6 +537,17 @@ const ProductionPage = () => {
                 onRefresh={() => dayQuery.refetch()}
                 refreshing={dayQuery.isFetching}
                 onUpdated={refreshDayQueries}
+            />
+
+            <ProductionReminderPanel
+                plantId={plantId}
+                productionDate={productionDate}
+                day={day}
+                canManage={canManage}
+                onFocusSlot={(slotKey) => {
+                    setSearch('');
+                    setSelectedSlotKey(slotKey);
+                }}
             />
 
             {day && day.lines.length && isMobile ? (

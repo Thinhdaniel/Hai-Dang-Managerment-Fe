@@ -294,7 +294,9 @@ const AppHeader: React.FC<AppHeaderProps> = ({ collapsed, isDesktop, mobileOpen,
                 ) : null}
                 {visibleNotifications.map((item) => {
                     const itemIcon =
-                        item.type === 'error' ? (
+                        item.actionType === 'production' ? (
+                            <BellOutlined className={item.type === 'error' ? 'text-rose-500' : 'text-amber-500'} />
+                        ) : item.type === 'error' ? (
                             <WarningOutlined className='text-rose-500' />
                         ) : item.type === 'warning' ? (
                             <ToolOutlined className='text-amber-500' />
@@ -318,6 +320,13 @@ const AppHeader: React.FC<AppHeaderProps> = ({ collapsed, isDesktop, mobileOpen,
                         href = `/assets/floor-map?reality=1${item.actionId ? `&plantId=${encodeURIComponent(item.actionId)}` : ''}`;
                     } else if (item.actionType === 'briefing') {
                         href = `/dashboard${item.actionId ? `?briefing=${encodeURIComponent(item.actionId)}` : ''}`;
+                    } else if (item.actionType === 'production') {
+                        const params = new URLSearchParams();
+                        if (item.actionData?.plantId) params.set('plantId', item.actionData.plantId);
+                        if (item.actionData?.productionDate) params.set('date', item.actionData.productionDate);
+                        if (item.actionData?.slotKey) params.set('slot', item.actionData.slotKey);
+                        if (item.actionData?.focus) params.set('focus', item.actionData.focus);
+                        href = `/production${params.toString() ? `?${params.toString()}` : ''}`;
                     }
 
                     return (

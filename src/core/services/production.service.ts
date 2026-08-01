@@ -18,8 +18,12 @@ import type {
     ProductionPlanAllocationPayload,
     ProductionReport,
     ProductionReportScope,
+    ProductionReminderSettings,
+    ProductionReminderStatus,
+    ProductionReminderTestResult,
     SaveProductionEntryPayload,
     ProductionTimeSlot,
+    UpdateProductionReminderSettingsPayload,
 } from '../types/production';
 
 const BASE = '/production';
@@ -66,6 +70,19 @@ export const productionService = {
 
     getBoard: (plantId: string, date: string): Promise<ProductionBoard | null> =>
         api.get(`${BASE}/board`, { params: { plantId, date } }),
+
+    getReminderStatus: (plantId: string, date: string): Promise<ProductionReminderStatus> =>
+        api.get(`${BASE}/reminders/status`, { params: { plantId, date } }),
+
+    getReminderSettings: (plantId: string): Promise<ProductionReminderSettings> =>
+        api.get(`${BASE}/reminders/settings`, { params: { plantId } }),
+
+    updateReminderSettings: (
+        payload: UpdateProductionReminderSettingsPayload
+    ): Promise<ProductionReminderSettings['rule']> => api.put(`${BASE}/reminders/settings`, payload),
+
+    sendReminderTest: (plantId: string): Promise<ProductionReminderTestResult> =>
+        api.post(`${BASE}/reminders/test`, { plantId }),
 
     getReport: (params: {
         plantId: string;
@@ -122,11 +139,9 @@ export const productionService = {
         formData.append('plantId', payload.plantId);
         formData.append('cutoffDate', payload.cutoffDate);
         formData.append('note', payload.note);
-        return api.post<ProductionOpeningBalanceBatch, FormData>(
-            `${BASE}/opening-balances/import/confirm`,
-            formData,
-            { headers: { 'Content-Type': 'multipart/form-data' } }
-        );
+        return api.post<ProductionOpeningBalanceBatch, FormData>(`${BASE}/opening-balances/import/confirm`, formData, {
+            headers: { 'Content-Type': 'multipart/form-data' },
+        });
     },
 
     voidOpeningBalance: (id: string, reason: string): Promise<ProductionOpeningBalanceBatch> =>

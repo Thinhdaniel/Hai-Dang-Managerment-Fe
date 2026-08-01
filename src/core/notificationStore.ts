@@ -33,12 +33,13 @@ export const useNotificationStore = create<NotificationStoreState>()(
 
             addNotification: (notification: Notification) => {
                 set((state) => {
-                    // Prevent duplicates
-                    if (state.notifications.some((n) => n._id === notification._id)) {
-                        return state;
-                    }
+                    // Nhắc việc lặp lại dùng cùng _id: thay nội dung và đưa lại
+                    // lên đầu thay vì bỏ qua bản realtime mới nhất.
                     return {
-                        notifications: [notification, ...state.notifications],
+                        notifications: [
+                            notification,
+                            ...state.notifications.filter((item) => item._id !== notification._id),
+                        ],
                     };
                 });
             },
