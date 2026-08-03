@@ -30,6 +30,13 @@
     font-size: var(--pd-fs-13, 15px);
 }
 
+.production-qc-report__summary em {
+    margin-top: 2px;
+    color: #74808e;
+    font-size: var(--pd-fs-8, 11px);
+    font-style: normal;
+}
+
 .production-qc-report .is-passed {
     color: #087a4c;
 }
@@ -38,14 +45,15 @@
     color: #b42318;
 }
 
-.production-qc-report .is-pending {
-    color: #a65309;
+.production-qc-report .is-rate,
+.production-qc-report .is-coverage {
+    color: #0f766e;
 }
 
 .production-qc-report__head,
 .production-qc-report__row {
     display: grid;
-    grid-template-columns: minmax(150px, 1.3fr) repeat(6, minmax(80px, 0.75fr));
+    grid-template-columns: minmax(150px, 1.3fr) repeat(5, minmax(82px, 0.75fr));
     align-items: center;
     gap: 10px;
 }

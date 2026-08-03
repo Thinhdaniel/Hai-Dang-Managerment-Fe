@@ -89,7 +89,7 @@ export interface HourlyProductionEntry {
 export interface HourlyQcEntry {
     id: string;
     slotKey: string;
-    runId: string;
+    runId?: string;
     passedQuantity: number;
     defectQuantity: number;
     totalQuantity: number;
@@ -121,12 +121,22 @@ export interface ProductionQcSlotValue {
     defectQuantity: number;
     totalQuantity: number;
     defectRate: number;
-    productionActual: number;
-    varianceQuantity: number;
-    pendingQuantity: number;
+    /** Sản lượng chuyền trong giờ, chỉ để tham khảo; không dùng đối soát QC. */
+    productionActualReference: number;
+    /** Payload backend cũ trong thời gian rollout. */
+    productionActual?: number;
+    referenceRunId?: string;
     reported: boolean;
+    /** Tương thích payload cũ trong thời gian rollout. */
     runId?: string;
     entryIds: string[];
+    note?: string;
+    enteredBy?: string;
+    enteredByName?: string;
+    enteredAt?: string;
+    updatedBy?: string;
+    updatedByName?: string;
+    updatedAt?: string;
 }
 
 export interface ProductionLineRecord {
@@ -158,8 +168,9 @@ export interface ProductionLineRecord {
     qcDefectQuantity: number;
     qcTotalQuantity: number;
     qcDefectRate: number;
-    qcPendingQuantity: number;
     qcReportedSlots: number;
+    qcExpectedSlots: number;
+    qcCoveragePercent: number;
     configured: boolean;
     updatedBy?: string;
     updatedByName?: string;
@@ -180,7 +191,9 @@ export interface ProductionDaySummary {
     qcDefectQuantity: number;
     qcTotalQuantity: number;
     qcDefectRate: number;
-    qcPendingQuantity: number;
+    qcReportedLineSlots: number;
+    qcExpectedLineSlots: number;
+    qcCoveragePercent: number;
 }
 
 export interface ProductionSlotSummary {
@@ -193,6 +206,8 @@ export interface ProductionSlotSummary {
     qcDefectQuantity: number;
     qcTotalQuantity: number;
     qcReportedLines: number;
+    qcExpectedLines: number;
+    qcCoveragePercent: number;
     totalLines: number;
 }
 
@@ -235,10 +250,12 @@ export interface SaveProductionEntryPayload {
 }
 
 export interface SaveProductionQcEntryPayload {
-    runId: string;
+    /** Chỉ gửi để tương thích backend cũ trong lúc rollout. */
+    runId?: string;
     passedQuantity: number;
     defectQuantity: number;
-    totalQuantity: number;
+    /** Backend mới tự tính; field này chỉ phục vụ phiên bản cũ. */
+    totalQuantity?: number;
     note?: string;
     clientMutationId?: string;
     expectedUpdatedAt?: string | null;

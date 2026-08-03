@@ -253,6 +253,15 @@ const ProductionDayReportPage = () => {
 
     const summary = day?.summary;
     const status = day ? statusMeta[day.status] : undefined;
+    const qcExpectedLineSlots = day
+        ? Number(day.summary.qcExpectedLineSlots ?? day.lines.length * activeSlots.length)
+        : 0;
+    const qcReportedLineSlots = day
+        ? Number(
+              day.summary.qcReportedLineSlots ??
+                  day.lines.reduce((sum, line) => sum + Number(line.qcReportedSlots || 0), 0)
+          )
+        : 0;
 
     return (
         <div className='production-page production-day-report'>
@@ -364,8 +373,10 @@ const ProductionDayReportPage = () => {
 
                     <section className='production-day-report__card production-qc-report'>
                         <div className='production-day-report__heading'>
-                            <Title level={4}>Đối chiếu chất lượng QC</Title>
-                            <Text type='secondary'>Tổng kiểm = Đạt + Lỗi, không cộng vào sản lượng tính lương</Text>
+                            <Title level={4}>Kết quả kiểm tra chất lượng</Title>
+                            <Text type='secondary'>
+                                Khối lượng QC thực tế trong ngày, độc lập với sản lượng tính lương
+                            </Text>
                         </div>
                         <div className='production-qc-report__summary'>
                             <span>
@@ -380,20 +391,22 @@ const ProductionDayReportPage = () => {
                                 <small>Lỗi</small>
                                 <strong>{number(summary.qcDefectQuantity)} SP</strong>
                             </span>
-                            <span className='is-pending'>
-                                <small>Chờ kiểm</small>
-                                <strong>{number(summary.qcPendingQuantity)} SP</strong>
+                            <span className='is-rate'>
+                                <small>Tỷ lệ lỗi</small>
+                                <strong>{number(summary.qcDefectRate, 2)}%</strong>
+                                <em>
+                                    Độ phủ {number(qcReportedLineSlots)}/{number(qcExpectedLineSlots)} lượt
+                                </em>
                             </span>
                         </div>
                         <div className='production-qc-report__lines'>
                             <div className='production-qc-report__head' aria-hidden='true'>
                                 <span>Chuyền</span>
-                                <span>Sản lượng báo</span>
                                 <span>Tổng kiểm</span>
                                 <span>Đạt</span>
                                 <span>Lỗi</span>
                                 <span>Tỷ lệ lỗi</span>
-                                <span>Chờ kiểm</span>
+                                <span>Khung đã nhập</span>
                             </div>
                             {day.lines.map((line) => (
                                 <div className='production-qc-report__row' key={line.lineId}>
@@ -401,7 +414,6 @@ const ProductionDayReportPage = () => {
                                         <strong>{line.lineCode}</strong>
                                         <small>{line.leaderName || line.lineName || '—'}</small>
                                     </span>
-                                    <span data-label='Sản lượng báo'>{number(line.totalActual)}</span>
                                     <span data-label='Tổng kiểm'>{number(line.qcTotalQuantity)}</span>
                                     <span data-label='Đạt' className='is-passed'>
                                         <CheckCircleFilled /> {number(line.qcPassedQuantity)}
@@ -412,8 +424,9 @@ const ProductionDayReportPage = () => {
                                     <span data-label='Tỷ lệ lỗi' className={line.qcDefectQuantity ? 'is-defect' : ''}>
                                         {number(line.qcDefectRate, 2)}%
                                     </span>
-                                    <span data-label='Chờ kiểm' className={line.qcPendingQuantity ? 'is-pending' : ''}>
-                                        {number(line.qcPendingQuantity)}
+                                    <span data-label='Khung đã nhập' className='is-coverage'>
+                                        {number(line.qcReportedSlots)}/
+                                        {number(line.qcExpectedSlots ?? activeSlots.length)}
                                     </span>
                                 </div>
                             ))}

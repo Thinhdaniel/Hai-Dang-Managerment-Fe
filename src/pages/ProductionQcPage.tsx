@@ -5,10 +5,11 @@ import {
     ClockCircleOutlined,
     ReloadOutlined,
     SearchOutlined,
+    SyncOutlined,
     WarningFilled,
 } from '@ant-design/icons';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Alert, App, Button, DatePicker, Empty, Input, Segmented, Select, Skeleton, Tag } from 'antd';
+import { Alert, App, Button, DatePicker, Empty, Input, Segmented, Select, Skeleton } from 'antd';
 import dayjs, { type Dayjs } from 'dayjs';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import ProductionQcEntryDrawer from '../components/production/ProductionQcEntryDrawer';
@@ -49,6 +50,9 @@ const selectDefaultSlot = (slots: ProductionTimeSlot[], date: Dayjs) => {
 const getQcValue = (line: ProductionLineRecord, slotKey: string) =>
     line.qcSlotValues.find((value) => value.key === slotKey);
 
+const productionReference = (value?: ProductionQcSlotValue) =>
+    Number(value?.productionActualReference ?? value?.productionActual ?? 0);
+
 const searchText = (line: ProductionLineRecord) =>
     [line.lineCode, line.lineName, line.leaderName, ...line.runs.flatMap((run) => [run.itemCode, run.itemName])]
         .filter(Boolean)
@@ -59,7 +63,7 @@ const ProductionQcPage = () => {
     const { message } = App.useApp();
     const { user, role } = useAuth();
     const { socket } = useSocket();
-    const { isPhone, isCompact } = useResponsive();
+    const { isPhone, isCompact, isWide } = useResponsive();
     const queryClient = useQueryClient();
     const slotRailRef = useRef<HTMLDivElement>(null);
     const [date, setDate] = useState<Dayjs>(() => dayjs());
@@ -68,8 +72,10 @@ const ProductionQcPage = () => {
     const [filter, setFilter] = useState<QcFilter>('all');
     const [search, setSearch] = useState('');
     const [selectedLineId, setSelectedLineId] = useState<string>();
+    const [recentlySavedLineId, setRecentlySavedLineId] = useState<string>();
     const productionDate = date.format('YYYY-MM-DD');
     const canSwitchPlant = isAdmin(role) || isDirector(role);
+    const overlayEditor = !isWide;
 
     const plantsQuery = useQuery({
         queryKey: ['plants'],
@@ -105,10 +111,20 @@ const ProductionQcPage = () => {
     }, [activeSlots, date, slotKey]);
 
     useEffect(() => {
+        setSelectedLineId(undefined);
+    }, [plantId, productionDate, slotKey]);
+
+    useEffect(() => {
+        if (!recentlySavedLineId) return;
+        const timer = window.setTimeout(() => setRecentlySavedLineId(undefined), 900);
+        return () => window.clearTimeout(timer);
+    }, [recentlySavedLineId]);
+
+    useEffect(() => {
         if (!slotKey) return;
         const frame = requestAnimationFrame(() => {
             slotRailRef.current
-                ?.querySelector<HTMLElement>('.pd-qc-slot.is-selected')
+                ?.querySelector<HTMLElement>('.pd-qc-time.is-selected')
                 ?.scrollIntoView({ inline: 'center', block: 'nearest', behavior: 'smooth' });
         });
         return () => cancelAnimationFrame(frame);
@@ -145,8 +161,9 @@ const ProductionQcPage = () => {
             }),
         onSuccess: async (updatedLine) => {
             replaceLineInCache(updatedLine);
+            setRecentlySavedLineId(updatedLine.lineId);
             message.success('Đã lưu kết quả QC');
-            setSelectedLineId(undefined);
+            if (overlayEditor) setSelectedLineId(undefined);
             await queryClient.invalidateQueries({ queryKey: ['production', 'day', plantId, productionDate] });
         },
         onError: (error) => {
@@ -169,112 +186,102 @@ const ProductionQcPage = () => {
 
     const selectedSlot = activeSlots.find((slot) => slot.key === slotKey);
     const selectedSummary = day?.slotSummaries.find((slot) => slot.key === slotKey);
+    const lines = day?.lines || [];
     const normalizedSearch = search.trim().toLocaleLowerCase('vi-VN');
-    const eligibleLines = useMemo(
-        () =>
-            (day?.lines || []).filter((line) => {
-                const value = getQcValue(line, slotKey);
-                return Boolean(value?.runId);
-            }),
-        [day?.lines, slotKey]
-    );
     const filteredLines = useMemo(
         () =>
-            eligibleLines.filter((line) => {
+            lines.filter((line) => {
                 const value = getQcValue(line, slotKey);
                 if (normalizedSearch && !searchText(line).includes(normalizedSearch)) return false;
                 if (filter === 'pending') return !value?.reported;
                 if (filter === 'defect') return Number(value?.defectQuantity || 0) > 0;
                 return true;
             }),
-        [eligibleLines, filter, normalizedSearch, slotKey]
+        [filter, lines, normalizedSearch, slotKey]
     );
-    const selectedLine = day?.lines.find((line) => line.lineId === selectedLineId);
+    const selectedLine = lines.find((line) => line.lineId === selectedLineId);
     const selectedValue = selectedLine ? getQcValue(selectedLine, slotKey) : undefined;
-    const slotTotal = eligibleLines.reduce(
-        (sum, line) => sum + Number(getQcValue(line, slotKey)?.totalQuantity || 0),
-        0
+    const slotTotal = lines.reduce((sum, line) => sum + Number(getQcValue(line, slotKey)?.totalQuantity || 0), 0);
+    const slotPassed = lines.reduce((sum, line) => sum + Number(getQcValue(line, slotKey)?.passedQuantity || 0), 0);
+    const slotDefect = lines.reduce((sum, line) => sum + Number(getQcValue(line, slotKey)?.defectQuantity || 0), 0);
+    const pendingLines = lines.filter((line) => !getQcValue(line, slotKey)?.reported).length;
+    const expectedLines = Number(selectedSummary?.qcExpectedLines ?? lines.length);
+    const reportedLines = Number(selectedSummary?.qcReportedLines || 0);
+    const dayExpected = Number(day?.summary.qcExpectedLineSlots ?? lines.length * activeSlots.length);
+    const dayReported = Number(
+        day?.summary.qcReportedLineSlots ?? lines.reduce((sum, line) => sum + line.qcReportedSlots, 0)
     );
-    const slotPassed = eligibleLines.reduce(
-        (sum, line) => sum + Number(getQcValue(line, slotKey)?.passedQuantity || 0),
-        0
-    );
-    const slotDefect = eligibleLines.reduce(
-        (sum, line) => sum + Number(getQcValue(line, slotKey)?.defectQuantity || 0),
-        0
-    );
-    const pendingLines = eligibleLines.filter((line) => !getQcValue(line, slotKey)?.reported).length;
-    const readOnly = day?.status !== 'draft';
+    const dayCoverage = dayExpected > 0 ? (dayReported / dayExpected) * 100 : 0;
+    const readOnly = day?.status === 'locked';
 
     const renderLine = (line: ProductionLineRecord) => {
-        const value = getQcValue(line, slotKey)!;
-        const run = line.runs.find((item) => item.id === value.runId);
+        const value = getQcValue(line, slotKey);
+        const referenceRun = line.runs.find((run) => run.id === (value?.referenceRunId || value?.runId));
+        const hasDefect = Number(value?.defectQuantity || 0) > 0;
+        const state = !value?.reported ? 'pending' : hasDefect ? 'defect' : 'passed';
         return (
-            <article
+            <button
                 key={line.lineId}
-                className={`pd-qc-line ${value.reported ? 'is-reported' : 'is-pending'} ${value.defectQuantity ? 'has-defect' : ''}`}
+                type='button'
+                className={`pd-qc-row is-${state} ${selectedLineId === line.lineId ? 'is-selected' : ''} ${recentlySavedLineId === line.lineId ? 'is-saved' : ''}`}
+                onClick={() => setSelectedLineId(line.lineId)}
             >
-                <div className='pd-qc-line__identity'>
-                    <span className='pd-qc-line__mark'>{line.lineCode.slice(0, 3).toUpperCase()}</span>
-                    <div>
+                <span className='pd-qc-row__line'>
+                    <i aria-hidden='true'>{line.lineCode.slice(0, 3).toUpperCase()}</i>
+                    <span>
                         <strong>{line.lineCode}</strong>
                         <small>{line.leaderName || line.lineName || 'Chưa có tên chuyền'}</small>
-                    </div>
-                </div>
-                <div className='pd-qc-line__item'>
-                    <span>{run?.itemCode || 'Chưa có mã hàng'}</span>
-                    <small>Sản lượng báo: {number(value.productionActual)}</small>
-                </div>
-                <div className='pd-qc-line__metrics'>
+                    </span>
+                </span>
+                <span className='pd-qc-row__reference'>
+                    <strong>{referenceRun?.itemCode || 'Không chạy mã'}</strong>
+                    <small>SL giờ: {number(productionReference(value))} · tham khảo</small>
+                </span>
+                <span className='pd-qc-row__numbers'>
                     <span>
                         <small>Tổng</small>
-                        <strong>{value.reported ? number(value.totalQuantity) : '—'}</strong>
+                        <strong>{value?.reported ? number(value.totalQuantity) : '—'}</strong>
                     </span>
                     <span className='is-passed'>
                         <small>Đạt</small>
-                        <strong>{value.reported ? number(value.passedQuantity) : '—'}</strong>
+                        <strong>{value?.reported ? number(value.passedQuantity) : '—'}</strong>
                     </span>
                     <span className='is-defect'>
                         <small>Lỗi</small>
-                        <strong>{value.reported ? number(value.defectQuantity) : '—'}</strong>
+                        <strong>{value?.reported ? number(value.defectQuantity) : '—'}</strong>
                     </span>
-                </div>
-                <div className='pd-qc-line__state'>
-                    {value.reported ? (
-                        value.defectQuantity ? (
-                            <Tag color='error' icon={<WarningFilled />}>
-                                Lỗi {value.defectRate.toLocaleString('vi-VN', { maximumFractionDigits: 2 })}%
-                            </Tag>
-                        ) : (
-                            <Tag color='success' icon={<CheckCircleFilled />}>
-                                Đã kiểm
-                            </Tag>
-                        )
-                    ) : (
-                        <Tag icon={<ClockCircleOutlined />}>Chưa kiểm</Tag>
-                    )}
-                </div>
-                <Button type={value.reported ? 'default' : 'primary'} onClick={() => setSelectedLineId(line.lineId)}>
-                    {readOnly ? 'Xem' : value.reported ? 'Sửa kết quả' : 'Nhập QC'}
-                </Button>
-            </article>
+                </span>
+                <span className={`pd-qc-row__status is-${state}`}>
+                    {state === 'pending' ? <ClockCircleOutlined /> : null}
+                    {state === 'passed' ? <CheckCircleFilled /> : null}
+                    {state === 'defect' ? <WarningFilled /> : null}
+                    {state === 'pending'
+                        ? 'Chưa nhập'
+                        : state === 'passed'
+                          ? 'Đã kiểm'
+                          : `Lỗi ${value?.defectRate.toLocaleString('vi-VN', { maximumFractionDigits: 2 })}%`}
+                </span>
+                <span className='pd-qc-row__action'>{readOnly ? 'Xem' : value?.reported ? 'Sửa' : 'Nhập'}</span>
+            </button>
         );
     };
 
     return (
         <div className='pd-qc-page'>
-            <header className='pd-qc-hero'>
-                <div className='pd-qc-hero__title'>
-                    <span className='pd-qc-hero__icon'>
+            <header className='pd-qc-topbar'>
+                <div className='pd-qc-title'>
+                    <span>
                         <AuditOutlined />
                     </span>
                     <div>
                         <small>KIỂM SOÁT CHẤT LƯỢNG</small>
                         <h1>QC theo giờ</h1>
-                        <p>Đối chiếu nhanh số đạt, lỗi và tổng kiểm theo từng chuyền.</p>
                     </div>
                 </div>
-                <div className='pd-qc-hero__controls'>
+                <div className='pd-qc-topbar__tools'>
+                    <span className={`pd-qc-live ${socket?.connected ? 'is-online' : 'is-offline'}`}>
+                        <i /> {socket?.connected ? 'Đồng bộ trực tiếp' : 'Đang kết nối'}
+                    </span>
                     {canSwitchPlant ? (
                         <Select
                             value={plantId || undefined}
@@ -298,6 +305,7 @@ const ProductionQcPage = () => {
                         icon={<ReloadOutlined />}
                         onClick={() => void dayQuery.refetch()}
                         loading={dayQuery.isFetching}
+                        aria-label='Làm mới dữ liệu QC'
                     >
                         {isPhone ? null : 'Làm mới'}
                     </Button>
@@ -322,9 +330,7 @@ const ProductionQcPage = () => {
                         description={
                             <span>
                                 <strong>Ngày này chưa được khởi tạo</strong>
-                                <small>
-                                    Quản lý hoặc tổ trưởng cần tạo ngày và thiết lập chuyền trước khi QC nhập.
-                                </small>
+                                <small>Quản lý hoặc tổ trưởng cần tạo ngày trước khi QC nhập.</small>
                             </span>
                         }
                     />
@@ -336,147 +342,185 @@ const ProductionQcPage = () => {
                             className='pd-qc-lock-alert'
                             type='info'
                             showIcon
-                            message={day.status === 'locked' ? 'Ngày đã khóa sổ' : 'Ngày đã gửi duyệt'}
+                            message='Ngày đã khóa sổ'
                             description='Kết quả QC đang ở chế độ chỉ xem.'
                         />
+                    ) : day.status === 'submitted' ? (
+                        <div className='pd-qc-submitted-note'>
+                            <SyncOutlined /> Ngày sản xuất đã gửi duyệt; bộ phận QC vẫn có thể hoàn thiện số kiểm.
+                        </div>
                     ) : null}
 
-                    <section className='pd-qc-summary' aria-label='Tổng hợp QC trong ngày'>
+                    <section className='pd-qc-overview' aria-label='Tổng hợp QC trong ngày'>
                         <div className='is-total'>
-                            <small>Tổng đã kiểm</small>
+                            <small>Tổng kiểm</small>
                             <strong>{number(day.summary.qcTotalQuantity)}</strong>
-                            <span>{number(day.summary.totalActual)} SP đã báo</span>
+                            <span>Khối lượng QC thực tế</span>
                         </div>
                         <div className='is-passed'>
                             <small>Đạt</small>
                             <strong>{number(day.summary.qcPassedQuantity)}</strong>
-                            <span>Đủ tiêu chuẩn</span>
+                            <span>Sản phẩm đạt chuẩn</span>
                         </div>
                         <div className='is-defect'>
                             <small>Lỗi</small>
                             <strong>{number(day.summary.qcDefectQuantity)}</strong>
+                            <span>Sản phẩm cần xử lý</span>
+                        </div>
+                        <div className='is-rate'>
+                            <small>Tỷ lệ lỗi</small>
+                            <strong>
+                                {day.summary.qcDefectRate.toLocaleString('vi-VN', { maximumFractionDigits: 2 })}%
+                            </strong>
                             <span>
-                                {day.summary.qcDefectRate.toLocaleString('vi-VN', { maximumFractionDigits: 2 })}% lỗi
+                                Đã nhập {number(dayReported)}/{number(dayExpected)} lượt
                             </span>
                         </div>
-                        <div className='is-pending'>
-                            <small>Chờ kiểm</small>
-                            <strong>{number(day.summary.qcPendingQuantity)}</strong>
-                            <span>So với sản lượng báo</span>
+                        <div className='pd-qc-overview__progress' aria-hidden='true'>
+                            <span style={{ width: `${Math.min(100, dayCoverage)}%` }} />
                         </div>
                     </section>
 
-                    <section className='pd-qc-workspace'>
-                        <div className='pd-qc-slot-section'>
+                    <section className={`pd-qc-console ${isWide ? 'has-editor' : ''}`}>
+                        <nav className='pd-qc-time-panel' aria-label='Chọn khung giờ kiểm'>
                             <header>
                                 <div>
-                                    <strong>Khung giờ kiểm</strong>
-                                    <small>Chọn đúng giờ trước khi nhập kết quả.</small>
+                                    <strong>Khung giờ</strong>
+                                    <small>
+                                        {number(reportedLines)}/{number(expectedLines)} chuyền đã nhập
+                                    </small>
                                 </div>
-                                <span>
-                                    {selectedSummary?.qcReportedLines || 0}/{selectedSummary?.totalLines || 0} chuyền
-                                </span>
+                                <span>{Math.round(Number(selectedSummary?.qcCoveragePercent || 0))}%</span>
                             </header>
-                            <div className='pd-qc-slots' ref={slotRailRef}>
+                            <div className='pd-qc-times' ref={slotRailRef}>
                                 {activeSlots.map((slot) => {
                                     const summary = day.slotSummaries.find((item) => item.key === slot.key);
-                                    const complete =
-                                        Boolean(summary?.totalLines) &&
-                                        summary?.qcReportedLines === summary?.totalLines;
+                                    const expected = Number(summary?.qcExpectedLines ?? lines.length);
+                                    const reported = Number(summary?.qcReportedLines || 0);
+                                    const complete = expected > 0 && reported === expected;
                                     return (
                                         <button
                                             key={slot.key}
                                             type='button'
-                                            className={`pd-qc-slot ${slot.key === slotKey ? 'is-selected' : ''} ${complete ? 'is-complete' : ''}`}
+                                            className={`pd-qc-time ${slot.key === slotKey ? 'is-selected' : ''} ${complete ? 'is-complete' : ''}`}
                                             onClick={() => setSlotKey(slot.key)}
                                         >
                                             <span>{slotRangeLabelShort(slot)}</span>
                                             <small>
-                                                {summary?.qcReportedLines || 0}/{summary?.totalLines || 0}
+                                                {reported}/{expected}
                                             </small>
+                                            <i aria-hidden='true' />
                                         </button>
                                     );
                                 })}
                             </div>
-                        </div>
+                        </nav>
 
-                        <div className='pd-qc-slot-totals'>
-                            <span>
-                                <small>Tổng</small>
-                                <strong>{number(slotTotal)}</strong>
-                            </span>
-                            <span className='is-passed'>
-                                <small>Đạt</small>
-                                <strong>{number(slotPassed)}</strong>
-                            </span>
-                            <span className='is-defect'>
-                                <small>Lỗi</small>
-                                <strong>{number(slotDefect)}</strong>
-                            </span>
-                            <span className='is-pending'>
-                                <small>Chưa nhập</small>
-                                <strong>{number(pendingLines)} chuyền</strong>
-                            </span>
-                        </div>
+                        <main className='pd-qc-main'>
+                            <div className='pd-qc-slot-summary'>
+                                <div>
+                                    <small>Khung đang xem</small>
+                                    <strong>{selectedSlot ? slotRangeLabelShort(selectedSlot) : '—'}</strong>
+                                </div>
+                                <span>
+                                    <small>Tổng</small>
+                                    <strong>{number(slotTotal)}</strong>
+                                </span>
+                                <span className='is-passed'>
+                                    <small>Đạt</small>
+                                    <strong>{number(slotPassed)}</strong>
+                                </span>
+                                <span className='is-defect'>
+                                    <small>Lỗi</small>
+                                    <strong>{number(slotDefect)}</strong>
+                                </span>
+                                <span className='is-pending'>
+                                    <small>Chưa nhập</small>
+                                    <strong>{number(pendingLines)}</strong>
+                                </span>
+                            </div>
 
-                        <div className='pd-qc-toolbar'>
-                            <Segmented<QcFilter>
-                                value={filter}
-                                onChange={setFilter}
-                                options={[
-                                    { label: 'Tất cả', value: 'all' },
-                                    { label: `Chưa kiểm (${pendingLines})`, value: 'pending' },
-                                    { label: 'Có lỗi', value: 'defect' },
-                                ]}
-                                block={isCompact}
-                            />
-                            <Input
-                                value={search}
-                                onChange={(event) => setSearch(event.target.value)}
-                                allowClear
-                                prefix={<SearchOutlined />}
-                                placeholder='Tìm chuyền hoặc mã hàng'
-                            />
-                        </div>
-
-                        <div className='pd-qc-list-head' aria-hidden='true'>
-                            <span>Chuyền</span>
-                            <span>Mã hàng / sản lượng</span>
-                            <span>Kết quả QC</span>
-                            <span>Trạng thái</span>
-                            <span>Thao tác</span>
-                        </div>
-                        <div className='pd-qc-lines'>
-                            {filteredLines.length ? (
-                                filteredLines.map(renderLine)
-                            ) : (
-                                <Empty
-                                    image={Empty.PRESENTED_IMAGE_SIMPLE}
-                                    description={
-                                        eligibleLines.length
-                                            ? 'Không có chuyền phù hợp bộ lọc'
-                                            : 'Khung giờ chưa có mã hàng cần kiểm'
-                                    }
+                            <div className='pd-qc-toolbar'>
+                                <Segmented<QcFilter>
+                                    value={filter}
+                                    onChange={setFilter}
+                                    options={[
+                                        { label: 'Tất cả', value: 'all' },
+                                        { label: `Chưa nhập (${pendingLines})`, value: 'pending' },
+                                        { label: 'Có lỗi', value: 'defect' },
+                                    ]}
+                                    block={isCompact}
                                 />
-                            )}
-                        </div>
+                                <Input
+                                    value={search}
+                                    onChange={(event) => setSearch(event.target.value)}
+                                    allowClear
+                                    prefix={<SearchOutlined />}
+                                    placeholder='Tìm chuyền hoặc mã hàng'
+                                />
+                            </div>
+
+                            <div className='pd-qc-table-head' aria-hidden='true'>
+                                <span>Chuyền</span>
+                                <span>Mã đang chạy · tham khảo</span>
+                                <span>Kết quả QC</span>
+                                <span>Trạng thái</span>
+                                <span />
+                            </div>
+                            <div className='pd-qc-rows'>
+                                {filteredLines.length ? (
+                                    filteredLines.map(renderLine)
+                                ) : (
+                                    <Empty
+                                        image={Empty.PRESENTED_IMAGE_SIMPLE}
+                                        description={
+                                            lines.length ? 'Không có chuyền phù hợp bộ lọc' : 'Ngày chưa có chuyền'
+                                        }
+                                    />
+                                )}
+                            </div>
+                        </main>
+
+                        {isWide ? (
+                            <ProductionQcEntryDrawer
+                                open={Boolean(selectedLine && selectedSlot && selectedValue)}
+                                mobile={false}
+                                line={selectedLine}
+                                slot={selectedSlot}
+                                value={selectedValue}
+                                readOnly={readOnly}
+                                saving={saveMutation.isPending}
+                                deleting={deleteMutation.isPending}
+                                onClose={() => setSelectedLineId(undefined)}
+                                onSave={(payload) =>
+                                    selectedLine && saveMutation.mutate({ lineId: selectedLine.lineId, payload })
+                                }
+                                onDelete={(entryId) =>
+                                    selectedLine && deleteMutation.mutate({ lineId: selectedLine.lineId, entryId })
+                                }
+                            />
+                        ) : null}
                     </section>
                 </>
             )}
 
-            <ProductionQcEntryDrawer
-                open={Boolean(selectedLine && selectedSlot && selectedValue)}
-                mobile={isCompact}
-                line={selectedLine}
-                slot={selectedSlot}
-                value={selectedValue}
-                readOnly={readOnly}
-                saving={saveMutation.isPending}
-                deleting={deleteMutation.isPending}
-                onClose={() => setSelectedLineId(undefined)}
-                onSave={(payload) => selectedLine && saveMutation.mutate({ lineId: selectedLine.lineId, payload })}
-                onDelete={(entryId) => selectedLine && deleteMutation.mutate({ lineId: selectedLine.lineId, entryId })}
-            />
+            {overlayEditor ? (
+                <ProductionQcEntryDrawer
+                    open={Boolean(selectedLine && selectedSlot && selectedValue)}
+                    mobile
+                    line={selectedLine}
+                    slot={selectedSlot}
+                    value={selectedValue}
+                    readOnly={readOnly}
+                    saving={saveMutation.isPending}
+                    deleting={deleteMutation.isPending}
+                    onClose={() => setSelectedLineId(undefined)}
+                    onSave={(payload) => selectedLine && saveMutation.mutate({ lineId: selectedLine.lineId, payload })}
+                    onDelete={(entryId) =>
+                        selectedLine && deleteMutation.mutate({ lineId: selectedLine.lineId, entryId })
+                    }
+                />
+            ) : null}
         </div>
     );
 };
