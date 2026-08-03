@@ -22,6 +22,7 @@ import type {
     ProductionReminderStatus,
     ProductionReminderTestResult,
     SaveProductionEntryPayload,
+    SaveProductionQcEntryPayload,
     ProductionTimeSlot,
     UpdateProductionReminderSettingsPayload,
 } from '../types/production';
@@ -234,4 +235,15 @@ export const productionService = {
 
     deleteEntry: (dayId: string, lineId: string, entryId: string): Promise<ProductionLineRecord> =>
         api.delete(`${BASE}/days/${dayId}/lines/${lineId}/entries/${entryId}`),
+
+    saveQcEntry: (
+        dayId: string,
+        lineId: string,
+        slotKey: string,
+        payload: SaveProductionQcEntryPayload
+    ): Promise<ProductionLineRecord> =>
+        api.put(`${BASE}/days/${dayId}/lines/${lineId}/qc-entries/${encodeURIComponent(slotKey)}`, payload),
+
+    deleteQcEntry: (dayId: string, lineId: string, entryId: string): Promise<ProductionLineRecord> =>
+        api.delete(`${BASE}/days/${dayId}/lines/${lineId}/qc-entries/${entryId}`),
 };

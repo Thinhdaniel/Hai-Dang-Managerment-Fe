@@ -1,0 +1,180 @@
+.production-qc-report__summary {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    overflow: hidden;
+    margin-bottom: 14px;
+    border: 1px solid #e0e5eb;
+    border-radius: 7px;
+    background: #f8f9fb;
+}
+
+.production-qc-report__summary > span {
+    display: flex;
+    min-width: 0;
+    flex-direction: column;
+    padding: 11px 14px;
+}
+
+.production-qc-report__summary > span + span {
+    border-left: 1px solid #e0e5eb;
+}
+
+.production-qc-report__summary small {
+    color: #687386;
+    font-size: var(--pd-fs-9, 12px);
+}
+
+.production-qc-report__summary strong {
+    margin-top: 2px;
+    color: #202a36;
+    font-size: var(--pd-fs-13, 15px);
+}
+
+.production-qc-report .is-passed {
+    color: #087a4c;
+}
+
+.production-qc-report .is-defect {
+    color: #b42318;
+}
+
+.production-qc-report .is-pending {
+    color: #a65309;
+}
+
+.production-qc-report__head,
+.production-qc-report__row {
+    display: grid;
+    grid-template-columns: minmax(150px, 1.3fr) repeat(6, minmax(80px, 0.75fr));
+    align-items: center;
+    gap: 10px;
+}
+
+.production-qc-report__head {
+    min-height: 36px;
+    padding-inline: 12px;
+    border: 1px solid #e0e5eb;
+    border-radius: 6px 6px 0 0;
+    color: #687386;
+    background: #f5f7f9;
+    font-size: var(--pd-fs-8, 11px);
+    font-weight: 750;
+}
+
+.production-qc-report__head span:not(:first-child),
+.production-qc-report__row > span:not(:first-child) {
+    text-align: right;
+}
+
+.production-qc-report__row {
+    min-height: 50px;
+    padding: 7px 12px;
+    border: 1px solid #e7eaee;
+    border-top: 0;
+    color: #3f4a59;
+    font-size: var(--pd-fs-10, 13px);
+}
+
+.production-qc-report__row:last-child {
+    border-radius: 0 0 6px 6px;
+}
+
+.production-qc-report__line {
+    display: flex;
+    min-width: 0;
+    flex-direction: column;
+}
+
+.production-qc-report__line strong,
+.production-qc-report__line small {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.production-qc-report__line strong {
+    color: #202a36;
+}
+
+.production-qc-report__line small {
+    color: #7d8795;
+    font-size: var(--pd-fs-8, 11px);
+}
+
+@media (max-width: 767px) {
+    .production-qc-report__summary {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .production-qc-report__summary > span:nth-child(3) {
+        border-top: 1px solid #e0e5eb;
+        border-left: 0;
+    }
+
+    .production-qc-report__summary > span:nth-child(4) {
+        border-top: 1px solid #e0e5eb;
+    }
+
+    .production-qc-report__head {
+        display: none;
+    }
+
+    .production-qc-report__lines {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+    }
+
+    .production-qc-report__row {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 0;
+        padding: 0;
+        border: 1px solid #dfe4ea;
+        border-radius: 7px;
+        overflow: hidden;
+    }
+
+    .production-qc-report__line {
+        grid-column: 1 / -1;
+        padding: 10px 12px;
+        border-bottom: 1px solid #e5e9ee;
+        background: #f7f8fa;
+    }
+
+    .production-qc-report__row > span:not(.production-qc-report__line) {
+        position: relative;
+        display: flex;
+        min-height: 48px;
+        flex-direction: column;
+        align-items: flex-end;
+        justify-content: center;
+        padding: 17px 11px 7px;
+        border-bottom: 1px solid #edf0f3;
+        text-align: right;
+    }
+
+    .production-qc-report__row > span:not(.production-qc-report__line):nth-child(even) {
+        border-right: 1px solid #edf0f3;
+    }
+
+    .production-qc-report__row > span[data-label]::before {
+        position: absolute;
+        top: 5px;
+        right: 11px;
+        color: #7d8795;
+        content: attr(data-label);
+        font-size: var(--pd-fs-8, 11px);
+    }
+
+    .production-qc-report__row > span:last-child {
+        grid-column: 1 / -1;
+        align-items: center;
+    }
+}
+
+@media print {
+    .production-qc-report__head,
+    .production-qc-report__row {
+        break-inside: avoid;
+    }
+}

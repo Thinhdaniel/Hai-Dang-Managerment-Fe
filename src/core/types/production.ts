@@ -86,12 +86,44 @@ export interface HourlyProductionEntry {
     updatedAt?: string;
 }
 
+export interface HourlyQcEntry {
+    id: string;
+    slotKey: string;
+    runId: string;
+    passedQuantity: number;
+    defectQuantity: number;
+    totalQuantity: number;
+    defectRate: number;
+    note?: string;
+    enteredBy?: string;
+    enteredByName?: string;
+    enteredAt?: string;
+    updatedBy?: string;
+    updatedByName?: string;
+    updatedAt?: string;
+}
+
 export interface ProductionSlotValue {
     key: string;
     /** Khung tăng ca: không có khoán (target = 0), sản lượng là phần vượt để xét thưởng. */
     overtime?: boolean;
     target: number;
     actual: number;
+    reported: boolean;
+    runId?: string;
+    entryIds: string[];
+}
+
+export interface ProductionQcSlotValue {
+    key: string;
+    overtime?: boolean;
+    passedQuantity: number;
+    defectQuantity: number;
+    totalQuantity: number;
+    defectRate: number;
+    productionActual: number;
+    varianceQuantity: number;
+    pendingQuantity: number;
     reported: boolean;
     runId?: string;
     entryIds: string[];
@@ -115,11 +147,19 @@ export interface ProductionLineRecord {
     runs: ProductionRun[];
     entries: HourlyProductionEntry[];
     slotValues: ProductionSlotValue[];
+    qcEntries: HourlyQcEntry[];
+    qcSlotValues: ProductionQcSlotValue[];
     totalTarget: number;
     totalActual: number;
     achievementPercent: number;
     totalAmount: number;
     averageIncome: number;
+    qcPassedQuantity: number;
+    qcDefectQuantity: number;
+    qcTotalQuantity: number;
+    qcDefectRate: number;
+    qcPendingQuantity: number;
+    qcReportedSlots: number;
     configured: boolean;
     updatedBy?: string;
     updatedByName?: string;
@@ -136,6 +176,11 @@ export interface ProductionDaySummary {
     totalAmount: number;
     averageIncome: number;
     itemCount: number;
+    qcPassedQuantity: number;
+    qcDefectQuantity: number;
+    qcTotalQuantity: number;
+    qcDefectRate: number;
+    qcPendingQuantity: number;
 }
 
 export interface ProductionSlotSummary {
@@ -144,6 +189,10 @@ export interface ProductionSlotSummary {
     target: number;
     actual: number;
     reportedLines: number;
+    qcPassedQuantity: number;
+    qcDefectQuantity: number;
+    qcTotalQuantity: number;
+    qcReportedLines: number;
     totalLines: number;
 }
 
@@ -182,6 +231,16 @@ export interface SaveProductionEntryPayload {
      * null: client tin ô chưa tồn tại; string: phiên bản client đã đọc;
      * undefined: tương thích luồng cũ, không kiểm tra xung đột.
      */
+    expectedUpdatedAt?: string | null;
+}
+
+export interface SaveProductionQcEntryPayload {
+    runId: string;
+    passedQuantity: number;
+    defectQuantity: number;
+    totalQuantity: number;
+    note?: string;
+    clientMutationId?: string;
     expectedUpdatedAt?: string | null;
 }
 

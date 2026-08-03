@@ -42,6 +42,7 @@ const roleOptions = [
     { value: UserRole.MANAGER, label: USER_ROLE_LABEL[UserRole.MANAGER] },
     { value: UserRole.STAFF, label: USER_ROLE_LABEL[UserRole.STAFF] },
     { value: UserRole.LINE_LEADER, label: USER_ROLE_LABEL[UserRole.LINE_LEADER] },
+    { value: UserRole.QC, label: USER_ROLE_LABEL[UserRole.QC] },
 ];
 
 const sanitizeValue = (value?: string | null) => (value || '').trim().replace(/\s+/g, ' ');
@@ -55,7 +56,7 @@ const UserFormModal = (props: UserFormModalProps) => {
     // Tổ trưởng bị khóa theo cơ sở và không tự đổi được (chỉ admin/giám đốc đổi
     // cơ sở), nên phải gán cơ sở ngay khi tạo — nếu không họ rơi vào cơ sở bất kỳ.
     const selectedRole = Form.useWatch('role', form);
-    const plantRequired = selectedRole === UserRole.LINE_LEADER;
+    const plantRequired = selectedRole === UserRole.LINE_LEADER || selectedRole === UserRole.QC;
 
     useEffect(() => {
         if (!open) {
@@ -181,19 +182,15 @@ const UserFormModal = (props: UserFormModalProps) => {
                     label='Cơ sở làm việc'
                     rules={
                         plantRequired
-                            ? [{ required: true, message: 'Tổ trưởng phải được gán cơ sở để nhập sản lượng' }]
+                            ? [{ required: true, message: 'Tài khoản sản xuất phải được gán cơ sở' }]
                             : undefined
                     }
-                    extra={
-                        plantRequired
-                            ? 'Tổ trưởng chỉ nhập sản lượng cho cơ sở này và không tự đổi được.'
-                            : undefined
-                    }
+                    extra={plantRequired ? 'Tổ trưởng/QC chỉ thao tác dữ liệu sản xuất của cơ sở này.' : undefined}
                 >
                     <Select
                         size='large'
                         allowClear={!plantRequired}
-                        placeholder={plantRequired ? 'Chọn cơ sở của tổ trưởng' : 'Chọn cơ sở (tùy chọn)'}
+                        placeholder={plantRequired ? 'Chọn cơ sở làm việc' : 'Chọn cơ sở (tùy chọn)'}
                         options={props.plants.map((p) => ({ value: p.id, label: p.name }))}
                     />
                 </Form.Item>

@@ -1,6 +1,7 @@
 import { App, Avatar, Button, ConfigProvider, Drawer, Dropdown, Tooltip, Typography, type MenuProps } from 'antd';
 import {
     AppstoreOutlined,
+    AuditOutlined,
     CalendarOutlined,
     DownOutlined,
     EditOutlined,
@@ -18,7 +19,7 @@ import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../core/contexts/AuthContext';
 import { useResponsive } from '../../core/hooks/useResponsive';
 import { useSocket } from '../../core/hooks/useSocket';
-import { can, isLineLeader } from '../../core/lib/permissions';
+import { can, getLandingPath, isProductionOperator, isQc } from '../../core/lib/permissions';
 import { countProductionEntryDrafts } from '../../core/lib/productionDraft';
 import { listProductionOutbox } from '../../core/lib/productionOutbox';
 import '../../styles/production.css';
@@ -63,12 +64,19 @@ const ProductionAppLayout = () => {
     }, [socket]);
 
     const manage = can(role, 'production.manage');
+    const qcAccess = can(role, 'production.qc.write');
     // Tổ trưởng chỉ có đúng màn nhập sản lượng — không hiện điều hướng nào khác,
     // không lối sang app quản lý máy/vật tư.
-    const leaderOnly = isLineLeader(role);
+    const qcOnly = isQc(role);
+    const operatorOnly = isProductionOperator(role);
     const navItems = [
         manage ? { to: '/production/planning', end: false, icon: <CalendarOutlined />, label: 'Kế hoạch' } : null,
-        { to: '/production', end: true, icon: <EditOutlined />, label: 'Nhập sản lượng', short: 'Nhập liệu' },
+        !qcOnly
+            ? { to: '/production', end: true, icon: <EditOutlined />, label: 'Nhập sản lượng', short: 'Nhập liệu' }
+            : null,
+        qcAccess
+            ? { to: '/production/qc', end: false, icon: <AuditOutlined />, label: 'Kiểm tra QC', short: 'QC' }
+            : null,
         manage ? { to: '/production/monitor', end: false, icon: <LineChartOutlined />, label: 'Điều hành' } : null,
         manage
             ? {
@@ -80,7 +88,7 @@ const ProductionAppLayout = () => {
               }
             : null,
         manage ? { to: '/production/reports', end: false, icon: <PieChartOutlined />, label: 'Báo cáo' } : null,
-        { to: '/production/history', end: false, icon: <HistoryOutlined />, label: 'Lịch sử' },
+        !operatorOnly ? { to: '/production/history', end: false, icon: <HistoryOutlined />, label: 'Lịch sử' } : null,
     ].filter((item): item is NonNullable<typeof item> => Boolean(item));
 
     // Thanh tab dưới chia đều chiều ngang: quá 5 mục thì mỗi mục còn ~62px ở
@@ -107,7 +115,7 @@ const ProductionAppLayout = () => {
         },
         { type: 'divider' },
         // Tổ trưởng không có quyền vào app quản lý máy/vật tư nên bỏ hẳn lối này.
-        ...(leaderOnly
+        ...(operatorOnly
             ? []
             : ([
                   { key: 'management', icon: <AppstoreOutlined />, label: 'Quản lý máy & vật tư' },
@@ -177,17 +185,23 @@ const ProductionAppLayout = () => {
                 },
             }}
         >
-            <div className={['production-app-shell', leaderOnly ? 'is-leader' : ''].filter(Boolean).join(' ')}>
+            <div
+                className={['production-app-shell', operatorOnly ? 'is-leader' : '', qcOnly ? 'is-qc' : '']
+                    .filter(Boolean)
+                    .join(' ')}
+            >
                 <header className='pd-header'>
-                    <button type='button' className='pd-brand' onClick={() => navigate('/production')}>
+                    <button type='button' className='pd-brand' onClick={() => navigate(getLandingPath(role))}>
                         <img src='/brand/company-logo.png' alt='' />
                         <strong>
                             Hải Đăng <em>Production</em>
                         </strong>
                     </button>
 
-                    {leaderOnly ? (
-                        <div className='pd-leader-tag'>Báo sản lượng theo giờ</div>
+                    {operatorOnly ? (
+                        <div className='pd-leader-tag'>
+                            {qcOnly ? 'Kiểm tra QC theo giờ' : 'Báo sản lượng theo giờ'}
+                        </div>
                     ) : (
                         <nav className='pd-nav' aria-label='Điều hướng sản xuất'>
                             {navItems.map((item) => (
@@ -207,7 +221,7 @@ const ProductionAppLayout = () => {
                             {isPhone ? null : realtimeOk ? 'Realtime' : 'Chờ đồng bộ'}
                         </div>
 
-                        {isPhone || leaderOnly ? null : (
+                        {isPhone || operatorOnly ? null : (
                             <Tooltip title='Về Quản lý máy & vật tư'>
                                 <Button icon={<SwapOutlined />} onClick={() => navigate('/dashboard')} />
                             </Tooltip>
@@ -230,8 +244,8 @@ const ProductionAppLayout = () => {
                 <nav
                     className='pd-tabbar'
                     aria-label='Điều hướng sản xuất'
-                    hidden={leaderOnly}
-                    style={leaderOnly ? { display: 'none' } : undefined}
+                    hidden={operatorOnly}
+                    style={operatorOnly ? { display: 'none' } : undefined}
                 >
                     {primaryNav.map((item) => (
                         <NavLink key={item.to} to={item.to} end={item.end} onClick={() => setMoreOpen(false)}>

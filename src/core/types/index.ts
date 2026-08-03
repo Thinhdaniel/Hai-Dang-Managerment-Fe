@@ -71,6 +71,8 @@ export enum UserRole {
     DIRECTOR = 'director',
     // Tổ trưởng chuyền: chỉ báo sản lượng theo giờ.
     LINE_LEADER = 'line_leader',
+    // QC: chỉ nhập kết quả đạt/lỗi theo giờ.
+    QC = 'qc',
 }
 
 // ===== BASE =====

@@ -23,6 +23,7 @@ const ROLE_PILL: Record<User['role'], { bg: string; text: string; label: string 
     staff:    { bg: 'oklch(0.96 0.04 145)', text: 'oklch(0.32 0.14 145)', label: USER_ROLE_LABEL.staff },
     director: { bg: 'oklch(0.95 0.06 300)', text: 'oklch(0.36 0.18 300)', label: USER_ROLE_LABEL.director },
     line_leader: { bg: 'oklch(0.95 0.05 265)', text: 'oklch(0.34 0.17 265)', label: USER_ROLE_LABEL.line_leader },
+    qc: { bg: 'oklch(0.96 0.04 190)', text: 'oklch(0.32 0.12 190)', label: USER_ROLE_LABEL.qc },
 };
 
 const PAGE_ANIM = `
@@ -193,6 +194,7 @@ const UserList: React.FC = () => {
                     staff: 0,
                     director: 0,
                     line_leader: 0,
+                    qc: 0,
                 }
             ),
         [userResponse?.statsSource]
@@ -452,6 +454,7 @@ const UserList: React.FC = () => {
                         { value: 'manager',     label: USER_ROLE_LABEL.manager },
                         { value: 'staff',       label: USER_ROLE_LABEL.staff },
                         { value: 'line_leader', label: USER_ROLE_LABEL.line_leader },
+                        { value: 'qc', label: USER_ROLE_LABEL.qc },
                     ]}
                 />
                 <Select

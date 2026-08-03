@@ -7,7 +7,7 @@ import LazyBoundary from '../components/shared/LazyBoundary';
 import ProtectedRoute, { RequireAccess } from './guard';
 import { ROUTE_ACCESS } from '../core/constants/navAccess';
 import { useAuth } from '../core/contexts/AuthContext';
-import { isLineLeader } from '../core/lib/permissions';
+import { isLineLeader, isQc } from '../core/lib/permissions';
 
 const Dashboard = lazy(() => import('../pages/Dashboard'));
 const ChatPage = lazy(() => import('../pages/ChatPage'));
@@ -45,6 +45,7 @@ const AiAssistantQualityPage = lazy(() => import('../pages/AiAssistantQualityPag
 const LuckyWheelPage = lazy(() => import('../pages/LuckyWheelPage'));
 const ProductionPage = lazy(() => import('../pages/ProductionPage'));
 const ProductionLeaderPage = lazy(() => import('../pages/ProductionLeaderPage'));
+const ProductionQcPage = lazy(() => import('../pages/ProductionQcPage'));
 const ProductionHistoryPage = lazy(() => import('../pages/ProductionHistoryPage'));
 const ProductionMonitorPage = lazy(() => import('../pages/ProductionMonitorPage'));
 const ProductionBoardPage = lazy(() => import('../pages/ProductionBoardPage'));
@@ -67,7 +68,9 @@ const withSuspense = (element: ReactNode) => <LazyBoundary>{element}</LazyBounda
 
 const ProductionIndexPage = () => {
     const { role } = useAuth();
-    return isLineLeader(role) ? <ProductionLeaderPage /> : <ProductionPage />;
+    if (isLineLeader(role)) return <ProductionLeaderPage />;
+    if (isQc(role)) return <Navigate to='/production/qc' replace />;
+    return <ProductionPage />;
 };
 
 /** Bọc element trong RequireAccess nếu route đó cần quyền (theo ROUTE_ACCESS). */
@@ -176,6 +179,7 @@ export const router = createBrowserRouter([
         errorElement: withSuspense(<RouteErrorPage />),
         children: [
             { index: true, element: withSuspense(<ProductionIndexPage />) },
+            { path: 'qc', element: guarded('/production/qc', <ProductionQcPage />) },
             { path: 'planning', element: guarded('/production/planning', <ProductionPlanningPage />) },
             { path: 'monitor', element: guarded('/production/monitor', <ProductionMonitorPage />) },
             { path: 'board', element: guarded('/production/board', <ProductionBoardPage />) },

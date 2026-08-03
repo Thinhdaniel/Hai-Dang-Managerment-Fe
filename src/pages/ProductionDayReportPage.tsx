@@ -1,5 +1,7 @@
 import {
     ArrowLeftOutlined,
+    CheckCircleFilled,
+    CloseCircleFilled,
     FileExcelOutlined,
     PrinterOutlined,
     ReloadOutlined,
@@ -21,6 +23,7 @@ import type {
     ProductionMonitorAlert,
     ProductionTimeSlot,
 } from '../core/types/production';
+import '../styles/production-qc-report.css';
 
 const { Text, Title } = Typography;
 
@@ -321,7 +324,9 @@ const ProductionDayReportPage = () => {
                         </div>
                         <div>
                             <span>Mức đạt</span>
-                            <strong className={`production-day-report-tone tone-${percentTone(summary.achievementPercent)}`}>
+                            <strong
+                                className={`production-day-report-tone tone-${percentTone(summary.achievementPercent)}`}
+                            >
                                 {number(summary.achievementPercent, 1)}%
                             </strong>
                             <small>
@@ -355,6 +360,64 @@ const ProductionDayReportPage = () => {
                                 </div>
                             </>
                         ) : null}
+                    </section>
+
+                    <section className='production-day-report__card production-qc-report'>
+                        <div className='production-day-report__heading'>
+                            <Title level={4}>Đối chiếu chất lượng QC</Title>
+                            <Text type='secondary'>Tổng kiểm = Đạt + Lỗi, không cộng vào sản lượng tính lương</Text>
+                        </div>
+                        <div className='production-qc-report__summary'>
+                            <span>
+                                <small>Tổng kiểm</small>
+                                <strong>{number(summary.qcTotalQuantity)} SP</strong>
+                            </span>
+                            <span className='is-passed'>
+                                <small>Đạt</small>
+                                <strong>{number(summary.qcPassedQuantity)} SP</strong>
+                            </span>
+                            <span className='is-defect'>
+                                <small>Lỗi</small>
+                                <strong>{number(summary.qcDefectQuantity)} SP</strong>
+                            </span>
+                            <span className='is-pending'>
+                                <small>Chờ kiểm</small>
+                                <strong>{number(summary.qcPendingQuantity)} SP</strong>
+                            </span>
+                        </div>
+                        <div className='production-qc-report__lines'>
+                            <div className='production-qc-report__head' aria-hidden='true'>
+                                <span>Chuyền</span>
+                                <span>Sản lượng báo</span>
+                                <span>Tổng kiểm</span>
+                                <span>Đạt</span>
+                                <span>Lỗi</span>
+                                <span>Tỷ lệ lỗi</span>
+                                <span>Chờ kiểm</span>
+                            </div>
+                            {day.lines.map((line) => (
+                                <div className='production-qc-report__row' key={line.lineId}>
+                                    <span className='production-qc-report__line'>
+                                        <strong>{line.lineCode}</strong>
+                                        <small>{line.leaderName || line.lineName || '—'}</small>
+                                    </span>
+                                    <span data-label='Sản lượng báo'>{number(line.totalActual)}</span>
+                                    <span data-label='Tổng kiểm'>{number(line.qcTotalQuantity)}</span>
+                                    <span data-label='Đạt' className='is-passed'>
+                                        <CheckCircleFilled /> {number(line.qcPassedQuantity)}
+                                    </span>
+                                    <span data-label='Lỗi' className={line.qcDefectQuantity ? 'is-defect' : ''}>
+                                        <CloseCircleFilled /> {number(line.qcDefectQuantity)}
+                                    </span>
+                                    <span data-label='Tỷ lệ lỗi' className={line.qcDefectQuantity ? 'is-defect' : ''}>
+                                        {number(line.qcDefectRate, 2)}%
+                                    </span>
+                                    <span data-label='Chờ kiểm' className={line.qcPendingQuantity ? 'is-pending' : ''}>
+                                        {number(line.qcPendingQuantity)}
+                                    </span>
+                                </div>
+                            ))}
+                        </div>
                     </section>
 
                     <section className='production-day-report__card'>
@@ -410,118 +473,130 @@ const ProductionDayReportPage = () => {
                         {isPhone ? (
                             <ProductionLedgerCards rows={ledgerRows} />
                         ) : (
-                        <div className='production-board-ledger-wrap'>
-                            <table className='production-board-ledger'>
-                                <thead>
-                                    <tr>
-                                        <th className='lg-line'>Chuyền</th>
-                                        <th className='lg-kind' aria-label='Chỉ tiêu' />
-                                        {activeSlots.map((slot) => (
-                                            <th key={slot.key}>{slotRangeLabelShort(slot)}</th>
-                                        ))}
-                                        <th className='lg-total'>Tổng</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    {day.lines.map((line) => {
-                                        const dayPercent = percentOf(line.totalActual, line.totalTarget);
-                                        return (
-                                            <Fragment key={line.lineId}>
-                                                <tr className='lg-row-quota'>
-                                                    <th rowSpan={3} className='lg-line'>
-                                                        {/* Trang đọc: không dựng nút giả trông bấm được mà không làm gì */}
-                                                        <span className='lg-line-static'>
-                                                            <b>{line.lineCode}</b>
-                                                            <small>{line.leaderName || '—'}</small>
-                                                        </span>
-                                                    </th>
-                                                    <th className='lg-kind'>Khoán</th>
-                                                    {activeSlots.map((slot) => {
-                                                        const value = line.slotValues.find((v) => v.key === slot.key);
-                                                        return (
-                                                            <td
-                                                                key={slot.key}
-                                                                className={value?.overtime ? 'is-ot' : ''}
-                                                            >
-                                                                {!value?.runId
-                                                                    ? ''
-                                                                    : value.overtime
-                                                                      ? 'TC'
-                                                                      : number(value.target)}
-                                                            </td>
-                                                        );
-                                                    })}
-                                                    <td className='lg-total'>{number(line.totalTarget)}</td>
-                                                </tr>
-                                                <tr className='lg-row-actual'>
-                                                    <th className='lg-kind'>Thực tế</th>
-                                                    {activeSlots.map((slot) => {
-                                                        const value = line.slotValues.find((v) => v.key === slot.key);
-                                                        const missing = Boolean(value?.runId) && !value?.reported;
-                                                        return (
-                                                            <td key={slot.key} className={missing ? 'is-missing' : ''}>
-                                                                {value?.reported ? (
-                                                                    number(value.actual)
-                                                                ) : missing ? (
-                                                                    <span className='lg-missing-dot' />
-                                                                ) : (
-                                                                    ''
-                                                                )}
-                                                            </td>
-                                                        );
-                                                    })}
-                                                    <td className='lg-total'>{number(line.totalActual)}</td>
-                                                </tr>
-                                                <tr className='lg-row-rate'>
-                                                    <th className='lg-kind'>Tỉ lệ</th>
-                                                    {activeSlots.map((slot) => {
-                                                        const value = line.slotValues.find((v) => v.key === slot.key);
-                                                        const percent =
-                                                            value?.reported && value.target > 0
-                                                                ? percentOf(value.actual, value.target)
-                                                                : null;
-                                                        return (
-                                                            <td
-                                                                key={slot.key}
-                                                                className={
-                                                                    percent === null
+                            <div className='production-board-ledger-wrap'>
+                                <table className='production-board-ledger'>
+                                    <thead>
+                                        <tr>
+                                            <th className='lg-line'>Chuyền</th>
+                                            <th className='lg-kind' aria-label='Chỉ tiêu' />
+                                            {activeSlots.map((slot) => (
+                                                <th key={slot.key}>{slotRangeLabelShort(slot)}</th>
+                                            ))}
+                                            <th className='lg-total'>Tổng</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {day.lines.map((line) => {
+                                            const dayPercent = percentOf(line.totalActual, line.totalTarget);
+                                            return (
+                                                <Fragment key={line.lineId}>
+                                                    <tr className='lg-row-quota'>
+                                                        <th rowSpan={3} className='lg-line'>
+                                                            {/* Trang đọc: không dựng nút giả trông bấm được mà không làm gì */}
+                                                            <span className='lg-line-static'>
+                                                                <b>{line.lineCode}</b>
+                                                                <small>{line.leaderName || '—'}</small>
+                                                            </span>
+                                                        </th>
+                                                        <th className='lg-kind'>Khoán</th>
+                                                        {activeSlots.map((slot) => {
+                                                            const value = line.slotValues.find(
+                                                                (v) => v.key === slot.key
+                                                            );
+                                                            return (
+                                                                <td
+                                                                    key={slot.key}
+                                                                    className={value?.overtime ? 'is-ot' : ''}
+                                                                >
+                                                                    {!value?.runId
                                                                         ? ''
-                                                                        : `has-bar is-${percentTone(percent) === 'success' ? 'ok' : percentTone(percent) === 'warning' ? 'warn' : 'danger'}`
-                                                                }
-                                                                style={
-                                                                    percent === null
-                                                                        ? undefined
-                                                                        : ({
-                                                                              '--lg-rate': Math.min(1, percent / 100),
-                                                                          } as React.CSSProperties)
-                                                                }
-                                                            >
-                                                                {percent === null ? '' : `${Math.round(percent)}%`}
-                                                            </td>
-                                                        );
-                                                    })}
-                                                    <td
-                                                        className={`lg-total is-${percentTone(dayPercent) === 'success' ? 'ok' : percentTone(dayPercent) === 'warning' ? 'warn' : 'danger'}`}
-                                                    >
-                                                        {number(dayPercent, 0)}%
-                                                    </td>
-                                                </tr>
-                                            </Fragment>
-                                        );
-                                    })}
-                                    <tr className='lg-row-actual production-day-report__slot-total'>
-                                        <th className='lg-line'>
-                                            <b>TOÀN XƯỞNG</b>
-                                        </th>
-                                        <th className='lg-kind'>Thực tế</th>
-                                        {slotTotals.map(({ slot, actual }) => (
-                                            <td key={slot.key}>{number(actual)}</td>
-                                        ))}
-                                        <td className='lg-total'>{number(summary.totalActual)}</td>
-                                    </tr>
-                                </tbody>
-                            </table>
-                        </div>
+                                                                        : value.overtime
+                                                                          ? 'TC'
+                                                                          : number(value.target)}
+                                                                </td>
+                                                            );
+                                                        })}
+                                                        <td className='lg-total'>{number(line.totalTarget)}</td>
+                                                    </tr>
+                                                    <tr className='lg-row-actual'>
+                                                        <th className='lg-kind'>Thực tế</th>
+                                                        {activeSlots.map((slot) => {
+                                                            const value = line.slotValues.find(
+                                                                (v) => v.key === slot.key
+                                                            );
+                                                            const missing = Boolean(value?.runId) && !value?.reported;
+                                                            return (
+                                                                <td
+                                                                    key={slot.key}
+                                                                    className={missing ? 'is-missing' : ''}
+                                                                >
+                                                                    {value?.reported ? (
+                                                                        number(value.actual)
+                                                                    ) : missing ? (
+                                                                        <span className='lg-missing-dot' />
+                                                                    ) : (
+                                                                        ''
+                                                                    )}
+                                                                </td>
+                                                            );
+                                                        })}
+                                                        <td className='lg-total'>{number(line.totalActual)}</td>
+                                                    </tr>
+                                                    <tr className='lg-row-rate'>
+                                                        <th className='lg-kind'>Tỉ lệ</th>
+                                                        {activeSlots.map((slot) => {
+                                                            const value = line.slotValues.find(
+                                                                (v) => v.key === slot.key
+                                                            );
+                                                            const percent =
+                                                                value?.reported && value.target > 0
+                                                                    ? percentOf(value.actual, value.target)
+                                                                    : null;
+                                                            return (
+                                                                <td
+                                                                    key={slot.key}
+                                                                    className={
+                                                                        percent === null
+                                                                            ? ''
+                                                                            : `has-bar is-${percentTone(percent) === 'success' ? 'ok' : percentTone(percent) === 'warning' ? 'warn' : 'danger'}`
+                                                                    }
+                                                                    style={
+                                                                        percent === null
+                                                                            ? undefined
+                                                                            : ({
+                                                                                  '--lg-rate': Math.min(
+                                                                                      1,
+                                                                                      percent / 100
+                                                                                  ),
+                                                                              } as React.CSSProperties)
+                                                                    }
+                                                                >
+                                                                    {percent === null ? '' : `${Math.round(percent)}%`}
+                                                                </td>
+                                                            );
+                                                        })}
+                                                        <td
+                                                            className={`lg-total is-${percentTone(dayPercent) === 'success' ? 'ok' : percentTone(dayPercent) === 'warning' ? 'warn' : 'danger'}`}
+                                                        >
+                                                            {number(dayPercent, 0)}%
+                                                        </td>
+                                                    </tr>
+                                                </Fragment>
+                                            );
+                                        })}
+                                        <tr className='lg-row-actual production-day-report__slot-total'>
+                                            <th className='lg-line'>
+                                                <b>TOÀN XƯỞNG</b>
+                                            </th>
+                                            <th className='lg-kind'>Thực tế</th>
+                                            {slotTotals.map(({ slot, actual }) => (
+                                                <td key={slot.key}>{number(actual)}</td>
+                                            ))}
+                                            <td className='lg-total'>{number(summary.totalActual)}</td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
                         )}
                     </section>
 
@@ -648,7 +723,8 @@ const ProductionDayReportPage = () => {
 
                     {isMobile ? null : (
                         <Text type='secondary' className='production-day-report__foot'>
-                            Số liệu chốt tại thời điểm {dayjs(day.updatedAt || Date.now()).format('DD/MM/YYYY HH:mm')}
+                            Số liệu chốt tại thời điểm{' '}
+                            {dayjs(day.updatedAt || day.dataAsOf || `${date}T00:00:00`).format('DD/MM/YYYY HH:mm')}
                         </Text>
                     )}
                 </>

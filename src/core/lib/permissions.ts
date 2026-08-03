@@ -40,6 +40,7 @@ export type Capability =
     | 'assistantQuality.view'
     | 'production.view'
     | 'production.write'
+    | 'production.qc.write'
     | 'production.manage';
 
 const ALL_VIEW: Capability[] = ['asset.view', 'transfer.view', 'borrowing.view', 'maintenance.view'];
@@ -70,6 +71,7 @@ const ROLE_CAPS: Record<Exclude<UserRole, UserRole.ADMIN>, Capability[]> = {
         'report.view',
         'production.view',
         'production.write',
+        'production.qc.write',
         'production.manage',
         'plant.view',
         'user.view',
@@ -97,6 +99,7 @@ const ROLE_CAPS: Record<Exclude<UserRole, UserRole.ADMIN>, Capability[]> = {
         'report.view',
         'production.view',
         'production.write',
+        'production.qc.write',
         'production.manage',
     ],
     [UserRole.STAFF]: [
@@ -113,6 +116,8 @@ const ROLE_CAPS: Record<Exclude<UserRole, UserRole.ADMIN>, Capability[]> = {
     ],
     // Tổ trưởng: CHỈ báo sản lượng theo giờ, không đụng bất kỳ module nào khác.
     [UserRole.LINE_LEADER]: ['production.view', 'production.write'],
+    // QC chỉ đọc ngày sản xuất và ghi kết quả chất lượng, không sửa sản lượng/cấu hình.
+    [UserRole.QC]: ['production.view', 'production.qc.write'],
 };
 
 export const isSuperAdmin = (role: Role) => role === UserRole.ADMIN;
@@ -121,12 +126,18 @@ export const isFieldStaff = (role: Role) => role === UserRole.STAFF;
 
 /** Tổ trưởng chuyền — chỉ có màn nhập sản lượng theo giờ. */
 export const isLineLeader = (role: Role) => role === UserRole.LINE_LEADER;
+export const isQc = (role: Role) => role === UserRole.QC;
+export const isProductionOperator = (role: Role) => isLineLeader(role) || isQc(role);
 
 /**
  * Trang đích sau khi đăng nhập / khi vào "/". Tổ trưởng đi thẳng màn nhập sản
  * lượng theo giờ; các role khác về Dashboard quản lý máy & vật tư như cũ.
  */
-export const getLandingPath = (role: Role) => (role === UserRole.LINE_LEADER ? '/production' : '/dashboard');
+export const getLandingPath = (role: Role) => {
+    if (role === UserRole.LINE_LEADER) return '/production';
+    if (role === UserRole.QC) return '/production/qc';
+    return '/dashboard';
+};
 
 /** Quản lý trở lên (Super Admin + Giám đốc + Quản lý) — đã gồm Giám đốc. */
 export const hasManagerAccess = (role: Role) =>

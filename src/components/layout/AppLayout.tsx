@@ -6,7 +6,7 @@ import AppSidebar from './AppSidebar';
 import MobileBottomNav from '../pwa/MobileBottomNav';
 import AssistantLauncher from '../AssistantLauncher';
 import { useAuth } from '../../core/contexts/AuthContext';
-import { isLineLeader } from '../../core/lib/permissions';
+import { getLandingPath, isProductionOperator } from '../../core/lib/permissions';
 
 const AssetAssistantDrawer = lazy(() => import('../AssetAssistantDrawer'));
 
@@ -45,8 +45,8 @@ const AppLayout: React.FC = () => {
     // Tổ trưởng không có phần mềm quản lý máy/vật tư — mọi đường vào cây "/"
     // đều đẩy thẳng về màn nhập sản lượng theo giờ (một chốt chặn duy nhất).
     // Đặt sau toàn bộ hook để không phá thứ tự hook (rules-of-hooks).
-    if (isLineLeader(role)) {
-        return <Navigate to='/production' replace />;
+    if (isProductionOperator(role)) {
+        return <Navigate to={getLandingPath(role)} replace />;
     }
 
     return (
