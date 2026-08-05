@@ -33,6 +33,13 @@ import {
     updateProductionOutbox,
     type ProductionEntryOutboxItem,
 } from '../core/lib/productionOutbox';
+import {
+    listProductionOperationOutbox,
+    removeProductionOperationOutbox,
+    subscribeProductionOperationOutbox,
+    updateProductionOperationOutbox,
+    type ProductionOperationOutboxItem,
+} from '../core/lib/productionOperationOutbox';
 import { slotRangeLabel, slotRangeLabelShort } from '../core/lib/productionSlot';
 import { productionService } from '../core/services/production.service';
 import type { ProductionDay, ProductionLineRecord, ProductionTimeSlot } from '../core/types/production';
@@ -89,6 +96,7 @@ const ProductionLeaderPage = () => {
     const [selectedLineId, setSelectedLineId] = useState<string | null>(null);
     const [online, setOnline] = useState(() => navigator.onLine);
     const [outbox, setOutbox] = useState<ProductionEntryOutboxItem[]>([]);
+    const [operationOutbox, setOperationOutbox] = useState<ProductionOperationOutboxItem[]>([]);
     const [saving, setSaving] = useState(false);
     const [flushing, setFlushing] = useState(false);
     const [receipt, setReceipt] = useState<{ mode: 'synced' | 'queued'; text: string }>();
@@ -99,6 +107,10 @@ const ProductionLeaderPage = () => {
     const plantId = user?.plantId || '';
     const productionDate = date.format('YYYY-MM-DD');
     const retryableOutboxCount = outbox.filter((item) => item.status === 'pending' || item.status === 'syncing').length;
+    const retryableOperationOutboxCount = operationOutbox.filter(
+        (item) => item.status === 'pending' || item.status === 'syncing'
+    ).length;
+    const retryableTotalCount = retryableOutboxCount + retryableOperationOutboxCount;
 
     const dayQuery = useQuery({
         queryKey: ['production', 'day', plantId, productionDate],
@@ -128,10 +140,21 @@ const ProductionLeaderPage = () => {
         setOutbox(entries.filter((item) => item.actorId === actorId && item.plantId === plantId));
     }, [actorId, plantId]);
 
+    const reloadOperationOutbox = useCallback(() => {
+        setOperationOutbox(
+            listProductionOperationOutbox().filter((item) => item.actorId === actorId && item.plantId === plantId)
+        );
+    }, [actorId, plantId]);
+
     useEffect(() => {
         void reloadOutbox();
         return subscribeProductionOutbox(() => void reloadOutbox());
     }, [reloadOutbox]);
+
+    useEffect(() => {
+        reloadOperationOutbox();
+        return subscribeProductionOperationOutbox(reloadOperationOutbox);
+    }, [reloadOperationOutbox]);
 
     useEffect(() => {
         const onOnline = () => setOnline(true);
@@ -248,6 +271,61 @@ const ProductionLeaderPage = () => {
                         break;
                     }
                 }
+
+                const operationEntries = listProductionOperationOutbox().filter(
+                    (item) =>
+                        item.actorId === actorId &&
+                        item.plantId === plantId &&
+                        item.status !== 'conflict' &&
+                        (force ||
+                            item.status === 'syncing' ||
+                            !item.nextRetryAt ||
+                            !Number.isFinite(new Date(item.nextRetryAt).getTime()) ||
+                            new Date(item.nextRetryAt).getTime() <= now)
+                );
+                for (const item of operationEntries) {
+                    const attempts = item.attempts + 1;
+                    updateProductionOperationOutbox(item.id, {
+                        status: 'syncing',
+                        attempts,
+                        updatedAt: new Date().toISOString(),
+                        nextRetryAt: undefined,
+                        lastError: undefined,
+                    });
+                    try {
+                        await productionService.saveOperationEntries(
+                            item.dayId,
+                            item.lineId,
+                            item.slotKey,
+                            item.entries
+                        );
+                        removeProductionOperationOutbox(item.id);
+                        synchronizedDates.add(item.productionDate);
+                    } catch (error) {
+                        const status = errorStatus(error);
+                        const permanentClientError =
+                            status !== undefined && status >= 400 && status < 500 && ![401, 408, 429].includes(status);
+                        if (permanentClientError) {
+                            updateProductionOperationOutbox(item.id, {
+                                status: 'conflict',
+                                attempts,
+                                updatedAt: new Date().toISOString(),
+                                nextRetryAt: undefined,
+                                lastError: errorMessage(error),
+                            });
+                            continue;
+                        }
+                        const retryDelayMs = Math.min(5 * 60_000, 15_000 * 2 ** Math.min(attempts - 1, 5));
+                        updateProductionOperationOutbox(item.id, {
+                            status: 'pending',
+                            attempts,
+                            updatedAt: new Date().toISOString(),
+                            nextRetryAt: new Date(Date.now() + retryDelayMs).toISOString(),
+                            lastError: errorMessage(error),
+                        });
+                        break;
+                    }
+                }
             } catch (error) {
                 flushFailed = true;
                 if (!syncFailureNotifiedRef.current) {
@@ -266,17 +344,18 @@ const ProductionLeaderPage = () => {
                     );
                 }
                 await reloadOutbox();
+                reloadOperationOutbox();
                 setFlushing(false);
                 flushingRef.current = false;
             }
         },
-        [actorId, message, online, plantId, queryClient, reloadOutbox]
+        [actorId, message, online, plantId, queryClient, reloadOperationOutbox, reloadOutbox]
     );
 
     useEffect(() => {
-        if (!online || retryableOutboxCount === 0) return;
+        if (!online || retryableOutboxCount + retryableOperationOutboxCount === 0) return;
         void flushOutbox(true);
-    }, [flushOutbox, online, retryableOutboxCount]);
+    }, [flushOutbox, online, retryableOperationOutboxCount, retryableOutboxCount]);
 
     useEffect(() => {
         if (!online) return;
@@ -325,17 +404,28 @@ const ProductionLeaderPage = () => {
     );
     const dueLines = useMemo(() => lines.filter((line) => lineState(line).due), [lineState, lines]);
     const reportedCount = dueLines.filter((line) => lineState(line).canonical?.reported).length;
-    const pendingCount = scopedOutbox.filter((item) => item.status === 'pending' || item.status === 'syncing').length;
+    const pendingCount =
+        scopedOutbox.filter((item) => item.status === 'pending' || item.status === 'syncing').length +
+        operationOutbox.filter(
+            (item) => item.productionDate === productionDate && (item.status === 'pending' || item.status === 'syncing')
+        ).length;
     const currentPendingCount = dueLines.filter((line) => {
         const state = lineState(line);
         return state.pending && !state.canonical?.reported;
     }).length;
     const effectiveReportedCount = dueLines.filter((line) => lineState(line).effectiveReported).length;
-    const conflictCount = scopedOutbox.filter((item) => item.status === 'conflict').length;
     const allConflictEntries = outbox.filter((item) => item.status === 'conflict');
-    const allConflictCount = allConflictEntries.length;
+    const allOperationConflictEntries = operationOutbox.filter((item) => item.status === 'conflict');
+    const allConflictCount = allConflictEntries.length + allOperationConflictEntries.length;
     const otherConflictEntry = allConflictEntries.find((item) => item.productionDate !== productionDate);
-    const conflictEntryAction = otherConflictEntry || allConflictEntries[0];
+    const otherOperationConflictEntry = allOperationConflictEntries.find(
+        (item) => item.productionDate !== productionDate
+    );
+    const conflictEntryAction =
+        otherConflictEntry || otherOperationConflictEntry || allConflictEntries[0] || allOperationConflictEntries[0];
+    const conflictIsOperation = Boolean(
+        conflictEntryAction && allOperationConflictEntries.some((item) => item.id === conflictEntryAction.id)
+    );
     const inaccessibleCurrentConflict =
         conflictEntryAction?.productionDate === productionDate &&
         dayQuery.isFetched &&
@@ -351,8 +441,13 @@ const ProductionLeaderPage = () => {
                 cancelText: 'Giữ lại',
                 okButtonProps: { danger: true },
                 onOk: async () => {
-                    await removeProductionOutbox(conflictEntryAction.id);
-                    await reloadOutbox();
+                    if (conflictIsOperation) {
+                        removeProductionOperationOutbox(conflictEntryAction.id);
+                        reloadOperationOutbox();
+                    } else {
+                        await removeProductionOutbox(conflictEntryAction.id);
+                        await reloadOutbox();
+                    }
                     message.success('Đã bỏ bản chờ không còn hợp lệ');
                 },
             });
@@ -361,6 +456,7 @@ const ProductionLeaderPage = () => {
         setDate(dayjs(conflictEntryAction.productionDate));
         setSlotKey(conflictEntryAction.slotKey);
         setSelectedLineId(conflictEntryAction.lineId);
+        if (conflictIsOperation) message.info('Mở “Công đoạn” để đối chiếu số liệu với máy chủ');
     };
 
     const visibleLines = useMemo(() => {
@@ -634,7 +730,7 @@ const ProductionLeaderPage = () => {
             </header>
 
             <div
-                className={`leader-sync-strip ${!online ? 'is-offline' : allConflictCount ? 'is-conflict' : retryableOutboxCount ? 'is-pending' : 'is-synced'}`}
+                className={`leader-sync-strip ${!online ? 'is-offline' : allConflictCount ? 'is-conflict' : retryableTotalCount ? 'is-pending' : 'is-synced'}`}
                 aria-live='polite'
             >
                 {!online ? (
@@ -647,8 +743,8 @@ const ProductionLeaderPage = () => {
                         <ExclamationCircleFilled />
                         <span>
                             {allConflictCount} bản ghi cần kiểm tra
-                            {otherConflictEntry
-                                ? ` · có dữ liệu ngày ${dayjs(otherConflictEntry.productionDate).format('DD/MM')}`
+                            {otherConflictEntry || otherOperationConflictEntry
+                                ? ` · có dữ liệu ngày ${dayjs((otherConflictEntry || otherOperationConflictEntry)!.productionDate).format('DD/MM')}`
                                 : ' do thiết bị khác đã cập nhật'}
                         </span>
                         {conflictEntryAction ? (
@@ -657,7 +753,7 @@ const ProductionLeaderPage = () => {
                             </button>
                         ) : null}
                     </>
-                ) : retryableOutboxCount || flushing ? (
+                ) : retryableTotalCount || flushing ? (
                     <>
                         <CloudSyncOutlined spin={flushing} />
                         <span>
@@ -665,7 +761,7 @@ const ProductionLeaderPage = () => {
                                 ? 'Đang đồng bộ dữ liệu...'
                                 : pendingCount
                                   ? `${pendingCount} bản ghi đang chờ đồng bộ`
-                                  : `${retryableOutboxCount} bản ghi ngày khác đang chờ đồng bộ`}
+                                  : `${retryableTotalCount} bản ghi đang chờ đồng bộ`}
                         </span>
                     </>
                 ) : (

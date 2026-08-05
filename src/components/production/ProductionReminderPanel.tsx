@@ -42,6 +42,18 @@ const effectiveMissingCodes = (event: ProductionReminderEvent, day?: ProductionD
     });
 };
 
+const effectiveMissingOperations = (event: ProductionReminderEvent, day?: ProductionDay | null) => {
+    if (!day) return event.missingOperationLabels || [];
+    const dueLabels = new Set(
+        day.lines.flatMap((line) =>
+            (line.operationSlotValues || [])
+                .filter((value) => value.key === event.slotKey && value.due && value.required && !value.reported)
+                .map((value) => `${line.lineCode} · ${value.operationCode} · ${value.itemCode}`)
+        )
+    );
+    return (event.missingOperationLabels || []).filter((label) => dueLabels.has(label));
+};
+
 const ProductionReminderPanel = ({ plantId, productionDate, day, canManage, onFocusSlot }: Props) => {
     const { message } = App.useApp();
     const queryClient = useQueryClient();
@@ -66,12 +78,21 @@ const ProductionReminderPanel = ({ plantId, productionDate, day, canManage, onFo
     const openEvents = useMemo(
         () =>
             (statusQuery.data?.events || [])
-                .filter((event) => event.state === 'open' && effectiveMissingCodes(event, day).length > 0)
+                .filter(
+                    (event) =>
+                        event.state === 'open' &&
+                        (effectiveMissingCodes(event, day).length > 0 ||
+                            effectiveMissingOperations(event, day).length > 0)
+                )
                 .sort((left, right) => new Date(left.dueAt).getTime() - new Date(right.dueAt).getTime()),
         [day, statusQuery.data?.events]
     );
     const missingLineCodes = useMemo(
         () => [...new Set(openEvents.flatMap((event) => effectiveMissingCodes(event, day)))],
+        [day, openEvents]
+    );
+    const missingOperationLabels = useMemo(
+        () => [...new Set(openEvents.flatMap((event) => effectiveMissingOperations(event, day)))],
         [day, openEvents]
     );
     const oldest = openEvents[0];
@@ -137,7 +158,12 @@ const ProductionReminderPanel = ({ plantId, productionDate, day, canManage, onFo
           : rule?.enabled === false
             ? 'Nhắc sản lượng đang tắt'
             : openEvents.length
-              ? `${missingLineCodes.length} chuyền chưa báo sản lượng`
+              ? [
+                    missingLineCodes.length ? `${missingLineCodes.length} chuyền` : '',
+                    missingOperationLabels.length ? `${missingOperationLabels.length} công đoạn` : '',
+                ]
+                    .filter(Boolean)
+                    .join(', ') + ' chưa nhập'
               : 'Nhắc theo giờ đang hoạt động';
     const description = statusQuery.isPending
         ? 'Đồng bộ trạng thái Web Push và các khung giờ đã đến hạn.'
@@ -171,6 +197,9 @@ const ProductionReminderPanel = ({ plantId, productionDate, day, canManage, onFo
                     <strong>{title}</strong>
                     <span>{description}</span>
                     {missingLineCodes.length ? <small>{missingLineCodes.slice(0, 8).join(' · ')}</small> : null}
+                    {missingOperationLabels.length ? (
+                        <small>CĐ: {missingOperationLabels.slice(0, 5).join(' · ')}</small>
+                    ) : null}
                 </div>
                 <div className='pd-reminder-bar__actions'>
                     {statusQuery.isError ? (

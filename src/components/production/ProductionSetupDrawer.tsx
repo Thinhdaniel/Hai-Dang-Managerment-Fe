@@ -15,14 +15,21 @@ import {
     TimePicker,
     Typography,
 } from 'antd';
-import { ClockCircleOutlined, EditOutlined, PlusOutlined, SaveOutlined } from '@ant-design/icons';
+import { ApartmentOutlined, ClockCircleOutlined, EditOutlined, PlusOutlined, SaveOutlined } from '@ant-design/icons';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import dayjs, { type Dayjs } from 'dayjs';
 import { useEffect, useMemo, useState } from 'react';
 import { buildSlotLabel, slotRangeLabelShort } from '../../core/lib/productionSlot';
 import { useResponsive } from '../../core/hooks/useResponsive';
 import { productionService } from '../../core/services/production.service';
-import type { ProductionDay, ProductionItem, ProductionLine, ProductionTimeSlot } from '../../core/types/production';
+import type {
+    ProductionDay,
+    ProductionItem,
+    ProductionLine,
+    ProductionOperation,
+    ProductionTimeSlot,
+} from '../../core/types/production';
+import ProductionOperationTemplateModal from './ProductionOperationTemplateModal';
 
 const { Text, Title } = Typography;
 
@@ -47,6 +54,13 @@ type ItemFormValues = {
     unitPrice?: number;
 };
 
+type OperationFormValues = {
+    code: string;
+    name: string;
+    unit?: string;
+    sortOrder?: number;
+};
+
 type SlotFormValues = {
     start: Dayjs;
     end: Dayjs;
@@ -63,9 +77,12 @@ const ProductionSetupDrawer = ({ open, plantId, day, onClose }: Props) => {
     const queryClient = useQueryClient();
     const [lineForm] = Form.useForm<LineFormValues>();
     const [itemForm] = Form.useForm<ItemFormValues>();
+    const [operationForm] = Form.useForm<OperationFormValues>();
     const [slotForm] = Form.useForm<SlotFormValues>();
     const [editingLine, setEditingLine] = useState<ProductionLine | null>(null);
     const [editingItem, setEditingItem] = useState<ProductionItem | null>(null);
+    const [editingOperation, setEditingOperation] = useState<ProductionOperation | null>(null);
+    const [templateItem, setTemplateItem] = useState<ProductionItem | null>(null);
     const [editingSlotKey, setEditingSlotKey] = useState<string | null>(null);
     const [draftSlots, setDraftSlots] = useState<ProductionTimeSlot[]>([]);
 
@@ -77,6 +94,11 @@ const ProductionSetupDrawer = ({ open, plantId, day, onClose }: Props) => {
     const itemsQuery = useQuery({
         queryKey: ['production', 'items', plantId, true],
         queryFn: () => productionService.getItems(plantId, true),
+        enabled: open && Boolean(plantId),
+    });
+    const operationsQuery = useQuery({
+        queryKey: ['production', 'operations', plantId, true],
+        queryFn: () => productionService.getOperations(plantId, true),
         enabled: open && Boolean(plantId),
     });
 
@@ -106,7 +128,8 @@ const ProductionSetupDrawer = ({ open, plantId, day, onClose }: Props) => {
         }
         modal.confirm({
             title: 'Khung giờ chưa được lưu',
-            content: 'Danh sách khung giờ đã thay đổi nhưng chưa bấm "Lưu toàn bộ khung giờ". Đóng bây giờ sẽ mất thay đổi.',
+            content:
+                'Danh sách khung giờ đã thay đổi nhưng chưa bấm "Lưu toàn bộ khung giờ". Đóng bây giờ sẽ mất thay đổi.',
             okText: 'Vẫn đóng',
             okButtonProps: { danger: true },
             cancelText: 'Ở lại để lưu',
@@ -118,6 +141,7 @@ const ProductionSetupDrawer = ({ open, plantId, day, onClose }: Props) => {
         await Promise.all([
             queryClient.invalidateQueries({ queryKey: ['production', 'lines', plantId] }),
             queryClient.invalidateQueries({ queryKey: ['production', 'items', plantId] }),
+            queryClient.invalidateQueries({ queryKey: ['production', 'operations', plantId] }),
             queryClient.invalidateQueries({ queryKey: ['production', 'day', plantId] }),
         ]);
     };
@@ -151,6 +175,21 @@ const ProductionSetupDrawer = ({ open, plantId, day, onClose }: Props) => {
         onError: (error) => message.error(errorMessage(error)),
     });
 
+    const operationMutation = useMutation({
+        mutationFn: async (values: OperationFormValues) =>
+            editingOperation
+                ? productionService.updateOperation(editingOperation.id, values)
+                : productionService.createOperation({ plantId, ...values }),
+        onSuccess: async () => {
+            message.success(editingOperation ? 'Đã cập nhật công đoạn' : 'Đã thêm công đoạn');
+            setEditingOperation(null);
+            operationForm.resetFields();
+            operationForm.setFieldsValue({ unit: 'SP', sortOrder: 0 });
+            await invalidateCatalog();
+        },
+        onError: (error) => message.error(errorMessage(error)),
+    });
+
     const timeSlotsMutation = useMutation({
         mutationFn: () => productionService.updateTimeSlots(day!.id, draftSlots),
         onSuccess: async () => {
@@ -177,6 +216,16 @@ const ProductionSetupDrawer = ({ open, plantId, day, onClose }: Props) => {
             name: item.name,
             unit: item.unit,
             unitPrice: item.unitPrice,
+        });
+    };
+
+    const editOperation = (operation: ProductionOperation) => {
+        setEditingOperation(operation);
+        operationForm.setFieldsValue({
+            code: operation.code,
+            name: operation.name,
+            unit: operation.unit,
+            sortOrder: operation.sortOrder,
         });
     };
 
@@ -279,7 +328,9 @@ const ProductionSetupDrawer = ({ open, plantId, day, onClose }: Props) => {
 
             <Select
                 className='w-full'
-                placeholder={addableLines.length ? 'Chọn chuyền để đưa vào ngày' : 'Mọi chuyền đang bật đã có trong ngày'}
+                placeholder={
+                    addableLines.length ? 'Chọn chuyền để đưa vào ngày' : 'Mọi chuyền đang bật đã có trong ngày'
+                }
                 value={null as unknown as string}
                 disabled={!addableLines.length || addDayLineMutation.isPending}
                 loading={addDayLineMutation.isPending}
@@ -348,8 +399,8 @@ const ProductionSetupDrawer = ({ open, plantId, day, onClose }: Props) => {
                 <div>
                     <Title level={5}>{editingLine ? `Sửa ${editingLine.code}` : 'Thêm chuyền sản xuất'}</Title>
                     <Text type='secondary'>
-                        Đây là danh mục dùng chung. Thêm chuyền ở đây chưa đưa nó vào ngày nào — sang tab "Chuyền
-                        trong ngày" để xếp cho ngày đang xem. Số công nhân cũng xác nhận riêng từng ngày.
+                        Đây là danh mục dùng chung. Thêm chuyền ở đây chưa đưa nó vào ngày nào — sang tab "Chuyền trong
+                        ngày" để xếp cho ngày đang xem. Số công nhân cũng xác nhận riêng từng ngày.
                     </Text>
                 </div>
                 {editingLine ? (
@@ -424,6 +475,107 @@ const ProductionSetupDrawer = ({ open, plantId, day, onClose }: Props) => {
         </div>
     );
 
+    const operationTab = (
+        <div className='production-setup-section'>
+            <div className='production-setup-heading'>
+                <div>
+                    <Title level={5}>
+                        {editingOperation ? `Sửa ${editingOperation.code}` : 'Danh mục công đoạn trọng yếu'}
+                    </Title>
+                    <Text type='secondary'>
+                        Chỉ tạo các công đoạn cần theo dõi nhịp. Danh sách này không làm thay đổi sản lượng thành phẩm.
+                    </Text>
+                </div>
+                {editingOperation ? (
+                    <Button
+                        onClick={() => {
+                            setEditingOperation(null);
+                            operationForm.resetFields();
+                            operationForm.setFieldsValue({ unit: 'SP', sortOrder: 0 });
+                        }}
+                    >
+                        Hủy sửa
+                    </Button>
+                ) : null}
+            </div>
+            <Form
+                form={operationForm}
+                layout='vertical'
+                initialValues={{ unit: 'SP', sortOrder: 0 }}
+                onFinish={(values) => operationMutation.mutate(values)}
+            >
+                <div className='production-setup-form-grid'>
+                    <Form.Item
+                        label='Mã công đoạn'
+                        name='code'
+                        rules={[{ required: true, message: 'Nhập mã công đoạn' }]}
+                    >
+                        <Input placeholder='VD: TRA_CO' autoCapitalize='characters' />
+                    </Form.Item>
+                    <Form.Item
+                        label='Tên công đoạn'
+                        name='name'
+                        rules={[{ required: true, message: 'Nhập tên công đoạn' }]}
+                    >
+                        <Input placeholder='VD: Tra cổ' />
+                    </Form.Item>
+                    <Form.Item label='Đơn vị' name='unit'>
+                        <Input placeholder='SP' />
+                    </Form.Item>
+                    <Form.Item label='Thứ tự' name='sortOrder'>
+                        <InputNumber min={0} precision={0} className='w-full' />
+                    </Form.Item>
+                </div>
+                <Button type='primary' htmlType='submit' icon={<SaveOutlined />} loading={operationMutation.isPending}>
+                    {editingOperation ? 'Lưu thay đổi' : 'Thêm công đoạn'}
+                </Button>
+            </Form>
+
+            <List
+                className='production-master-list'
+                loading={operationsQuery.isLoading}
+                dataSource={operationsQuery.data || []}
+                locale={{ emptyText: <Empty description='Chưa có công đoạn' /> }}
+                renderItem={(operation) => (
+                    <List.Item
+                        actions={[
+                            <Button
+                                key='edit'
+                                type='text'
+                                icon={<EditOutlined />}
+                                onClick={() => editOperation(operation)}
+                            >
+                                Sửa
+                            </Button>,
+                            <Switch
+                                key='active'
+                                size='small'
+                                checked={operation.isActive}
+                                onChange={(isActive) =>
+                                    productionService
+                                        .updateOperation(operation.id, { isActive })
+                                        .then(invalidateCatalog)
+                                        .catch((error) => message.error(errorMessage(error)))
+                                }
+                            />,
+                        ]}
+                    >
+                        <List.Item.Meta
+                            avatar={<ApartmentOutlined />}
+                            title={
+                                <span className='production-master-title'>
+                                    {operation.code}
+                                    {!operation.isActive ? <Tag>Đã tắt</Tag> : null}
+                                </span>
+                            }
+                            description={`${operation.name} · ${operation.unit}`}
+                        />
+                    </List.Item>
+                )}
+            />
+        </div>
+    );
+
     const itemTab = (
         <div className='production-setup-section'>
             <div className='production-setup-heading'>
@@ -471,6 +623,14 @@ const ProductionSetupDrawer = ({ open, plantId, day, onClose }: Props) => {
                 renderItem={(item) => (
                     <List.Item
                         actions={[
+                            <Button
+                                key='operations'
+                                type='text'
+                                icon={<ApartmentOutlined />}
+                                onClick={() => setTemplateItem(item)}
+                            >
+                                Công đoạn
+                            </Button>,
                             <Button key='edit' type='text' icon={<EditOutlined />} onClick={() => editItem(item)}>
                                 Sửa
                             </Button>,
@@ -494,7 +654,7 @@ const ProductionSetupDrawer = ({ open, plantId, day, onClose }: Props) => {
                                     {!item.isActive ? <Tag>Đã tắt</Tag> : null}
                                 </span>
                             }
-                            description={`${item.name || 'Chưa đặt tên'} · ${money(item.unitPrice)} đ/${item.unit}`}
+                            description={`${item.name || 'Chưa đặt tên'} · ${money(item.unitPrice)} đ/${item.unit} · ${(item.operationTemplates || []).length} công đoạn`}
                         />
                     </List.Item>
                 )}
@@ -617,8 +777,18 @@ const ProductionSetupDrawer = ({ open, plantId, day, onClose }: Props) => {
                     { key: 'day-lines', label: 'Chuyền trong ngày', children: dayLinesTab },
                     { key: 'lines', label: 'Danh mục chuyền', children: lineTab },
                     { key: 'items', label: 'Mã hàng', children: itemTab },
+                    { key: 'operations', label: 'Công đoạn', children: operationTab },
                     { key: 'slots', label: 'Khung giờ', children: slotsTab },
                 ]}
+            />
+            <ProductionOperationTemplateModal
+                open={Boolean(templateItem)}
+                item={templateItem}
+                operations={operationsQuery.data || []}
+                onClose={() => setTemplateItem(null)}
+                onSaved={async () => {
+                    await invalidateCatalog();
+                }}
             />
         </Drawer>
     );

@@ -34,9 +34,32 @@ export interface ProductionItem {
     name?: string;
     unit: string;
     unitPrice: number;
+    operationTemplates: ProductionItemOperationTemplate[];
     isActive: boolean;
     createdAt?: string;
     updatedAt?: string;
+}
+
+export interface ProductionOperation {
+    id: string;
+    plantId: string;
+    code: string;
+    name: string;
+    unit: string;
+    sortOrder: number;
+    isActive: boolean;
+    createdAt?: string;
+    updatedAt?: string;
+}
+
+export interface ProductionItemOperationTemplate {
+    operationId: string;
+    operationCode: string;
+    operationName: string;
+    unit: string;
+    hourlyQuota: number;
+    required: boolean;
+    sortOrder: number;
 }
 
 export interface ProductionTimeSlot {
@@ -103,6 +126,77 @@ export interface HourlyQcEntry {
     updatedAt?: string;
 }
 
+export interface ProductionOperationTrack {
+    id: string;
+    operationId: string;
+    operationCode: string;
+    operationName: string;
+    unit: string;
+    itemId: string;
+    itemCode: string;
+    sourceRunId: string;
+    hourlyQuota: number;
+    required: boolean;
+    sortOrder: number;
+    startedSlotKey: string;
+    endedSlotKey?: string;
+    status: 'active' | 'closed';
+    createdBy?: string;
+    createdByName?: string;
+    createdAt?: string;
+}
+
+export interface HourlyOperationEntry {
+    id: string;
+    slotKey: string;
+    trackId: string;
+    quantity: number;
+    note?: string;
+    enteredBy?: string;
+    enteredByName?: string;
+    enteredAt?: string;
+    updatedBy?: string;
+    updatedByName?: string;
+    updatedAt?: string;
+}
+
+export interface ProductionOperationSlotValue {
+    key: string;
+    trackId: string;
+    operationId: string;
+    operationCode: string;
+    operationName: string;
+    unit: string;
+    itemId: string;
+    itemCode: string;
+    sourceRunId: string;
+    required: boolean;
+    due: boolean;
+    transition: boolean;
+    overtime: boolean;
+    target: number;
+    actual: number;
+    achievementPercent: number;
+    reported: boolean;
+    entryIds: string[];
+    note?: string;
+    enteredBy?: string;
+    enteredByName?: string;
+    enteredAt?: string;
+    updatedBy?: string;
+    updatedByName?: string;
+    updatedAt?: string;
+}
+
+export interface ProductionOperationTrackSummary extends ProductionOperationTrack {
+    target: number;
+    actual: number;
+    achievementPercent: number;
+    expectedEntries: number;
+    reportedEntries: number;
+    coveragePercent: number;
+}
+
 export interface ProductionSlotValue {
     key: string;
     /** Khung tăng ca: không có khoán (target = 0), sản lượng là phần vượt để xét thưởng. */
@@ -159,6 +253,11 @@ export interface ProductionLineRecord {
     slotValues: ProductionSlotValue[];
     qcEntries: HourlyQcEntry[];
     qcSlotValues: ProductionQcSlotValue[];
+    operationTrackingEnabled: boolean;
+    operationTracks: ProductionOperationTrack[];
+    operationEntries: HourlyOperationEntry[];
+    operationSlotValues: ProductionOperationSlotValue[];
+    operationTrackSummaries: ProductionOperationTrackSummary[];
     totalTarget: number;
     totalActual: number;
     achievementPercent: number;
@@ -171,6 +270,10 @@ export interface ProductionLineRecord {
     qcReportedSlots: number;
     qcExpectedSlots: number;
     qcCoveragePercent: number;
+    operationExpectedEntries: number;
+    operationReportedEntries: number;
+    operationCoveragePercent: number;
+    operationBehindCount: number;
     configured: boolean;
     updatedBy?: string;
     updatedByName?: string;
@@ -194,6 +297,12 @@ export interface ProductionDaySummary {
     qcReportedLineSlots: number;
     qcExpectedLineSlots: number;
     qcCoveragePercent: number;
+    operationTrackedLineCount: number;
+    operationTrackCount: number;
+    operationExpectedEntries: number;
+    operationReportedEntries: number;
+    operationCoveragePercent: number;
+    operationBehindCount: number;
 }
 
 export interface ProductionSlotSummary {
@@ -208,6 +317,10 @@ export interface ProductionSlotSummary {
     qcReportedLines: number;
     qcExpectedLines: number;
     qcCoveragePercent: number;
+    operationExpectedEntries: number;
+    operationReportedEntries: number;
+    operationCoveragePercent: number;
+    operationBehindCount: number;
     totalLines: number;
 }
 
@@ -256,6 +369,21 @@ export interface SaveProductionQcEntryPayload {
     defectQuantity: number;
     /** Backend mới tự tính; field này chỉ phục vụ phiên bản cũ. */
     totalQuantity?: number;
+    note?: string;
+    clientMutationId?: string;
+    expectedUpdatedAt?: string | null;
+}
+
+export interface ProductionOperationConfigPayload {
+    operationId: string;
+    hourlyQuota: number;
+    required: boolean;
+    sortOrder: number;
+}
+
+export interface SaveProductionOperationEntryPayload {
+    trackId: string;
+    quantity: number;
     note?: string;
     clientMutationId?: string;
     expectedUpdatedAt?: string | null;
@@ -668,6 +796,7 @@ export type ConfigureProductionLinePayload = {
     itemId?: string;
     hourlyQuota?: number;
     startSlotKey?: string;
+    operationTrackingEnabled?: boolean;
 };
 
 export type ProductionReportScope = 'all' | 'locked';
@@ -675,6 +804,7 @@ export type ProductionReportHealth = 'healthy' | 'warning' | 'critical';
 export type ProductionReportExceptionSeverity = 'critical' | 'warning' | 'info';
 export type ProductionReportExceptionType =
     | 'missing_report'
+    | 'missing_operation_report'
     | 'under_target'
     | 'zero_without_note'
     | 'unconfigured_line'
@@ -692,6 +822,11 @@ export interface ProductionReportSummary {
     expectedReports: number;
     reportedEntries: number;
     reportingRate: number;
+    operationExpectedEntries: number;
+    operationReportedEntries: number;
+    operationCoveragePercent: number;
+    operationBehindCount: number;
+    operationCount: number;
     averageWorkers: number;
     outputPerWorkerDay: number;
     averageDailyActual: number;
@@ -729,6 +864,10 @@ export interface ProductionReportTrendPoint {
     expectedReports: number;
     reportedEntries: number;
     reportingRate: number;
+    operationExpectedEntries: number;
+    operationReportedEntries: number;
+    operationCoveragePercent: number;
+    operationBehindCount: number;
     workers: number;
     configuredLines: number;
     totalLines: number;
@@ -811,6 +950,29 @@ export interface ProductionReportOrder {
     cumulativeAmount?: number;
 }
 
+export interface ProductionReportOperation {
+    key: string;
+    lineId: string;
+    lineCode: string;
+    leaderName?: string;
+    itemId: string;
+    itemCode: string;
+    operationId: string;
+    operationCode: string;
+    operationName: string;
+    unit: string;
+    required: boolean;
+    activeDays: number;
+    targetQuantity: number;
+    actualQuantity: number;
+    achievementPercent: number;
+    expectedEntries: number;
+    reportedEntries: number;
+    coveragePercent: number;
+    behindSlots: number;
+    transitionQuantity: number;
+}
+
 export interface ProductionReportException {
     id: string;
     type: ProductionReportExceptionType;
@@ -872,12 +1034,14 @@ export interface ProductionReport {
     lines: ProductionReportLine[];
     items: ProductionReportItem[];
     orders: ProductionReportOrder[];
+    operations: ProductionReportOperation[];
     exceptionSummary: {
         total: number;
         critical: number;
         warning: number;
         info: number;
         missingReports: number;
+        missingOperationReports: number;
         underTarget: number;
         zeroWithoutNote: number;
         unconfiguredLines: number;
@@ -1020,6 +1184,7 @@ export interface ProductionReminderEvent {
     state: 'open' | 'resolved' | 'expired';
     dueAt: string;
     missingLineCodes: string[];
+    missingOperationLabels: string[];
     underTargetLineCodes: string[];
     reminderCount: number;
     lastNotifiedAt?: string;

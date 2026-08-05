@@ -1,4 +1,5 @@
 import {
+    ApartmentOutlined,
     ArrowLeftOutlined,
     CheckCircleFilled,
     CloseCircleFilled,
@@ -60,6 +61,25 @@ const ProductionDayReportPage = () => {
     const monitor = query.data?.monitor;
     const financialsVisible = day?.financialsVisible !== false;
     const activeSlots = useMemo(() => (day?.timeSlots || []).filter((slot) => slot.isActive), [day?.timeSlots]);
+    const operationRows = useMemo(
+        () =>
+            (day?.lines || [])
+                .flatMap((line) =>
+                    (line.operationTrackSummaries || []).map((track) => ({
+                        ...track,
+                        lineId: line.lineId,
+                        lineCode: line.lineCode,
+                        leaderName: line.leaderName,
+                    }))
+                )
+                .sort(
+                    (left, right) =>
+                        left.lineCode.localeCompare(right.lineCode) ||
+                        left.sortOrder - right.sortOrder ||
+                        left.operationCode.localeCompare(right.operationCode)
+                ),
+        [day?.lines]
+    );
 
     const exportMutation = useMutation({
         mutationFn: () => productionService.exportDay(day!.id),
@@ -432,6 +452,88 @@ const ProductionDayReportPage = () => {
                             ))}
                         </div>
                     </section>
+
+                    {summary.operationTrackCount > 0 ? (
+                        <section className='production-day-report__card production-operation-report'>
+                            <div className='production-day-report__heading'>
+                                <Title level={4}>Công đoạn trọng yếu</Title>
+                                <Text type='secondary'>
+                                    Bán thành phẩm theo dõi riêng, không cộng vào sản lượng tính lương
+                                </Text>
+                            </div>
+                            <div className='production-operation-report__summary'>
+                                <span>
+                                    <small>Chuyền theo dõi</small>
+                                    <strong>{number(summary.operationTrackedLineCount)}</strong>
+                                </span>
+                                <span>
+                                    <small>Công đoạn đang quản lý</small>
+                                    <strong>{number(summary.operationTrackCount)}</strong>
+                                </span>
+                                <span>
+                                    <small>Độ phủ nhập liệu</small>
+                                    <strong>{number(summary.operationCoveragePercent, 1)}%</strong>
+                                    <em>
+                                        {number(summary.operationReportedEntries)}/
+                                        {number(summary.operationExpectedEntries)} lượt bắt buộc
+                                    </em>
+                                </span>
+                                <span className={summary.operationBehindCount ? 'is-attention' : 'is-complete'}>
+                                    <small>Dưới khoán công đoạn</small>
+                                    <strong>{number(summary.operationBehindCount)}</strong>
+                                    <em>{summary.operationBehindCount ? 'cần kiểm tra' : 'không có cảnh báo'}</em>
+                                </span>
+                            </div>
+                            <div className='production-operation-report__list'>
+                                <div className='production-operation-report__head' aria-hidden='true'>
+                                    <span>Chuyền / mã hàng</span>
+                                    <span>Công đoạn</span>
+                                    <span>Khoán</span>
+                                    <span>Thực tế</span>
+                                    <span>Mức đạt</span>
+                                    <span>Độ phủ</span>
+                                </div>
+                                {operationRows.map((row) => (
+                                    <article
+                                        className='production-operation-report__row'
+                                        key={`${row.lineId}-${row.id}`}
+                                    >
+                                        <span className='production-operation-report__identity'>
+                                            <b>{row.lineCode}</b>
+                                            <small>{row.itemCode}</small>
+                                        </span>
+                                        <span className='production-operation-report__operation'>
+                                            <i>
+                                                <ApartmentOutlined />
+                                            </i>
+                                            <span>
+                                                <b>{row.operationName}</b>
+                                                <small>{row.operationCode}</small>
+                                            </span>
+                                        </span>
+                                        <span data-label='Khoán'>
+                                            {number(row.target)} {row.unit}
+                                        </span>
+                                        <span data-label='Thực tế'>
+                                            {number(row.actual)} {row.unit}
+                                        </span>
+                                        <span
+                                            data-label='Mức đạt'
+                                            className={`is-${percentTone(row.achievementPercent)}`}
+                                        >
+                                            {row.target > 0 ? `${number(row.achievementPercent, 1)}%` : '—'}
+                                        </span>
+                                        <span
+                                            data-label='Độ phủ'
+                                            className={row.coveragePercent >= 100 ? 'is-complete' : 'is-attention'}
+                                        >
+                                            {number(row.reportedEntries)}/{number(row.expectedEntries)}
+                                        </span>
+                                    </article>
+                                ))}
+                            </div>
+                        </section>
+                    ) : null}
 
                     <section className='production-day-report__card'>
                         <div className='production-day-report__heading'>

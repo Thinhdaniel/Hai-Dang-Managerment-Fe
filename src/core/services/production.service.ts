@@ -11,6 +11,8 @@ import type {
     ProductionLinePayload,
     ProductionLineRecord,
     ProductionMonitorResponse,
+    ProductionOperation,
+    ProductionOperationConfigPayload,
     ProductionOpeningBalanceBatch,
     ProductionOpeningBalanceList,
     ProductionOpeningBalancePreview,
@@ -22,6 +24,7 @@ import type {
     ProductionReminderStatus,
     ProductionReminderTestResult,
     SaveProductionEntryPayload,
+    SaveProductionOperationEntryPayload,
     SaveProductionQcEntryPayload,
     ProductionTimeSlot,
     UpdateProductionReminderSettingsPayload,
@@ -41,10 +44,30 @@ export const productionService = {
     getItems: (plantId: string, includeInactive = false): Promise<ProductionItem[]> =>
         api.get(`${BASE}/items`, { params: { plantId, includeInactive } }),
 
+    getOperations: (plantId: string, includeInactive = false): Promise<ProductionOperation[]> =>
+        api.get(`${BASE}/operations`, { params: { plantId, includeInactive } }),
+
+    createOperation: (payload: {
+        plantId: string;
+        code: string;
+        name: string;
+        unit?: string;
+        sortOrder?: number;
+        isActive?: boolean;
+    }): Promise<ProductionOperation> => api.post(`${BASE}/operations`, payload),
+
+    updateOperation: (
+        id: string,
+        payload: Partial<Omit<ProductionOperation, 'id' | 'plantId' | 'createdAt' | 'updatedAt'>>
+    ): Promise<ProductionOperation> => api.patch(`${BASE}/operations/${id}`, payload),
+
     createItem: (payload: ProductionItemPayload): Promise<ProductionItem> => api.post(`${BASE}/items`, payload),
 
     updateItem: (id: string, payload: Partial<Omit<ProductionItemPayload, 'plantId'>>): Promise<ProductionItem> =>
         api.patch(`${BASE}/items/${id}`, payload),
+
+    updateItemOperations: (id: string, operations: ProductionOperationConfigPayload[]): Promise<ProductionItem> =>
+        api.put(`${BASE}/items/${id}/operations`, { operations }),
 
     lookupDay: (plantId: string, date: string): Promise<ProductionDay | null> =>
         api.get(`${BASE}/days/lookup`, { params: { plantId, date } }),
@@ -216,6 +239,12 @@ export const productionService = {
         payload: { itemId: string; hourlyQuota: number; startedSlotKey: string }
     ): Promise<ProductionLineRecord> => api.post(`${BASE}/days/${dayId}/lines/${lineId}/runs`, payload),
 
+    configureOperationTracks: (
+        dayId: string,
+        lineId: string,
+        payload: { runId: string; enabled: boolean; operations: ProductionOperationConfigPayload[] }
+    ): Promise<ProductionLineRecord> => api.put(`${BASE}/days/${dayId}/lines/${lineId}/operation-tracks`, payload),
+
     correctLineSetup: (
         dayId: string,
         lineId: string,
@@ -235,6 +264,19 @@ export const productionService = {
 
     deleteEntry: (dayId: string, lineId: string, entryId: string): Promise<ProductionLineRecord> =>
         api.delete(`${BASE}/days/${dayId}/lines/${lineId}/entries/${entryId}`),
+
+    saveOperationEntries: (
+        dayId: string,
+        lineId: string,
+        slotKey: string,
+        entries: SaveProductionOperationEntryPayload[]
+    ): Promise<ProductionLineRecord> =>
+        api.put(`${BASE}/days/${dayId}/lines/${lineId}/operation-entries/${encodeURIComponent(slotKey)}`, {
+            entries,
+        }),
+
+    deleteOperationEntry: (dayId: string, lineId: string, entryId: string): Promise<ProductionLineRecord> =>
+        api.delete(`${BASE}/days/${dayId}/lines/${lineId}/operation-entries/${entryId}`),
 
     saveQcEntry: (
         dayId: string,

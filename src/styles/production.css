@@ -31,19 +31,9 @@
     --pd-radius: 8px;
     --pd-radius-lg: 12px;
 
-    --pd-shadow-1:
-        0 1px 2px rgba(23, 26, 32, 0.06),
-        0 8px 24px -16px rgba(23, 26, 32, 0.12);
-    --pd-shadow-2:
-        0 2px 4px rgba(23, 26, 32, 0.06),
-        0 16px 32px -16px rgba(23, 26, 32, 0.18);
-    --pd-font:
-        'Inter',
-        'Be Vietnam Pro',
-        'Segoe UI',
-        system-ui,
-        -apple-system,
-        sans-serif;
+    --pd-shadow-1: 0 1px 2px rgba(23, 26, 32, 0.06), 0 8px 24px -16px rgba(23, 26, 32, 0.12);
+    --pd-shadow-2: 0 2px 4px rgba(23, 26, 32, 0.06), 0 16px 32px -16px rgba(23, 26, 32, 0.18);
+    --pd-font: 'Inter', 'Be Vietnam Pro', 'Segoe UI', system-ui, -apple-system, sans-serif;
 
     /* Remap biến legacy để History/Planning/Report tự ăn palette mới */
     --production-ink: var(--pd-ink);
@@ -4536,7 +4526,9 @@
     border-radius: var(--pd-radius-lg);
     background: var(--pd-surface);
     box-shadow: var(--pd-shadow-1);
-    transition: transform 150ms ease, box-shadow 150ms ease;
+    transition:
+        transform 150ms ease,
+        box-shadow 150ms ease;
 }
 
 .production-monitor-kpis > div:hover {
@@ -4997,7 +4989,9 @@
 /* Cột đang chạy: nền brand nhạt xuyên suốt */
 .production-monitor-matrix-cell.state-current {
     background: var(--pd-brand-tint);
-    box-shadow: inset 2px 0 0 var(--pd-brand), inset -2px 0 0 var(--pd-brand);
+    box-shadow:
+        inset 2px 0 0 var(--pd-brand),
+        inset -2px 0 0 var(--pd-brand);
 }
 
 .mx-run {
@@ -5983,4 +5977,108 @@
 
 .pd-more-list a.active .anticon {
     color: var(--pd-brand);
+}
+
+.production-operation-modal__title {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.production-operation-modal__title .anticon {
+    color: #0f766e;
+}
+
+.production-operation-modal__help {
+    margin: 0 0 12px;
+    color: #667085;
+    font-size: 12px;
+    line-height: 1.55;
+}
+
+.production-operation-template-list {
+    display: flex;
+    max-height: 440px;
+    margin-top: 12px;
+    flex-direction: column;
+    gap: 8px;
+    overflow-y: auto;
+}
+
+.production-operation-template-row {
+    display: grid;
+    min-width: 0;
+    min-height: 68px;
+    padding: 9px 10px;
+    align-items: center;
+    border: 1px solid var(--pd-border, #e1e5ea);
+    border-radius: 8px;
+    background: #fff;
+    grid-template-columns: 28px minmax(150px, 1fr) 126px 104px;
+    gap: 10px;
+}
+
+.production-operation-template-row__index {
+    display: grid;
+    width: 26px;
+    height: 26px;
+    place-items: center;
+    border-radius: 6px;
+    color: #0f766e;
+    background: #eaf7f5;
+    font-size: 11px;
+    font-weight: 750;
+}
+
+.production-operation-template-row__identity {
+    display: flex;
+    min-width: 0;
+    flex-direction: column;
+}
+
+.production-operation-template-row__identity strong {
+    overflow: hidden;
+    color: #1d2939;
+    font-size: 13px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.production-operation-template-row__identity small,
+.production-operation-template-row label > span {
+    color: #667085;
+    font-size: 10px;
+}
+
+.production-operation-template-row label {
+    display: flex;
+    min-width: 0;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.production-operation-template-row label .ant-input-number {
+    width: 100%;
+}
+
+.production-operation-template-row__required {
+    align-items: flex-start;
+}
+
+@media (max-width: 767px) {
+    .production-operation-modal {
+        max-width: calc(100vw - 16px);
+        margin: 8px auto;
+    }
+
+    .production-operation-template-row {
+        grid-template-columns: 28px minmax(0, 1fr) 112px;
+    }
+
+    .production-operation-template-row__required {
+        grid-column: 2 / -1;
+        flex-direction: row;
+        align-items: center;
+        justify-content: space-between;
+    }
 }

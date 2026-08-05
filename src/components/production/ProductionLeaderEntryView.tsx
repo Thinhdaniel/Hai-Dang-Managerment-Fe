@@ -1,5 +1,6 @@
 import {
     ArrowLeftOutlined,
+    ApartmentOutlined,
     CheckCircleFilled,
     EditOutlined,
     HistoryOutlined,
@@ -10,7 +11,7 @@ import {
     WarningFilled,
 } from '@ant-design/icons';
 import { useMutation } from '@tanstack/react-query';
-import { Alert, App, Button, Input, InputNumber, Select, Tag } from 'antd';
+import { Alert, App, Button, Input, InputNumber, Select, Switch, Tag } from 'antd';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
     getProductionEntryDraft,
@@ -22,6 +23,7 @@ import { slotRangeLabel } from '../../core/lib/productionSlot';
 import { productionService } from '../../core/services/production.service';
 import type { ProductionDay, ProductionItem, ProductionLineRecord, ProductionRun } from '../../core/types/production';
 import type { ProductionEntryOutboxItem } from '../../core/lib/productionOutbox';
+import ProductionOperationEntryDrawer from './ProductionOperationEntryDrawer';
 
 const number = (value = 0) => new Intl.NumberFormat('vi-VN').format(value);
 const errorMessage = (error: unknown) =>
@@ -103,6 +105,8 @@ const ProductionLeaderEntryView = ({
     const [nextItemId, setNextItemId] = useState('');
     const [nextQuota, setNextQuota] = useState<number | null>(null);
     const [nextSlotKey, setNextSlotKey] = useState(slotKey);
+    const [trackOperations, setTrackOperations] = useState(Boolean(line.operationTrackingEnabled));
+    const [operationDrawerOpen, setOperationDrawerOpen] = useState(false);
     const [baseUpdatedAt, setBaseUpdatedAt] = useState<string | null>(null);
     const [formDirty, setFormDirty] = useState(false);
     const [remoteChanged, setRemoteChanged] = useState(false);
@@ -143,6 +147,7 @@ const ProductionLeaderEntryView = ({
         changeRunSlotOptions.find((item) => item.value === slotKey && !item.disabled)?.value ||
         changeRunSlotOptions.find((item) => !item.disabled)?.value;
     const selectedRun = line.runs.find((run) => run.id === runId);
+    const selectedItem = items.find((item) => item.id === selectedRun?.itemId);
     const existingEntry = line.entries.find((entry) => entry.slotKey === slotKey && entry.runId === runId);
     const previousEntry = useMemo(() => {
         if (!runId) return undefined;
@@ -237,8 +242,9 @@ const ProductionLeaderEntryView = ({
 
     useEffect(() => {
         setWorkerCount(line.workerCount);
+        setTrackOperations(Boolean(line.operationTrackingEnabled));
         setEditWorkers(false);
-    }, [line.id, line.workerCount]);
+    }, [line.id, line.operationTrackingEnabled, line.workerCount]);
 
     useEffect(() => {
         if (!runId || pendingEntry?.runId === runId) return;
@@ -285,13 +291,14 @@ const ProductionLeaderEntryView = ({
                 day.id,
                 line.lineId,
                 hasPlan
-                    ? { workerCount, workerCountConfirmed: true }
+                    ? { workerCount, workerCountConfirmed: true, operationTrackingEnabled: trackOperations }
                     : {
                           workerCount,
                           workerCountConfirmed: true,
                           itemId: nextItemId,
                           hourlyQuota: nextQuota ?? undefined,
                           startSlotKey: nextSlotKey,
+                          operationTrackingEnabled: trackOperations,
                       }
             );
         },
@@ -384,6 +391,11 @@ const ProductionLeaderEntryView = ({
         Boolean(existingEntry) &&
         quantity === existingEntry?.quantity &&
         (combinedNote || '') === (existingEntry?.note || '');
+    const operationValuesForSlot = (line.operationSlotValues || []).filter(
+        (value) => value.key === slotKey && (value.due || value.reported)
+    );
+    const operationReportedForSlot = operationValuesForSlot.filter((value) => value.reported).length;
+    const operationAvailable = Boolean(operationValuesForSlot.length || selectedItem?.operationTemplates?.length);
     const persistDraft = useCallback(() => {
         if (draftSuppressedRef.current || !formDirty || readOnly || !actorId || !runId) return;
         saveProductionEntryDraft({
@@ -505,6 +517,9 @@ const ProductionLeaderEntryView = ({
 
     if (!line.configured && !readOnly) {
         const hasPlan = line.runs.some((run) => run.source === 'plan');
+        const setupRun = [...line.runs].reverse().find((run) => run.status === 'active') || line.runs[0];
+        const setupItem = items.find((item) => item.id === (hasPlan ? setupRun?.itemId : nextItemId));
+        const setupOperationCount = setupItem?.operationTemplates?.length || 0;
         const setupReady = workerCount >= 0 && (hasPlan || (Boolean(nextItemId) && nextQuota !== null));
         return (
             <section className='leader-entry-view'>
@@ -547,7 +562,11 @@ const ProductionLeaderEntryView = ({
                                     optionFilterProp='label'
                                     value={nextItemId || undefined}
                                     placeholder='Chọn mã hàng'
-                                    onChange={setNextItemId}
+                                    onChange={(itemId) => {
+                                        setNextItemId(itemId);
+                                        const item = items.find((candidate) => candidate.id === itemId);
+                                        if (!item?.operationTemplates?.length) setTrackOperations(false);
+                                    }}
                                     options={items.map((item) => ({
                                         value: item.id,
                                         label: `${item.code}${item.name ? ` · ${item.name}` : ''}`,
@@ -577,6 +596,24 @@ const ProductionLeaderEntryView = ({
                             </label>
                         </>
                     )}
+                    <div className={`leader-entry-operation-toggle ${trackOperations ? 'is-enabled' : ''}`}>
+                        <span>
+                            <ApartmentOutlined />
+                        </span>
+                        <div>
+                            <strong>Theo dõi công đoạn trọng yếu</strong>
+                            <small>
+                                {setupOperationCount
+                                    ? `${setupOperationCount} công đoạn từ template ${setupItem?.code || ''}`
+                                    : 'Mã hàng chưa được quản lý cấu hình công đoạn'}
+                            </small>
+                        </div>
+                        <Switch
+                            checked={trackOperations}
+                            disabled={!setupOperationCount}
+                            onChange={setTrackOperations}
+                        />
+                    </div>
                     {!online ? (
                         <Alert type='warning' showIcon message='Cần kết nối mạng để xác nhận thông tin đầu ngày' />
                     ) : null}
@@ -656,6 +693,31 @@ const ProductionLeaderEntryView = ({
                     )}
                 </div>
             </div>
+
+            {operationAvailable ? (
+                <button
+                    type='button'
+                    className={`leader-entry-operation-launch ${operationReportedForSlot === operationValuesForSlot.length && operationValuesForSlot.length ? 'is-complete' : ''}`}
+                    onClick={() => setOperationDrawerOpen(true)}
+                >
+                    <span>
+                        <ApartmentOutlined />
+                    </span>
+                    <div>
+                        <strong>Công đoạn trọng yếu</strong>
+                        <small>
+                            {operationValuesForSlot.length
+                                ? `${operationReportedForSlot}/${operationValuesForSlot.length} công đoạn đã nhập trong giờ`
+                                : `${selectedItem?.operationTemplates?.length || 0} công đoạn có thể bật theo dõi`}
+                        </small>
+                    </div>
+                    <b>
+                        {operationValuesForSlot.length
+                            ? `${operationReportedForSlot}/${operationValuesForSlot.length}`
+                            : 'Mở'}
+                    </b>
+                </button>
+            ) : null}
 
             {restoredAt ? (
                 <Alert
@@ -961,6 +1023,17 @@ const ProductionLeaderEntryView = ({
                     </small>
                 </footer>
             ) : null}
+            <ProductionOperationEntryDrawer
+                open={operationDrawerOpen}
+                actorId={actorId}
+                day={day}
+                line={line}
+                slotKey={slotKey}
+                items={items}
+                online={online}
+                onClose={() => setOperationDrawerOpen(false)}
+                onSaved={onRefresh}
+            />
         </section>
     );
 };
