@@ -1,4 +1,5 @@
 import {
+    ApartmentOutlined,
     CheckCircleFilled,
     ClockCircleOutlined,
     DollarOutlined,
@@ -82,6 +83,7 @@ const ProgressTrack = ({ value, tone }: { value: number; tone: string }) => (
 const LineCard = ({ line, onOpen }: { line: ProductionBoardLine; onOpen: () => void }) => {
     const meta = statusMeta[line.status];
     const incomeGap = line.day.projectedIncomeGap;
+    const operations = line.operations;
     // Con số quản trị quan tâm nhất: hụt/vượt bao nhiêu SP so với khoán các giờ đã chốt.
     const hasCheckpoint = line.checkpoint.target > 0;
     const gap = line.checkpoint.gap;
@@ -144,9 +146,7 @@ const LineCard = ({ line, onOpen }: { line: ProductionBoardLine; onOpen: () => v
                 <span>
                     <small>Cuối ngày/người</small>
                     <strong
-                        className={
-                            incomeGap === undefined ? 'is-pending' : incomeGap < 0 ? 'is-behind' : 'is-on-track'
-                        }
+                        className={incomeGap === undefined ? 'is-pending' : incomeGap < 0 ? 'is-behind' : 'is-on-track'}
                     >
                         {line.day.projectedAverageIncome === undefined
                             ? 'Chờ số liệu'
@@ -154,6 +154,24 @@ const LineCard = ({ line, onOpen }: { line: ProductionBoardLine; onOpen: () => v
                     </strong>
                 </span>
             </span>
+
+            {operations?.trackedCount ? (
+                <span
+                    className={`production-board-line-card__operations ${
+                        operations.missingCount ? 'is-danger' : operations.behindCount ? 'is-warning' : 'is-stable'
+                    }`}
+                >
+                    <ApartmentOutlined />
+                    <b>{operations.trackedCount} công đoạn</b>
+                    <small>
+                        {operations.missingCount
+                            ? `${operations.missingCount} lượt thiếu nhập`
+                            : operations.behindCount
+                              ? `${operations.behindCount} công đoạn dưới khoán`
+                              : `${operations.reportedEntries}/${operations.expectedEntries} lượt đã báo`}
+                    </small>
+                </span>
+            ) : null}
 
             <span className={`production-board-line-card__guidance tone-${line.guidance.tone}`}>
                 <b>{line.guidance.title}</b>
@@ -328,9 +346,7 @@ const BoardLedger = ({
                                             </td>
                                         );
                                     })}
-                                    <td
-                                        className={`lg-total ${dayPercent === null ? '' : rateTone(dayPercent)}`}
-                                    >
+                                    <td className={`lg-total ${dayPercent === null ? '' : rateTone(dayPercent)}`}>
                                         {dayPercent === null ? '' : `${Math.round(dayPercent)}%`}
                                     </td>
                                 </tr>
@@ -353,6 +369,7 @@ const IncomeMetric = ({ label, value, note, tone }: { label: string; value: stri
 
 const FocusLineBoard = ({ line }: { line: ProductionBoardLine }) => {
     const meta = statusMeta[line.status];
+    const operations = line.operations;
     const projectedGap = line.day.projectedIncomeGap;
     const projectedPercent =
         line.day.projectedAverageIncome !== undefined && line.day.targetAverageIncome > 0
@@ -554,6 +571,55 @@ const FocusLineBoard = ({ line }: { line: ProductionBoardLine }) => {
                     </div>
                 ))}
             </section>
+
+            {operations?.trackedCount ? (
+                <section className='production-board-focus-operations'>
+                    <div className='production-board-section-title'>
+                        <span>
+                            <ApartmentOutlined />
+                            <b>Công đoạn trọng yếu</b>
+                        </span>
+                        <small>
+                            {operations.reportedEntries}/{operations.expectedEntries} lượt bắt buộc đã báo
+                        </small>
+                    </div>
+                    <div>
+                        {operations.items.map((operation) => (
+                            <article className={`status-${operation.status}`} key={operation.trackId}>
+                                <span>
+                                    <strong>{operation.operationName}</strong>
+                                    <small>
+                                        {operation.operationCode} · mã {operation.itemCode}
+                                    </small>
+                                </span>
+                                <span>
+                                    <small>Lũy kế</small>
+                                    <strong>
+                                        {number(operation.actual)}/{number(operation.target)} {operation.unit}
+                                    </strong>
+                                </span>
+                                <span>
+                                    <small>Mức đạt</small>
+                                    <strong>
+                                        {operation.target > 0 ? `${number(operation.achievementPercent)}%` : '—'}
+                                    </strong>
+                                </span>
+                                <em>
+                                    {operation.status === 'missing'
+                                        ? `Thiếu ${operation.missingCount} lượt`
+                                        : operation.status === 'critical' || operation.status === 'at_risk'
+                                          ? `${operation.behindCount} giờ dưới khoán`
+                                          : operation.status === 'on_track'
+                                            ? 'Đúng nhịp'
+                                            : operation.required
+                                              ? 'Chờ số liệu'
+                                              : 'Tham khảo'}
+                                </em>
+                            </article>
+                        ))}
+                    </div>
+                </section>
+            ) : null}
         </div>
     );
 };
@@ -668,6 +734,25 @@ const ProductionBoardPage = () => {
     const pageSize = isCompact ? Math.max(lines.length, 1) : isWide ? 8 : 6;
     const pageCount = Math.max(1, Math.ceil(lines.length / pageSize));
     const visibleLines = lines.slice(pageIndex * pageSize, (pageIndex + 1) * pageSize);
+    const operationSignals = useMemo(
+        () =>
+            lines
+                .flatMap((line) =>
+                    (line.operations?.items || []).map((operation) => ({
+                        ...operation,
+                        lineId: line.lineId,
+                        lineCode: line.lineCode,
+                    }))
+                )
+                .filter((operation) => ['missing', 'critical', 'at_risk'].includes(operation.status))
+                .sort(
+                    (left, right) =>
+                        (left.status === 'missing' ? 0 : left.status === 'critical' ? 1 : 2) -
+                            (right.status === 'missing' ? 0 : right.status === 'critical' ? 1 : 2) ||
+                        left.lineCode.localeCompare(right.lineCode, 'vi-VN', { numeric: true })
+                ),
+        [lines]
+    );
 
     useEffect(() => {
         if (!lines.length) return;
@@ -900,6 +985,63 @@ const ProductionBoardPage = () => {
                                 </div>
                             </div>
 
+                            {board.summary.operationTrackCount ? (
+                                <section className='production-board-operation-strip'>
+                                    <div className='production-board-operation-strip__title'>
+                                        <ApartmentOutlined />
+                                        <span>
+                                            <strong>Công đoạn trọng yếu</strong>
+                                            <small>
+                                                {board.summary.operationTrackedLines || 0} chuyền đang theo dõi
+                                            </small>
+                                        </span>
+                                    </div>
+                                    <div className='production-board-operation-strip__metrics'>
+                                        <span>
+                                            <small>Độ phủ</small>
+                                            <strong>
+                                                {board.summary.operationExpectedEntries
+                                                    ? `${number(board.summary.operationCoveragePercent || 0)}%`
+                                                    : '—'}
+                                            </strong>
+                                        </span>
+                                        <span className={board.summary.missingOperationEntries ? 'is-danger' : ''}>
+                                            <small>Thiếu nhập</small>
+                                            <strong>{board.summary.missingOperationEntries || 0}</strong>
+                                        </span>
+                                        <span className={board.summary.behindOperations ? 'is-warning' : ''}>
+                                            <small>Dưới khoán</small>
+                                            <strong>{board.summary.behindOperations || 0}</strong>
+                                        </span>
+                                    </div>
+                                    <div className='production-board-operation-strip__signals'>
+                                        {operationSignals.length ? (
+                                            operationSignals.slice(0, isPhone ? 2 : 4).map((operation) => (
+                                                <button
+                                                    type='button'
+                                                    key={`${operation.lineId}-${operation.trackId}`}
+                                                    onClick={() => openLine(operation.lineId)}
+                                                >
+                                                    <b>{operation.lineCode}</b>
+                                                    <span>
+                                                        <strong>{operation.operationName}</strong>
+                                                        <small>
+                                                            {operation.status === 'missing'
+                                                                ? `Thiếu ${operation.missingCount} lượt`
+                                                                : `${operation.achievementPercent.toFixed(0)}% khoán`}
+                                                        </small>
+                                                    </span>
+                                                </button>
+                                            ))
+                                        ) : (
+                                            <span className='production-board-operation-strip__clear'>
+                                                <CheckCircleFilled /> Công đoạn đang ổn định
+                                            </span>
+                                        )}
+                                    </div>
+                                </section>
+                            ) : null}
+
                             {visibleLines.length ? (
                                 <div className='production-board-line-grid'>
                                     {visibleLines.map((line) => (
@@ -931,8 +1073,8 @@ const ProductionBoardPage = () => {
                                             <b>Sổ khoán theo giờ</b>
                                         </span>
                                         <small className='production-board-ledger-legend'>
-                                            <span className='lg-missing-dot' /> chưa báo · Khoán / Thực tế / Tỉ lệ
-                                            từng khung giờ
+                                            <span className='lg-missing-dot' /> chưa báo · Khoán / Thực tế / Tỉ lệ từng
+                                            khung giờ
                                         </small>
                                     </div>
                                     <BoardLedger board={board} onOpenLine={openLine} isPhone={isPhone} />

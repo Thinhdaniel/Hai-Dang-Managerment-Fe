@@ -458,6 +458,95 @@ export interface ProductionMonitorSlot {
     totalLines: number;
 }
 
+export type ProductionMonitorOperationStatus =
+    | 'waiting'
+    | 'reference'
+    | 'missing'
+    | 'critical'
+    | 'at_risk'
+    | 'on_track';
+
+export type ProductionMonitorOperationAlertType =
+    | 'missing_operation_report'
+    | 'low_operation_output'
+    | 'operation_output_spike';
+
+export interface ProductionMonitorOperationCurrentSlot {
+    key: string;
+    label: string;
+    target: number;
+    actual: number;
+    reported: boolean;
+}
+
+export interface ProductionMonitorOperation {
+    key: string;
+    trackId: string;
+    lineId: string;
+    lineCode: string;
+    lineName?: string;
+    leaderName?: string;
+    itemId: string;
+    itemCode: string;
+    sourceRunId: string;
+    operationId: string;
+    operationCode: string;
+    operationName: string;
+    unit: string;
+    required: boolean;
+    sortOrder: number;
+    trackStatus: 'active' | 'closed';
+    startedSlotKey: string;
+    endedSlotKey?: string;
+    status: ProductionMonitorOperationStatus;
+    targetToNow: number;
+    actualToNow: number;
+    achievementPercent: number;
+    expectedEntries: number;
+    reportedEntries: number;
+    coveragePercent: number;
+    missingSlotKeys: string[];
+    behindSlotKeys: string[];
+    transitionQuantity: number;
+    currentSlot?: ProductionMonitorOperationCurrentSlot;
+    lastEnteredByName?: string;
+    lastUpdatedAt?: string;
+}
+
+export interface ProductionMonitorOperationAlert {
+    id: string;
+    type: ProductionMonitorOperationAlertType;
+    severity: ProductionMonitorAlertSeverity;
+    lineId: string;
+    lineCode: string;
+    trackId: string;
+    operationId: string;
+    operationCode: string;
+    operationName: string;
+    itemCode: string;
+    slotKey: string;
+    slotLabel: string;
+    title: string;
+    description: string;
+}
+
+export interface ProductionMonitorOperationSummary {
+    trackedLines: number;
+    trackCount: number;
+    requiredTrackCount: number;
+    expectedEntries: number;
+    reportedEntries: number;
+    missingEntries: number;
+    coveragePercent: number;
+    behindTrackCount: number;
+    onTrackTrackCount: number;
+    currentTrackCount: number;
+    currentReportedCount: number;
+    criticalAlerts: number;
+    warningAlerts: number;
+    lastUpdatedAt?: string;
+}
+
 export interface ProductionMonitorSummary {
     configuredLines: number;
     totalLines: number;
@@ -485,6 +574,9 @@ export interface ProductionMonitor {
     alerts: ProductionMonitorAlert[];
     linePerformance: ProductionMonitorLine[];
     slotPerformance: ProductionMonitorSlot[];
+    operationSummary: ProductionMonitorOperationSummary;
+    operationAlerts: ProductionMonitorOperationAlert[];
+    operationPerformance: ProductionMonitorOperation[];
     forecast?: ProductionForecast;
 }
 
@@ -544,6 +636,30 @@ export interface ProductionBoardCurrentSlot {
     requiredPer15: number;
 }
 
+export interface ProductionBoardOperation {
+    trackId: string;
+    operationCode: string;
+    operationName: string;
+    itemCode: string;
+    unit: string;
+    required: boolean;
+    sortOrder: number;
+    status: ProductionMonitorOperationStatus;
+    target: number;
+    actual: number;
+    achievementPercent: number;
+    expectedEntries: number;
+    reportedEntries: number;
+    missingCount: number;
+    behindCount: number;
+    currentSlot?: {
+        key: string;
+        target: number;
+        actual: number;
+        reported: boolean;
+    };
+}
+
 export interface ProductionBoardLine {
     lineId: string;
     lineCode: string;
@@ -594,6 +710,16 @@ export interface ProductionBoardLine {
         overQuotaAmount: number;
     };
     currentSlot?: ProductionBoardCurrentSlot;
+    operations?: {
+        trackedCount: number;
+        expectedEntries: number;
+        reportedEntries: number;
+        missingCount: number;
+        behindCount: number;
+        currentCount: number;
+        currentReportedCount: number;
+        items: ProductionBoardOperation[];
+    };
     guidance: {
         tone: ProductionBoardGuidanceTone;
         title: string;
@@ -639,6 +765,13 @@ export interface ProductionBoard {
         onTrackLines: number;
         attentionLines: number;
         missingLines: number;
+        operationTrackedLines?: number;
+        operationTrackCount?: number;
+        operationExpectedEntries?: number;
+        operationReportedEntries?: number;
+        operationCoveragePercent?: number;
+        missingOperationEntries?: number;
+        behindOperations?: number;
     };
     lines: ProductionBoardLine[];
     updatedAt?: string;

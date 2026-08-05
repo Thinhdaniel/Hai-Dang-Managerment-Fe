@@ -1,6 +1,7 @@
 import {
     AimOutlined,
     AlertOutlined,
+    ApartmentOutlined,
     ArrowDownOutlined,
     ArrowUpOutlined,
     CheckCircleFilled,
@@ -34,6 +35,7 @@ import dayjs, { type Dayjs } from 'dayjs';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import ProductionCommandRibbon from '../components/production/ProductionCommandRibbon';
+import ProductionOperationMonitor from '../components/production/ProductionOperationMonitor';
 import { useAuth } from '../core/contexts/AuthContext';
 import { useSocket } from '../core/hooks/useSocket';
 import { isAdmin, isDirector } from '../core/lib/permissions';
@@ -54,6 +56,7 @@ const errorMessage = (error: unknown) => (error instanceof Error ? error.message
 
 type MobileView = 'overview' | 'alerts' | 'lines';
 type AlertFilter = 'all' | ProductionMonitorAlertSeverity;
+type MonitorMode = 'output' | 'operations';
 
 const lineStatusMeta: Record<ProductionMonitorLineStatus, { label: string; color: string; rank: number }> = {
     critical: { label: 'Nghiêm trọng', color: 'red', rank: 0 },
@@ -81,6 +84,7 @@ const ProductionMonitorPage = () => {
     const [date, setDate] = useState<Dayjs>(() => dayjs());
     const [plantId, setPlantId] = useState(user?.plantId || '');
     const [mobileView, setMobileView] = useState<MobileView>('overview');
+    const [monitorMode, setMonitorMode] = useState<MonitorMode>('output');
     const [alertFilter, setAlertFilter] = useState<AlertFilter>('all');
     const [isFullscreen, setIsFullscreen] = useState(false);
     // Đồng hồ tick mỗi giây để màn điều hành luôn "sống", độc lập với chu kỳ tải dữ liệu.
@@ -136,6 +140,21 @@ const ProductionMonitorPage = () => {
     const data = monitorQuery.data;
     const day = data?.day;
     const monitor = data?.monitor;
+    const operationSummary = monitor?.operationSummary || {
+        trackedLines: 0,
+        trackCount: 0,
+        requiredTrackCount: 0,
+        expectedEntries: 0,
+        reportedEntries: 0,
+        missingEntries: 0,
+        coveragePercent: 100,
+        behindTrackCount: 0,
+        onTrackTrackCount: 0,
+        currentTrackCount: 0,
+        currentReportedCount: 0,
+        criticalAlerts: 0,
+        warningAlerts: 0,
+    };
 
     const filteredAlerts = useMemo(
         () => (monitor?.alerts || []).filter((alert) => alertFilter === 'all' || alert.severity === alertFilter),
@@ -424,9 +443,21 @@ const ProductionMonitorPage = () => {
                                 </b>
                             </div>
                             <div className='pd-stat'>
-                                <span>Độ phủ báo giờ</span>
-                                <b className={monitor.summary.reportingRate < 90 ? 'tone-danger' : 'tone-success'}>
-                                    {monitor.summary.reportingRate.toFixed(0)}%
+                                <span>{monitorMode === 'operations' ? 'Độ phủ công đoạn' : 'Độ phủ báo giờ'}</span>
+                                <b
+                                    className={
+                                        (monitorMode === 'operations'
+                                            ? operationSummary.coveragePercent
+                                            : monitor.summary.reportingRate) < 90
+                                            ? 'tone-danger'
+                                            : 'tone-success'
+                                    }
+                                >
+                                    {(monitorMode === 'operations'
+                                        ? operationSummary.coveragePercent
+                                        : monitor.summary.reportingRate
+                                    ).toFixed(0)}
+                                    %
                                 </b>
                             </div>
                             <div className='pd-stat'>
@@ -460,7 +491,46 @@ const ProductionMonitorPage = () => {
                 }
             />
 
-            {isMobile && data ? (
+            {data && day && monitor ? (
+                <section className='production-monitor-modebar'>
+                    <Segmented<MonitorMode>
+                        block={isMobile}
+                        value={monitorMode}
+                        onChange={(value) => {
+                            setMonitorMode(value);
+                            setMobileView('overview');
+                        }}
+                        options={[
+                            {
+                                value: 'output',
+                                label: (
+                                    <span>
+                                        <LineChartOutlined /> Thành phẩm
+                                    </span>
+                                ),
+                            },
+                            {
+                                value: 'operations',
+                                label: (
+                                    <span>
+                                        <ApartmentOutlined /> Công đoạn
+                                        {operationSummary.missingEntries ? (
+                                            <b>{operationSummary.missingEntries}</b>
+                                        ) : null}
+                                    </span>
+                                ),
+                            },
+                        ]}
+                    />
+                    <Text type='secondary'>
+                        {monitorMode === 'operations'
+                            ? 'Theo dõi bán thành phẩm theo từng công đoạn, chuyền và khung giờ.'
+                            : 'Theo dõi thành phẩm, nhịp khoán và tình trạng báo giờ của chuyền.'}
+                    </Text>
+                </section>
+            ) : null}
+
+            {isMobile && data && monitorMode === 'output' ? (
                 <Segmented<MobileView>
                     className='production-monitor-mobile-tabs'
                     block
@@ -503,250 +573,277 @@ const ProductionMonitorPage = () => {
                 </section>
             ) : (
                 <>
-                    {monitor.forecast && (!isMobile || mobileView === 'overview') ? (
-                        <section className='production-monitor-forecastbar'>
-                            <div className='production-monitor-forecastbar__signal'>
-                                <RocketOutlined />
-                                <span>
-                                    <small>Dự kiến cuối ngày</small>
-                                    <strong>{number(monitor.forecast.summary.projectedEndOfDay)} SP</strong>
-                                </span>
-                            </div>
-                            <div className='production-monitor-forecastbar__progress'>
-                                <div>
-                                    <span>
-                                        {monitor.forecast.summary.projectedCompletionPercent.toFixed(1)}% kế hoạch
-                                    </span>
-                                    <small>
-                                        Mục tiêu {number(monitor.forecast.summary.plannedQuantity)} SP · còn{' '}
-                                        {number(monitor.forecast.summary.remainingQuantity)} SP
-                                    </small>
-                                </div>
-                                <Progress
-                                    percent={Math.min(
-                                        100,
-                                        Math.round(monitor.forecast.summary.projectedCompletionPercent)
-                                    )}
-                                    showInfo={false}
-                                    strokeColor={
-                                        monitor.forecast.summary.projectedCompletionPercent >= 95
-                                            ? '#168a52'
-                                            : monitor.forecast.summary.projectedCompletionPercent >= 80
-                                              ? '#c87816'
-                                              : '#c54141'
-                                    }
-                                />
-                            </div>
-                            <div className='production-monitor-forecastbar__risk'>
-                                <span>
-                                    <strong>{monitor.forecast.summary.atRiskAllocations}</strong>
-                                    <small>phân bổ rủi ro</small>
-                                </span>
-                                <Tag>
-                                    Tin cậy{' '}
-                                    {monitor.forecast.summary.confidence === 'high'
-                                        ? 'cao'
-                                        : monitor.forecast.summary.confidence === 'medium'
-                                          ? 'vừa'
-                                          : 'thấp'}
-                                </Tag>
-                                <Button
-                                    type='link'
-                                    onClick={() =>
-                                        navigate(`/production/planning?plantId=${plantId}&date=${productionDate}`)
-                                    }
-                                >
-                                    Xem kế hoạch
-                                </Button>
-                            </div>
-                        </section>
-                    ) : null}
-
-                    {!isMobile || mobileView === 'overview' ? (
+                    {monitorMode === 'operations' ? (
+                        <ProductionOperationMonitor
+                            day={day}
+                            monitor={monitor}
+                            isMobile={isMobile}
+                            onOpenEntry={openEntry}
+                        />
+                    ) : (
                         <>
-                            <section className='production-monitor-kpis'>
-                                <div className='production-monitor-kpi-primary'>
-                                    <i className='pd-kpi-ico'>
-                                        <ThunderboltOutlined />
-                                    </i>
-                                    <span>Sản lượng đến hiện tại</span>
-                                    <strong>{number(monitor.summary.actualToNow)}</strong>
-                                    <small>/ {number(monitor.summary.targetToNow)} SP theo khoán</small>
-                                </div>
-                                <div>
-                                    <i className='pd-kpi-ico'>
-                                        <AimOutlined />
-                                    </i>
-                                    <span>Nhịp đạt</span>
-                                    <strong className={`tone-${achievementTone(monitor.summary.achievementToNow)}`}>
-                                        {monitor.summary.achievementToNow.toFixed(1)}%
-                                    </strong>
-                                    <small>
-                                        {monitor.summary.baselineAchievement === undefined
-                                            ? 'Chưa có đường chuẩn'
-                                            : `Nền ${monitor.summary.baselineAchievement.toFixed(1)}%`}
-                                    </small>
-                                </div>
-                                <div>
-                                    <i className='pd-kpi-ico'>
-                                        <FieldTimeOutlined />
-                                    </i>
-                                    <span>Độ phủ báo giờ</span>
-                                    <strong>{monitor.summary.reportingRate.toFixed(1)}%</strong>
-                                    <small>
-                                        {monitor.summary.reportedSlots}/{monitor.summary.dueSlots} ô đến hạn
-                                    </small>
-                                </div>
-                                <div>
-                                    <i className='pd-kpi-ico'>
-                                        <CheckCircleOutlined />
-                                    </i>
-                                    <span>Đúng nhịp</span>
-                                    <strong>{monitor.summary.onTrackLines}</strong>
-                                    <small>trên {monitor.summary.totalLines} chuyền</small>
-                                </div>
-                                <div className={monitor.summary.atRiskLines ? 'has-risk' : ''}>
-                                    <i className='pd-kpi-ico'>
-                                        <AlertOutlined />
-                                    </i>
-                                    <span>Cần xử lý</span>
-                                    <strong>{monitor.summary.atRiskLines}</strong>
-                                    <small>
-                                        {monitor.summary.criticalAlerts} nghiêm trọng · {monitor.summary.warningAlerts}{' '}
-                                        cảnh báo
-                                    </small>
-                                </div>
-                            </section>
-
-                            <section className='production-monitor-hour-strip'>
-                                {monitor.slotPerformance.map((slot) => (
-                                    <div
-                                        key={slot.key}
-                                        className={`${slot.due ? 'is-due' : 'is-future'} ${monitor.currentSlotKey === slot.key ? 'is-current' : ''}`}
-                                    >
-                                        <span>{slotRangeLabelShort(slot)}</span>
-                                        <strong>{slot.due ? number(slot.actual) : '—'}</strong>
-                                        <small>
-                                            {monitor.currentSlotKey === slot.key
-                                                ? 'Đang chạy'
-                                                : slot.due
-                                                  ? `${slot.reportedLines}/${slot.totalLines} chuyền`
-                                                  : 'Sắp tới'}
-                                        </small>
-                                    </div>
-                                ))}
-                            </section>
-
-                            <section className='production-monitor-matrix-panel'>
-                                <div className='production-monitor-section-heading'>
-                                    <div>
-                                        <Title level={4}>Ma trận sản lượng theo giờ</Title>
-                                        <Text type='secondary'>Số thực tế và tỷ lệ đạt tại từng chuyền.</Text>
-                                    </div>
-                                    <Button icon={<EyeOutlined />} onClick={() => openEntry()}>
-                                        Mở sổ nhập
-                                    </Button>
-                                </div>
-                                {renderMatrix()}
-                            </section>
-                        </>
-                    ) : null}
-
-                    {!isMobile || mobileView === 'alerts' ? (
-                        <section className='production-monitor-alert-panel'>
-                            <div className='production-monitor-section-heading'>
-                                <div>
-                                    <Title level={4}>Việc cần xử lý</Title>
-                                    <Text type='secondary'>{monitor.alerts.length} tín hiệu đang mở</Text>
-                                </div>
-                                <Segmented<AlertFilter>
-                                    value={alertFilter}
-                                    onChange={setAlertFilter}
-                                    options={[
-                                        { value: 'all', label: 'Tất cả' },
-                                        { value: 'critical', label: `Nặng ${monitor.summary.criticalAlerts}` },
-                                        { value: 'warning', label: `Cảnh báo ${monitor.summary.warningAlerts}` },
-                                    ]}
-                                />
-                            </div>
-                            <div className='production-monitor-alert-list'>
-                                {filteredAlerts.length ? (
-                                    filteredAlerts.map(renderAlert)
-                                ) : (
-                                    <div className='production-monitor-all-clear'>
-                                        <CheckCircleFilled />
+                            {monitor.forecast && (!isMobile || mobileView === 'overview') ? (
+                                <section className='production-monitor-forecastbar'>
+                                    <div className='production-monitor-forecastbar__signal'>
+                                        <RocketOutlined />
                                         <span>
-                                            <strong>Không có tín hiệu trong nhóm này</strong>
-                                            <small>Số liệu đến hạn hiện không cần xử lý thêm.</small>
+                                            <small>Dự kiến cuối ngày</small>
+                                            <strong>{number(monitor.forecast.summary.projectedEndOfDay)} SP</strong>
                                         </span>
                                     </div>
-                                )}
-                            </div>
-                        </section>
-                    ) : null}
-
-                    {!isMobile || mobileView === 'lines' ? (
-                        isMobile ? (
-                            <section className='production-monitor-line-cards'>
-                                {sortedLines.map((line) => {
-                                    const meta = lineStatusMeta[line.status];
-                                    return (
-                                        <button key={line.lineId} type='button' onClick={() => openEntry(line.lineId)}>
-                                            <div>
-                                                <span>{line.lineCode}</span>
-                                                <div>
-                                                    <strong>
-                                                        {line.leaderName || line.lineName || 'Chưa có tổ trưởng'}
-                                                    </strong>
-                                                    <small>{line.workerCount} người</small>
-                                                </div>
-                                                <Tag color={meta.color}>{meta.label}</Tag>
-                                            </div>
-                                            <div className='production-monitor-line-card__numbers'>
-                                                <span>
-                                                    <small>Thực tế</small>
-                                                    <strong>{number(line.actualToNow)}</strong>
-                                                </span>
-                                                <span>
-                                                    <small>Mức đạt</small>
-                                                    <strong>{line.achievementPercent.toFixed(1)}%</strong>
-                                                </span>
-                                                <span>
-                                                    <small>Đã báo</small>
-                                                    <strong>
-                                                        {line.reportedSlots}/{line.dueSlots}
-                                                    </strong>
-                                                </span>
-                                            </div>
-                                            <Progress
-                                                percent={Math.min(100, Math.round(line.achievementPercent))}
-                                                showInfo={false}
-                                                size='small'
-                                                strokeColor={line.achievementPercent >= 95 ? '#168a52' : '#c87816'}
-                                            />
-                                        </button>
-                                    );
-                                })}
-                            </section>
-                        ) : (
-                            <section className='production-monitor-line-table'>
-                                <div className='production-monitor-section-heading'>
-                                    <div>
-                                        <Title level={4}>Tình trạng theo chuyền</Title>
-                                        <Text type='secondary'>Xếp chuyền cần chú ý lên trước.</Text>
+                                    <div className='production-monitor-forecastbar__progress'>
+                                        <div>
+                                            <span>
+                                                {monitor.forecast.summary.projectedCompletionPercent.toFixed(1)}% kế
+                                                hoạch
+                                            </span>
+                                            <small>
+                                                Mục tiêu {number(monitor.forecast.summary.plannedQuantity)} SP · còn{' '}
+                                                {number(monitor.forecast.summary.remainingQuantity)} SP
+                                            </small>
+                                        </div>
+                                        <Progress
+                                            percent={Math.min(
+                                                100,
+                                                Math.round(monitor.forecast.summary.projectedCompletionPercent)
+                                            )}
+                                            showInfo={false}
+                                            strokeColor={
+                                                monitor.forecast.summary.projectedCompletionPercent >= 95
+                                                    ? '#168a52'
+                                                    : monitor.forecast.summary.projectedCompletionPercent >= 80
+                                                      ? '#c87816'
+                                                      : '#c54141'
+                                            }
+                                        />
                                     </div>
-                                    <LineChartOutlined />
-                                </div>
-                                <Table<ProductionMonitorLine>
-                                    rowKey='lineId'
-                                    columns={lineColumns}
-                                    dataSource={sortedLines}
-                                    pagination={false}
-                                    scroll={{ x: 920 }}
-                                />
-                            </section>
-                        )
-                    ) : null}
+                                    <div className='production-monitor-forecastbar__risk'>
+                                        <span>
+                                            <strong>{monitor.forecast.summary.atRiskAllocations}</strong>
+                                            <small>phân bổ rủi ro</small>
+                                        </span>
+                                        <Tag>
+                                            Tin cậy{' '}
+                                            {monitor.forecast.summary.confidence === 'high'
+                                                ? 'cao'
+                                                : monitor.forecast.summary.confidence === 'medium'
+                                                  ? 'vừa'
+                                                  : 'thấp'}
+                                        </Tag>
+                                        <Button
+                                            type='link'
+                                            onClick={() =>
+                                                navigate(
+                                                    `/production/planning?plantId=${plantId}&date=${productionDate}`
+                                                )
+                                            }
+                                        >
+                                            Xem kế hoạch
+                                        </Button>
+                                    </div>
+                                </section>
+                            ) : null}
+
+                            {!isMobile || mobileView === 'overview' ? (
+                                <>
+                                    <section className='production-monitor-kpis'>
+                                        <div className='production-monitor-kpi-primary'>
+                                            <i className='pd-kpi-ico'>
+                                                <ThunderboltOutlined />
+                                            </i>
+                                            <span>Sản lượng đến hiện tại</span>
+                                            <strong>{number(monitor.summary.actualToNow)}</strong>
+                                            <small>/ {number(monitor.summary.targetToNow)} SP theo khoán</small>
+                                        </div>
+                                        <div>
+                                            <i className='pd-kpi-ico'>
+                                                <AimOutlined />
+                                            </i>
+                                            <span>Nhịp đạt</span>
+                                            <strong
+                                                className={`tone-${achievementTone(monitor.summary.achievementToNow)}`}
+                                            >
+                                                {monitor.summary.achievementToNow.toFixed(1)}%
+                                            </strong>
+                                            <small>
+                                                {monitor.summary.baselineAchievement === undefined
+                                                    ? 'Chưa có đường chuẩn'
+                                                    : `Nền ${monitor.summary.baselineAchievement.toFixed(1)}%`}
+                                            </small>
+                                        </div>
+                                        <div>
+                                            <i className='pd-kpi-ico'>
+                                                <FieldTimeOutlined />
+                                            </i>
+                                            <span>Độ phủ báo giờ</span>
+                                            <strong>{monitor.summary.reportingRate.toFixed(1)}%</strong>
+                                            <small>
+                                                {monitor.summary.reportedSlots}/{monitor.summary.dueSlots} ô đến hạn
+                                            </small>
+                                        </div>
+                                        <div>
+                                            <i className='pd-kpi-ico'>
+                                                <CheckCircleOutlined />
+                                            </i>
+                                            <span>Đúng nhịp</span>
+                                            <strong>{monitor.summary.onTrackLines}</strong>
+                                            <small>trên {monitor.summary.totalLines} chuyền</small>
+                                        </div>
+                                        <div className={monitor.summary.atRiskLines ? 'has-risk' : ''}>
+                                            <i className='pd-kpi-ico'>
+                                                <AlertOutlined />
+                                            </i>
+                                            <span>Cần xử lý</span>
+                                            <strong>{monitor.summary.atRiskLines}</strong>
+                                            <small>
+                                                {monitor.summary.criticalAlerts} nghiêm trọng ·{' '}
+                                                {monitor.summary.warningAlerts} cảnh báo
+                                            </small>
+                                        </div>
+                                    </section>
+
+                                    <section className='production-monitor-hour-strip'>
+                                        {monitor.slotPerformance.map((slot) => (
+                                            <div
+                                                key={slot.key}
+                                                className={`${slot.due ? 'is-due' : 'is-future'} ${monitor.currentSlotKey === slot.key ? 'is-current' : ''}`}
+                                            >
+                                                <span>{slotRangeLabelShort(slot)}</span>
+                                                <strong>{slot.due ? number(slot.actual) : '—'}</strong>
+                                                <small>
+                                                    {monitor.currentSlotKey === slot.key
+                                                        ? 'Đang chạy'
+                                                        : slot.due
+                                                          ? `${slot.reportedLines}/${slot.totalLines} chuyền`
+                                                          : 'Sắp tới'}
+                                                </small>
+                                            </div>
+                                        ))}
+                                    </section>
+
+                                    <section className='production-monitor-matrix-panel'>
+                                        <div className='production-monitor-section-heading'>
+                                            <div>
+                                                <Title level={4}>Ma trận sản lượng theo giờ</Title>
+                                                <Text type='secondary'>Số thực tế và tỷ lệ đạt tại từng chuyền.</Text>
+                                            </div>
+                                            <Button icon={<EyeOutlined />} onClick={() => openEntry()}>
+                                                Mở sổ nhập
+                                            </Button>
+                                        </div>
+                                        {renderMatrix()}
+                                    </section>
+                                </>
+                            ) : null}
+
+                            {!isMobile || mobileView === 'alerts' ? (
+                                <section className='production-monitor-alert-panel'>
+                                    <div className='production-monitor-section-heading'>
+                                        <div>
+                                            <Title level={4}>Việc cần xử lý</Title>
+                                            <Text type='secondary'>{monitor.alerts.length} tín hiệu đang mở</Text>
+                                        </div>
+                                        <Segmented<AlertFilter>
+                                            value={alertFilter}
+                                            onChange={setAlertFilter}
+                                            options={[
+                                                { value: 'all', label: 'Tất cả' },
+                                                { value: 'critical', label: `Nặng ${monitor.summary.criticalAlerts}` },
+                                                {
+                                                    value: 'warning',
+                                                    label: `Cảnh báo ${monitor.summary.warningAlerts}`,
+                                                },
+                                            ]}
+                                        />
+                                    </div>
+                                    <div className='production-monitor-alert-list'>
+                                        {filteredAlerts.length ? (
+                                            filteredAlerts.map(renderAlert)
+                                        ) : (
+                                            <div className='production-monitor-all-clear'>
+                                                <CheckCircleFilled />
+                                                <span>
+                                                    <strong>Không có tín hiệu trong nhóm này</strong>
+                                                    <small>Số liệu đến hạn hiện không cần xử lý thêm.</small>
+                                                </span>
+                                            </div>
+                                        )}
+                                    </div>
+                                </section>
+                            ) : null}
+
+                            {!isMobile || mobileView === 'lines' ? (
+                                isMobile ? (
+                                    <section className='production-monitor-line-cards'>
+                                        {sortedLines.map((line) => {
+                                            const meta = lineStatusMeta[line.status];
+                                            return (
+                                                <button
+                                                    key={line.lineId}
+                                                    type='button'
+                                                    onClick={() => openEntry(line.lineId)}
+                                                >
+                                                    <div>
+                                                        <span>{line.lineCode}</span>
+                                                        <div>
+                                                            <strong>
+                                                                {line.leaderName ||
+                                                                    line.lineName ||
+                                                                    'Chưa có tổ trưởng'}
+                                                            </strong>
+                                                            <small>{line.workerCount} người</small>
+                                                        </div>
+                                                        <Tag color={meta.color}>{meta.label}</Tag>
+                                                    </div>
+                                                    <div className='production-monitor-line-card__numbers'>
+                                                        <span>
+                                                            <small>Thực tế</small>
+                                                            <strong>{number(line.actualToNow)}</strong>
+                                                        </span>
+                                                        <span>
+                                                            <small>Mức đạt</small>
+                                                            <strong>{line.achievementPercent.toFixed(1)}%</strong>
+                                                        </span>
+                                                        <span>
+                                                            <small>Đã báo</small>
+                                                            <strong>
+                                                                {line.reportedSlots}/{line.dueSlots}
+                                                            </strong>
+                                                        </span>
+                                                    </div>
+                                                    <Progress
+                                                        percent={Math.min(100, Math.round(line.achievementPercent))}
+                                                        showInfo={false}
+                                                        size='small'
+                                                        strokeColor={
+                                                            line.achievementPercent >= 95 ? '#168a52' : '#c87816'
+                                                        }
+                                                    />
+                                                </button>
+                                            );
+                                        })}
+                                    </section>
+                                ) : (
+                                    <section className='production-monitor-line-table'>
+                                        <div className='production-monitor-section-heading'>
+                                            <div>
+                                                <Title level={4}>Tình trạng theo chuyền</Title>
+                                                <Text type='secondary'>Xếp chuyền cần chú ý lên trước.</Text>
+                                            </div>
+                                            <LineChartOutlined />
+                                        </div>
+                                        <Table<ProductionMonitorLine>
+                                            rowKey='lineId'
+                                            columns={lineColumns}
+                                            dataSource={sortedLines}
+                                            pagination={false}
+                                            scroll={{ x: 920 }}
+                                        />
+                                    </section>
+                                )
+                            ) : null}
+                        </>
+                    )}
                 </>
             )}
         </div>
