@@ -1,5 +1,6 @@
 import { Alert, App, Button, Drawer, Form, Input, InputNumber, Popconfirm, Select, Tag, Typography } from 'antd';
 import {
+    ApartmentOutlined,
     CheckOutlined,
     DeleteOutlined,
     EditOutlined,
@@ -15,15 +16,19 @@ import { slotRangeLabel } from '../../core/lib/productionSlot';
 import { useResponsive } from '../../core/hooks/useResponsive';
 import { productionService } from '../../core/services/production.service';
 import type { ProductionDay, ProductionItem, ProductionLineRecord } from '../../core/types/production';
+import '../../styles/production-leader.css';
+import ProductionOperationEntryDrawer from './ProductionOperationEntryDrawer';
 
 const { Text, Title } = Typography;
 
 type Props = {
     open: boolean;
+    actorId: string;
     day: ProductionDay;
     line?: ProductionLineRecord;
     items: ProductionItem[];
     slotKey: string;
+    online: boolean;
     onClose: () => void;
     onSaved: (moveNext: boolean) => void;
 };
@@ -57,7 +62,7 @@ const errorMessage = (error: unknown) => (error instanceof Error ? error.message
 const errorStatus = (error: unknown) =>
     typeof error === 'object' && error && 'status' in error ? Number(error.status) : undefined;
 
-const ProductionEntryDrawer = ({ open, day, line, items, slotKey, onClose, onSaved }: Props) => {
+const ProductionEntryDrawer = ({ open, actorId, day, line, items, slotKey, online, onClose, onSaved }: Props) => {
     const { isPhone } = useResponsive();
     const { message, modal } = App.useApp();
     const queryClient = useQueryClient();
@@ -68,6 +73,7 @@ const ProductionEntryDrawer = ({ open, day, line, items, slotKey, onClose, onSav
     const [showSetup, setShowSetup] = useState(false);
     const [showChangeItem, setShowChangeItem] = useState(false);
     const [showCorrection, setShowCorrection] = useState(false);
+    const [operationDrawerOpen, setOperationDrawerOpen] = useState(false);
     const selectedRunId = Form.useWatch('runId', entryForm);
     const runDraftSlotKey = Form.useWatch('startedSlotKey', runForm);
     const slot = day.timeSlots.find((item) => item.key === slotKey);
@@ -146,6 +152,10 @@ const ProductionEntryDrawer = ({ open, day, line, items, slotKey, onClose, onSav
             reason: '',
         });
     }, [correctionForm, day.timeSlots, isReadOnly, line, open, setupForm]);
+
+    useEffect(() => {
+        if (!open) setOperationDrawerOpen(false);
+    }, [line?.lineId, open, slotKey]);
 
     useEffect(() => {
         if (!open || !line) return;
@@ -282,7 +292,25 @@ const ProductionEntryDrawer = ({ open, day, line, items, slotKey, onClose, onSav
 
     if (!line) return null;
 
-    const selectedRun = line.runs.find((run) => run.id === selectedRunId);
+    const selectedRun =
+        line.runs.find((run) => run.id === selectedRunId) ||
+        line.runs.find((run) => run.id === slotValue?.runId) ||
+        [...line.runs].reverse().find((run) => run.status === 'active') ||
+        [...line.runs].reverse()[0];
+    const selectedItem =
+        items.find((item) => item.id === selectedRun?.itemId) ||
+        items.find(
+            (item) =>
+                item.code.trim().toLocaleUpperCase('vi-VN') ===
+                String(selectedRun?.itemCode || '')
+                    .trim()
+                    .toLocaleUpperCase('vi-VN')
+        );
+    const operationValuesForSlot = (line.operationSlotValues || []).filter(
+        (value) => value.key === slotKey && value.sourceRunId === selectedRun?.id && (value.due || value.reported)
+    );
+    const operationReportedForSlot = operationValuesForSlot.filter((value) => value.reported).length;
+    const operationTemplateCount = selectedItem?.operationTemplates?.length || 0;
 
     return (
         <Drawer
@@ -328,6 +356,39 @@ const ProductionEntryDrawer = ({ open, day, line, items, slotKey, onClose, onSav
                     </Tag>
                 )}
             </div>
+
+            {line.configured && selectedRun && (eligibleRuns.length > 0 || operationValuesForSlot.length > 0) ? (
+                <button
+                    type='button'
+                    className={`production-operation-admin-launch ${
+                        operationValuesForSlot.length > 0 && operationReportedForSlot === operationValuesForSlot.length
+                            ? 'is-complete'
+                            : ''
+                    }`}
+                    onClick={() => setOperationDrawerOpen(true)}
+                >
+                    <span>
+                        <ApartmentOutlined />
+                    </span>
+                    <div>
+                        <strong>Công đoạn trọng yếu</strong>
+                        <small>
+                            {operationValuesForSlot.length
+                                ? `${operationReportedForSlot}/${operationValuesForSlot.length} công đoạn đã nhập trong giờ`
+                                : operationTemplateCount
+                                  ? `${operationTemplateCount} công đoạn đã cấu hình · bấm để bật theo dõi`
+                                  : `Mã ${selectedRun.itemCode} chưa được gán template công đoạn`}
+                        </small>
+                    </div>
+                    <b>
+                        {operationValuesForSlot.length
+                            ? `${operationReportedForSlot}/${operationValuesForSlot.length}`
+                            : operationTemplateCount
+                              ? 'Mở'
+                              : 'Kiểm tra'}
+                    </b>
+                </button>
+            ) : null}
 
             {isReadOnly ? (
                 <section className='production-drawer-section production-readonly-entry'>
@@ -765,6 +826,17 @@ const ProductionEntryDrawer = ({ open, day, line, items, slotKey, onClose, onSav
                     </Button>
                 </div>
             ) : null}
+            <ProductionOperationEntryDrawer
+                open={open && operationDrawerOpen}
+                actorId={actorId}
+                day={day}
+                line={line}
+                slotKey={slotKey}
+                items={items}
+                online={online}
+                onClose={() => setOperationDrawerOpen(false)}
+                onSaved={refreshDay}
+            />
         </Drawer>
     );
 };

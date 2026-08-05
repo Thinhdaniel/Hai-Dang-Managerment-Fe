@@ -84,7 +84,15 @@ const ProductionOperationEntryDrawer = ({
         line.runs.find((run) => run.id === productionSlot?.runId) ||
         [...line.runs].reverse().find((run) => run.status === 'active') ||
         [...line.runs].reverse()[0];
-    const currentItem = items.find((item) => item.id === currentRun?.itemId);
+    const currentItem =
+        items.find((item) => item.id === currentRun?.itemId) ||
+        items.find(
+            (item) =>
+                item.code.trim().toLocaleUpperCase('vi-VN') ===
+                String(currentRun?.itemCode || '')
+                    .trim()
+                    .toLocaleUpperCase('vi-VN')
+        );
     const allSlotValues = useMemo(
         () => (line.operationSlotValues || []).filter((value) => value.key === slotKey),
         [line.operationSlotValues, slotKey]

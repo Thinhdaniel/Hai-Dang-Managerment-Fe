@@ -147,7 +147,15 @@ const ProductionLeaderEntryView = ({
         changeRunSlotOptions.find((item) => item.value === slotKey && !item.disabled)?.value ||
         changeRunSlotOptions.find((item) => !item.disabled)?.value;
     const selectedRun = line.runs.find((run) => run.id === runId);
-    const selectedItem = items.find((item) => item.id === selectedRun?.itemId);
+    const selectedItem =
+        items.find((item) => item.id === selectedRun?.itemId) ||
+        items.find(
+            (item) =>
+                item.code.trim().toLocaleUpperCase('vi-VN') ===
+                String(selectedRun?.itemCode || '')
+                    .trim()
+                    .toLocaleUpperCase('vi-VN')
+        );
     const existingEntry = line.entries.find((entry) => entry.slotKey === slotKey && entry.runId === runId);
     const previousEntry = useMemo(() => {
         if (!runId) return undefined;

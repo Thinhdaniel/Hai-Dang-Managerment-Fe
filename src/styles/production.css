@@ -3631,6 +3631,96 @@
     white-space: nowrap;
 }
 
+.production-operation-admin-launch {
+    display: grid;
+    width: 100%;
+    min-height: 64px;
+    align-items: center;
+    margin-bottom: 12px;
+    padding: 10px 12px;
+    border: 1px solid #cfe2df;
+    border-radius: var(--pd-radius);
+    color: var(--pd-ink);
+    background: #f8fbfa;
+    font-family: inherit;
+    grid-template-columns: 40px minmax(0, 1fr) auto;
+    gap: 11px;
+    text-align: left;
+    cursor: pointer;
+    transition:
+        border-color 160ms ease,
+        background-color 160ms ease,
+        box-shadow 160ms ease,
+        transform 160ms ease;
+}
+
+.production-operation-admin-launch:hover,
+.production-operation-admin-launch:focus-visible {
+    border-color: #6bb9ae;
+    background: #f4faf8;
+    box-shadow: 0 5px 16px rgba(15, 118, 110, 0.1);
+    outline: none;
+}
+
+.production-operation-admin-launch:active {
+    transform: translateY(1px);
+}
+
+.production-operation-admin-launch > span {
+    display: grid;
+    width: 40px;
+    height: 40px;
+    place-items: center;
+    border: 1px solid #b8d9d4;
+    border-radius: 8px;
+    color: #0f766e;
+    background: #eaf7f5;
+    font-size: 19px;
+}
+
+.production-operation-admin-launch > div {
+    display: flex;
+    min-width: 0;
+    flex-direction: column;
+    gap: 3px;
+}
+
+.production-operation-admin-launch strong {
+    font-size: var(--pd-fs-13);
+    font-weight: 750;
+}
+
+.production-operation-admin-launch small {
+    overflow: hidden;
+    color: var(--pd-ink-3);
+    font-size: var(--pd-fs-11-5);
+    line-height: 1.4;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.production-operation-admin-launch > b {
+    min-width: 48px;
+    padding: 6px 8px;
+    border-radius: 6px;
+    color: #0f766e;
+    background: #eaf7f5;
+    font-size: var(--pd-fs-11-5);
+    text-align: center;
+}
+
+.production-operation-admin-launch.is-complete {
+    border-color: #b9dfca;
+    background: #f6fbf8;
+}
+
+.production-operation-admin-launch.is-complete > span,
+.production-operation-admin-launch.is-complete > b {
+    border-color: #b9dfca;
+    color: #087a4c;
+    background: #eaf8f0;
+}
+
 .production-drawer-section,
 .production-setup-section {
     margin-bottom: 10px;

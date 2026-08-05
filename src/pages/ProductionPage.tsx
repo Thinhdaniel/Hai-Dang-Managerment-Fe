@@ -79,12 +79,24 @@ const ProductionPage = () => {
     const [selectedLineId, setSelectedLineId] = useState<string | null>(() => searchParams.get('lineId'));
     const [setupOpen, setSetupOpen] = useState(false);
     const [search, setSearch] = useState('');
+    const [online, setOnline] = useState(() => navigator.onLine);
     const slotRailRef = useRef<HTMLDivElement>(null);
     const productionDate = date.format('YYYY-MM-DD');
     const canManage = can(role, 'production.manage');
     const canSwitchPlant = isAdmin(role) || isDirector(role);
     const canReopenLocked = isAdmin(role) || isDirector(role);
     const canSeeFinancials = hasManagerAccess(role);
+
+    useEffect(() => {
+        const handleOnline = () => setOnline(true);
+        const handleOffline = () => setOnline(false);
+        window.addEventListener('online', handleOnline);
+        window.addEventListener('offline', handleOffline);
+        return () => {
+            window.removeEventListener('online', handleOnline);
+            window.removeEventListener('offline', handleOffline);
+        };
+    }, []);
 
     // Khi mở từ Web Push/in-app notification, đồng bộ lại state kể cả khi
     // người dùng đang đứng sẵn ở /production và chỉ query string thay đổi.
@@ -712,10 +724,12 @@ const ProductionPage = () => {
             {day && selectedLine ? (
                 <ProductionEntryDrawer
                     open={Boolean(selectedLineId)}
+                    actorId={user?.id || ''}
                     day={day as ProductionDay}
                     line={selectedLine}
                     items={itemsQuery.data || []}
                     slotKey={selectedSlotKey}
+                    online={online}
                     onClose={() => setSelectedLineId(null)}
                     onSaved={moveAfterSave}
                 />
