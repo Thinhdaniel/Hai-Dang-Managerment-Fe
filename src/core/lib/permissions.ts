@@ -41,6 +41,7 @@ export type Capability =
     | 'production.view'
     | 'production.write'
     | 'production.qc.write'
+    | 'production.qc.report'
     | 'production.manage';
 
 const ALL_VIEW: Capability[] = ['asset.view', 'transfer.view', 'borrowing.view', 'maintenance.view'];
@@ -72,6 +73,7 @@ const ROLE_CAPS: Record<Exclude<UserRole, UserRole.ADMIN>, Capability[]> = {
         'production.view',
         'production.write',
         'production.qc.write',
+        'production.qc.report',
         'production.manage',
         'plant.view',
         'user.view',
@@ -100,6 +102,7 @@ const ROLE_CAPS: Record<Exclude<UserRole, UserRole.ADMIN>, Capability[]> = {
         'production.view',
         'production.write',
         'production.qc.write',
+        'production.qc.report',
         'production.manage',
     ],
     [UserRole.STAFF]: [
@@ -117,7 +120,7 @@ const ROLE_CAPS: Record<Exclude<UserRole, UserRole.ADMIN>, Capability[]> = {
     // Tổ trưởng: CHỈ báo sản lượng theo giờ, không đụng bất kỳ module nào khác.
     [UserRole.LINE_LEADER]: ['production.view', 'production.write'],
     // QC chỉ đọc ngày sản xuất và ghi kết quả chất lượng, không sửa sản lượng/cấu hình.
-    [UserRole.QC]: ['production.view', 'production.qc.write'],
+    [UserRole.QC]: ['production.view', 'production.qc.write', 'production.qc.report'],
 };
 
 export const isSuperAdmin = (role: Role) => role === UserRole.ADMIN;

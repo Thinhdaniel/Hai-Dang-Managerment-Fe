@@ -2,6 +2,7 @@ import { App, Avatar, Button, ConfigProvider, Drawer, Dropdown, Tooltip, Typogra
 import {
     AppstoreOutlined,
     AuditOutlined,
+    BarChartOutlined,
     CalendarOutlined,
     DownOutlined,
     EditOutlined,
@@ -19,7 +20,7 @@ import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../core/contexts/AuthContext';
 import { useResponsive } from '../../core/hooks/useResponsive';
 import { useSocket } from '../../core/hooks/useSocket';
-import { can, getLandingPath, isProductionOperator, isQc } from '../../core/lib/permissions';
+import { can, getLandingPath, isLineLeader, isProductionOperator, isQc } from '../../core/lib/permissions';
 import { countProductionEntryDrafts } from '../../core/lib/productionDraft';
 import { listProductionOutbox } from '../../core/lib/productionOutbox';
 import '../../styles/production.css';
@@ -65,6 +66,7 @@ const ProductionAppLayout = () => {
 
     const manage = can(role, 'production.manage');
     const qcAccess = can(role, 'production.qc.write');
+    const qcReportAccess = can(role, 'production.qc.report');
     // Tổ trưởng chỉ có đúng màn nhập sản lượng — không hiện điều hướng nào khác,
     // không lối sang app quản lý máy/vật tư.
     const qcOnly = isQc(role);
@@ -75,7 +77,16 @@ const ProductionAppLayout = () => {
             ? { to: '/production', end: true, icon: <EditOutlined />, label: 'Nhập sản lượng', short: 'Nhập liệu' }
             : null,
         qcAccess
-            ? { to: '/production/qc', end: false, icon: <AuditOutlined />, label: 'Kiểm tra QC', short: 'QC' }
+            ? { to: '/production/qc', end: true, icon: <AuditOutlined />, label: 'Kiểm tra QC', short: 'QC' }
+            : null,
+        qcReportAccess
+            ? {
+                  to: '/production/qc/reports',
+                  end: false,
+                  icon: <BarChartOutlined />,
+                  label: 'Báo cáo QC',
+                  short: 'Báo cáo',
+              }
             : null,
         manage ? { to: '/production/monitor', end: false, icon: <LineChartOutlined />, label: 'Điều hành' } : null,
         manage
@@ -198,10 +209,8 @@ const ProductionAppLayout = () => {
                         </strong>
                     </button>
 
-                    {operatorOnly ? (
-                        <div className='pd-leader-tag'>
-                            {qcOnly ? 'Kiểm tra QC theo giờ' : 'Báo sản lượng theo giờ'}
-                        </div>
+                    {isLineLeader(role) ? (
+                        <div className='pd-leader-tag'>Báo sản lượng theo giờ</div>
                     ) : (
                         <nav className='pd-nav' aria-label='Điều hướng sản xuất'>
                             {navItems.map((item) => (
@@ -244,8 +253,8 @@ const ProductionAppLayout = () => {
                 <nav
                     className='pd-tabbar'
                     aria-label='Điều hướng sản xuất'
-                    hidden={operatorOnly}
-                    style={operatorOnly ? { display: 'none' } : undefined}
+                    hidden={isLineLeader(role)}
+                    style={isLineLeader(role) ? { display: 'none' } : undefined}
                 >
                     {primaryNav.map((item) => (
                         <NavLink key={item.to} to={item.to} end={item.end} onClick={() => setMoreOpen(false)}>

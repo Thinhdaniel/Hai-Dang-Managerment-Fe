@@ -288,7 +288,7 @@
 }
 
 .pd-qc-console.has-editor {
-    grid-template-columns: 176px minmax(440px, 1fr) 370px;
+    grid-template-columns: 176px minmax(420px, 1fr) minmax(420px, 460px);
 }
 
 .pd-qc-time-panel {
@@ -736,6 +736,12 @@
     background: #f5f7f9;
 }
 
+.pd-qc-editor__notice.is-legacy {
+    border-color: #f0d59a;
+    color: #7a5310;
+    background: #fff9ea;
+}
+
 .pd-qc-editor__notice .anticon {
     margin-top: 2px;
 }
@@ -779,6 +785,220 @@
     font-size: 13px;
     text-overflow: ellipsis;
     white-space: nowrap;
+}
+
+.pd-qc-batch {
+    display: flex;
+    min-width: 0;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.pd-qc-batch__head,
+.pd-qc-batch__head > div {
+    display: flex;
+    min-width: 0;
+}
+
+.pd-qc-batch__head {
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+}
+
+.pd-qc-batch__head > div {
+    flex-direction: column;
+}
+
+.pd-qc-batch__head strong {
+    color: var(--qc-ink);
+    font-size: 12px;
+}
+
+.pd-qc-batch__head small {
+    color: var(--qc-muted);
+    font-size: 9px;
+}
+
+.pd-qc-batch__head .ant-btn {
+    min-height: 34px;
+    border-color: #cbd8df;
+    color: var(--qc-primary);
+    background: #fff;
+    font-size: 10px;
+    font-weight: 700;
+}
+
+.pd-qc-batch__rows {
+    display: flex;
+    min-width: 0;
+    flex-direction: column;
+    gap: 9px;
+}
+
+.pd-qc-inspection {
+    display: flex;
+    min-width: 0;
+    flex-direction: column;
+    gap: 9px;
+    padding: 11px;
+    border: 1px solid #dce3e8;
+    border-left: 3px solid #3b7b8f;
+    border-radius: 7px;
+    background: #fff;
+    box-shadow: 0 3px 10px rgba(23, 50, 77, 0.035);
+    animation: pd-qc-inspection-in 180ms ease both;
+}
+
+.pd-qc-inspection > header {
+    display: flex;
+    min-height: 24px;
+    align-items: center;
+    gap: 7px;
+}
+
+.pd-qc-inspection > header > span:first-child {
+    margin-right: auto;
+    color: #4d5d6b;
+    font-size: 10px;
+    font-weight: 750;
+}
+
+.pd-qc-inspection > header .ant-tag {
+    margin: 0;
+    font-size: 9px;
+}
+
+.pd-qc-inspection > header .ant-btn {
+    width: 28px;
+    height: 28px;
+}
+
+.pd-qc-inspection__item {
+    display: flex;
+    min-width: 0;
+    flex-direction: column;
+    gap: 5px;
+}
+
+.pd-qc-inspection__item > span {
+    color: var(--qc-muted);
+    font-size: 9px;
+    font-weight: 700;
+}
+
+.pd-qc-inspection__item .ant-select,
+.pd-qc-inspection__source .ant-select,
+.pd-qc-inspection__source .ant-picker {
+    width: 100%;
+}
+
+.pd-qc-inspection .ant-select-selector,
+.pd-qc-inspection .ant-picker,
+.pd-qc-inspection .ant-input {
+    min-height: 38px;
+}
+
+.pd-qc-inspection .ant-segmented {
+    padding: 3px;
+    border: 1px solid #e0e6ea;
+    background: #f4f6f8;
+}
+
+.pd-qc-inspection .ant-segmented-item {
+    min-height: 30px;
+    font-size: 10px;
+    font-weight: 650;
+}
+
+.pd-qc-inspection__source {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 7px;
+}
+
+.pd-qc-inspection__source > :only-child {
+    grid-column: 1 / -1;
+}
+
+.pd-qc-inspection__numbers {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr)) minmax(72px, 0.72fr);
+    overflow: hidden;
+    border: 1px solid #dfe5ea;
+    border-radius: 6px;
+    background: #fafbfc;
+}
+
+.pd-qc-inspection__numbers > label,
+.pd-qc-inspection__total {
+    display: flex;
+    min-width: 0;
+    min-height: 68px;
+    flex-direction: column;
+    justify-content: center;
+    padding: 7px 8px;
+}
+
+.pd-qc-inspection__numbers > * + * {
+    border-left: 1px solid #e1e6ea;
+}
+
+.pd-qc-inspection__numbers label > span,
+.pd-qc-inspection__total small {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    color: var(--qc-muted);
+    font-size: 9px;
+    font-weight: 700;
+}
+
+.pd-qc-inspection__numbers label.is-passed > span {
+    color: var(--qc-passed);
+}
+
+.pd-qc-inspection__numbers label.is-defect > span {
+    color: var(--qc-defect);
+}
+
+.pd-qc-inspection__numbers .ant-input-number {
+    width: 100%;
+    border: 0;
+    background: transparent;
+    box-shadow: none;
+}
+
+.pd-qc-inspection__numbers .ant-input-number-input {
+    height: 32px;
+    padding: 0;
+    color: var(--qc-ink);
+    font-size: 20px;
+    font-weight: 800;
+}
+
+.pd-qc-inspection__total strong {
+    overflow: hidden;
+    color: var(--qc-ink);
+    font-size: 19px;
+    text-overflow: ellipsis;
+}
+
+.pd-qc-inspection__meta {
+    display: grid;
+    grid-template-columns: minmax(120px, 0.75fr) minmax(0, 1.25fr);
+    gap: 7px;
+}
+
+@keyframes pd-qc-inspection-in {
+    from {
+        opacity: 0;
+        transform: translateY(5px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
 }
 
 .pd-qc-editor__field {
@@ -1013,7 +1233,7 @@
 
     .pd-qc-topbar__tools {
         display: grid;
-        grid-template-columns: minmax(0, 1fr) 42px;
+        grid-template-columns: minmax(0, 1fr) 42px 42px;
         gap: 7px;
     }
 
@@ -1268,6 +1488,59 @@
 
     .pd-qc-editor__notice {
         font-size: 11px;
+    }
+
+    .pd-qc-batch__head strong {
+        font-size: 13px;
+    }
+
+    .pd-qc-batch__head small,
+    .pd-qc-inspection__item > span,
+    .pd-qc-inspection__numbers label > span,
+    .pd-qc-inspection__total small {
+        font-size: 11px;
+    }
+
+    .pd-qc-inspection {
+        gap: 10px;
+        padding: 11px 10px;
+        border-radius: 8px;
+    }
+
+    .pd-qc-inspection > header > span:first-child,
+    .pd-qc-inspection > header .ant-tag,
+    .pd-qc-inspection .ant-segmented-item {
+        font-size: 11px;
+    }
+
+    .pd-qc-inspection .ant-select-selector,
+    .pd-qc-inspection .ant-picker,
+    .pd-qc-inspection .ant-input {
+        min-height: 42px;
+    }
+
+    .pd-qc-inspection__source,
+    .pd-qc-inspection__meta {
+        grid-template-columns: minmax(0, 1fr);
+    }
+
+    .pd-qc-inspection__numbers {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .pd-qc-inspection__total {
+        grid-column: 1 / -1;
+        min-height: 48px;
+        align-items: center;
+        flex-direction: row;
+        justify-content: space-between;
+        border-top: 1px solid #e1e6ea;
+        border-left: 0 !important;
+    }
+
+    .pd-qc-inspection__numbers .ant-input-number-input {
+        min-height: 38px;
+        font-size: 23px;
     }
 
     .pd-qc-editor__field > span {

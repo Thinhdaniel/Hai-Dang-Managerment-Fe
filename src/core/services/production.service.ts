@@ -16,6 +16,10 @@ import type {
     ProductionOpeningBalanceBatch,
     ProductionOpeningBalanceList,
     ProductionOpeningBalancePreview,
+    ProductionQcOpeningBalanceBatch,
+    ProductionQcOpeningBalanceList,
+    ProductionQcOpeningBalancePreview,
+    ProductionQcReport,
     ProductionPlan,
     ProductionPlanAllocationPayload,
     ProductionReport,
@@ -26,6 +30,7 @@ import type {
     SaveProductionEntryPayload,
     SaveProductionOperationEntryPayload,
     SaveProductionQcEntryPayload,
+    SaveProductionQcRecordPayload,
     ProductionTimeSlot,
     UpdateProductionReminderSettingsPayload,
 } from '../types/production';
@@ -121,6 +126,80 @@ export const productionService = {
         to: string;
         scope?: ProductionReportScope;
     }): Promise<Blob> => api.get(`${BASE}/reports/export`, { params, responseType: 'blob' }),
+
+    getQcReport: (params: {
+        plantId: string;
+        from: string;
+        to: string;
+        itemId?: string;
+        lineId?: string;
+        orderCode?: string;
+    }): Promise<ProductionQcReport> => api.get(`${BASE}/qc/reports/summary`, { params }),
+
+    exportQcReport: (params: {
+        plantId: string;
+        from: string;
+        to: string;
+        itemId?: string;
+        lineId?: string;
+        orderCode?: string;
+    }): Promise<Blob> => api.get(`${BASE}/qc/reports/export`, { params, responseType: 'blob' }),
+
+    getQcOpeningBalances: (plantId: string): Promise<ProductionQcOpeningBalanceList> =>
+        api.get(`${BASE}/qc/opening-balances`, { params: { plantId } }),
+
+    createManualQcOpeningBalance: (payload: {
+        plantId: string;
+        cutoffDate: string;
+        note: string;
+        entries: Array<{
+            lineId: string;
+            itemId?: string | null;
+            orderCode?: string;
+            mode: 'full' | 'backlog_only';
+            passedQuantity: number;
+            defectQuantity: number;
+            pendingQuantity: number;
+        }>;
+    }): Promise<ProductionQcOpeningBalanceBatch> => api.post(`${BASE}/qc/opening-balances/manual`, payload),
+
+    previewQcOpeningBalanceImport: (
+        file: File,
+        payload: { plantId: string; cutoffDate: string; note: string }
+    ): Promise<ProductionQcOpeningBalancePreview> => {
+        const formData = new FormData();
+        formData.append('file', file);
+        formData.append('plantId', payload.plantId);
+        formData.append('cutoffDate', payload.cutoffDate);
+        formData.append('note', payload.note);
+        return api.post<ProductionQcOpeningBalancePreview, FormData>(
+            `${BASE}/qc/opening-balances/import/preview`,
+            formData,
+            { headers: { 'Content-Type': 'multipart/form-data' } }
+        );
+    },
+
+    confirmQcOpeningBalanceImport: (
+        file: File,
+        payload: { plantId: string; cutoffDate: string; note: string }
+    ): Promise<ProductionQcOpeningBalanceBatch> => {
+        const formData = new FormData();
+        formData.append('file', file);
+        formData.append('plantId', payload.plantId);
+        formData.append('cutoffDate', payload.cutoffDate);
+        formData.append('note', payload.note);
+        return api.post<ProductionQcOpeningBalanceBatch, FormData>(
+            `${BASE}/qc/opening-balances/import/confirm`,
+            formData,
+            { headers: { 'Content-Type': 'multipart/form-data' } }
+        );
+    },
+
+    voidQcOpeningBalance: (id: string, reason: string): Promise<ProductionQcOpeningBalanceBatch> =>
+        api.post(`${BASE}/qc/opening-balances/${id}/void`, { reason }),
+
+    downloadQcOpeningBalanceTemplate: (plantId: string): Promise<Blob> =>
+        api.get(`${BASE}/qc/opening-balances/template`, { params: { plantId }, responseType: 'blob' }),
 
     getOpeningBalances: (plantId: string): Promise<ProductionOpeningBalanceList> =>
         api.get(`${BASE}/opening-balances`, { params: { plantId } }),
@@ -288,4 +367,15 @@ export const productionService = {
 
     deleteQcEntry: (dayId: string, lineId: string, entryId: string): Promise<ProductionLineRecord> =>
         api.delete(`${BASE}/days/${dayId}/lines/${lineId}/qc-entries/${entryId}`),
+
+    saveQcRecord: (
+        dayId: string,
+        lineId: string,
+        slotKey: string,
+        payload: SaveProductionQcRecordPayload
+    ): Promise<ProductionLineRecord> =>
+        api.put(`${BASE}/days/${dayId}/lines/${lineId}/qc-records/${encodeURIComponent(slotKey)}`, payload),
+
+    deleteQcRecord: (dayId: string, lineId: string, slotKey: string): Promise<ProductionLineRecord> =>
+        api.delete(`${BASE}/days/${dayId}/lines/${lineId}/qc-records/${encodeURIComponent(slotKey)}`),
 };

@@ -113,11 +113,57 @@ export interface HourlyQcEntry {
     id: string;
     slotKey: string;
     runId?: string;
+    itemId?: string;
+    itemCode?: string;
+    itemName?: string;
+    orderCode?: string;
+    inspectionType?: ProductionQcInspectionType;
+    sourceType?: ProductionQcSourceType;
+    sourceProductionDate?: string;
+    allocationState?: 'exact' | 'unallocated';
+    legacy?: boolean;
     passedQuantity: number;
     defectQuantity: number;
     totalQuantity: number;
     defectRate: number;
     note?: string;
+    enteredBy?: string;
+    enteredByName?: string;
+    enteredAt?: string;
+    updatedBy?: string;
+    updatedByName?: string;
+    updatedAt?: string;
+}
+
+export type ProductionQcInspectionType = 'first_pass' | 'recheck';
+export type ProductionQcSourceType = 'current_day' | 'carryover';
+
+export interface ProductionQcInspection {
+    id?: string;
+    itemId: string;
+    itemCode: string;
+    itemName?: string;
+    unit: string;
+    orderCode?: string;
+    inspectionType: ProductionQcInspectionType;
+    sourceType: ProductionQcSourceType;
+    sourceProductionDate?: string;
+    passedQuantity: number;
+    defectQuantity: number;
+    totalQuantity: number;
+    defectRate: number;
+    note?: string;
+}
+
+export interface ProductionQcSlotRecord {
+    id: string;
+    dayId: string;
+    lineId: string;
+    slotKey: string;
+    inspections: ProductionQcInspection[];
+    passedQuantity: number;
+    defectQuantity: number;
+    totalQuantity: number;
     enteredBy?: string;
     enteredByName?: string;
     enteredAt?: string;
@@ -215,6 +261,9 @@ export interface ProductionQcSlotValue {
     defectQuantity: number;
     totalQuantity: number;
     defectRate: number;
+    firstPassQuantity?: number;
+    recheckQuantity?: number;
+    unallocatedQuantity?: number;
     /** Sản lượng chuyền trong giờ, chỉ để tham khảo; không dùng đối soát QC. */
     productionActualReference: number;
     /** Payload backend cũ trong thời gian rollout. */
@@ -252,6 +301,7 @@ export interface ProductionLineRecord {
     entries: HourlyProductionEntry[];
     slotValues: ProductionSlotValue[];
     qcEntries: HourlyQcEntry[];
+    qcSlotRecords: ProductionQcSlotRecord[];
     qcSlotValues: ProductionQcSlotValue[];
     operationTrackingEnabled: boolean;
     operationTracks: ProductionOperationTrack[];
@@ -266,6 +316,9 @@ export interface ProductionLineRecord {
     qcPassedQuantity: number;
     qcDefectQuantity: number;
     qcTotalQuantity: number;
+    qcFirstPassQuantity: number;
+    qcRecheckQuantity: number;
+    qcUnallocatedQuantity: number;
     qcDefectRate: number;
     qcReportedSlots: number;
     qcExpectedSlots: number;
@@ -293,6 +346,9 @@ export interface ProductionDaySummary {
     qcPassedQuantity: number;
     qcDefectQuantity: number;
     qcTotalQuantity: number;
+    qcFirstPassQuantity: number;
+    qcRecheckQuantity: number;
+    qcUnallocatedQuantity: number;
     qcDefectRate: number;
     qcReportedLineSlots: number;
     qcExpectedLineSlots: number;
@@ -370,6 +426,24 @@ export interface SaveProductionQcEntryPayload {
     /** Backend mới tự tính; field này chỉ phục vụ phiên bản cũ. */
     totalQuantity?: number;
     note?: string;
+    clientMutationId?: string;
+    expectedUpdatedAt?: string | null;
+}
+
+export interface SaveProductionQcInspectionPayload {
+    id?: string;
+    itemId: string;
+    orderCode?: string;
+    inspectionType: ProductionQcInspectionType;
+    sourceType: ProductionQcSourceType;
+    sourceProductionDate?: string;
+    passedQuantity: number;
+    defectQuantity: number;
+    note?: string;
+}
+
+export interface SaveProductionQcRecordPayload {
+    inspections: SaveProductionQcInspectionPayload[];
     clientMutationId?: string;
     expectedUpdatedAt?: string | null;
 }
@@ -1281,6 +1355,233 @@ export interface ProductionOpeningBalancePreview {
         invalidRows: number;
     };
     rows: ProductionOpeningBalancePreviewRow[];
+}
+
+export type ProductionQcOpeningMode = 'full' | 'backlog_only';
+
+export interface ProductionQcOpeningBalanceEntry {
+    id?: string;
+    lineId: string;
+    lineCode: string;
+    lineName?: string;
+    itemId?: string;
+    itemCode?: string;
+    itemName?: string;
+    orderCode?: string;
+    unit: string;
+    mode: ProductionQcOpeningMode;
+    passedQuantity: number;
+    defectQuantity: number;
+    inspectedQuantity: number;
+    pendingQuantity: number;
+    allocationState: 'exact' | 'unallocated';
+    sourceRow?: number;
+}
+
+export interface ProductionQcOpeningBalanceSummary {
+    entryCount: number;
+    passedQuantity: number;
+    defectQuantity: number;
+    inspectedQuantity: number;
+    pendingQuantity: number;
+    exactPendingQuantity: number;
+    unallocatedPendingQuantity: number;
+    fullEntryCount: number;
+}
+
+export interface ProductionQcOpeningBalanceCoverage extends ProductionQcOpeningBalanceSummary {
+    available: boolean;
+    cutoffDate?: string;
+    batchCount: number;
+    exactCoveragePercent: number;
+    historicalQualityComplete: boolean;
+    lastConfirmedAt?: string;
+}
+
+export interface ProductionQcOpeningBalanceBatch {
+    id: string;
+    code: string;
+    plantId: string;
+    plantName: string;
+    plantCode?: string;
+    cutoffDate: string;
+    sourceType: 'manual' | 'excel';
+    sourceFileName?: string;
+    sourceFileSize?: number;
+    sourceSheet?: string;
+    note: string;
+    status: 'confirmed' | 'voided';
+    summary: ProductionQcOpeningBalanceSummary;
+    entries: ProductionQcOpeningBalanceEntry[];
+    confirmedBy?: ProductionActor;
+    confirmedAt?: string;
+    voidedBy?: ProductionActor;
+    voidedAt?: string;
+    voidReason?: string;
+    createdAt?: string;
+    updatedAt?: string;
+}
+
+export interface ProductionQcOpeningBalanceList {
+    plant: { id: string; name: string; code?: string };
+    coverage: ProductionQcOpeningBalanceCoverage;
+    batches: ProductionQcOpeningBalanceBatch[];
+}
+
+export interface ProductionQcOpeningBalancePreview {
+    plant: { id: string; name: string; code?: string };
+    cutoffDate: string;
+    fileName?: string;
+    sheetName: string;
+    headerRow: number;
+    summary: ProductionQcOpeningBalanceSummary & {
+        totalRows: number;
+        validRows: number;
+        invalidRows: number;
+        reconciliationInvalidCount: number;
+    };
+    rows: Array<{
+        rowNumber: number;
+        lineCode: string;
+        itemCode?: string;
+        itemName?: string;
+        orderCode?: string;
+        mode: ProductionQcOpeningMode;
+        passedQuantity?: number;
+        defectQuantity?: number;
+        pendingQuantity?: number;
+        allocationState: 'exact' | 'unallocated';
+        isValid: boolean;
+        errors: string[];
+    }>;
+    reconciliation: Array<{
+        entryKey: string;
+        lineCode: string;
+        itemCode?: string;
+        orderCode?: string;
+        mode: ProductionQcOpeningMode;
+        productionQuantity?: number;
+        declaredQuantity: number;
+        variance?: number;
+        reconciled: boolean;
+        message: string;
+    }>;
+}
+
+export type ProductionQcReportCoverageStatus = 'missing' | 'partial' | 'complete';
+
+export interface ProductionQcReportRow {
+    itemId?: string;
+    itemCode?: string;
+    itemName?: string;
+    lineId?: string;
+    lineCode?: string;
+    lineName?: string;
+    openingProduced: number;
+    openingPending: number;
+    openingPassed: number;
+    openingDefect: number;
+    historicalQualityComplete: boolean;
+    periodProduced: number;
+    periodPassed: number;
+    periodDefect: number;
+    periodFirstPass: number;
+    periodRecheck: number;
+    trackedProducedToDate: number;
+    trackedFirstPassToDate: number;
+    trackedRecheckToDate: number;
+    legacyQuantity: number;
+    cumulativeProduced: number;
+    cumulativeInspected?: number;
+    cumulativeKnownPassed: number;
+    cumulativeKnownDefect: number;
+    pendingQuantity?: number;
+    overInspectedQuantity: number;
+    qcCompletionPercent?: number;
+    periodDefectRate: number;
+    periodFirstPassYield: number;
+    cumulativeKnownDefectRate: number;
+    lastQcDate?: string;
+}
+
+export interface ProductionQcReport {
+    meta: {
+        plantId: string;
+        plantName?: string;
+        plantCode?: string;
+        from: string;
+        to: string;
+        generatedAt: string;
+        filters: {
+            itemId?: string;
+            lineId?: string;
+            orderCode?: string;
+        };
+        coverage: {
+            status: ProductionQcReportCoverageStatus;
+            productionOpeningAvailable: boolean;
+            qcOpeningAvailable: boolean;
+            cutoffDate?: string;
+            trackingStartDate?: string;
+            exactCoveragePercent: number;
+            allocationCoveragePercent: number;
+            historicalQualityComplete: boolean;
+            legacyUnallocatedQuantity: number;
+            openingUnallocatedPendingQuantity: number;
+            itemBreakdownPendingKnown: boolean;
+        };
+    };
+    summary: {
+        periodProduced: number;
+        periodFirstPass: number;
+        periodPassed: number;
+        periodDefect: number;
+        periodRecheck: number;
+        periodBalance: number;
+        periodDefectRate: number;
+        periodFirstPassYield: number;
+        openingProduced: number;
+        openingPending: number;
+        openingKnownPassed: number;
+        openingKnownDefect: number;
+        trackedProducedToDate: number;
+        trackedFirstPassToDate: number;
+        cumulativeProduced: number;
+        cumulativeInspected?: number;
+        pendingQuantity?: number;
+        pendingKnown: boolean;
+        pendingUnknownReason?: 'missing_opening' | 'unallocated_scope';
+        overInspectedQuantity: number;
+        qcCompletionPercent?: number;
+        itemCount: number;
+        lineCount: number;
+        exceptionCount: number;
+    };
+    trend: Array<{
+        date: string;
+        produced: number;
+        firstPass: number;
+        passed: number;
+        defect: number;
+        recheck: number;
+        defectRate: number;
+        cumulativeProduced: number;
+        cumulativePending?: number;
+        cumulativeInspected?: number;
+        overInspectedQuantity: number;
+    }>;
+    items: ProductionQcReportRow[];
+    lines: ProductionQcReportRow[];
+    exceptions: Array<{
+        id: string;
+        type: 'missing_opening' | 'legacy_unallocated' | 'opening_unallocated' | 'over_inspected' | 'high_defect';
+        severity: 'critical' | 'warning';
+        itemId?: string;
+        itemCode?: string;
+        title: string;
+        description: string;
+        quantity?: number;
+    }>;
 }
 
 export interface ProductionReminderRule {

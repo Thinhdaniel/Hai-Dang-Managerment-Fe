@@ -7,11 +7,13 @@ import {
     SearchOutlined,
     SyncOutlined,
     WarningFilled,
+    BarChartOutlined,
 } from '@ant-design/icons';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Alert, App, Button, DatePicker, Empty, Input, Segmented, Select, Skeleton } from 'antd';
 import dayjs, { type Dayjs } from 'dayjs';
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import ProductionQcEntryDrawer from '../components/production/ProductionQcEntryDrawer';
 import { useAuth } from '../core/contexts/AuthContext';
 import { useResponsive } from '../core/hooks/useResponsive';
@@ -26,7 +28,7 @@ import type {
     ProductionLineRecord,
     ProductionQcSlotValue,
     ProductionTimeSlot,
-    SaveProductionQcEntryPayload,
+    SaveProductionQcRecordPayload,
 } from '../core/types/production';
 import '../styles/production-qc.css';
 
@@ -65,6 +67,7 @@ const ProductionQcPage = () => {
     const { socket } = useSocket();
     const { isPhone, isCompact, isWide } = useResponsive();
     const queryClient = useQueryClient();
+    const navigate = useNavigate();
     const slotRailRef = useRef<HTMLDivElement>(null);
     const [date, setDate] = useState<Dayjs>(() => dayjs());
     const [plantId, setPlantId] = useState(user?.plantId || '');
@@ -95,6 +98,12 @@ const ProductionQcPage = () => {
         queryFn: () => productionService.lookupDay(plantId, productionDate),
         enabled: Boolean(plantId),
         refetchInterval: 60_000,
+    });
+    const itemsQuery = useQuery({
+        queryKey: ['production', 'items', plantId, 'qc-entry'],
+        queryFn: () => productionService.getItems(plantId, false),
+        enabled: Boolean(plantId),
+        staleTime: 5 * 60 * 1000,
     });
     const day = dayQuery.data;
     const activeSlots = useMemo(
@@ -154,8 +163,8 @@ const ProductionQcPage = () => {
     };
 
     const saveMutation = useMutation({
-        mutationFn: ({ lineId, payload }: { lineId: string; payload: SaveProductionQcEntryPayload }) =>
-            productionService.saveQcEntry(day!.id, lineId, slotKey, {
+        mutationFn: ({ lineId, payload }: { lineId: string; payload: SaveProductionQcRecordPayload }) =>
+            productionService.saveQcRecord(day!.id, lineId, slotKey, {
                 ...payload,
                 clientMutationId: createProductionMutationId(),
             }),
@@ -173,8 +182,18 @@ const ProductionQcPage = () => {
     });
 
     const deleteMutation = useMutation({
-        mutationFn: ({ lineId, entryId }: { lineId: string; entryId: string }) =>
-            productionService.deleteQcEntry(day!.id, lineId, entryId),
+        mutationFn: ({
+            lineId,
+            recordId,
+            legacyEntryId,
+        }: {
+            lineId: string;
+            recordId?: string;
+            legacyEntryId?: string;
+        }) =>
+            recordId
+                ? productionService.deleteQcRecord(day!.id, lineId, slotKey)
+                : productionService.deleteQcEntry(day!.id, lineId, String(legacyEntryId)),
         onSuccess: async (updatedLine) => {
             replaceLineInCache(updatedLine);
             message.success('Đã xóa kết quả QC');
@@ -201,6 +220,7 @@ const ProductionQcPage = () => {
     );
     const selectedLine = lines.find((line) => line.lineId === selectedLineId);
     const selectedValue = selectedLine ? getQcValue(selectedLine, slotKey) : undefined;
+    const selectedRecord = selectedLine?.qcSlotRecords.find((record) => record.slotKey === slotKey);
     const slotTotal = lines.reduce((sum, line) => sum + Number(getQcValue(line, slotKey)?.totalQuantity || 0), 0);
     const slotPassed = lines.reduce((sum, line) => sum + Number(getQcValue(line, slotKey)?.passedQuantity || 0), 0);
     const slotDefect = lines.reduce((sum, line) => sum + Number(getQcValue(line, slotKey)?.defectQuantity || 0), 0);
@@ -308,6 +328,9 @@ const ProductionQcPage = () => {
                         aria-label='Làm mới dữ liệu QC'
                     >
                         {isPhone ? null : 'Làm mới'}
+                    </Button>
+                    <Button icon={<BarChartOutlined />} onClick={() => navigate('/production/qc/reports')}>
+                        {isPhone ? null : 'Báo cáo QC'}
                     </Button>
                 </div>
             </header>
@@ -488,6 +511,9 @@ const ProductionQcPage = () => {
                                 line={selectedLine}
                                 slot={selectedSlot}
                                 value={selectedValue}
+                                record={selectedRecord}
+                                items={itemsQuery.data || []}
+                                productionDate={productionDate}
                                 readOnly={readOnly}
                                 saving={saveMutation.isPending}
                                 deleting={deleteMutation.isPending}
@@ -495,8 +521,13 @@ const ProductionQcPage = () => {
                                 onSave={(payload) =>
                                     selectedLine && saveMutation.mutate({ lineId: selectedLine.lineId, payload })
                                 }
-                                onDelete={(entryId) =>
-                                    selectedLine && deleteMutation.mutate({ lineId: selectedLine.lineId, entryId })
+                                onDelete={() =>
+                                    selectedLine &&
+                                    deleteMutation.mutate({
+                                        lineId: selectedLine.lineId,
+                                        recordId: selectedRecord?.id,
+                                        legacyEntryId: selectedValue?.entryIds[0],
+                                    })
                                 }
                             />
                         ) : null}
@@ -511,13 +542,21 @@ const ProductionQcPage = () => {
                     line={selectedLine}
                     slot={selectedSlot}
                     value={selectedValue}
+                    record={selectedRecord}
+                    items={itemsQuery.data || []}
+                    productionDate={productionDate}
                     readOnly={readOnly}
                     saving={saveMutation.isPending}
                     deleting={deleteMutation.isPending}
                     onClose={() => setSelectedLineId(undefined)}
                     onSave={(payload) => selectedLine && saveMutation.mutate({ lineId: selectedLine.lineId, payload })}
-                    onDelete={(entryId) =>
-                        selectedLine && deleteMutation.mutate({ lineId: selectedLine.lineId, entryId })
+                    onDelete={() =>
+                        selectedLine &&
+                        deleteMutation.mutate({
+                            lineId: selectedLine.lineId,
+                            recordId: selectedRecord?.id,
+                            legacyEntryId: selectedValue?.entryIds[0],
+                        })
                     }
                 />
             ) : null}

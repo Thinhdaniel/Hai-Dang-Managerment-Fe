@@ -62,6 +62,7 @@ export const ROUTE_ACCESS: Record<string, AccessCheck> = {
     '/events/lucky-wheel': requireDirectorUp,
     '/production': requireCap('production.view'),
     '/production/qc': requireCap('production.qc.write'),
+    '/production/qc/reports': requireCap('production.qc.report'),
     '/production/planning': requireCap('production.manage'),
     '/production/monitor': requireCap('production.manage'),
     '/production/board': requireCap('production.manage'),
