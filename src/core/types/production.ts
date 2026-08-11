@@ -36,8 +36,24 @@ export interface ProductionItem {
     unitPrice: number;
     operationTemplates: ProductionItemOperationTemplate[];
     isActive: boolean;
+    priceUpdate?: ProductionUnitPriceUpdateResult;
     createdAt?: string;
     updatedAt?: string;
+}
+
+export type ProductionUnitPriceMode = 'future_only' | 'recalculate_from_date';
+
+export interface ProductionUnitPriceUpdateResult {
+    mode: ProductionUnitPriceMode;
+    previousUnitPrice: number;
+    nextUnitPrice: number;
+    effectiveFrom?: string;
+    affectedDayCount: number;
+    affectedRecordCount: number;
+    affectedRunCount: number;
+    affectedEntryCount: number;
+    affectedPlanCount: number;
+    affectedPlanAllocationCount: number;
 }
 
 export interface ProductionOperation {
@@ -995,6 +1011,9 @@ export type ProductionItemPayload = {
     unit?: string;
     unitPrice?: number;
     isActive?: boolean;
+    unitPriceMode?: ProductionUnitPriceMode;
+    unitPriceEffectiveFrom?: string;
+    unitPriceChangeReason?: string;
 };
 
 export type ConfigureProductionLinePayload = {

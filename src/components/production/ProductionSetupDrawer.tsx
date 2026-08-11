@@ -1,6 +1,8 @@
 import {
+    Alert,
     App,
     Button,
+    DatePicker,
     Drawer,
     Empty,
     Form,
@@ -8,6 +10,7 @@ import {
     InputNumber,
     List,
     Popconfirm,
+    Radio,
     Select,
     Switch,
     Tabs,
@@ -15,7 +18,14 @@ import {
     TimePicker,
     Typography,
 } from 'antd';
-import { ApartmentOutlined, ClockCircleOutlined, EditOutlined, PlusOutlined, SaveOutlined } from '@ant-design/icons';
+import {
+    ApartmentOutlined,
+    ClockCircleOutlined,
+    EditOutlined,
+    HistoryOutlined,
+    PlusOutlined,
+    SaveOutlined,
+} from '@ant-design/icons';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import dayjs, { type Dayjs } from 'dayjs';
 import { useEffect, useMemo, useState } from 'react';
@@ -28,6 +38,7 @@ import type {
     ProductionLine,
     ProductionOperation,
     ProductionTimeSlot,
+    ProductionUnitPriceMode,
 } from '../../core/types/production';
 import ProductionOperationTemplateModal from './ProductionOperationTemplateModal';
 
@@ -52,6 +63,9 @@ type ItemFormValues = {
     name?: string;
     unit?: string;
     unitPrice?: number;
+    unitPriceMode?: ProductionUnitPriceMode;
+    unitPriceEffectiveFrom?: Dayjs;
+    unitPriceChangeReason?: string;
 };
 
 type OperationFormValues = {
@@ -85,6 +99,14 @@ const ProductionSetupDrawer = ({ open, plantId, day, onClose }: Props) => {
     const [templateItem, setTemplateItem] = useState<ProductionItem | null>(null);
     const [editingSlotKey, setEditingSlotKey] = useState<string | null>(null);
     const [draftSlots, setDraftSlots] = useState<ProductionTimeSlot[]>([]);
+    const [forcePriceRecalculation, setForcePriceRecalculation] = useState(false);
+    const watchedUnitPrice = Form.useWatch('unitPrice', itemForm);
+    const watchedUnitPriceMode = Form.useWatch('unitPriceMode', itemForm);
+    const effectiveWatchedUnitPrice = watchedUnitPrice ?? editingItem?.unitPrice ?? 0;
+    const itemPriceChanged = Boolean(
+        editingItem && Number(effectiveWatchedUnitPrice) !== Number(editingItem.unitPrice || 0)
+    );
+    const itemPriceUpdateRequested = itemPriceChanged || forcePriceRecalculation;
 
     const linesQuery = useQuery({
         queryKey: ['production', 'lines', plantId, true],
@@ -161,16 +183,55 @@ const ProductionSetupDrawer = ({ open, plantId, day, onClose }: Props) => {
     });
 
     const itemMutation = useMutation({
-        mutationFn: async (values: ItemFormValues) =>
-            editingItem
-                ? productionService.updateItem(editingItem.id, values)
-                : productionService.createItem({ plantId, ...values }),
-        onSuccess: async () => {
-            message.success(editingItem ? 'Đã cập nhật mã hàng' : 'Đã thêm mã hàng');
+        mutationFn: async (values: ItemFormValues) => {
+            const catalogValues = {
+                code: values.code,
+                name: values.name,
+                unit: values.unit,
+                unitPrice: values.unitPrice,
+            };
+            if (!editingItem) return productionService.createItem({ plantId, ...catalogValues });
+
+            const priceChanged = Number(values.unitPrice || 0) !== Number(editingItem.unitPrice || 0);
+            const correctionRequested = forcePriceRecalculation && values.unitPriceMode === 'recalculate_from_date';
+            return productionService.updateItem(editingItem.id, {
+                ...catalogValues,
+                ...(priceChanged || correctionRequested
+                    ? {
+                          unitPriceMode: values.unitPriceMode || 'recalculate_from_date',
+                          unitPriceEffectiveFrom:
+                              values.unitPriceMode === 'future_only'
+                                  ? undefined
+                                  : values.unitPriceEffectiveFrom?.format('YYYY-MM-DD'),
+                          unitPriceChangeReason: values.unitPriceChangeReason?.trim(),
+                      }
+                    : {}),
+            });
+        },
+        onSuccess: async (result) => {
+            if (result.priceUpdate?.mode === 'recalculate_from_date') {
+                const { affectedEntryCount, affectedRunCount, affectedDayCount } = result.priceUpdate;
+                if (affectedRunCount > 0) {
+                    message.success(
+                        `Đã tính lại ${affectedEntryCount} khung nhập, ${affectedRunCount} lần chạy trên ${affectedDayCount} ngày`
+                    );
+                } else {
+                    message.info('Đã cập nhật đơn giá; không có dữ liệu cũ phù hợp để tính lại');
+                }
+            } else if (result.priceUpdate?.mode === 'future_only') {
+                message.success('Đã lưu đơn giá mới; dữ liệu đã nhập vẫn giữ nguyên');
+            } else {
+                message.success(editingItem ? 'Đã cập nhật mã hàng' : 'Đã thêm mã hàng');
+            }
             setEditingItem(null);
+            setForcePriceRecalculation(false);
             itemForm.resetFields();
             itemForm.setFieldValue('unit', 'SP');
-            await invalidateCatalog();
+            if (result.priceUpdate?.mode === 'recalculate_from_date') {
+                await queryClient.invalidateQueries({ queryKey: ['production'] });
+            } else {
+                await invalidateCatalog();
+            }
         },
         onError: (error) => message.error(errorMessage(error)),
     });
@@ -211,11 +272,58 @@ const ProductionSetupDrawer = ({ open, plantId, day, onClose }: Props) => {
 
     const editItem = (item: ProductionItem) => {
         setEditingItem(item);
+        setForcePriceRecalculation(false);
         itemForm.setFieldsValue({
             code: item.code,
             name: item.name,
             unit: item.unit,
             unitPrice: item.unitPrice,
+            unitPriceMode: 'recalculate_from_date',
+            unitPriceEffectiveFrom: dayjs(day?.productionDate || undefined),
+            unitPriceChangeReason: undefined,
+        });
+    };
+
+    const submitItemForm = (values: ItemFormValues) => {
+        const priceChanged = Boolean(
+            editingItem && Number(values.unitPrice || 0) !== Number(editingItem.unitPrice || 0)
+        );
+        const priceUpdateRequested = priceChanged || forcePriceRecalculation;
+        if (!editingItem || !priceUpdateRequested || values.unitPriceMode === 'future_only') {
+            itemMutation.mutate(values);
+            return;
+        }
+
+        const effectiveFrom = values.unitPriceEffectiveFrom?.format('DD/MM/YYYY');
+        modal.confirm({
+            title: 'Xác nhận tính lại đơn giá lịch sử',
+            content: (
+                <div className='production-price-confirm'>
+                    <p>
+                        {priceChanged ? (
+                            <>
+                                Mã <strong>{editingItem.code}</strong> sẽ đổi từ{' '}
+                                <strong>{money(editingItem.unitPrice)}đ</strong> sang{' '}
+                                <strong>{money(values.unitPrice)}đ</strong> từ ngày <strong>{effectiveFrom}</strong>.
+                            </>
+                        ) : (
+                            <>
+                                Mã <strong>{editingItem.code}</strong> sẽ áp dụng lại đơn giá hiện tại{' '}
+                                <strong>{money(values.unitPrice)}đ</strong> cho dữ liệu từ ngày{' '}
+                                <strong>{effectiveFrom}</strong>.
+                            </>
+                        )}
+                    </p>
+                    <p>
+                        Hệ thống sẽ tính lại giá trị sản lượng, thu nhập và báo cáo liên quan, kể cả ngày đã khóa. Sản
+                        lượng gốc không thay đổi.
+                    </p>
+                </div>
+            ),
+            okText: 'Tính lại và lưu',
+            cancelText: 'Kiểm tra lại',
+            okButtonProps: { danger: true },
+            onOk: () => itemMutation.mutateAsync(values),
         });
     };
 
@@ -581,21 +689,24 @@ const ProductionSetupDrawer = ({ open, plantId, day, onClose }: Props) => {
             <div className='production-setup-heading'>
                 <div>
                     <Title level={5}>{editingItem ? `Sửa ${editingItem.code}` : 'Thêm mã hàng'}</Title>
-                    <Text type='secondary'>Đơn giá được chụp lại khi mã hàng bắt đầu chạy.</Text>
+                    <Text type='secondary'>
+                        Khi đổi đơn giá, hệ thống sẽ yêu cầu chọn rõ có tính lại dữ liệu cũ hay không.
+                    </Text>
                 </div>
                 {editingItem ? (
                     <Button
                         onClick={() => {
                             setEditingItem(null);
+                            setForcePriceRecalculation(false);
                             itemForm.resetFields();
-                            itemForm.setFieldValue('unit', 'SP');
+                            itemForm.setFieldsValue({ unit: 'SP', unitPrice: 0 });
                         }}
                     >
                         Hủy sửa
                     </Button>
                 ) : null}
             </div>
-            <Form form={itemForm} layout='vertical' onFinish={(values) => itemMutation.mutate(values)}>
+            <Form form={itemForm} layout='vertical' onFinish={submitItemForm}>
                 <div className='production-setup-form-grid'>
                     <Form.Item label='Mã hàng' name='code' rules={[{ required: true, message: 'Nhập mã hàng' }]}>
                         <Input placeholder='VD: 416' autoCapitalize='characters' />
@@ -606,13 +717,122 @@ const ProductionSetupDrawer = ({ open, plantId, day, onClose }: Props) => {
                     <Form.Item label='Đơn vị' name='unit' initialValue='SP'>
                         <Input placeholder='SP' />
                     </Form.Item>
-                    <Form.Item label='Đơn giá' name='unitPrice' initialValue={0}>
+                    <Form.Item
+                        label='Đơn giá'
+                        name='unitPrice'
+                        initialValue={0}
+                        rules={[{ required: true, message: 'Nhập đơn giá' }]}
+                    >
                         <InputNumber min={0} precision={0} className='w-full' addonAfter='đ' />
                     </Form.Item>
                 </div>
-                <Button type='primary' htmlType='submit' icon={<SaveOutlined />} loading={itemMutation.isPending}>
-                    {editingItem ? 'Lưu thay đổi' : 'Thêm mã hàng'}
-                </Button>
+                {editingItem && !itemPriceChanged && !forcePriceRecalculation ? (
+                    <div className='production-price-recalculate-prompt'>
+                        <div>
+                            <strong>Dữ liệu cũ chưa đúng đơn giá?</strong>
+                            <span>Dùng đơn giá hiện tại {money(editingItem.unitPrice)}đ để tính lại theo ngày.</span>
+                        </div>
+                        <Button
+                            icon={<HistoryOutlined />}
+                            onClick={() => {
+                                setForcePriceRecalculation(true);
+                                itemForm.setFieldsValue({
+                                    unitPriceMode: 'recalculate_from_date',
+                                    unitPriceEffectiveFrom: dayjs(day?.productionDate || undefined),
+                                    unitPriceChangeReason: undefined,
+                                });
+                            }}
+                        >
+                            Tính lại dữ liệu cũ
+                        </Button>
+                    </div>
+                ) : null}
+                {itemPriceUpdateRequested ? (
+                    <div className='production-price-change-panel'>
+                        <Alert
+                            type={itemPriceChanged ? 'warning' : 'info'}
+                            showIcon
+                            message={
+                                itemPriceChanged
+                                    ? `Đơn giá thay đổi: ${money(editingItem?.unitPrice)}đ → ${money(Number(effectiveWatchedUnitPrice))}đ`
+                                    : `Tính lại theo đơn giá hiện tại: ${money(editingItem?.unitPrice)}đ`
+                            }
+                            description={
+                                itemPriceChanged
+                                    ? 'Hãy chọn đúng phạm vi áp dụng. Lựa chọn này quyết định số liệu trên bảng chuyền, báo cáo và thu nhập.'
+                                    : 'Hệ thống sẽ chỉ sửa snapshot đơn giá cũ; không thay đổi sản lượng đã nhập.'
+                            }
+                            action={
+                                !itemPriceChanged ? (
+                                    <Button size='small' onClick={() => setForcePriceRecalculation(false)}>
+                                        Hủy
+                                    </Button>
+                                ) : undefined
+                            }
+                        />
+                        {itemPriceChanged ? (
+                            <Form.Item
+                                label='Cách áp dụng đơn giá'
+                                name='unitPriceMode'
+                                rules={[{ required: true, message: 'Chọn cách áp dụng đơn giá' }]}
+                            >
+                                <Radio.Group className='production-price-mode-list'>
+                                    <Radio value='recalculate_from_date'>
+                                        <span className='production-price-mode-copy'>
+                                            <strong>Sửa đơn giá đã khai báo sai</strong>
+                                            <small>Tính lại dữ liệu từ ngày chọn, kể cả báo cáo đã khóa.</small>
+                                        </span>
+                                    </Radio>
+                                    <Radio value='future_only'>
+                                        <span className='production-price-mode-copy'>
+                                            <strong>Chỉ áp dụng cho lần chạy mới</strong>
+                                            <small>Giữ nguyên đơn giá của mọi dữ liệu và lần chạy đã tạo.</small>
+                                        </span>
+                                    </Radio>
+                                </Radio.Group>
+                            </Form.Item>
+                        ) : null}
+                        {watchedUnitPriceMode !== 'future_only' ? (
+                            <Form.Item
+                                label='Tính lại từ ngày'
+                                name='unitPriceEffectiveFrom'
+                                rules={[{ required: true, message: 'Chọn ngày bắt đầu tính lại' }]}
+                            >
+                                <DatePicker
+                                    className='w-full'
+                                    format='DD/MM/YYYY'
+                                    allowClear={false}
+                                    disabledDate={(date) => date.isAfter(dayjs(), 'day')}
+                                />
+                            </Form.Item>
+                        ) : null}
+                        <Form.Item
+                            label='Lý do thay đổi'
+                            name='unitPriceChangeReason'
+                            rules={[
+                                { required: true, whitespace: true, message: 'Nhập lý do để truy vết thay đổi' },
+                                { min: 3, message: 'Lý do cần có ít nhất 3 ký tự' },
+                                { max: 500, message: 'Lý do không vượt quá 500 ký tự' },
+                            ]}
+                        >
+                            <Input.TextArea
+                                rows={2}
+                                maxLength={500}
+                                showCount
+                                placeholder='VD: Đơn giá ban đầu nhập sai theo báo giá'
+                            />
+                        </Form.Item>
+                    </div>
+                ) : null}
+                <div className='production-item-save-action'>
+                    <Button type='primary' htmlType='submit' icon={<SaveOutlined />} loading={itemMutation.isPending}>
+                        {forcePriceRecalculation && !itemPriceChanged
+                            ? 'Tính lại và lưu'
+                            : editingItem
+                              ? 'Lưu thay đổi'
+                              : 'Thêm mã hàng'}
+                    </Button>
+                </div>
             </Form>
 
             <List
