@@ -33,6 +33,7 @@ import { can, hasManagerAccess, isAdmin, isDirector } from '../core/lib/permissi
 import { plantService } from '../core/services/plant.service';
 import { useResponsive } from '../core/hooks/useResponsive';
 import { productionService } from '../core/services/production.service';
+import { productionPlantLabel } from '../core/lib/productionAccess';
 import type { ProductionDay, ProductionDayStatus } from '../core/types/production';
 
 const { RangePicker } = DatePicker;
@@ -271,7 +272,10 @@ const ProductionHistoryPage = () => {
                         }}
                         disabled={!canSwitchPlant}
                         loading={plantsQuery.isLoading}
-                        options={(plantsQuery.data || []).map((plant) => ({ value: plant.id, label: plant.name }))}
+                        options={(plantsQuery.data || []).map((plant) => ({
+                            value: plant.id,
+                            label: productionPlantLabel(plant),
+                        }))}
                         placeholder='Chọn cơ sở'
                     />
                     <RangePicker

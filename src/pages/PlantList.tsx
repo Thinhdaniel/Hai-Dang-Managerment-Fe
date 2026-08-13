@@ -1,6 +1,7 @@
 import React, { lazy, useMemo, useState } from 'react';
 import { App, Button, Input, Table, Tooltip, type TableColumnsType } from 'antd';
 import {
+    CheckCircleFilled,
     ClusterOutlined,
     DeleteOutlined,
     EditOutlined,
@@ -8,6 +9,7 @@ import {
     PlusOutlined,
     ReloadOutlined,
     SearchOutlined,
+    StopOutlined,
 } from '@ant-design/icons';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import dayjs from 'dayjs';
@@ -16,7 +18,7 @@ import LazyBoundary from '../components/shared/LazyBoundary';
 import PageHeader from '../components/shared/PageHeader';
 import StatsCard from '../components/shared/StatsCard';
 import { useAuth } from '../core/contexts/AuthContext';
-import { hasManagerAccess, isAdmin } from '../core/lib/permissions';
+import { isAdmin } from '../core/lib/permissions';
 import { normalizeSearchTerm } from '../core/lib/search';
 import { plantService } from '../core/services';
 import type { Plant } from '../core/types';
@@ -48,6 +50,7 @@ const PlantList: React.FC = () => {
         queryClient.invalidateQueries({ queryKey: ['assets'] });
         queryClient.invalidateQueries({ queryKey: ['asset'] });
         queryClient.invalidateQueries({ queryKey: ['transfers'] });
+        queryClient.invalidateQueries({ queryKey: ['production-access'] });
     };
 
     const createMutation = useMutation({
@@ -106,6 +109,7 @@ const PlantList: React.FC = () => {
         address?: string;
         phone?: string;
         coordinates?: { lat: number; lng: number } | null;
+        productionAccess?: { enabled: boolean };
     }) => {
         if (editingPlant) {
             await updateMutation.mutateAsync({ id: editingPlant.id, data: values });
@@ -144,6 +148,22 @@ const PlantList: React.FC = () => {
             key: 'phone',
             width: 150,
             render: (value?: string) => <span className='text-slate-600'>{value || '-'}</span>,
+        },
+        {
+            title: 'SẢN XUẤT',
+            dataIndex: 'productionAccess',
+            key: 'productionAccess',
+            width: 160,
+            render: (_value, record) =>
+                record.productionAccess?.enabled ? (
+                    <span className='inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-700'>
+                        <CheckCircleFilled /> Đã triển khai
+                    </span>
+                ) : (
+                    <span className='inline-flex items-center gap-1.5 rounded-full bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-500'>
+                        <StopOutlined /> Chưa triển khai
+                    </span>
+                ),
         },
         {
             title: 'MÁY ĐANG QUẢN LÝ',
@@ -282,7 +302,7 @@ const PlantList: React.FC = () => {
                             ),
                             className: '!m-0 border-t border-slate-100 !px-5 !py-4',
                         }}
-                        scroll={{ x: 980 }}
+                        scroll={{ x: 1140 }}
                     />
                 </div>
             </div>

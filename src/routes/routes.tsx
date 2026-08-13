@@ -3,6 +3,7 @@ import type { ReactNode } from 'react';
 import { Navigate, createBrowserRouter } from 'react-router-dom';
 import AppLayout from '../components/layout/AppLayout';
 import ProductionAppLayout from '../components/production/ProductionAppLayout';
+import ProductionAccessGate from '../components/production/ProductionAccessGate';
 import LazyBoundary from '../components/shared/LazyBoundary';
 import ProtectedRoute, { RequireAccess } from './guard';
 import { ROUTE_ACCESS } from '../core/constants/navAccess';
@@ -176,7 +177,12 @@ export const router = createBrowserRouter([
     },
     {
         path: '/production',
-        element: guarded('/production', <ProductionAppLayout />),
+        element: guarded(
+            '/production',
+            <ProductionAccessGate>
+                <ProductionAppLayout />
+            </ProductionAccessGate>
+        ),
         errorElement: withSuspense(<RouteErrorPage />),
         children: [
             { index: true, element: withSuspense(<ProductionIndexPage />) },

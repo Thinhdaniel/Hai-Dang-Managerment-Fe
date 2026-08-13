@@ -107,6 +107,13 @@ export interface Plant {
     phone?: string;
     managerId?: string;
     coordinates?: { lat: number; lng: number };
+    productionAccess?: {
+        enabled: boolean;
+        enabledAt?: string;
+        enabledBy?: string;
+        disabledAt?: string;
+        disabledBy?: string;
+    };
     assetCount?: number;
     machineCount?: number;
     createdAt: string;

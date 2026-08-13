@@ -13,6 +13,8 @@ import { App, Button, DatePicker, Dropdown, Input, Modal, Select, Typography, ty
 import dayjs, { type Dayjs } from 'dayjs';
 import { useState, type ReactNode } from 'react';
 import { productionService } from '../../core/services/production.service';
+import { productionPlantLabel } from '../../core/lib/productionAccess';
+import type { Plant } from '../../core/types';
 import type { ProductionDay, ProductionDayStatus, ProductionDayStatusEvent } from '../../core/types/production';
 
 const { Text } = Typography;
@@ -35,7 +37,7 @@ type Props = {
     date: Dayjs;
     onDateChange: (value: Dayjs) => void;
     plantId?: string;
-    plants: { id: string; name: string }[];
+    plants: Pick<Plant, 'id' | 'name' | 'productionAccess'>[];
     plantsLoading?: boolean;
     canSwitchPlant: boolean;
     onPlantChange?: (plantId: string) => void;
@@ -177,7 +179,7 @@ const ProductionCommandRibbon = ({
                         loading={plantsLoading}
                         placeholder='Chọn cơ sở'
                         popupMatchSelectWidth={false}
-                        options={plants.map((plant) => ({ value: plant.id, label: plant.name }))}
+                        options={plants.map((plant) => ({ value: plant.id, label: productionPlantLabel(plant) }))}
                         style={{ minWidth: 140 }}
                     />
                 ) : null}

@@ -11,6 +11,7 @@ type PlantPayload = {
     phone?: string;
     managerId?: string;
     coordinates?: { lat: number; lng: number } | null;
+    productionAccess?: { enabled: boolean };
 };
 
 export const plantService = {

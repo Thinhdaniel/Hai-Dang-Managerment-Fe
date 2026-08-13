@@ -41,6 +41,7 @@ import { slotRangeLabelShort } from '../core/lib/productionSlot';
 import { plantService } from '../core/services/plant.service';
 import { useResponsive } from '../core/hooks/useResponsive';
 import { productionService } from '../core/services/production.service';
+import { productionPlantLabel } from '../core/lib/productionAccess';
 import type {
     ProductionItem,
     ProductionLine,
@@ -551,7 +552,10 @@ const ProductionPlanningPage = () => {
                         onChange={(value) => confirmDiscard(() => setPlantId(value))}
                         disabled={!canSwitchPlant}
                         loading={plantsQuery.isLoading}
-                        options={(plantsQuery.data || []).map((plant) => ({ value: plant.id, label: plant.name }))}
+                        options={(plantsQuery.data || []).map((plant) => ({
+                            value: plant.id,
+                            label: productionPlantLabel(plant),
+                        }))}
                     />
                     <DatePicker
                         value={date}

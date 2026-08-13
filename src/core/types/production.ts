@@ -1690,3 +1690,12 @@ export interface ProductionReminderTestResult {
         ready: boolean;
     };
 }
+export interface ProductionAccessStatus {
+    plantId: string;
+    plantName: string;
+    plantCode: string;
+    enabled: boolean;
+    globalAccess: boolean;
+    canAccess: boolean;
+    reason?: 'PRODUCTION_NOT_ENABLED';
+}

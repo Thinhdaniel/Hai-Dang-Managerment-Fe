@@ -33,7 +33,8 @@ import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import usePageMeta from '../navigation/usePageMeta';
 import { normalizeSearchTerm } from '../../core/lib/search';
 import { useAuth } from '../../core/contexts/AuthContext';
-import { can, hasManagerAccess } from '../../core/lib/permissions';
+import { hasManagerAccess } from '../../core/lib/permissions';
+import { canOpenProduction as canOpenProductionModule } from '../../core/lib/productionAccess';
 import { useNotificationContext } from '../../core/contexts/NotificationContext';
 import PushNotificationToggle from '../notifications/PushNotificationToggle';
 import NotificationSoundToggle from '../notifications/NotificationSoundToggle';
@@ -74,7 +75,7 @@ const AppHeader: React.FC<AppHeaderProps> = ({ collapsed, isDesktop, mobileOpen,
     const pageMeta = usePageMeta();
     const supportsSearch = pathname.startsWith('/assets');
     const canViewUsers = hasManagerAccess(role);
-    const canOpenProduction = can(role, 'production.view');
+    const canOpenProduction = canOpenProductionModule(user);
     const useNotificationDrawer = !isDesktop;
 
     const quickAction = useMemo(() => {

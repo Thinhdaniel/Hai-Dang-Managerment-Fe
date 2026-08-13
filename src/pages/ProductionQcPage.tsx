@@ -23,6 +23,7 @@ import { isAdmin, isDirector } from '../core/lib/permissions';
 import { slotRangeLabelShort } from '../core/lib/productionSlot';
 import { plantService } from '../core/services/plant.service';
 import { productionService } from '../core/services/production.service';
+import { productionPlantLabel } from '../core/lib/productionAccess';
 import type {
     ProductionDay,
     ProductionLineRecord,
@@ -306,7 +307,10 @@ const ProductionQcPage = () => {
                         <Select
                             value={plantId || undefined}
                             onChange={setPlantId}
-                            options={(plantsQuery.data || []).map((plant) => ({ value: plant.id, label: plant.name }))}
+                            options={(plantsQuery.data || []).map((plant) => ({
+                                value: plant.id,
+                                label: productionPlantLabel(plant),
+                            }))}
                             placeholder='Chọn cơ sở'
                             aria-label='Chọn cơ sở'
                         />

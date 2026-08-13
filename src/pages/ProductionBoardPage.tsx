@@ -23,6 +23,7 @@ import { plantService } from '../core/services/plant.service';
 import ProductionLedgerCards, { type LedgerRow } from '../components/production/ProductionLedgerCards';
 import { useResponsive } from '../core/hooks/useResponsive';
 import { productionService } from '../core/services/production.service';
+import { productionPlantLabel } from '../core/lib/productionAccess';
 import type {
     ProductionBoard,
     ProductionBoardLine,
@@ -836,7 +837,10 @@ const ProductionBoardPage = () => {
                         disabled={!canSwitchPlant}
                         loading={plantsQuery.isLoading}
                         placeholder='Chọn cơ sở'
-                        options={(plantsQuery.data || []).map((plant) => ({ label: plant.name, value: plant.id }))}
+                        options={(plantsQuery.data || []).map((plant) => ({
+                            label: productionPlantLabel(plant),
+                            value: plant.id,
+                        }))}
                         onChange={(value) => {
                             setPlantId(value);
                             updateUrl({ plantId: value, lineId: undefined });

@@ -2,6 +2,7 @@ import api from '../lib/api';
 import type {
     ConfigureProductionLinePayload,
     ProductionBoard,
+    ProductionAccessStatus,
     ProductionDay,
     ProductionDayPage,
     ProductionDayStatus,
@@ -38,6 +39,9 @@ import type {
 const BASE = '/production';
 
 export const productionService = {
+    getAccess: (plantId?: string): Promise<ProductionAccessStatus> =>
+        api.get(`${BASE}/access`, { params: plantId ? { plantId } : undefined }),
+
     getLines: (plantId: string, includeInactive = false): Promise<ProductionLine[]> =>
         api.get(`${BASE}/lines`, { params: { plantId, includeInactive } }),
 

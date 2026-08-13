@@ -41,6 +41,7 @@ import { useSocket } from '../core/hooks/useSocket';
 import { can, isAdmin, isDirector } from '../core/lib/permissions';
 import { plantService } from '../core/services/plant.service';
 import { productionService } from '../core/services/production.service';
+import { productionPlantLabel } from '../core/lib/productionAccess';
 import type { ProductionQcReportRow } from '../core/types/production';
 import '../styles/production-qc-management.css';
 
@@ -370,7 +371,10 @@ const ProductionQcReportPage = () => {
                         setItemId(undefined);
                         setLineId(undefined);
                     }}
-                    options={(plantsQuery.data || []).map((plant) => ({ value: plant.id, label: plant.name }))}
+                    options={(plantsQuery.data || []).map((plant) => ({
+                        value: plant.id,
+                        label: productionPlantLabel(plant),
+                    }))}
                     placeholder='Chọn cơ sở'
                 />
             ) : (
