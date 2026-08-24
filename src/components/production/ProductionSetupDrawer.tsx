@@ -84,6 +84,7 @@ type SlotFormValues = {
 const errorMessage = (error: unknown) => (error instanceof Error ? error.message : 'Không thể lưu dữ liệu');
 const money = (value = 0) => new Intl.NumberFormat('vi-VN').format(value);
 const minuteToTime = (minute: number) => dayjs().startOf('day').add(minute, 'minute');
+const normalizedLineText = (value?: string) => String(value || '').trim();
 
 const ProductionSetupDrawer = ({ open, plantId, day, onClose }: Props) => {
     const { isPhone } = useResponsive();
@@ -403,6 +404,20 @@ const ProductionSetupDrawer = ({ open, plantId, day, onClose }: Props) => {
     const dayLines = day?.lines || [];
     const dayLineIds = new Set(dayLines.map((line) => line.lineId));
     const addableLines = (linesQuery.data || []).filter((line) => line.isActive && !dayLineIds.has(line.id));
+    const catalogLineById = new Map((linesQuery.data || []).map((line) => [line.id, line]));
+    const driftedDayLines = dayLines.filter((line) => {
+        const catalogLine = catalogLineById.get(line.lineId);
+        if (!catalogLine) return false;
+        return (
+            normalizedLineText(line.lineCode).toUpperCase() !== normalizedLineText(catalogLine.code).toUpperCase() ||
+            normalizedLineText(line.lineName) !== normalizedLineText(catalogLine.name) ||
+            normalizedLineText(line.leaderName) !== normalizedLineText(catalogLine.leaderName) ||
+            Number(line.sortOrder || 0) !== Number(catalogLine.sortOrder || 0)
+        );
+    });
+    const inactiveDayLineIds = new Set(
+        dayLines.filter((line) => catalogLineById.get(line.lineId)?.isActive === false).map((line) => line.lineId)
+    );
 
     const addDayLineMutation = useMutation({
         mutationFn: (lineId: string) => productionService.addDayLine(day!.id, lineId),
@@ -422,6 +437,15 @@ const ProductionSetupDrawer = ({ open, plantId, day, onClose }: Props) => {
         onError: (error) => message.error(errorMessage(error)),
     });
 
+    const syncDayLinesMutation = useMutation({
+        mutationFn: () => productionService.syncDayLineMetadata(day!.id),
+        onSuccess: async () => {
+            message.success('Đã đồng bộ tên chuyền và tổ trưởng, số liệu sản xuất được giữ nguyên');
+            await queryClient.invalidateQueries({ queryKey: ['production', 'day', plantId] });
+        },
+        onError: (error) => message.error(errorMessage(error)),
+    });
+
     const dayLinesTab = day ? (
         <div className='production-setup-section'>
             <div className='production-setup-heading'>
@@ -433,6 +457,26 @@ const ProductionSetupDrawer = ({ open, plantId, day, onClose }: Props) => {
                     </Text>
                 </div>
             </div>
+
+            {driftedDayLines.length ? (
+                <Alert
+                    type='warning'
+                    showIcon
+                    message={`${driftedDayLines.length} chuyền đang dùng thông tin cũ`}
+                    description='Chỉ cập nhật mã, tên, tổ trưởng và thứ tự từ danh mục. Sản lượng, mã hàng, QC, công đoạn và số công nhân trong ngày được giữ nguyên.'
+                    action={
+                        <Button
+                            size='small'
+                            type='primary'
+                            disabled={day.status !== 'draft'}
+                            loading={syncDayLinesMutation.isPending}
+                            onClick={() => syncDayLinesMutation.mutate()}
+                        >
+                            Đồng bộ ngay
+                        </Button>
+                    }
+                />
+            ) : null}
 
             <Select
                 className='w-full'
@@ -475,6 +519,10 @@ const ProductionSetupDrawer = ({ open, plantId, day, onClose }: Props) => {
                                 title={
                                     <span className='production-master-title'>
                                         {line.lineCode}
+                                        {driftedDayLines.some((item) => item.lineId === line.lineId) ? (
+                                            <Tag color='orange'>Thông tin cũ</Tag>
+                                        ) : null}
+                                        {inactiveDayLineIds.has(line.lineId) ? <Tag>Đã tắt trong danh mục</Tag> : null}
                                         {locked ? (
                                             <Tag color='blue'>
                                                 {line.entries.length ? 'Đã có sản lượng' : 'Đã gán mã hàng'}

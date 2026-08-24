@@ -307,6 +307,9 @@ export const productionService = {
     addDayLine: (dayId: string, lineId: string): Promise<ProductionDay> =>
         api.post(`${BASE}/days/${dayId}/lines`, { lineId }),
 
+    syncDayLineMetadata: (dayId: string): Promise<ProductionDay> =>
+        api.post(`${BASE}/days/${dayId}/lines/sync-catalog`),
+
     removeDayLine: (dayId: string, lineId: string): Promise<ProductionDay> =>
         api.delete(`${BASE}/days/${dayId}/lines/${lineId}`),
 
