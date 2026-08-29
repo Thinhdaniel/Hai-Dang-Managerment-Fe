@@ -19,6 +19,7 @@ import {
 } from 'antd';
 import {
     EyeOutlined,
+    ExportOutlined,
     PlusOutlined,
     QrcodeOutlined,
     ReloadOutlined,
@@ -37,12 +38,13 @@ import {
     borrowingStatusOptions,
     borrowingTypeMeta,
     borrowingTypeOptions,
+    outboundBorrowingBatchStatusMeta,
 } from '../core/constants/transactions';
 import { plantService } from '../core/services';
 import { borrowingService } from '../core/services/borrowing.service';
 import { useAuth } from '../core/contexts/AuthContext';
 import { can } from '../core/lib/permissions';
-import type { Borrowing, BorrowingBatch, BorrowingFilter } from '../core/types';
+import { BorrowingDirection, type Borrowing, type BorrowingBatch, type BorrowingFilter } from '../core/types';
 
 const ReturnTransactionModal = lazy(() => import('../components/transactions/ReturnTransactionModal'));
 
@@ -60,6 +62,9 @@ const buildTransactionCode = (item: Borrowing) =>
 const getCounterpartyLabel = (item: Borrowing) => item.borrowerName || item.partnerName || 'Chưa xác định';
 
 const getCounterpartySubLabel = (item: Borrowing) => {
+    if (item.direction === BorrowingDirection.OUTBOUND) {
+        return item.location || 'Máy Hải Đăng đang ở đối tác';
+    }
     if (item.type === 'internal') {
         return item.purpose || 'Công nhân nội bộ';
     }
@@ -99,6 +104,7 @@ const BorrowingList: React.FC = () => {
     const [filters, setFilters] = useState(() => createDefaultFilters());
     const [draftFilters, setDraftFilters] = useState(() => createDefaultFilters());
     const [selectedTransaction, setSelectedTransaction] = useState<Borrowing | null>(null);
+    const [outboundPage, setOutboundPage] = useState(1);
     const [batchForm] = Form.useForm<BatchFormValues>();
     const [isBatchModalOpen, setIsBatchModalOpen] = useState(false);
 
@@ -113,8 +119,15 @@ const BorrowingList: React.FC = () => {
     });
 
     const { data: batchResponse, isLoading: isLoadingBatches } = useQuery({
-        queryKey: ['borrowing-batches', { page: 1, limit: 8 }],
-        queryFn: () => borrowingService.getBatches({ page: 1, limit: 8 }),
+        queryKey: ['borrowing-batches', { page: 1, limit: 8, direction: BorrowingDirection.INBOUND }],
+        queryFn: () => borrowingService.getBatches({ page: 1, limit: 8, direction: BorrowingDirection.INBOUND }),
+        enabled: canManageBorrowing,
+    });
+
+    const { data: outboundBatchResponse, isLoading: isLoadingOutboundBatches } = useQuery({
+        queryKey: ['borrowing-batches', { page: outboundPage, limit: 8, direction: BorrowingDirection.OUTBOUND }],
+        queryFn: () =>
+            borrowingService.getBatches({ page: outboundPage, limit: 8, direction: BorrowingDirection.OUTBOUND }),
         enabled: canManageBorrowing,
     });
 
@@ -151,6 +164,7 @@ const BorrowingList: React.FC = () => {
 
     const transactions = useMemo(() => transactionResponse?.data ?? [], [transactionResponse?.data]);
     const batches = useMemo(() => batchResponse?.data ?? [], [batchResponse?.data]);
+    const outboundBatches = useMemo(() => outboundBatchResponse?.data ?? [], [outboundBatchResponse?.data]);
     const plantOptions = useMemo(
         () =>
             plants.map((plant) => ({
@@ -171,8 +185,10 @@ const BorrowingList: React.FC = () => {
                 },
                 {
                     total: 0,
+                    draft: 0,
                     active: 0,
                     returned: 0,
+                    cancelled: 0,
                     internal: 0,
                     external: 0,
                     rental: 0,
@@ -209,6 +225,7 @@ const BorrowingList: React.FC = () => {
         const values = await batchForm.validateFields();
         await createBatchMutation.mutateAsync({
             type: values.type,
+            direction: BorrowingDirection.INBOUND,
             // Rà soát thực tế có thể chưa biết máy của ai — để trống, BE tự điền "Chưa xác định"
             partnerName: values.partnerName?.trim() || undefined,
             contractNo: values.contractNo?.trim() || undefined,
@@ -326,6 +343,81 @@ const BorrowingList: React.FC = () => {
         },
     ];
 
+    const outboundColumns: TableColumnsType<BorrowingBatch> = [
+        {
+            title: 'LÔ CHO MƯỢN',
+            key: 'batch',
+            render: (_value, record) => (
+                <div className='flex min-w-[210px] flex-col gap-1'>
+                    <button
+                        type='button'
+                        className='w-fit font-mono text-sm font-black text-cyan-800 hover:text-cyan-950'
+                        onClick={() => navigate(`/borrowings/outbound/${record.id}`)}
+                    >
+                        {record.code}
+                    </button>
+                    <span className='text-xs font-semibold text-slate-500'>
+                        {record.contractNo || 'Chưa có số hợp đồng'} · {record.plant?.name || '-'}
+                    </span>
+                </div>
+            ),
+        },
+        {
+            title: 'ĐỐI TÁC NHẬN MÁY',
+            key: 'partner',
+            render: (_value, record) => (
+                <div className='flex min-w-[180px] flex-col gap-1'>
+                    <span className='text-sm font-bold text-slate-900'>{record.partnerName}</span>
+                    <span className='text-xs text-slate-500'>
+                        {record.contactName || 'Chưa có đầu mối'}
+                        {record.expectedReturnTime
+                            ? ` · hạn ${dayjs(record.expectedReturnTime).format('DD/MM/YYYY')}`
+                            : ''}
+                    </span>
+                </div>
+            ),
+        },
+        {
+            title: 'TIẾN ĐỘ',
+            key: 'progress',
+            width: 200,
+            render: (_value, record) => (
+                <div className='flex flex-col gap-1'>
+                    <span className='text-sm font-black text-slate-900'>
+                        {record.selectedCount ?? 0}/{record.plannedQuantity} đã chọn
+                    </span>
+                    <span className='text-xs font-semibold text-slate-500'>
+                        Đang ở đối tác {record.activeCount ?? 0} · Đã nhận {record.returnedCount ?? 0}
+                    </span>
+                </div>
+            ),
+        },
+        {
+            title: 'TRẠNG THÁI',
+            dataIndex: 'status',
+            width: 180,
+            render: (status) => {
+                const meta = outboundBorrowingBatchStatusMeta[status as BorrowingBatch['status']];
+                return <Tag color={meta?.color}>{meta?.label || status}</Tag>;
+            },
+        },
+        {
+            title: '',
+            key: 'action',
+            width: 110,
+            align: 'right',
+            render: (_value, record) => (
+                <Button
+                    type='primary'
+                    className='bg-cyan-700 hover:!bg-cyan-800'
+                    onClick={() => navigate(`/borrowings/outbound/${record.id}`)}
+                >
+                    Mở lô
+                </Button>
+            ),
+        },
+    ];
+
     const columns: TableColumnsType<Borrowing> = [
         {
             title: 'THIẾT BỊ',
@@ -344,7 +436,7 @@ const BorrowingList: React.FC = () => {
             dataIndex: 'type',
             key: 'type',
             width: 150,
-            render: (value) => <TransactionTypeBadge type={value} />,
+            render: (value, record) => <TransactionTypeBadge type={value} direction={record.direction} />,
         },
         {
             title: 'NGƯỜI MƯỢN / ĐỐI TÁC',
@@ -361,7 +453,7 @@ const BorrowingList: React.FC = () => {
             dataIndex: 'status',
             key: 'status',
             width: 150,
-            render: (value) => <TransactionStatusBadge status={value} />,
+            render: (value, record) => <TransactionStatusBadge status={value} direction={record.direction} />,
         },
         {
             title: 'THỜI GIAN',
@@ -390,16 +482,40 @@ const BorrowingList: React.FC = () => {
                             type='text'
                             icon={<EyeOutlined />}
                             className='flex h-8 w-8 items-center justify-center rounded-md bg-blue-50 text-blue-600 transition-colors hover:bg-blue-100 hover:text-blue-700'
-                            onClick={() => navigate(`/borrowings/${record.id}`)}
+                            onClick={() =>
+                                navigate(
+                                    record.direction === BorrowingDirection.OUTBOUND && record.batchId
+                                        ? `/borrowings/outbound/${record.batchId}`
+                                        : `/borrowings/${record.id}`
+                                )
+                            }
                         />
                     </Tooltip>
-                    <Tooltip title={record.status === 'active' ? 'Xác nhận trả' : 'Giao dịch đã hoàn tất'}>
+                    <Tooltip
+                        title={
+                            record.direction === BorrowingDirection.OUTBOUND
+                                ? 'Mở lô để nhận lại máy'
+                                : record.status === 'active'
+                                  ? 'Xác nhận trả'
+                                  : 'Giao dịch đã hoàn tất'
+                        }
+                    >
                         <Button
                             type='text'
                             icon={<RollbackOutlined />}
-                            disabled={record.status !== 'active'}
+                            disabled={
+                                record.status !== 'active' ||
+                                (record.direction === BorrowingDirection.OUTBOUND && !record.batchId)
+                            }
                             className='flex h-8 w-8 items-center justify-center rounded-md bg-emerald-50 text-emerald-600 transition-colors hover:bg-emerald-100 hover:text-emerald-700 disabled:bg-slate-100 disabled:text-slate-300'
-                            onClick={() => record.status === 'active' && setSelectedTransaction(record)}
+                            onClick={() => {
+                                if (record.status !== 'active') return;
+                                if (record.direction === BorrowingDirection.OUTBOUND && record.batchId) {
+                                    navigate(`/borrowings/outbound/${record.batchId}`);
+                                    return;
+                                }
+                                setSelectedTransaction(record);
+                            }}
                         />
                     </Tooltip>
                 </div>
@@ -492,6 +608,7 @@ const BorrowingList: React.FC = () => {
     };
 
     const renderTransactionMobileCard = (record: Borrowing, index: number) => {
+        const isOutbound = record.direction === BorrowingDirection.OUTBOUND;
         const isActive = record.status === 'active';
 
         return (
@@ -508,8 +625,8 @@ const BorrowingList: React.FC = () => {
                 <div className='relative z-[1] flex items-start justify-between gap-3'>
                     <div className='min-w-0'>
                         <div className='flex flex-wrap items-center gap-2'>
-                            <TransactionTypeBadge type={record.type} />
-                            <TransactionStatusBadge status={record.status} />
+                            <TransactionTypeBadge type={record.type} direction={record.direction} />
+                            <TransactionStatusBadge status={record.status} direction={record.direction} />
                         </div>
                         <h3 className='mt-2 mb-0 line-clamp-2 text-base font-black text-slate-950'>
                             {record.asset?.name || '-'}
@@ -547,18 +664,28 @@ const BorrowingList: React.FC = () => {
                         size='large'
                         icon={<EyeOutlined />}
                         className='borrowing-mobile-action'
-                        onClick={() => navigate(`/borrowings/${record.id}`)}
+                        onClick={() =>
+                            navigate(
+                                isOutbound && record.batchId
+                                    ? `/borrowings/outbound/${record.batchId}`
+                                    : `/borrowings/${record.id}`
+                            )
+                        }
                     >
                         Chi tiết
                     </Button>
                     <Button
                         size='large'
                         icon={<RollbackOutlined />}
-                        disabled={!isActive}
+                        disabled={!isActive || (isOutbound && !record.batchId)}
                         className='borrowing-mobile-action borrowing-mobile-action--return'
-                        onClick={() => isActive && setSelectedTransaction(record)}
+                        onClick={() => {
+                            if (!isActive) return;
+                            if (isOutbound && record.batchId) navigate(`/borrowings/outbound/${record.batchId}`);
+                            else setSelectedTransaction(record);
+                        }}
                     >
-                        Trả máy
+                        {isOutbound ? 'Mở lô' : 'Trả máy'}
                     </Button>
                 </div>
             </article>
@@ -568,10 +695,19 @@ const BorrowingList: React.FC = () => {
     return (
         <div className='borrowing-mobile-page flex flex-col gap-6'>
             <PageHeader
-                title='Borrow / Return Management'
-                subtitle='Theo dõi mượn nội bộ, mượn ngoài và thuê máy trong cùng một luồng vận hành thống nhất.'
+                title='Quản lý mượn / trả máy'
+                subtitle='Theo dõi riêng máy nhận từ đối tác, máy Hải Đăng cho mượn và giao dịch nội bộ.'
                 actions={
                     <Space wrap>
+                        {canManageBorrowing ? (
+                            <Button
+                                icon={<ExportOutlined />}
+                                onClick={() => navigate('/borrowings/outbound/new')}
+                                className='border-cyan-200 font-bold text-cyan-800 hover:!border-cyan-500 hover:!text-cyan-900'
+                            >
+                                Cho đối tác mượn
+                            </Button>
+                        ) : null}
                         {canManageBorrowing ? (
                             <Button icon={<QrcodeOutlined />} onClick={() => setIsBatchModalOpen(true)}>
                                 Tạo lô + QR tạm
@@ -617,6 +753,137 @@ const BorrowingList: React.FC = () => {
                     <div className='mt-2 text-xs font-medium text-slate-500'>Giao dịch có phát sinh chi phí</div>
                 </div>
             </div>
+
+            {canManageBorrowing ? (
+                <section className='overflow-hidden rounded-xl border border-cyan-200 bg-white shadow-sm'>
+                    <div className='flex flex-col gap-4 border-b border-cyan-100 bg-cyan-50/60 px-5 py-4 md:flex-row md:items-center md:justify-between'>
+                        <div>
+                            <div className='text-sm font-black tracking-[0.14em] text-cyan-800 uppercase'>
+                                Máy Hải Đăng cho đối tác mượn
+                            </div>
+                            <div className='mt-1 text-base font-black text-slate-950'>
+                                Lô xuất, bàn giao và nhận lại nhiều máy
+                            </div>
+                            <div className='mt-1 text-sm font-semibold text-slate-600'>
+                                Giữ nguyên QR vĩnh viễn; mọi máy phải cùng cơ sở xuất và được giám đốc duyệt trước khi
+                                giao.
+                            </div>
+                        </div>
+                        <Button
+                            type='primary'
+                            icon={<ExportOutlined />}
+                            onClick={() => navigate('/borrowings/outbound/new')}
+                            className='bg-cyan-700 hover:!bg-cyan-800'
+                        >
+                            Tạo lô cho mượn
+                        </Button>
+                    </div>
+
+                    {batchStats?.outbound ? (
+                        <div className='grid grid-cols-2 border-b border-slate-100 lg:grid-cols-4'>
+                            {[
+                                ['Đang ở đối tác', `${batchStats.outbound.activeMachines} máy`],
+                                ['Lô đang mở', String(batchStats.outbound.openBatches)],
+                                ['Chờ phê duyệt', String(batchStats.outbound.pendingApprovalBatches)],
+                                ['Quá hạn nhận lại', String(batchStats.outbound.overdueBatches)],
+                            ].map(([label, value], index) => (
+                                <div
+                                    key={label}
+                                    className={`px-4 py-3 ${index % 2 ? 'border-l' : ''} border-slate-100 lg:border-l first:lg:border-l-0`}
+                                >
+                                    <div className='text-[10px] font-black tracking-[0.1em] text-slate-400 uppercase'>
+                                        {label}
+                                    </div>
+                                    <div
+                                        className={`mt-1 text-xl font-black ${label === 'Quá hạn nhận lại' && batchStats.outbound.overdueBatches ? 'text-rose-600' : 'text-slate-900'}`}
+                                    >
+                                        {value}
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    ) : null}
+
+                    <div className='grid grid-cols-1 gap-3 p-3 md:hidden'>
+                        {isLoadingOutboundBatches ? (
+                            <div className='borrowing-mobile-empty'>Đang tải lô cho mượn...</div>
+                        ) : outboundBatches.length ? (
+                            outboundBatches.map((record) => {
+                                const meta = outboundBorrowingBatchStatusMeta[record.status];
+                                return (
+                                    <article
+                                        key={record.id}
+                                        className='rounded-xl border border-slate-200 bg-white p-4 shadow-sm'
+                                    >
+                                        <div className='flex items-start justify-between gap-3'>
+                                            <div className='min-w-0'>
+                                                <Tag color={meta?.color} className='!m-0'>
+                                                    {meta?.label || record.status}
+                                                </Tag>
+                                                <h3 className='mt-2 mb-0 truncate font-mono text-base font-black text-cyan-900'>
+                                                    {record.code}
+                                                </h3>
+                                                <p className='mt-1 mb-0 line-clamp-1 text-sm font-bold text-slate-800'>
+                                                    {record.partnerName}
+                                                </p>
+                                            </div>
+                                            <div className='flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-cyan-50 text-cyan-700'>
+                                                <ExportOutlined />
+                                            </div>
+                                        </div>
+                                        <div className='mt-4 grid grid-cols-3 gap-2 text-center'>
+                                            <div className='rounded-lg bg-slate-50 p-2'>
+                                                <span className='block text-[10px] text-slate-400'>DỰ KIẾN</span>
+                                                <strong>{record.plannedQuantity}</strong>
+                                            </div>
+                                            <div className='rounded-lg bg-slate-50 p-2'>
+                                                <span className='block text-[10px] text-slate-400'>ĐÃ GIAO</span>
+                                                <strong>{record.issuedCount ?? 0}</strong>
+                                            </div>
+                                            <div className='rounded-lg bg-slate-50 p-2'>
+                                                <span className='block text-[10px] text-slate-400'>ĐÃ NHẬN</span>
+                                                <strong>{record.returnedCount ?? 0}</strong>
+                                            </div>
+                                        </div>
+                                        <Button
+                                            block
+                                            type='primary'
+                                            className='mt-3 bg-cyan-700 hover:!bg-cyan-800'
+                                            onClick={() => navigate(`/borrowings/outbound/${record.id}`)}
+                                        >
+                                            Mở lô
+                                        </Button>
+                                    </article>
+                                );
+                            })
+                        ) : (
+                            <Empty description='Chưa có lô cho đối tác mượn' />
+                        )}
+                    </div>
+                    <div className='hidden md:block'>
+                        <Table<BorrowingBatch>
+                            rowKey='id'
+                            loading={isLoadingOutboundBatches}
+                            columns={outboundColumns}
+                            dataSource={outboundBatches}
+                            scroll={{ x: 920 }}
+                            pagination={false}
+                            onRow={(record) => ({ onDoubleClick: () => navigate(`/borrowings/outbound/${record.id}`) })}
+                        />
+                    </div>
+                    {(outboundBatchResponse?.total ?? 0) > 8 ? (
+                        <div className='flex justify-center border-t border-slate-100 px-4 py-3 md:justify-end'>
+                            <Pagination
+                                current={outboundBatchResponse?.page ?? outboundPage}
+                                total={outboundBatchResponse?.total ?? 0}
+                                pageSize={outboundBatchResponse?.limit ?? 8}
+                                showSizeChanger={false}
+                                onChange={setOutboundPage}
+                            />
+                        </div>
+                    ) : null}
+                </section>
+            ) : null}
 
             {canManageBorrowing ? (
                 <section className='borrowing-mobile-section overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm'>
@@ -871,8 +1138,8 @@ const BorrowingList: React.FC = () => {
                     className='pt-2 [&_.ant-form-item-label>label]:font-bold [&_.ant-form-item-label>label]:text-slate-700'
                 >
                     <div className='mb-4 rounded-2xl border border-cyan-100 bg-cyan-50 p-4 text-sm font-semibold text-cyan-900'>
-                        Lô này dùng cho máy mượn/thuê từ đối tác. Chưa rõ đối tác hay hạn trả thì cứ để trống — nhập
-                        máy trước, bổ sung sau. Chỉ tạo QR tạm nếu đối tác cho phép dán tem lên máy.
+                        Lô này dùng cho máy mượn/thuê từ đối tác. Chưa rõ đối tác hay hạn trả thì cứ để trống — nhập máy
+                        trước, bổ sung sau. Chỉ tạo QR tạm nếu đối tác cho phép dán tem lên máy.
                     </div>
                     <div className='grid grid-cols-1 gap-3 md:grid-cols-2'>
                         <Form.Item label='Loại lô' name='type' rules={[{ required: true, message: 'Chọn loại lô' }]}>

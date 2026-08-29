@@ -16,6 +16,7 @@ export const ASSET_STATUS_LABEL: Record<AssetStatus, string> = {
     [AssetStatus.MAINTENANCE]: 'Bảo trì',
     [AssetStatus.BROKEN]: 'Máy lỗi',
     [AssetStatus.BORROWING]: 'Đang mượn',
+    [AssetStatus.LOANED_OUT]: 'Đang cho đối tác mượn',
     [AssetStatus.STORAGE]: 'Tồn kho',
     [AssetStatus.RETURNED_TO_PARTNER]: 'Đã trả đối tác',
 };
@@ -27,6 +28,7 @@ export const ASSET_STATUS_COLOR: Record<AssetStatus, string> = {
     [AssetStatus.MAINTENANCE]: 'warning',
     [AssetStatus.BROKEN]: 'error',
     [AssetStatus.BORROWING]: 'purple',
+    [AssetStatus.LOANED_OUT]: 'cyan',
     [AssetStatus.STORAGE]: 'default',
     [AssetStatus.RETURNED_TO_PARTNER]: 'default',
 };
@@ -38,6 +40,7 @@ export const ASSET_STATUS_HEX: Record<AssetStatus, string> = {
     [AssetStatus.MAINTENANCE]: '#fa8c16',
     [AssetStatus.BROKEN]: '#f5222d',
     [AssetStatus.BORROWING]: '#722ed1',
+    [AssetStatus.LOANED_OUT]: '#0891b2',
     [AssetStatus.STORAGE]: '#8c8c8c',
     [AssetStatus.RETURNED_TO_PARTNER]: '#64748b',
 };
@@ -50,6 +53,7 @@ export const ASSET_STATUS_TRANSITIONS: Record<AssetStatus, AssetStatus[]> = {
     [AssetStatus.MAINTENANCE]: [AssetStatus.ACTIVE, AssetStatus.BROKEN],
     [AssetStatus.BROKEN]: [AssetStatus.MAINTENANCE],
     [AssetStatus.BORROWING]: [AssetStatus.ACTIVE],
+    [AssetStatus.LOANED_OUT]: [],
     [AssetStatus.STORAGE]: [AssetStatus.ACTIVE],
     [AssetStatus.RETURNED_TO_PARTNER]: [],
 };
@@ -108,13 +112,17 @@ export const TRANSFER_STATUS_COLOR: Record<TransferStatus, string> = {
 
 // ===== BORROWING STATUS =====
 export const BORROWING_STATUS_LABEL: Record<BorrowingStatus, string> = {
+    [BorrowingStatus.DRAFT]: 'Đã chọn / chờ bàn giao',
     [BorrowingStatus.ACTIVE]: 'Đang hoạt động',
     [BorrowingStatus.RETURNED]: 'Đã trả',
+    [BorrowingStatus.CANCELLED]: 'Đã hủy',
 };
 
 export const BORROWING_STATUS_COLOR: Record<BorrowingStatus, string> = {
+    [BorrowingStatus.DRAFT]: 'default',
     [BorrowingStatus.ACTIVE]: 'processing',
     [BorrowingStatus.RETURNED]: 'success',
+    [BorrowingStatus.CANCELLED]: 'default',
 };
 
 export const BORROWING_TYPE_LABEL: Record<BorrowingType, string> = {

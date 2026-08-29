@@ -27,6 +27,8 @@ const BorrowingList = lazy(() => import('../pages/BorrowingList'));
 const BorrowingCreate = lazy(() => import('../pages/BorrowingCreate'));
 const BorrowingDetail = lazy(() => import('../pages/BorrowingDetail'));
 const BorrowingBatchDetail = lazy(() => import('../pages/BorrowingBatchDetail'));
+const OutboundBorrowingCreate = lazy(() => import('../pages/OutboundBorrowingCreate'));
+const OutboundBorrowingBatchDetail = lazy(() => import('../pages/OutboundBorrowingBatchDetail'));
 const PlantList = lazy(() => import('../pages/PlantList'));
 const UserList = lazy(() => import('../pages/UserList'));
 const MaterialListPage = lazy(() => import('../pages/MaterialListPage'));
@@ -135,6 +137,14 @@ export const router = createBrowserRouter([
             { path: 'transfers/:id', element: withSuspense(<TransferDetail />) },
             { path: 'borrowings', element: withSuspense(<BorrowingList />) },
             { path: 'borrowings/new', element: withSuspense(<BorrowingCreate />) },
+            {
+                path: 'borrowings/outbound/new',
+                element: guarded('/borrowings/outbound/new', <OutboundBorrowingCreate />),
+            },
+            {
+                path: 'borrowings/outbound/:id',
+                element: guarded('/borrowings/outbound/:id', <OutboundBorrowingBatchDetail />),
+            },
             {
                 path: 'borrowings/batches/:id',
                 element: guarded('/borrowings/batches/:id', <BorrowingBatchDetail />),

@@ -9,6 +9,7 @@ export const ASSET_STATUS_COLOR: Record<AssetStatus, { color: string; label: str
     [AssetStatus.MAINTENANCE]: { color: '#f59e0b', label: 'Bảo trì' },
     [AssetStatus.BROKEN]: { color: '#f43f5e', label: 'Lỗi' },
     [AssetStatus.BORROWING]: { color: '#6366f1', label: 'Đang mượn' },
+    [AssetStatus.LOANED_OUT]: { color: '#0891b2', label: 'Đang cho đối tác mượn' },
     [AssetStatus.STORAGE]: { color: '#64748b', label: 'Tồn kho' },
     [AssetStatus.RETURNED_TO_PARTNER]: { color: '#94a3b8', label: 'Đã trả đối tác' },
 };

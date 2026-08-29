@@ -16,6 +16,7 @@ const STATUS_META: Record<string, { label: string; color: string }> = {
     maintenance: { label: 'Bảo trì', color: '#d97706' },
     broken: { label: 'Lỗi / hỏng', color: '#dc2626' },
     borrowing: { label: 'Đang mượn', color: '#6366f1' },
+    loaned_out: { label: 'Đang cho đối tác mượn', color: '#0891b2' },
     storage: { label: 'Tồn kho', color: '#64748b' },
 };
 
@@ -42,8 +43,7 @@ const DashboardChartsRow = ({ data, loading }: DashboardChartsRowProps) => {
             tooltip: {
                 ...ECHARTS_TOOLTIP_STYLE,
                 trigger: 'item',
-                formatter: (params: any) =>
-                    `<b>${params.name}</b><br/>${params.value} máy · ${params.percent}%`,
+                formatter: (params: any) => `<b>${params.name}</b><br/>${params.value} máy · ${params.percent}%`,
             },
             series: [
                 {

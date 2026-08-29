@@ -126,7 +126,14 @@ export const useNotifications = (socket: import('socket.io-client').Socket | nul
                 const invalidateMap: Record<string, string[][]> = {
                     transfer: [['transfers'], ['transfers-stats']],
                     asset: [['assets']],
-                    borrowing: [['borrowings']],
+                    borrowing: [
+                        ['borrowings'],
+                        ['borrowing-batches'],
+                        ['borrowing-batch-stats'],
+                        ['assets'],
+                        ['asset-stat'],
+                        ['dashboard'],
+                    ],
                     maintenance: [['maintenances'], ['assets'], ['dashboard']],
                     purchase_request: [['purchase-requests']],
                     purchase_order: [['purchase-orders']],

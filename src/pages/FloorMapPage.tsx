@@ -67,6 +67,7 @@ const STATUS_VISUAL: Record<string, StatusVisual> = {
     [AssetStatus.MAINTENANCE]: 'warn',
     [AssetStatus.PENDING_DISPOSAL]: 'warn',
     [AssetStatus.BORROWING]: 'loan',
+    [AssetStatus.LOANED_OUT]: 'loan',
     [AssetStatus.STORAGE]: 'idle',
 };
 
@@ -232,7 +233,7 @@ const HeaderClock: React.FC = React.memo(() => {
     return (
         <>
             <span className='fmp-live'>
-                <span className={`fmp-dot${connected ? '' : ' fmp-dot-off'}`} />
+                <span className={`fmp-dot${connected ? '' : 'fmp-dot-off'}`} />
                 {connected ? 'LIVE' : 'MẤT KẾT NỐI'}
             </span>
             <span className='fmp-clock'>{clock}</span>
@@ -1177,7 +1178,7 @@ const FloorMapPage: React.FC = () => {
     };
 
     return (
-        <div className={`fmp-page rounded-2xl p-4 md:p-5${light ? ' fmp-light' : ''}`}>
+        <div className={`fmp-page rounded-2xl p-4 md:p-5${light ? 'fmp-light' : ''}`}>
             <style>{FMP_CSS}</style>
 
             {/* ── Header ── */}
@@ -1359,7 +1360,7 @@ const FloorMapPage: React.FC = () => {
                                 {zones.map((z) => (
                                     <div
                                         key={z.id}
-                                        className={`fmp-flat-zone${selectedZoneId === z.id ? ' fmp-zone-sel' : ''}`}
+                                        className={`fmp-flat-zone${selectedZoneId === z.id ? 'fmp-zone-sel' : ''}`}
                                         style={{
                                             left: `${z.x}%`,
                                             top: `${z.y}%`,
@@ -1387,7 +1388,7 @@ const FloorMapPage: React.FC = () => {
                                         <button
                                             key={m.id}
                                             type='button'
-                                            className={`fmp-chip${selectedId === m.id ? ' fmp-chip-sel' : ''}`}
+                                            className={`fmp-chip${selectedId === m.id ? 'fmp-chip-sel' : ''}`}
                                             style={{
                                                 left: `${m.floorPos!.x}%`,
                                                 top: `${m.floorPos!.y}%`,

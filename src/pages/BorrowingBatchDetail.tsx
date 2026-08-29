@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
     Alert,
     App,
@@ -47,6 +47,7 @@ import { aiOcrService } from '../core/services/ai-help.service';
 import { borrowingService } from '../core/services/borrowing.service';
 import { qrLabelService } from '../core/services/qr-label.service';
 import {
+    BorrowingDirection,
     type Borrowing,
     type BorrowingStatus,
     type BulkReturnBorrowingBatchPayload,
@@ -149,6 +150,13 @@ const BorrowingBatchDetail: React.FC = () => {
 
     const batch = data?.batch;
     const items = data?.items ?? [];
+
+    useEffect(() => {
+        if (batch?.direction === BorrowingDirection.OUTBOUND) {
+            navigate(`/borrowings/outbound/${batch.id}`, { replace: true });
+        }
+    }, [batch, navigate]);
+
     const activeItems = useMemo(() => items.filter((item) => item.status === BORROWING_STATUS_ACTIVE), [items]);
     const selectedActiveItems = useMemo(
         () => activeItems.filter((item) => selectedReturnIds.includes(item.id)),
@@ -601,6 +609,10 @@ const BorrowingBatchDetail: React.FC = () => {
         return <Empty description='Không tìm thấy lô mượn/thuê' />;
     }
 
+    if (batch.direction === BorrowingDirection.OUTBOUND) {
+        return <Skeleton active paragraph={{ rows: 8 }} className='rounded-xl bg-white p-6' />;
+    }
+
     const statusMeta = borrowingBatchStatusMeta[batch.status];
     const batchClosed = batch.status === 'returned' || batch.status === 'cancelled';
     // Lô còn nợ thông tin sau rà soát — nhắc bổ sung
@@ -622,11 +634,7 @@ const BorrowingBatchDetail: React.FC = () => {
                                 Sửa thông tin lô
                             </Button>
                         ) : null}
-                        <Button
-                            icon={<DownloadOutlined />}
-                            loading={exportingHandover}
-                            onClick={handleExportHandover}
-                        >
+                        <Button icon={<DownloadOutlined />} loading={exportingHandover} onClick={handleExportHandover}>
                             Xuất biên bản
                         </Button>
                         {batch.qrBatchId ? (
@@ -766,9 +774,9 @@ const BorrowingBatchDetail: React.FC = () => {
                                         Nhận nhanh nhiều máy
                                     </Button>
                                     <div className='mt-2 text-xs font-medium text-slate-500'>
-                                        Máy khách không được dán/đánh dấu gì — nhập tay, nhận diện bằng serial và mã
-                                        máy đối tác. Máy chưa từng có trên hệ thống và sắp trả ngay thì dùng "Nhận
-                                        nhanh nhiều máy" để dán danh sách một lượt.
+                                        Máy khách không được dán/đánh dấu gì — nhập tay, nhận diện bằng serial và mã máy
+                                        đối tác. Máy chưa từng có trên hệ thống và sắp trả ngay thì dùng "Nhận nhanh
+                                        nhiều máy" để dán danh sách một lượt.
                                     </div>
                                 </Card>
 
@@ -843,9 +851,7 @@ const BorrowingBatchDetail: React.FC = () => {
                                             <Button
                                                 icon={<CheckCircleOutlined />}
                                                 disabled={!activeItems.length}
-                                                onClick={() =>
-                                                    setSelectedReturnIds(activeItems.map((item) => item.id))
-                                                }
+                                                onClick={() => setSelectedReturnIds(activeItems.map((item) => item.id))}
                                             >
                                                 Chọn tất cả
                                             </Button>
@@ -949,9 +955,7 @@ const BorrowingBatchDetail: React.FC = () => {
                     </span>
                     {ocrImages.length ? (
                         <div className='mt-3'>
-                            <div className='mb-1.5 text-xs font-bold text-slate-600'>
-                                Chọn 1 ảnh lưu vào hồ sơ máy:
-                            </div>
+                            <div className='mb-1.5 text-xs font-bold text-slate-600'>Chọn 1 ảnh lưu vào hồ sơ máy:</div>
                             <div className='flex flex-wrap gap-2'>
                                 {ocrImages.map((image, index) => (
                                     <button
@@ -964,7 +968,11 @@ const BorrowingBatchDetail: React.FC = () => {
                                                 : 'border-slate-200 opacity-70 hover:opacity-100'
                                         }`}
                                     >
-                                        <img src={image.url} alt={`Ảnh máy ${index + 1}`} className='h-20 w-20 object-cover' />
+                                        <img
+                                            src={image.url}
+                                            alt={`Ảnh máy ${index + 1}`}
+                                            className='h-20 w-20 object-cover'
+                                        />
                                     </button>
                                 ))}
                             </div>

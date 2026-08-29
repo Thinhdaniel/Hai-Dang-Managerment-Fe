@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { App, Button, Drawer, Grid, Input, Modal, Tag, Typography } from 'antd';
+import { Alert, App, Button, Drawer, Grid, Input, Modal, Tag, Typography } from 'antd';
 import {
     CheckCircleOutlined,
     CloseOutlined,
@@ -37,6 +37,7 @@ const statusTone: Record<AssetStatus, string> = {
     [AssetStatus.MAINTENANCE]: 'border-amber-200 bg-amber-50 text-amber-700 hover:!border-amber-300',
     [AssetStatus.BROKEN]: 'border-rose-200 bg-rose-50 text-rose-700 hover:!border-rose-300',
     [AssetStatus.BORROWING]: 'border-indigo-200 bg-indigo-50 text-indigo-700 hover:!border-indigo-300',
+    [AssetStatus.LOANED_OUT]: 'border-cyan-200 bg-cyan-50 text-cyan-700 hover:!border-cyan-300',
     [AssetStatus.STORAGE]: 'border-slate-300 bg-slate-50 text-slate-700 hover:!border-slate-400',
     [AssetStatus.PENDING_DISPOSAL]: 'border-orange-200 bg-orange-50 text-orange-700 hover:!border-orange-300',
     [AssetStatus.DISPOSED]: 'border-slate-300 bg-slate-100 text-slate-600 hover:!border-slate-400',
@@ -46,6 +47,8 @@ const statusTone: Record<AssetStatus, string> = {
 const canReturnToPartner = (asset: Asset) => asset.ownershipType !== AssetOwnershipType.OWNED;
 
 const buildStatusOptions = (asset: Asset) => {
+    if (asset.status === AssetStatus.LOANED_OUT) return [AssetStatus.LOANED_OUT];
+
     const options = canReturnToPartner(asset)
         ? [...baseStatusOptions, AssetStatus.RETURNED_TO_PARTNER]
         : [...baseStatusOptions];
@@ -71,10 +74,11 @@ const QrQuickUpdateModal: React.FC<QrQuickUpdateModalProps> = ({ open, asset, on
     }, [asset, open]);
 
     const statusOptions = useMemo(() => (asset ? buildStatusOptions(asset) : baseStatusOptions), [asset]);
+    const workflowLocked = asset?.status === AssetStatus.LOANED_OUT;
     const normalizedArea = area.trim();
     const statusChanged = Boolean(asset && status !== asset.status);
     const areaChanged = Boolean(asset && normalizedArea !== (asset.area ?? '').trim());
-    const canSave = Boolean(asset && (statusChanged || areaChanged));
+    const canSave = Boolean(asset && !workflowLocked && (statusChanged || areaChanged));
 
     const handleSave = async () => {
         if (!asset || !canSave) return;
@@ -144,6 +148,15 @@ const QrQuickUpdateModal: React.FC<QrQuickUpdateModalProps> = ({ open, asset, on
                 </div>
             </div>
 
+            {workflowLocked ? (
+                <Alert
+                    showIcon
+                    type='info'
+                    message='Máy đang được cho đối tác mượn'
+                    description='Trạng thái và vị trí được khóa theo lô bàn giao. Hãy nhận lại máy trong module Mượn / trả để hệ thống khôi phục đúng trạng thái ban đầu.'
+                />
+            ) : null}
+
             <div>
                 <Text className='mb-2 block text-sm font-bold text-slate-800'>Trạng thái mới</Text>
                 <div className='grid grid-cols-2 gap-2 md:grid-cols-5'>
@@ -153,8 +166,9 @@ const QrQuickUpdateModal: React.FC<QrQuickUpdateModalProps> = ({ open, asset, on
                             <button
                                 key={option}
                                 type='button'
+                                disabled={workflowLocked}
                                 onClick={() => setStatus(option)}
-                                className={`min-h-[48px] rounded-xl border px-3 py-2 text-sm font-bold transition-all ${
+                                className={`min-h-[48px] rounded-xl border px-3 py-2 text-sm font-bold transition-all disabled:cursor-not-allowed disabled:opacity-70 ${
                                     statusTone[option]
                                 } ${active ? 'ring-2 ring-blue-500 ring-offset-1' : ''}`}
                             >
@@ -172,6 +186,7 @@ const QrQuickUpdateModal: React.FC<QrQuickUpdateModalProps> = ({ open, asset, on
                     value={area}
                     placeholder='Nhập khu vực hiện tại của máy'
                     onChange={(event) => setArea(event.target.value)}
+                    disabled={workflowLocked}
                     allowClear
                 />
             </label>
@@ -183,6 +198,7 @@ const QrQuickUpdateModal: React.FC<QrQuickUpdateModalProps> = ({ open, asset, on
                     placeholder='Ví dụ: kiểm kê phát hiện tại khu may A, đổi về tồn kho...'
                     rows={3}
                     onChange={(event) => setNote(event.target.value)}
+                    disabled={workflowLocked}
                     maxLength={300}
                     showCount
                 />

@@ -105,7 +105,12 @@ const OWNERSHIP_LABEL: Record<AssetOwnershipType, string> = {
 const canTransferAsset = (asset: Asset | null) =>
     Boolean(
         asset &&
-        ![AssetStatus.RETURNED_TO_PARTNER, AssetStatus.PENDING_DISPOSAL, AssetStatus.DISPOSED].includes(asset.status) &&
+        ![
+            AssetStatus.LOANED_OUT,
+            AssetStatus.RETURNED_TO_PARTNER,
+            AssetStatus.PENDING_DISPOSAL,
+            AssetStatus.DISPOSED,
+        ].includes(asset.status) &&
         !asset.hasOpenTransfer
     );
 
@@ -168,6 +173,17 @@ const buildSmartInsight = (asset: Asset, canManage: boolean): SmartScanInsight =
             tone: 'violet',
             icon: <SafetyCertificateOutlined />,
             checks: ['Kiểm tra lịch sử trả máy', 'Không dùng lại nếu chưa kích hoạt lại', 'Xác minh tem QR còn hợp lệ'],
+        };
+    }
+
+    if (asset.status === AssetStatus.LOANED_OUT) {
+        return {
+            title: 'Máy đang ở đối tác',
+            description:
+                'Máy thuộc Hải Đăng và đang trong một lô cho mượn. Mọi thao tác nhận lại phải thực hiện theo lô bàn giao.',
+            tone: 'violet',
+            icon: <HistoryOutlined />,
+            checks: ['Mở đúng lô cho mượn', 'Đối chiếu ảnh và phụ kiện', 'Ghi nhận tình trạng khi nhận lại'],
         };
     }
 
@@ -481,6 +497,7 @@ const GlobalQrScannerPage: React.FC = () => {
         if (!asset) return [];
 
         const isReturned = asset.status === AssetStatus.RETURNED_TO_PARTNER;
+        const isLoanedOut = asset.status === AssetStatus.LOANED_OUT;
         const hasTransfer = Boolean(asset.hasOpenTransfer);
         const dueMaintenance = isOverdue(asset.nextMaintenanceDate);
         const external = isExternalOwnership(asset);
@@ -495,8 +512,8 @@ const GlobalQrScannerPage: React.FC = () => {
                         : 'Lập phiếu kiểm tra, bảo trì định kỳ hoặc sửa ngoài',
                 icon: <BuildOutlined />,
                 tone: asset.status === AssetStatus.BROKEN ? 'rose' : 'amber',
-                disabled: isReturned,
-                visible: !isReturned,
+                disabled: isReturned || isLoanedOut,
+                visible: !isReturned && !isLoanedOut,
                 recommended:
                     asset.status === AssetStatus.BROKEN || dueMaintenance || asset.status === AssetStatus.ACTIVE,
                 priority: asset.status === AssetStatus.BROKEN ? 100 : dueMaintenance ? 92 : 74,
@@ -539,8 +556,8 @@ const GlobalQrScannerPage: React.FC = () => {
                 description: 'Đổi trạng thái hoặc khu vực máy ngay tại hiện trường',
                 icon: <ToolOutlined />,
                 tone: 'emerald',
-                disabled: !canManage,
-                visible: canManage,
+                disabled: !canManage || isLoanedOut,
+                visible: canManage && !isLoanedOut,
                 recommended:
                     canManage &&
                     [AssetStatus.MAINTENANCE, AssetStatus.STORAGE, AssetStatus.BORROWING].includes(asset.status),
@@ -570,7 +587,7 @@ const GlobalQrScannerPage: React.FC = () => {
                 icon: <SwapOutlined />,
                 tone: 'indigo',
                 disabled: !canManage || !canTransferAsset(asset),
-                visible: canManage && !hasTransfer && !isReturned,
+                visible: canManage && !hasTransfer && !isReturned && !isLoanedOut,
                 recommended:
                     canManage && !hasTransfer && [AssetStatus.ACTIVE, AssetStatus.STORAGE].includes(asset.status),
                 priority: asset.status === AssetStatus.STORAGE ? 94 : 70,
@@ -591,15 +608,27 @@ const GlobalQrScannerPage: React.FC = () => {
             },
             {
                 key: 'borrowings',
-                title: asset.ownershipType === AssetOwnershipType.RENTAL ? 'Theo dõi máy thuê' : 'Theo dõi mượn / trả',
-                description: 'Xem lịch sử mượn, thuê, đối tác, chi phí và tình trạng trả máy',
+                title: isLoanedOut
+                    ? 'Mở lô đang cho mượn'
+                    : asset.ownershipType === AssetOwnershipType.RENTAL
+                      ? 'Theo dõi máy thuê'
+                      : 'Theo dõi mượn / trả',
+                description: isLoanedOut
+                    ? 'Nhận lại máy, đối chiếu hiện trạng và khôi phục trạng thái theo đúng lô bàn giao'
+                    : 'Xem lịch sử mượn, thuê, đối tác, chi phí và tình trạng trả máy',
                 icon: <HistoryOutlined />,
                 tone: 'violet',
                 disabled: false,
-                visible: external || asset.status === AssetStatus.BORROWING || isReturned,
-                recommended: external || asset.status === AssetStatus.BORROWING || isReturned,
-                priority: asset.status === AssetStatus.BORROWING ? 93 : isReturned ? 90 : 82,
-                badge: asset.ownershipType === AssetOwnershipType.RENTAL ? 'Thuê' : external ? 'Đối tác' : undefined,
+                visible: isLoanedOut || external || asset.status === AssetStatus.BORROWING || isReturned,
+                recommended: isLoanedOut || external || asset.status === AssetStatus.BORROWING || isReturned,
+                priority: isLoanedOut ? 100 : asset.status === AssetStatus.BORROWING ? 93 : isReturned ? 90 : 82,
+                badge: isLoanedOut
+                    ? 'Đang ở đối tác'
+                    : asset.ownershipType === AssetOwnershipType.RENTAL
+                      ? 'Thuê'
+                      : external
+                        ? 'Đối tác'
+                        : undefined,
                 onClick: () => navigate('/borrowings'),
             },
             {

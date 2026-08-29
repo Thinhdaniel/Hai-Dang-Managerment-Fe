@@ -4,6 +4,7 @@ export enum AssetStatus {
     MAINTENANCE = 'maintenance',
     BROKEN = 'broken',
     BORROWING = 'borrowing',
+    LOANED_OUT = 'loaned_out',
     STORAGE = 'storage',
     PENDING_DISPOSAL = 'pending_disposal',
     DISPOSED = 'disposed',
@@ -38,17 +39,28 @@ export enum TransferStatus {
 }
 
 export enum BorrowingStatus {
+    DRAFT = 'draft',
     ACTIVE = 'active',
     RETURNED = 'returned',
+    CANCELLED = 'cancelled',
 }
 
 export enum BorrowingBatchStatus {
     DRAFT = 'draft',
     RECEIVING = 'receiving',
+    PENDING_APPROVAL = 'pending_approval',
+    APPROVED = 'approved',
     ACTIVE = 'active',
     PARTIALLY_RETURNED = 'partially_returned',
     RETURNED = 'returned',
+    REJECTED = 'rejected',
     CANCELLED = 'cancelled',
+}
+
+export enum BorrowingDirection {
+    INTERNAL = 'internal',
+    INBOUND = 'inbound',
+    OUTBOUND = 'outbound',
 }
 
 export enum BorrowingType {
@@ -667,6 +679,7 @@ export interface Borrowing {
     batch?: BorrowingBatch;
     qrLabelId?: string;
     type: BorrowingType;
+    direction: BorrowingDirection;
     borrowerId?: string;
     borrower?: User;
     borrowerName?: string;
@@ -683,6 +696,11 @@ export interface Borrowing {
     returnNote?: string;
     receiveCondition?: string;
     receiveNote?: string;
+    issueCondition?: string;
+    issueNote?: string;
+    accessories?: string[];
+    issueImages?: string[];
+    returnImages?: string[];
     returnCondition?: string;
     qrReturnAction?: QrReturnAction;
     qrReturnNote?: string;
@@ -690,6 +708,9 @@ export interface Borrowing {
     qrRemovedBy?: string;
     returnedInBatchAt?: string;
     assetStatusBefore?: AssetStatus;
+    assetOwnershipTypeBefore?: AssetOwnershipType;
+    assetPlantIdBefore?: string;
+    assetAreaBefore?: string;
     createdBy?: string;
     returnedBy?: string;
     createdAt: string;
@@ -700,8 +721,13 @@ export interface BorrowingBatch {
     id: string;
     code: string;
     type: BorrowingType.EXTERNAL | BorrowingType.RENTAL;
+    direction: BorrowingDirection.INBOUND | BorrowingDirection.OUTBOUND;
     status: BorrowingBatchStatus;
     partnerName: string;
+    contactName?: string;
+    contactPhone?: string;
+    partnerAddress?: string;
+    purpose?: string;
     contractNo?: string;
     plantId: string;
     plant?: Plant;
@@ -711,13 +737,26 @@ export interface BorrowingBatch {
     plannedQuantity: number;
     qrBatchId?: string;
     qrBatch?: Pick<QrLabelBatch, 'id' | 'code' | 'quantity' | 'status' | 'printedAt'>;
-    labelPolicy: 'temporary';
+    labelPolicy: 'temporary' | 'permanent';
     removeQrOnReturn: boolean;
     note?: string;
     receivedCount?: number;
+    selectedCount?: number;
+    draftCount?: number;
+    issuedCount?: number;
     activeCount?: number;
     returnedCount?: number;
     unusedQrCount?: number;
+    submittedBy?: string;
+    submittedAt?: string;
+    approvedBy?: string;
+    approvedAt?: string;
+    rejectedBy?: string;
+    rejectedAt?: string;
+    rejectReason?: string;
+    handedOverBy?: string;
+    handedOverAt?: string;
+    handoverImages?: string[];
     closedAt?: string;
     createdAt: string;
     updatedAt: string;
@@ -747,15 +786,21 @@ export interface BorrowingFilter extends PaginationParams {
     borrowerId?: string;
     type?: BorrowingType;
     status?: BorrowingStatus;
+    direction?: BorrowingDirection;
     startDate?: string;
     endDate?: string;
 }
 
 export interface CreateBorrowingBatchPayload {
     type: BorrowingType.EXTERNAL | BorrowingType.RENTAL;
+    direction?: BorrowingDirection.INBOUND | BorrowingDirection.OUTBOUND;
     /** Bỏ trống khi rà soát chưa rõ máy của ai — BE tự điền "Chưa xác định", bổ sung sau */
     partnerName?: string;
     contractNo?: string;
+    contactName?: string;
+    contactPhone?: string;
+    partnerAddress?: string;
+    purpose?: string;
     plantId: string;
     area?: string;
     borrowTime: string;
@@ -777,14 +822,54 @@ export interface BorrowingBatchStats {
         nearestDue: string | null;
         overdue: number;
     }>;
+    outbound: {
+        activeMachines: number;
+        assetValue: number;
+        partnerCount: number;
+        openBatches: number;
+        pendingApprovalBatches: number;
+        overdueBatches: number;
+        byPartner: Array<{
+            partnerName: string;
+            machines: number;
+            assetValue: number;
+            nearestDue: string | null;
+            overdue: number;
+        }>;
+    };
 }
 
 export interface UpdateBorrowingBatchPayload {
     partnerName?: string;
     contractNo?: string;
+    contactName?: string;
+    contactPhone?: string;
+    partnerAddress?: string;
+    purpose?: string;
     area?: string;
     expectedReturnTime?: string;
+    plannedQuantity?: number;
     note?: string;
+}
+
+export interface AddOutboundBorrowingAssetsPayload {
+    items: Array<{
+        assetId: string;
+        issueCondition?: string;
+        issueNote?: string;
+        accessories?: string[];
+        issueImages?: string[];
+    }>;
+}
+
+export interface ConfirmOutboundHandoverPayload {
+    handoverTime: string;
+    handoverImages?: string[];
+    note?: string;
+}
+
+export interface OutboundBatchReasonPayload {
+    reason: string;
 }
 
 export interface ReceiveBorrowingBatchByQrPayload {
@@ -831,6 +916,7 @@ export interface BulkReturnBorrowingBatchPayload {
         qrReturnAction?: QrReturnAction;
         returnCondition?: string;
         returnNote?: string;
+        returnImages?: string[];
         qrReturnNote?: string;
     }>;
 }

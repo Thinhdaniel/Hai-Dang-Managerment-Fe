@@ -28,6 +28,10 @@ export const borrowingStatusMeta: Record<
         badgeClassName: string;
     }
 > = {
+    draft: {
+        label: 'Chờ bàn giao',
+        badgeClassName: 'border-slate-200 bg-slate-50 text-slate-700',
+    },
     active: {
         label: 'Đang hoạt động',
         badgeClassName: 'border-emerald-200 bg-emerald-50 text-emerald-700',
@@ -35,6 +39,10 @@ export const borrowingStatusMeta: Record<
     returned: {
         label: 'Đã trả',
         badgeClassName: 'border-slate-200 bg-slate-100 text-slate-700',
+    },
+    cancelled: {
+        label: 'Đã hủy',
+        badgeClassName: 'border-slate-200 bg-slate-100 text-slate-500',
     },
 };
 
@@ -57,9 +65,12 @@ export const borrowingBatchStatusMeta: Record<
 > = {
     draft: { label: 'Nháp', color: 'default' },
     receiving: { label: 'Đang nhận máy', color: 'processing' },
+    pending_approval: { label: 'Chờ giám đốc duyệt', color: 'orange' },
+    approved: { label: 'Đã duyệt / chờ bàn giao', color: 'cyan' },
     active: { label: 'Đang mượn/thuê', color: 'green' },
     partially_returned: { label: 'Trả một phần', color: 'gold' },
     returned: { label: 'Đã trả hết', color: 'blue' },
+    rejected: { label: 'Bị từ chối', color: 'red' },
     cancelled: { label: 'Đã hủy', color: 'red' },
 };
 
@@ -67,6 +78,14 @@ export const borrowingBatchStatusOptions = Object.entries(borrowingBatchStatusMe
     value,
     label: meta.label,
 }));
+
+export const outboundBorrowingBatchStatusMeta: typeof borrowingBatchStatusMeta = {
+    ...borrowingBatchStatusMeta,
+    receiving: { label: 'Đang chuẩn bị máy', color: 'processing' },
+    active: { label: 'Đang ở đối tác', color: 'green' },
+    partially_returned: { label: 'Đã nhận một phần', color: 'gold' },
+    returned: { label: 'Đã nhận đủ', color: 'blue' },
+};
 
 export const qrReturnActionMeta: Record<QrReturnAction, { label: string; color: string; description: string }> = {
     removed: {

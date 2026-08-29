@@ -113,6 +113,20 @@ export const PAGE_META: PageMeta[] = [
         searchPlaceholder: 'Quét QR hoặc tìm máy trong lô...',
     },
     {
+        path: '/borrowings/outbound/new',
+        title: 'Tạo Lô Cho Mượn Máy',
+        subtitle: 'Lập hồ sơ máy Hải Đăng bàn giao cho đối tác mượn.',
+        breadcrumbs: ['Dashboard', 'Giao dịch thiết bị', 'Cho đối tác mượn', 'Tạo lô'],
+        searchPlaceholder: 'Tìm theo mã máy...',
+    },
+    {
+        path: '/borrowings/outbound/:id',
+        title: 'Lô Cho Đối Tác Mượn',
+        subtitle: 'Chọn máy, duyệt, bàn giao và nhận lại nhiều máy theo lô.',
+        breadcrumbs: ['Dashboard', 'Giao dịch thiết bị', 'Cho đối tác mượn'],
+        searchPlaceholder: 'Tìm hoặc quét máy trong lô...',
+    },
+    {
         path: '/borrowings/:id',
         title: 'Chi Tiết Giao Dịch',
         subtitle: 'Xem đầy đủ thông tin và timeline của giao dịch thiết bị.',

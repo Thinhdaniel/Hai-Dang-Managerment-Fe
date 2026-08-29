@@ -49,6 +49,8 @@ import { transferService } from '../core/services/transfer.service';
 import { ASSET_OWNERSHIP_LABEL, isAssetInDisposalFlow, isReturnedToPartner } from '../core/constants';
 import {
     AssetStatus,
+    BorrowingDirection,
+    BorrowingStatus,
     type Asset,
     type AssetDisposalItem,
     type Borrowing,
@@ -71,6 +73,7 @@ const STATUS_CFG: Record<AssetStatus, { label: string; color: string; badge: str
     maintenance: { label: 'Đang bảo trì', color: 'gold', badge: 'warning' },
     broken: { label: 'Lỗi / hỏng', color: 'red', badge: 'error' },
     borrowing: { label: 'Đang mượn', color: 'purple', badge: 'processing' },
+    loaned_out: { label: 'Đang cho đối tác mượn', color: 'cyan', badge: 'processing' },
     storage: { label: 'Tồn kho', color: 'default', badge: 'default' },
     returned_to_partner: { label: 'Đã trả đối tác', color: 'default', badge: 'default' },
 };
@@ -438,21 +441,36 @@ const AssetDetail: React.FC = () => {
     const openTransfer = transfers.find((transfer: Transfer) => ['pending', 'approved'].includes(transfer.status));
     const hasOpenTransfer = asset.hasOpenTransfer || Boolean(openTransfer);
     const returnedToPartner = isReturnedToPartner(asset.status);
+    const loanedOut = asset.status === AssetStatus.LOANED_OUT;
     const inDisposalFlow = isAssetInDisposalFlow(asset.status);
+    const activeOutboundBorrowing = borrowings.find(
+        (item) => item.direction === BorrowingDirection.OUTBOUND && item.status === BorrowingStatus.ACTIVE
+    );
+    const activeOutboundBatchId = activeOutboundBorrowing?.batchId || activeOutboundBorrowing?.batch?.id;
+    const borrowingActionPath = loanedOut
+        ? activeOutboundBatchId
+            ? `/borrowings/outbound/${activeOutboundBatchId}`
+            : '/borrowings'
+        : `/borrowings/new?assetId=${asset.id}`;
+    const borrowingActionLabel = loanedOut ? 'Mở lô đang cho mượn' : 'Tạo giao dịch mượn / thuê';
     const disposalRecords = asset.disposalRecords ?? [];
     const latestDisposalRecord = disposalRecords[0];
     const operationDisabledReason = returnedToPartner
         ? 'Máy đã trả đối tác, không thể tạo nghiệp vụ mới'
-        : inDisposalFlow
-          ? 'Máy đang/đã nằm trong hồ sơ thanh lý, chỉ nên xử lý trong module thanh lý'
-          : '';
+        : loanedOut
+          ? 'Máy đang ở đối tác; nhận lại trong lô cho mượn trước khi tạo nghiệp vụ khác'
+          : inDisposalFlow
+            ? 'Máy đang/đã nằm trong hồ sơ thanh lý, chỉ nên xử lý trong module thanh lý'
+            : '';
     const transferDisabledReason = returnedToPartner
         ? 'Máy đã trả đối tác, không thể điều chuyển'
-        : inDisposalFlow
-          ? 'Máy đang/đã nằm trong hồ sơ thanh lý, không thể điều chuyển'
-          : hasOpenTransfer
-            ? 'Máy đang có lệnh điều chuyển chưa hoàn tất'
-            : '';
+        : loanedOut
+          ? 'Máy đang được cho đối tác mượn, không thể điều chuyển'
+          : inDisposalFlow
+            ? 'Máy đang/đã nằm trong hồ sơ thanh lý, không thể điều chuyển'
+            : hasOpenTransfer
+              ? 'Máy đang có lệnh điều chuyển chưa hoàn tất'
+              : '';
     const ownershipLabel = ASSET_OWNERSHIP_LABEL[asset.ownershipType] || ASSET_OWNERSHIP_LABEL.owned;
     const latestDisposalItemStatus = latestDisposalRecord
         ? (DISPOSAL_ITEM_STATUS_LABEL[latestDisposalRecord.status] ?? {
@@ -758,14 +776,14 @@ const AssetDetail: React.FC = () => {
                             </Button>
                         </Tooltip>
                         {canManage ? (
-                            <Tooltip title={operationDisabledReason}>
+                            <Tooltip title={loanedOut ? undefined : operationDisabledReason}>
                                 <Button
                                     block
                                     icon={<RollbackOutlined />}
-                                    disabled={Boolean(operationDisabledReason)}
-                                    onClick={() => navigate(`/borrowings/new?assetId=${asset.id}`)}
+                                    disabled={!loanedOut && Boolean(operationDisabledReason)}
+                                    onClick={() => navigate(borrowingActionPath)}
                                 >
-                                    Tạo giao dịch mượn / thuê
+                                    {borrowingActionLabel}
                                 </Button>
                             </Tooltip>
                         ) : null}
@@ -846,10 +864,10 @@ const AssetDetail: React.FC = () => {
                     <Button
                         size='small'
                         icon={<RollbackOutlined />}
-                        disabled={Boolean(operationDisabledReason)}
-                        onClick={() => navigate(`/borrowings/new?assetId=${asset.id}`)}
+                        disabled={!loanedOut && Boolean(operationDisabledReason)}
+                        onClick={() => navigate(borrowingActionPath)}
                     >
-                        Tạo giao dịch
+                        {loanedOut ? 'Mở lô cho mượn' : 'Tạo giao dịch'}
                     </Button>
                 ) : null
             }
@@ -861,13 +879,19 @@ const AssetDetail: React.FC = () => {
                             key={item.id}
                             type='button'
                             className='flex w-full cursor-pointer flex-col gap-3 py-4 text-left transition-colors hover:bg-slate-50 md:flex-row md:items-start md:justify-between'
-                            onClick={() => navigate(`/borrowings/${item.id}`)}
+                            onClick={() =>
+                                navigate(
+                                    item.direction === BorrowingDirection.OUTBOUND && (item.batchId || item.batch?.id)
+                                        ? `/borrowings/outbound/${item.batchId || item.batch?.id}`
+                                        : `/borrowings/${item.id}`
+                                )
+                            }
                         >
                             <div className='flex flex-col gap-1 px-1'>
                                 <div className='flex flex-wrap items-center gap-2'>
                                     <Text strong>{item.borrowerName || item.partnerName || '-'}</Text>
-                                    <TransactionTypeBadge type={item.type} />
-                                    <TransactionStatusBadge status={item.status} />
+                                    <TransactionTypeBadge type={item.type} direction={item.direction} />
+                                    <TransactionStatusBadge status={item.status} direction={item.direction} />
                                 </div>
                                 {item.purpose ? <Text type='secondary'>{item.purpose}</Text> : null}
                                 {item.location ? <Text type='secondary'>Vị trí: {item.location}</Text> : null}
@@ -1093,14 +1117,14 @@ const AssetDetail: React.FC = () => {
                                 </Button>
                             </Tooltip>
                             {canManage ? (
-                                <Tooltip title={operationDisabledReason}>
+                                <Tooltip title={loanedOut ? undefined : operationDisabledReason}>
                                     <Button
                                         className='asset-detail-action-button'
                                         icon={<RollbackOutlined />}
-                                        disabled={Boolean(operationDisabledReason)}
-                                        onClick={() => navigate(`/borrowings/new?assetId=${asset.id}`)}
+                                        disabled={!loanedOut && Boolean(operationDisabledReason)}
+                                        onClick={() => navigate(borrowingActionPath)}
                                     >
-                                        Tạo giao dịch
+                                        {loanedOut ? 'Mở lô cho mượn' : 'Tạo giao dịch'}
                                     </Button>
                                 </Tooltip>
                             ) : null}
@@ -1127,7 +1151,18 @@ const AssetDetail: React.FC = () => {
                         </div>
                     </div>
 
-                    {canUpdateStatus && !inDisposalFlow ? (
+                    {canUpdateStatus && loanedOut ? (
+                        <div className='asset-detail-status-panel rounded-2xl border border-cyan-200 bg-cyan-50 p-4'>
+                            <div className='mb-1 flex items-center gap-2 font-bold text-cyan-900'>
+                                <HistoryOutlined />
+                                Máy đang được cho đối tác mượn
+                            </div>
+                            <Text className='text-sm !text-cyan-800'>
+                                Trạng thái và vị trí được quản lý theo lô bàn giao. Nhận lại máy trong module Mượn / trả
+                                để khôi phục đúng dữ liệu trước khi bàn giao.
+                            </Text>
+                        </div>
+                    ) : canUpdateStatus && !inDisposalFlow ? (
                         <div className='asset-detail-status-panel rounded-2xl border border-slate-200 bg-slate-50 p-4'>
                             <div className='mb-3 flex items-center gap-2'>
                                 <ToolOutlined className='text-slate-500' />
@@ -1139,7 +1174,9 @@ const AssetDetail: React.FC = () => {
                                 shape='round'
                                 options={Object.entries(STATUS_CFG)
                                     .filter(
-                                        ([value]) => !isReturnedToPartner(value as AssetStatus) || returnedToPartner
+                                        ([value]) =>
+                                            value !== AssetStatus.LOANED_OUT &&
+                                            (!isReturnedToPartner(value as AssetStatus) || returnedToPartner)
                                     )
                                     .map(([value, config]) => ({
                                         value: value as AssetStatus,

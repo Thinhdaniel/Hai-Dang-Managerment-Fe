@@ -110,6 +110,13 @@ const statusMeta: Record<AssetStatus, { bg: string; text: string; border: string
         dot: 'bg-indigo-500',
         label: 'Đang mượn',
     },
+    loaned_out: {
+        bg: 'bg-cyan-50',
+        text: 'text-cyan-700',
+        border: 'border-cyan-200',
+        dot: 'bg-cyan-600',
+        label: 'Cho đối tác mượn',
+    },
     storage: {
         bg: 'bg-slate-100',
         text: 'text-slate-700',
@@ -267,7 +274,6 @@ const AssetList: React.FC = () => {
         const next = filtersFromParams();
         setDraftFilters(next);
         setFilters(next);
-        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [searchParams]);
 
     const { data: assetResponse, isLoading } = useQuery({
@@ -623,9 +629,7 @@ const AssetList: React.FC = () => {
         }
 
         const [firstAsset] = selectedAssets;
-        const hasDifferentSource = selectedAssets.some(
-            (asset) => asset.plantId !== firstAsset.plantId
-        );
+        const hasDifferentSource = selectedAssets.some((asset) => asset.plantId !== firstAsset.plantId);
 
         if (hasDifferentSource) {
             message.warning('Chỉ có thể tạo một lệnh cho các máy cùng cơ sở hiện tại');

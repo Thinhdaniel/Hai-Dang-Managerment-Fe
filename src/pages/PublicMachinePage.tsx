@@ -18,6 +18,7 @@ const statusMeta: Record<AssetStatus, { label: string; className: string }> = {
     maintenance: { label: 'Bảo trì', className: 'border-amber-200 bg-amber-50 text-amber-700' },
     broken: { label: 'Hỏng', className: 'border-rose-200 bg-rose-50 text-rose-700' },
     borrowing: { label: 'Đang mượn', className: 'border-indigo-200 bg-indigo-50 text-indigo-700' },
+    loaned_out: { label: 'Đang cho đối tác mượn', className: 'border-cyan-200 bg-cyan-50 text-cyan-700' },
     storage: { label: 'Lưu kho', className: 'border-slate-200 bg-slate-100 text-slate-700' },
     returned_to_partner: { label: 'Đã trả đối tác', className: 'border-slate-200 bg-slate-100 text-slate-600' },
 };

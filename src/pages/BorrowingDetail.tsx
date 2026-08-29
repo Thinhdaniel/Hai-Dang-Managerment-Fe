@@ -1,4 +1,4 @@
-import React, { lazy, useMemo, useState } from 'react';
+import React, { lazy, useEffect, useMemo, useState } from 'react';
 import { App, Button, Card, Descriptions, Empty, Space, Spin, Timeline, Typography } from 'antd';
 import { ArrowLeftOutlined, RollbackOutlined } from '@ant-design/icons';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -9,6 +9,7 @@ import LazyBoundary from '../components/shared/LazyBoundary';
 import TransactionStatusBadge from '../components/transactions/TransactionStatusBadge';
 import TransactionTypeBadge from '../components/transactions/TransactionTypeBadge';
 import { borrowingService } from '../core/services/borrowing.service';
+import { BorrowingDirection } from '../core/types';
 
 const ReturnTransactionModal = lazy(() => import('../components/transactions/ReturnTransactionModal'));
 
@@ -29,6 +30,13 @@ const BorrowingDetail: React.FC = () => {
         queryFn: () => borrowingService.getById(id),
         enabled: Boolean(id),
     });
+
+    useEffect(() => {
+        const batchId = transaction?.batchId || transaction?.batch?.id;
+        if (transaction?.direction === BorrowingDirection.OUTBOUND && batchId) {
+            navigate(`/borrowings/outbound/${batchId}`, { replace: true });
+        }
+    }, [navigate, transaction]);
 
     const returnMutation = useMutation({
         mutationFn: ({ returnTime, note }: { returnTime: string; note?: string }) =>
@@ -115,6 +123,14 @@ const BorrowingDetail: React.FC = () => {
         return <Empty description='Không tìm thấy giao dịch thiết bị' />;
     }
 
+    if (transaction.direction === BorrowingDirection.OUTBOUND && (transaction.batchId || transaction.batch?.id)) {
+        return (
+            <div className='flex min-h-[50vh] items-center justify-center'>
+                <Spin size='large' />
+            </div>
+        );
+    }
+
     return (
         <div className='flex flex-col gap-6'>
             <section className='overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm'>
@@ -133,7 +149,7 @@ const BorrowingDetail: React.FC = () => {
                                 <Title level={2} className='!m-0 !text-2xl font-bold text-slate-800'>
                                     {transaction.asset?.name || 'Giao dịch thiết bị'}
                                 </Title>
-                                <TransactionTypeBadge type={transaction.type} />
+                                <TransactionTypeBadge type={transaction.type} direction={transaction.direction} />
                                 <TransactionStatusBadge status={transaction.status} />
                             </div>
                             <div className='flex flex-wrap gap-2'>
@@ -199,7 +215,7 @@ const BorrowingDetail: React.FC = () => {
                             className='[&_.ant-descriptions-item-content]:font-medium [&_.ant-descriptions-item-content]:text-slate-800 [&_.ant-descriptions-item-label]:font-medium [&_.ant-descriptions-item-label]:text-slate-500'
                         >
                             <Descriptions.Item label='Loại giao dịch'>
-                                <TransactionTypeBadge type={transaction.type} />
+                                <TransactionTypeBadge type={transaction.type} direction={transaction.direction} />
                             </Descriptions.Item>
                             <Descriptions.Item label='Trạng thái'>
                                 <TransactionStatusBadge status={transaction.status} />

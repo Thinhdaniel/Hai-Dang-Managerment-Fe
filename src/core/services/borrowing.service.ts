@@ -6,13 +6,17 @@ import type {
     BorrowingBatchDetail,
     BorrowingBatchStats,
     BorrowingBatchStatus,
+    BorrowingDirection,
     BorrowingFilter,
     BorrowingType,
     BulkReturnBorrowingBatchPayload,
     BulkReturnBorrowingBatchResponse,
+    AddOutboundBorrowingAssetsPayload,
+    ConfirmOutboundHandoverPayload,
     CreateBorrowingBatchPayload,
     CreateBorrowingPayload,
     PaginatedResponse,
+    OutboundBatchReasonPayload,
     ReceiveBorrowingBatchByQrPayload,
     ReceiveBorrowingBatchBulkPayload,
     UpdateBorrowingBatchPayload,
@@ -26,6 +30,7 @@ export type BorrowingBatchListParams = {
     search?: string;
     type?: BorrowingType;
     status?: BorrowingBatchStatus;
+    direction?: BorrowingDirection;
     plantId?: string;
 };
 
@@ -83,4 +88,28 @@ export const borrowingService = {
             `${BASE}/batches/${id}/bulk-return`,
             data
         ),
+
+    addOutboundAssets: (id: string, data: AddOutboundBorrowingAssetsPayload): Promise<BorrowingBatchDetail> =>
+        api.post<BorrowingBatchDetail, AddOutboundBorrowingAssetsPayload>(
+            `${BASE}/batches/${id}/outbound-assets`,
+            data
+        ),
+
+    removeOutboundAsset: (id: string, itemId: string): Promise<BorrowingBatchDetail> =>
+        api.delete<BorrowingBatchDetail>(`${BASE}/batches/${id}/outbound-assets/${itemId}`),
+
+    submitOutboundBatch: (id: string): Promise<BorrowingBatchDetail> =>
+        api.post<BorrowingBatchDetail>(`${BASE}/batches/${id}/submit`),
+
+    approveOutboundBatch: (id: string): Promise<BorrowingBatchDetail> =>
+        api.post<BorrowingBatchDetail>(`${BASE}/batches/${id}/approve`),
+
+    rejectOutboundBatch: (id: string, data: OutboundBatchReasonPayload): Promise<BorrowingBatchDetail> =>
+        api.post<BorrowingBatchDetail, OutboundBatchReasonPayload>(`${BASE}/batches/${id}/reject`, data),
+
+    confirmOutboundHandover: (id: string, data: ConfirmOutboundHandoverPayload): Promise<BorrowingBatchDetail> =>
+        api.post<BorrowingBatchDetail, ConfirmOutboundHandoverPayload>(`${BASE}/batches/${id}/confirm-handover`, data),
+
+    cancelOutboundBatch: (id: string, data: OutboundBatchReasonPayload): Promise<BorrowingBatchDetail> =>
+        api.post<BorrowingBatchDetail, OutboundBatchReasonPayload>(`${BASE}/batches/${id}/cancel`, data),
 };

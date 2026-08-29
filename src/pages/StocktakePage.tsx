@@ -50,6 +50,7 @@ import { floorMapService } from '../core/services/floor-map.service';
 import { plantService, stocktakeService } from '../core/services';
 import { transferService } from '../core/services/transfer.service';
 import {
+    AssetStatus,
     type Asset,
     type CreateStocktakeSessionPayload,
     type CreateTransferPayload,
@@ -121,6 +122,8 @@ const areaLabel = (value?: string | null) =>
           ? 'Tất cả khu vực'
           : normalizeArea(value) || 'Tất cả';
 const assetLocation = (asset: Asset) => `${asset.plant?.name || 'Chưa rõ cơ sở'} / ${asset.area || 'Chưa gắn khu vực'}`;
+const isExpectedAtPlant = (asset: Asset) =>
+    !isAssetClosedLifecycle(asset.status) && asset.status !== AssetStatus.LOANED_OUT;
 const formatTime = (value?: string) => (value ? new Date(value).toLocaleString('vi-VN') : '-');
 const formatClock = (value?: string | null) =>
     value ? new Date(value).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' }) : '-';
@@ -382,7 +385,7 @@ const StocktakePage: React.FC = () => {
     const areaOptions = useMemo(() => {
         const values = new Map<string, string>();
         plantAssets.forEach((asset) => {
-            if (isAssetClosedLifecycle(asset.status)) return;
+            if (!isExpectedAtPlant(asset)) return;
             const value = areaValue(asset.area);
             values.set(value.toLowerCase(), value);
         });
@@ -444,7 +447,7 @@ const StocktakePage: React.FC = () => {
 
         const response = plantAssetsQuery.data ?? (await plantAssetsQuery.refetch()).data;
         const scopedAssets = (response?.data ?? []).filter(
-            (asset) => !isAssetClosedLifecycle(asset.status) && scopeMatches(asset, selectedArea)
+            (asset) => isExpectedAtPlant(asset) && scopeMatches(asset, selectedArea)
         );
         const floorMapResponse = floorMapQuery.data ?? (await floorMapQuery.refetch()).data;
         const expectedIds = new Set(scopedAssets.map((asset) => asset.id));
@@ -735,6 +738,28 @@ const StocktakePage: React.FC = () => {
                 } else {
                     message.success(`Có mặt: ${asset.machineCode}`);
                 }
+                return;
+            }
+
+            if (asset.status === AssetStatus.LOANED_OUT) {
+                const loanMessage = 'Máy đang được ghi nhận ở đối tác; cần nhận lại theo lô trước khi đưa vào kiểm kê';
+                recordQrScan({
+                    ...logBase,
+                    assetId: asset.id,
+                    result: 'wrong_area',
+                    metadata: { selectedPlantId, selectedArea, assetStatus: asset.status },
+                });
+                appendRecord({
+                    type: 'wrong_area',
+                    rawValue,
+                    asset,
+                    message: loanMessage,
+                    gpsNote,
+                    ...coverageFields,
+                });
+                flashFeedback('wrong_area', asset.machineCode, loanMessage);
+                setActiveTab('anomalies');
+                message.warning(`Máy chưa được nhận lại: ${asset.machineCode}`);
                 return;
             }
 
