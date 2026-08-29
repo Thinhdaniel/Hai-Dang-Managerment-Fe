@@ -10,6 +10,7 @@ import {
     WarningOutlined,
 } from '@ant-design/icons';
 import dayjs from 'dayjs';
+import { getTransferBlockedAssetReason } from '../../core/lib/transferEligibility';
 import type { Asset, CreateTransferPayload, Plant } from '../../core/types';
 
 const { TextArea } = Input;
@@ -68,6 +69,8 @@ const TransferModal = ({
     const sourceAreaSummary = getSourceAreaSummary(transferAssets);
     const hasMultipleSourceAreas = sourceAreaSummary === 'Nhiều khu vực';
     const isSamePlant = Boolean(toPlantId && sourcePlantId && toPlantId === sourcePlantId);
+    const blockedAsset = transferAssets.find((item) => getTransferBlockedAssetReason(item.status));
+    const blockedReason = blockedAsset ? getTransferBlockedAssetReason(blockedAsset.status) : '';
 
     useEffect(() => {
         if (!open) {
@@ -86,6 +89,10 @@ const TransferModal = ({
 
     const handleFinish = async (values: TransferModalFormValues) => {
         if (!transferAssets.length) return;
+        if (blockedReason) {
+            message.error(`${blockedAsset?.machineCode || blockedAsset?.name}: ${blockedReason}`);
+            return;
+        }
 
         const targetArea = normalizeArea(values.toArea);
         const unchangedAssets = transferAssets.filter(
@@ -180,6 +187,7 @@ const TransferModal = ({
                     size='large'
                     icon={<SwapOutlined />}
                     loading={submitting}
+                    disabled={Boolean(blockedReason)}
                     onClick={() => form.submit()}
                 >
                     Tạo lệnh điều chuyển
@@ -187,6 +195,15 @@ const TransferModal = ({
             ]}
         >
             <div className='flex flex-col gap-4'>
+                {blockedReason ? (
+                    <Alert
+                        showIcon
+                        type='error'
+                        title='Không thể tạo lệnh điều chuyển'
+                        description={`${blockedAsset?.machineCode || blockedAsset?.name}: ${blockedReason}`}
+                        classNames={{ root: 'rounded-xl' }}
+                    />
+                ) : null}
                 <Alert
                     showIcon
                     type='info'

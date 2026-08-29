@@ -45,15 +45,11 @@ import type { AiAssetSearchFilters } from '../core/services/ai-help.service';
 import { useAuth } from '../core/contexts/AuthContext';
 import { can, isAdmin, isDirector } from '../core/lib/permissions';
 import { normalizeSearchTerm } from '../core/lib/search';
+import { getTransferBlockedAssetReason, isTransferBlockedAssetStatus } from '../core/lib/transferEligibility';
 import { brandService, plantService } from '../core/services';
 import { assetService } from '../core/services/asset.service';
 import { transferService } from '../core/services/transfer.service';
-import {
-    ASSET_OWNERSHIP_LABEL,
-    ASSET_OWNERSHIP_OPTIONS,
-    isAssetInDisposalFlow,
-    isReturnedToPartner,
-} from '../core/constants';
+import { ASSET_OWNERSHIP_LABEL, ASSET_OWNERSHIP_OPTIONS, isAssetInDisposalFlow } from '../core/constants';
 import {
     AssetOwnershipType,
     AssetStatus,
@@ -215,12 +211,8 @@ const renderOwnershipPill = (ownershipType: AssetOwnershipType = AssetOwnershipT
 };
 
 const getAssetLocation = (asset: Asset) => asset.area || asset.plant?.name || 'Chưa gắn khu vực';
-const isTransferBlockedAsset = (status?: AssetStatus) => isReturnedToPartner(status) || isAssetInDisposalFlow(status);
-const getTransferBlockedReason = (status?: AssetStatus) => {
-    if (isReturnedToPartner(status)) return 'Máy đã trả đối tác, không thể điều chuyển';
-    if (isAssetInDisposalFlow(status)) return 'Máy đang/đã nằm trong hồ sơ thanh lý, không thể điều chuyển';
-    return '';
-};
+const isTransferBlockedAsset = isTransferBlockedAssetStatus;
+const getTransferBlockedReason = getTransferBlockedAssetReason;
 const formatNumber = (value?: number) => (value ?? 0).toLocaleString('vi-VN');
 
 const AssetList: React.FC = () => {
@@ -602,7 +594,7 @@ const AssetList: React.FC = () => {
 
     const handleOpenTransfer = (asset: Asset) => {
         if (isTransferBlockedAsset(asset.status)) {
-            message.warning('Máy đã trả đối tác, không thể tạo lệnh điều chuyển');
+            message.warning(getTransferBlockedReason(asset.status));
             return;
         }
 
@@ -612,10 +604,12 @@ const AssetList: React.FC = () => {
     };
 
     const handleOpenSelectedTransfer = () => {
-        const returnedPartnerAssets = selectedAssets.filter((asset) => isTransferBlockedAsset(asset.status));
-        if (returnedPartnerAssets.length) {
+        const blockedLifecycleAssets = selectedAssets.filter((asset) => isTransferBlockedAsset(asset.status));
+        if (blockedLifecycleAssets.length) {
             message.warning(
-                `Không thể điều chuyển máy đã trả đối tác: ${returnedPartnerAssets.map((asset) => asset.name).join(', ')}`
+                `Không thể điều chuyển: ${blockedLifecycleAssets
+                    .map((asset) => `${asset.machineCode || asset.name} (${getTransferBlockedReason(asset.status)})`)
+                    .join(', ')}`
             );
             return;
         }
