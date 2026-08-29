@@ -110,6 +110,12 @@ const formatDateTime = (value?: string) => (value ? dayjs(value).format('DD/MM/Y
 const formatCurrency = (value?: number) =>
     typeof value === 'number' ? `${value.toLocaleString('vi-VN')} đ` : 'Chưa khai báo';
 
+const getSuggestedHandoverTime = (borrowTime?: string) => {
+    const now = dayjs();
+    const plannedTime = dayjs(borrowTime);
+    return plannedTime.isValid() && !plannedTime.isAfter(now) ? plannedTime : now;
+};
+
 const EvidenceImages = ({ urls = [] }: { urls?: string[] }) =>
     urls.length ? (
         <Image.PreviewGroup>
@@ -857,7 +863,7 @@ const OutboundBorrowingBatchDetail: React.FC = () => {
                         size='large'
                         icon={<CheckCircleOutlined />}
                         onClick={() => {
-                            handoverForm.setFieldsValue({ handoverTime: dayjs() });
+                            handoverForm.setFieldsValue({ handoverTime: getSuggestedHandoverTime(batch.borrowTime) });
                             setIsHandoverOpen(true);
                         }}
                         className='h-12 bg-cyan-700 font-bold hover:!bg-cyan-800'
@@ -931,7 +937,7 @@ const OutboundBorrowingBatchDetail: React.FC = () => {
                         type='primary'
                         icon={<AuditOutlined />}
                         onClick={() => {
-                            handoverForm.setFieldsValue({ handoverTime: dayjs() });
+                            handoverForm.setFieldsValue({ handoverTime: getSuggestedHandoverTime(batch.borrowTime) });
                             setIsHandoverOpen(true);
                         }}
                         className='bg-cyan-700 hover:!bg-cyan-800'
@@ -1039,6 +1045,13 @@ const OutboundBorrowingBatchDetail: React.FC = () => {
                     type='warning'
                     showIcon
                     message={`Thao tác này chuyển ${items.filter((item) => item.status === BorrowingStatus.DRAFT).length} máy sang trạng thái “Đang cho đối tác mượn”.`}
+                    className='mb-4'
+                />
+                <Alert
+                    type='info'
+                    showIcon
+                    message='Có thể ghi nhận bàn giao hồi tố'
+                    description='Nếu máy đã giao trước khi lập lệnh, chọn đúng thời điểm giao thực tế. Thời điểm phê duyệt vẫn được lưu riêng trong lịch sử hệ thống.'
                     className='mb-4'
                 />
                 <Form form={handoverForm} layout='vertical'>
