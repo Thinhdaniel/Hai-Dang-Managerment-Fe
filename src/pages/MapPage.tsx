@@ -27,6 +27,21 @@ import { AssetStatus, type AssetLocationPoint } from '../core/types';
 const DEFAULT_CENTER: [number, number] = [16.0, 107.8];
 const DEFAULT_ZOOM = 6;
 const STATUS_KEYS = Object.values(AssetStatus);
+const CARTO_BASEMAP_KEY = String(import.meta.env.VITE_CARTO_BASEMAP_KEY || '').trim();
+const BASEMAP = CARTO_BASEMAP_KEY
+    ? {
+          url: `https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png?key=${encodeURIComponent(CARTO_BASEMAP_KEY)}`,
+          attribution:
+              '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/attributions">CARTO</a>',
+          subdomains: 'abcd',
+          maxZoom: 20,
+      }
+    : {
+          url: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+          attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+          subdomains: undefined,
+          maxZoom: 19,
+      };
 
 type TypeMeta = {
     key: string;
@@ -579,30 +594,30 @@ const MapPage: React.FC = () => {
                                         typeFilter.includes(group.meta.key)
                                 )
                                 .map((group) => {
-                                const selected = typeFilter.includes(group.meta.key);
-                                return (
-                                    <button
-                                        key={group.meta.key}
-                                        type='button'
-                                        className={
-                                            selected ? 'machine-map-type-chip is-active' : 'machine-map-type-chip'
-                                        }
-                                        style={{ '--type-color': group.meta.color } as CSSProperties}
-                                        onClick={() => {
-                                            setTypeFilter((current) =>
-                                                current.includes(group.meta.key)
-                                                    ? current.filter((key) => key !== group.meta.key)
-                                                    : [...current, group.meta.key]
-                                            );
-                                            setClusterAssets([]);
-                                        }}
-                                    >
-                                        <i aria-hidden='true' />
-                                        <span>{group.meta.label}</span>
-                                        <b>{group.assets.length}</b>
-                                    </button>
-                                );
-                            })}
+                                    const selected = typeFilter.includes(group.meta.key);
+                                    return (
+                                        <button
+                                            key={group.meta.key}
+                                            type='button'
+                                            className={
+                                                selected ? 'machine-map-type-chip is-active' : 'machine-map-type-chip'
+                                            }
+                                            style={{ '--type-color': group.meta.color } as CSSProperties}
+                                            onClick={() => {
+                                                setTypeFilter((current) =>
+                                                    current.includes(group.meta.key)
+                                                        ? current.filter((key) => key !== group.meta.key)
+                                                        : [...current, group.meta.key]
+                                                );
+                                                setClusterAssets([]);
+                                            }}
+                                        >
+                                            <i aria-hidden='true' />
+                                            <span>{group.meta.label}</span>
+                                            <b>{group.assets.length}</b>
+                                        </button>
+                                    );
+                                })}
                         </div>
                     </div>
 
@@ -699,8 +714,10 @@ const MapPage: React.FC = () => {
                                 scrollWheelZoom
                             >
                                 <TileLayer
-                                    attribution='&copy; OpenStreetMap &copy; CARTO'
-                                    url='https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png'
+                                    attribution={BASEMAP.attribution}
+                                    url={BASEMAP.url}
+                                    subdomains={BASEMAP.subdomains}
+                                    maxZoom={BASEMAP.maxZoom}
                                 />
                                 <FitBounds points={points} signal={fitSignal} />
                                 {facilities.map((facility) => (
