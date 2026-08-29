@@ -39,7 +39,7 @@ const BASEMAP = CARTO_BASEMAP_KEY
     : {
           url: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
           attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
-          subdomains: undefined,
+          subdomains: 'abc',
           maxZoom: 19,
       };
 
