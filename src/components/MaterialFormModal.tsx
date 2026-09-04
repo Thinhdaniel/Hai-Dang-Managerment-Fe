@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { App, Form, Input, InputNumber, Modal, Switch } from 'antd';
+import { Alert, App, Form, Input, InputNumber, Modal, Segmented, Switch } from 'antd';
 import { DatabaseOutlined } from '@ant-design/icons';
 import type { Material, MaterialPayload } from '../core/services/material.service';
 
@@ -11,6 +11,9 @@ type MaterialFormValues = {
     minStockLevel?: number;
     description?: string;
     isActive?: boolean;
+    reuseTrackingMode?: 'none' | 'quantity' | 'serialized';
+    defaultReturnDays?: number;
+    conditionCheckRequired?: boolean;
 };
 
 type MaterialFormModalProps = {
@@ -27,6 +30,7 @@ const MaterialFormModal: React.FC<MaterialFormModalProps> = ({ open, onClose, on
     const [form] = Form.useForm<MaterialFormValues>();
     const { message } = App.useApp();
     const [submitting, setSubmitting] = useState(false);
+    const reuseTrackingMode = Form.useWatch('reuseTrackingMode', form) || 'none';
 
     useEffect(() => {
         if (!open) {
@@ -42,6 +46,9 @@ const MaterialFormModal: React.FC<MaterialFormModalProps> = ({ open, onClose, on
                 minStockLevel: initialValues.minStockLevel ?? 0,
                 description: initialValues.description,
                 isActive: initialValues.isActive,
+                reuseTrackingMode: initialValues.reuseTrackingMode || 'none',
+                defaultReturnDays: initialValues.defaultReturnDays ?? 0,
+                conditionCheckRequired: initialValues.conditionCheckRequired === true,
             });
             return;
         }
@@ -50,6 +57,9 @@ const MaterialFormModal: React.FC<MaterialFormModalProps> = ({ open, onClose, on
         form.setFieldsValue({
             minStockLevel: 0,
             isActive: true,
+            reuseTrackingMode: 'none',
+            defaultReturnDays: 0,
+            conditionCheckRequired: false,
         });
     }, [form, initialValues, open]);
 
@@ -65,6 +75,10 @@ const MaterialFormModal: React.FC<MaterialFormModalProps> = ({ open, onClose, on
             minStockLevel: values.minStockLevel ?? 0,
             description: sanitizeValue(values.description) || undefined,
             isActive: values.isActive !== false,
+            reuseTrackingMode: values.reuseTrackingMode || 'none',
+            defaultReturnDays: values.reuseTrackingMode === 'none' ? 0 : (values.defaultReturnDays ?? 0),
+            conditionCheckRequired:
+                values.reuseTrackingMode === 'none' ? false : values.conditionCheckRequired === true,
         };
 
         try {
@@ -157,6 +171,48 @@ const MaterialFormModal: React.FC<MaterialFormModalProps> = ({ open, onClose, on
                     >
                         <Switch checkedChildren='Hoạt động' unCheckedChildren='Ngừng' />
                     </Form.Item>
+
+                    <div className='rounded-lg border border-slate-200 bg-slate-50 p-4 md:col-span-2'>
+                        <div className='mb-3'>
+                            <div className='text-sm font-semibold text-slate-800'>Kiểm soát sau cấp phát</div>
+                            <div className='mt-1 text-xs text-slate-500'>
+                                Chọn cách theo dõi trách nhiệm và thu hồi vật tư sau khi cấp.
+                            </div>
+                        </div>
+                        <Form.Item name='reuseTrackingMode'>
+                            <Segmented
+                                block
+                                options={[
+                                    { label: 'Tiêu hao', value: 'none' },
+                                    { label: 'Theo số lượng', value: 'quantity' },
+                                    { label: 'Theo từng chiếc', value: 'serialized' },
+                                ]}
+                            />
+                        </Form.Item>
+                        {reuseTrackingMode !== 'none' ? (
+                            <>
+                                <Alert
+                                    className='my-3'
+                                    type='info'
+                                    showIcon
+                                    message='Khi cấp vật tư này, người giữ và đợt mã hàng sẽ là thông tin bắt buộc.'
+                                />
+                                <div className='grid grid-cols-1 gap-4 md:grid-cols-2'>
+                                    <Form.Item name='defaultReturnDays' label='Số ngày dự kiến thu hồi'>
+                                        <InputNumber min={0} max={3650} precision={0} className='w-full' size='large' />
+                                    </Form.Item>
+                                    <Form.Item
+                                        name='conditionCheckRequired'
+                                        label='Kiểm tra tình trạng khi trả'
+                                        valuePropName='checked'
+                                        className='rounded-lg border border-slate-200 bg-white px-4 py-3'
+                                    >
+                                        <Switch checkedChildren='Bắt buộc' unCheckedChildren='Không bắt buộc' />
+                                    </Form.Item>
+                                </div>
+                            </>
+                        ) : null}
+                    </div>
 
                     <Form.Item name='description' label='Mô tả' className='md:col-span-2'>
                         <Input.TextArea

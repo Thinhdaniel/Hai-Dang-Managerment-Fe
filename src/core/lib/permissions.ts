@@ -26,6 +26,7 @@ export type Capability =
     | 'inventory.view'
     | 'distribution.view'
     | 'distribution.manage'
+    | 'materialCustody.manage'
     | 'supplyRequest.manage'
     | 'technicalPurchase.manage'
     | 'procurement.operate'
@@ -65,6 +66,7 @@ const ROLE_CAPS: Record<Exclude<UserRole, UserRole.ADMIN>, Capability[]> = {
         'inventory.view',
         'distribution.view',
         'distribution.manage',
+        'materialCustody.manage',
         'supplyRequest.manage',
         'technicalPurchase.manage',
         'procurement.operate',
@@ -95,6 +97,7 @@ const ROLE_CAPS: Record<Exclude<UserRole, UserRole.ADMIN>, Capability[]> = {
         'inventory.view',
         'distribution.view',
         'distribution.manage',
+        'materialCustody.manage',
         'supplyRequest.manage',
         'technicalPurchase.manage',
         'procurement.operate',

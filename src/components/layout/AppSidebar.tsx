@@ -139,6 +139,14 @@ const navigationSections: NavigationSection[] = [
                 capability: 'distribution.view',
             },
             {
+                path: '/materials/custody',
+                label: 'CCDC & thu hồi',
+                description: 'Theo dõi cấp cho công nhân',
+                icon: <AuditOutlined />,
+                matchMode: 'exact',
+                capability: 'materialCustody.manage',
+            },
+            {
                 path: '/materials/supply-requests',
                 label: 'Đề xuất cấp vật tư',
                 description: 'Yêu cầu từ các cơ sở',

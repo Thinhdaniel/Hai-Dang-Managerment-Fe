@@ -11,6 +11,7 @@ export type NotificationActionType =
     | 'technical_purchase'
     | 'purchase_order'
     | 'distribution'
+    | 'material_custody'
     | 'chat'
     | 'floor_map'
     | 'digest'

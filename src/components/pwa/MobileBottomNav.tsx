@@ -28,7 +28,13 @@ type DockButtonProps = {
 };
 
 const isExactOrPrefix = (pathname: string, path: string) => pathname === path || pathname.startsWith(`${path}/`);
-const materialCatalogPaths = ['/materials', '/materials/inventory', '/materials/suppliers', '/materials/reports'];
+const materialCatalogPaths = [
+    '/materials',
+    '/materials/inventory',
+    '/materials/suppliers',
+    '/materials/reports',
+    '/materials/custody',
+];
 const formatBadge = (count?: number) => {
     if (!count) return '';
     return count > 9 ? '9+' : String(count);

@@ -1,19 +1,38 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import dayjs, { type Dayjs } from 'dayjs';
 import {
-    Alert, App, Button, DatePicker, Divider, Input, InputNumber,
-    Modal, Select, Space, Tag, Tooltip,
+    Alert,
+    App,
+    Button,
+    DatePicker,
+    Divider,
+    Input,
+    InputNumber,
+    Modal,
+    Segmented,
+    Select,
+    Space,
+    Tag,
+    Tooltip,
 } from 'antd';
 import {
-    CheckCircleOutlined, ClockCircleOutlined, DeleteOutlined,
-    PlusOutlined, SaveOutlined, ScanOutlined, SendOutlined,
+    CheckCircleOutlined,
+    ClockCircleOutlined,
+    DeleteOutlined,
+    PlusOutlined,
+    SaveOutlined,
+    ScanOutlined,
+    SendOutlined,
 } from '@ant-design/icons';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
-    distributionService, inventoryService,
-    type Distribution, type MaterialInventory,
+    distributionService,
+    inventoryService,
+    type Distribution,
+    type MaterialInventory,
 } from '../core/services/material.service';
 import { aiMaterialMatchService, aiOcrService } from '../core/services/ai-help.service';
+import { materialCustodyService, type CustodyHolderType } from '../core/services/material-custody.service';
 
 const fmt = (v?: number) => (v ?? 0).toLocaleString('vi-VN');
 
@@ -30,7 +49,11 @@ type ItemRow = {
 
 const newRow = (): ItemRow => ({
     key: `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
-    materialId: undefined, quantity: 1, unitPrice: 0, vatRate: 0, note: '',
+    materialId: undefined,
+    quantity: 1,
+    unitPrice: 0,
+    vatRate: 0,
+    note: '',
 });
 
 const rowKey = () => `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
@@ -64,6 +87,11 @@ const InternalDistributionModal: React.FC<Props> = ({ open, plantId, existingDra
     const [targetLine, setTargetLine] = useState('');
     const [distributedAt, setDistributedAt] = useState<Dayjs>(dayjs());
     const [noteGeneral, setNoteGeneral] = useState('');
+    const [holderType, setHolderType] = useState<CustodyHolderType>('employee');
+    const [recipientId, setRecipientId] = useState<string>();
+    const [holderName, setHolderName] = useState('');
+    const [usageCampaignId, setUsageCampaignId] = useState<string>();
+    const [expectedReturnAt, setExpectedReturnAt] = useState<Dayjs | null>(null);
     const [rows, setRows] = useState<ItemRow[]>([newRow()]);
     const [scanning, setScanning] = useState(false);
     const [scanReview, setScanReview] = useState<ScanReview | null>(null);
@@ -82,6 +110,21 @@ const InternalDistributionModal: React.FC<Props> = ({ open, plantId, existingDra
             setTargetLine('');
             setDistributedAt(dayjs());
             setNoteGeneral('');
+            setHolderType('employee');
+            setRecipientId(undefined);
+            setHolderName('');
+            setUsageCampaignId(undefined);
+            setExpectedReturnAt(null);
+        } else {
+            setRequesterName(existingDraft.requesterName || '');
+            setTargetDepartment(existingDraft.targetDepartment || '');
+            setTargetLine(existingDraft.targetLine || '');
+            setNoteGeneral(existingDraft.note || '');
+            setHolderType(existingDraft.holderType || 'employee');
+            setRecipientId(existingDraft.recipientId);
+            setHolderName(existingDraft.holderName || '');
+            setUsageCampaignId(existingDraft.usageCampaignId);
+            setExpectedReturnAt(existingDraft.expectedReturnAt ? dayjs(existingDraft.expectedReturnAt) : null);
         }
     }, [open, existingDraft]);
 
@@ -100,13 +143,39 @@ const InternalDistributionModal: React.FC<Props> = ({ open, plantId, existingDra
         [inventoryRows]
     );
 
+    const { data: recipientResponse } = useQuery({
+        queryKey: ['material-custody', 'recipients', plantId],
+        queryFn: () => materialCustodyService.getRecipients({ plantId, isActive: true, limit: 200 }),
+        enabled: open && Boolean(plantId),
+        staleTime: 60_000,
+    });
+    const { data: campaignResponse } = useQuery({
+        queryKey: ['material-custody', 'campaigns', plantId, 'active'],
+        queryFn: () => materialCustodyService.getCampaigns({ plantId, status: 'active', limit: 100 }),
+        enabled: open && Boolean(plantId),
+        staleTime: 30_000,
+    });
+    const recipients = recipientResponse?.data || [];
+    const campaigns = campaignResponse?.data || [];
+
+    const hasReturnable = useMemo(
+        () =>
+            rows.some((row) => {
+                const mode = row.materialId ? inventoryMap.get(row.materialId)?.material?.reuseTrackingMode : 'none';
+                return mode && mode !== 'none';
+            }) || existingDraft?.items?.some((item) => item.reuseTrackingMode && item.reuseTrackingMode !== 'none'),
+        [existingDraft?.items, inventoryMap, rows]
+    );
+
     const materialOptions = useMemo(
-        () => (inventoryRows as MaterialInventory[]).map((r) => ({
-            value: r.materialId,
-            label: `${r.material?.code ? `[${r.material.code}] ` : ''}${r.material?.name || r.materialId}`,
-            stock: r.currentStock ?? 0,
-            unit: r.material?.unit || '',
-        })),
+        () =>
+            (inventoryRows as MaterialInventory[]).map((r) => ({
+                value: r.materialId,
+                label: `${r.material?.code ? `[${r.material.code}] ` : ''}${r.material?.name || r.materialId}`,
+                stock: r.currentStock ?? 0,
+                unit: r.material?.unit || '',
+                reuseTrackingMode: r.material?.reuseTrackingMode || 'none',
+            })),
         [inventoryRows]
     );
 
@@ -151,9 +220,7 @@ const InternalDistributionModal: React.FC<Props> = ({ open, plantId, existingDra
             // Chỉ tự điền khi danh mục khớp CHẮC và vật tư CÒN TỒN ở cơ sở.
             const autofill = inStock && match!.status === 'matched' && (match!.confidence ?? 0) >= 90;
             const inv = autofill ? inventoryMap.get(match!.materialId!) : undefined;
-            const noteFromOcr = [item.verifyNote ? `⚠ ${item.verifyNote}` : '', item.note]
-                .filter(Boolean)
-                .join(' · ');
+            const noteFromOcr = [item.verifyNote ? `⚠ ${item.verifyNote}` : '', item.note].filter(Boolean).join(' · ');
             if (autofill) autofilled += 1;
             else manual += 1;
             const rawQty = item.quantity ?? item.quantityRequested;
@@ -197,9 +264,13 @@ const InternalDistributionModal: React.FC<Props> = ({ open, plantId, existingDra
         const flagged = result.verification?.flagged ?? 0;
         if (result.verification?.status === 'verified') {
             if (flagged) {
-                message.warning(`Đã quét ${scannedRows.length} dòng — ${flagged} dòng 2 lần đọc lệch nhau, xem cảnh báo ⚠.`);
+                message.warning(
+                    `Đã quét ${scannedRows.length} dòng — ${flagged} dòng 2 lần đọc lệch nhau, xem cảnh báo ⚠.`
+                );
             } else {
-                message.success(`Đã quét ${scannedRows.length} dòng — 2 lần đọc khớp nhau. Rà lại vật tư & số lượng trước khi chốt.`);
+                message.success(
+                    `Đã quét ${scannedRows.length} dòng — 2 lần đọc khớp nhau. Rà lại vật tư & số lượng trước khi chốt.`
+                );
             }
         } else {
             message.warning(`Đã quét ${scannedRows.length} dòng nhưng CHƯA đối chiếu chéo được — rà kỹ số lượng.`);
@@ -207,9 +278,9 @@ const InternalDistributionModal: React.FC<Props> = ({ open, plantId, existingDra
     };
 
     const handleScanFiles = async (files?: File | File[] | FileList | null) => {
-        const list = (!files ? [] : files instanceof FileList ? Array.from(files) : Array.isArray(files) ? files : [files]).filter(
-            (file) => file.type.startsWith('image/')
-        );
+        const list = (
+            !files ? [] : files instanceof FileList ? Array.from(files) : Array.isArray(files) ? files : [files]
+        ).filter((file) => file.type.startsWith('image/'));
         if (!list.length || scanBusyRef.current) return;
         scanBusyRef.current = true;
         setScanning(true);
@@ -245,45 +316,85 @@ const InternalDistributionModal: React.FC<Props> = ({ open, plantId, existingDra
     const patchRow = (key: string, changes: Partial<ItemRow>) =>
         setRows((p) => p.map((r) => (r.key === key ? { ...r, ...changes } : r)));
 
-    const removeRow = (key: string) =>
-        setRows((p) => p.length > 1 ? p.filter((r) => r.key !== key) : p);
+    const removeRow = (key: string) => setRows((p) => (p.length > 1 ? p.filter((r) => r.key !== key) : p));
 
-    const totals = useMemo(() => rows.reduce((acc, r) => {
-        const tp = Number((r.quantity * r.unitPrice).toFixed(2));
-        const va = Number((tp * r.vatRate / 100).toFixed(2));
-        return { price: acc.price + tp, vat: acc.vat + va, total: acc.total + tp + va };
-    }, { price: 0, vat: 0, total: 0 }), [rows]);
+    const totals = useMemo(
+        () =>
+            rows.reduce(
+                (acc, r) => {
+                    const tp = Number((r.quantity * r.unitPrice).toFixed(2));
+                    const va = Number(((tp * r.vatRate) / 100).toFixed(2));
+                    return { price: acc.price + tp, vat: acc.vat + va, total: acc.total + tp + va };
+                },
+                { price: 0, vat: 0, total: 0 }
+            ),
+        [rows]
+    );
 
-    const buildItems = () => rows.map((r) => ({
-        materialId: r.materialId!,
-        quantity: r.quantity,
-        unitPrice: r.unitPrice,
-        vatRate: r.vatRate,
-        note: r.note.trim() || undefined,
-    }));
+    const buildItems = () =>
+        rows.map((r) => ({
+            materialId: r.materialId!,
+            quantity: r.quantity,
+            unitPrice: r.unitPrice,
+            vatRate: r.vatRate,
+            note: r.note.trim() || undefined,
+            reuseTrackingMode: inventoryMap.get(r.materialId!)?.material?.reuseTrackingMode || 'none',
+        }));
+
+    const buildCustodyPayload = () => ({
+        holderType: hasReturnable ? holderType : undefined,
+        recipientId: hasReturnable && holderType === 'employee' ? recipientId : undefined,
+        holderName: hasReturnable && holderType === 'team' ? holderName.trim() || undefined : undefined,
+        usageCampaignId: hasReturnable ? usageCampaignId : undefined,
+        expectedReturnAt: hasReturnable && expectedReturnAt ? expectedReturnAt.endOf('day').toISOString() : undefined,
+    });
 
     const validate = (checkStock = true) => {
         if (!isDraftMode && !requesterName.trim()) {
-            message.error('Vui lòng nhập tên người xin cấp'); return false;
+            message.error('Vui lòng nhập tên người xin cấp');
+            return false;
         }
         for (const [i, r] of rows.entries()) {
-            if (!r.materialId) { message.error(`Dòng ${i + 1}: chưa chọn vật tư`); return false; }
-            if (r.quantity <= 0) { message.error(`Dòng ${i + 1}: số lượng phải > 0`); return false; }
+            if (!r.materialId) {
+                message.error(`Dòng ${i + 1}: chưa chọn vật tư`);
+                return false;
+            }
+            if (r.quantity <= 0) {
+                message.error(`Dòng ${i + 1}: số lượng phải > 0`);
+                return false;
+            }
             if (checkStock) {
                 const stock = inventoryMap.get(r.materialId)?.currentStock ?? 0;
                 if (r.quantity > stock) {
-                    message.error(`Dòng ${i + 1}: tồn kho không đủ (còn ${fmt(stock)})`); return false;
+                    message.error(`Dòng ${i + 1}: tồn kho không đủ (còn ${fmt(stock)})`);
+                    return false;
                 }
+            }
+        }
+        if (hasReturnable) {
+            if (!usageCampaignId) {
+                message.error('Vật tư tái sử dụng bắt buộc chọn đợt mã hàng');
+                return false;
+            }
+            if (holderType === 'employee' && !recipientId) {
+                message.error('Vui lòng chọn công nhân đang giữ vật tư');
+                return false;
+            }
+            if (holderType === 'team' && !holderName.trim() && !targetLine.trim()) {
+                message.error('Vui lòng nhập tên tổ/chuyền đang giữ vật tư');
+                return false;
             }
         }
         return true;
     };
 
-    const invalidate = () => Promise.all([
-        queryClient.invalidateQueries({ queryKey: ['materials', 'distributions'] }),
-        queryClient.invalidateQueries({ queryKey: ['materials', 'inventory'] }),
-        queryClient.invalidateQueries({ queryKey: ['materials', 'distributions', 'draft-internal'] }),
-    ]);
+    const invalidate = () =>
+        Promise.all([
+            queryClient.invalidateQueries({ queryKey: ['materials', 'distributions'] }),
+            queryClient.invalidateQueries({ queryKey: ['materials', 'inventory'] }),
+            queryClient.invalidateQueries({ queryKey: ['materials', 'distributions', 'draft-internal'] }),
+            queryClient.invalidateQueries({ queryKey: ['material-custody'] }),
+        ]);
 
     // ── Mutation: tạo nháp (KHÔNG đóng modal, chỉ thông báo)
     const saveDraftMutation = useMutation({
@@ -295,6 +406,7 @@ const InternalDistributionModal: React.FC<Props> = ({ open, plantId, existingDra
                 distributedAt: distributedAt.toISOString(),
                 note: noteGeneral.trim() || undefined,
                 status: 'draft',
+                ...buildCustodyPayload(),
                 items: buildItems(),
             }),
         onSuccess: async (dist) => {
@@ -316,6 +428,7 @@ const InternalDistributionModal: React.FC<Props> = ({ open, plantId, existingDra
                 distributedAt: distributedAt.toISOString(),
                 note: noteGeneral.trim() || undefined,
                 status: 'confirmed',
+                ...buildCustodyPayload(),
                 items: buildItems(),
             }),
         onSuccess: async (dist) => {
@@ -329,7 +442,13 @@ const InternalDistributionModal: React.FC<Props> = ({ open, plantId, existingDra
     // ── Mutation: thêm vật tư vào draft
     const appendMutation = useMutation({
         mutationFn: () =>
-            distributionService.appendInternalItems(existingDraft!.id, buildItems()),
+            distributionService.appendInternalItems(existingDraft!.id, {
+                requesterName: requesterName.trim(),
+                targetDepartment: targetDepartment.trim() || undefined,
+                targetLine: targetLine.trim() || undefined,
+                ...buildCustodyPayload(),
+                items: buildItems(),
+            }),
         onSuccess: async (dist) => {
             await invalidate();
             message.success('Đã thêm vật tư vào phiếu nháp');
@@ -349,14 +468,21 @@ const InternalDistributionModal: React.FC<Props> = ({ open, plantId, existingDra
         onError: (e: any) => message.error(e?.message ?? 'Có lỗi xảy ra'),
     });
 
-    const handleSaveDraft = () => { if (validate(false)) saveDraftMutation.mutate(); };
-    const handleConfirm = () => { if (validate()) confirmMutation.mutate(); };
-    const handleAppend = () => { if (validate(false)) appendMutation.mutate(); };
+    const handleSaveDraft = () => {
+        if (validate(false)) saveDraftMutation.mutate();
+    };
+    const handleConfirm = () => {
+        if (validate()) confirmMutation.mutate();
+    };
+    const handleAppend = () => {
+        if (validate(false)) appendMutation.mutate();
+    };
     const handleFinalize = () => {
         Modal.confirm({
             title: 'Chốt phiếu cấp phát nội bộ?',
             content: 'Tồn kho sẽ bị trừ ngay lập tức. Không thể hoàn tác.',
-            okText: 'Chốt phiếu', okButtonProps: { className: 'bg-green-600' },
+            okText: 'Chốt phiếu',
+            okButtonProps: { className: 'bg-green-600' },
             onOk: () => finalizeMutation.mutateAsync(),
         });
     };
@@ -371,45 +497,57 @@ const InternalDistributionModal: React.FC<Props> = ({ open, plantId, existingDra
             destroyOnClose
             styles={{ body: { padding: 0, maxHeight: '82vh', overflowY: 'auto' } }}
             title={
-                <div className="flex items-center gap-3 px-1 py-0.5">
-                    <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-emerald-50 text-emerald-600">
+                <div className='flex items-center gap-3 px-1 py-0.5'>
+                    <div className='flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-emerald-50 text-emerald-600'>
                         <SendOutlined />
                     </div>
                     <div>
-                        <div className="text-base font-semibold text-slate-900">
+                        <div className='text-base font-semibold text-slate-900'>
                             {isDraftMode ? 'Thêm vật tư vào phiếu nháp' : 'Cấp phát vật tư nội bộ'}
                         </div>
                         {isDraftMode ? (
-                            <div className="flex items-center gap-2 text-xs">
-                                <Tag color="orange" icon={<ClockCircleOutlined />} className="!m-0">Nháp</Tag>
-                                <span className="font-mono font-semibold text-slate-600">{existingDraft?.distributionCode}</span>
-                                <span className="text-slate-400">·</span>
-                                <span className="text-slate-400">{existingDraft?.targetDepartment || existingDraft?.requesterName}</span>
-                                <span className="text-slate-400">·</span>
-                                <span className="text-slate-400">{existingDraft?.items?.length ?? 0} dòng hiện có</span>
+                            <div className='flex items-center gap-2 text-xs'>
+                                <Tag color='orange' icon={<ClockCircleOutlined />} className='!m-0'>
+                                    Nháp
+                                </Tag>
+                                <span className='font-mono font-semibold text-slate-600'>
+                                    {existingDraft?.distributionCode}
+                                </span>
+                                <span className='text-slate-400'>·</span>
+                                <span className='text-slate-400'>
+                                    {existingDraft?.targetDepartment || existingDraft?.requesterName}
+                                </span>
+                                <span className='text-slate-400'>·</span>
+                                <span className='text-slate-400'>{existingDraft?.items?.length ?? 0} dòng hiện có</span>
                             </div>
                         ) : (
-                            <div className="text-xs text-slate-400">Cấp phát trực tiếp trong nội bộ cơ sở</div>
+                            <div className='text-xs text-slate-400'>Cấp phát trực tiếp trong nội bộ cơ sở</div>
                         )}
                     </div>
                 </div>
             }
             footer={
-                <div className="flex items-center justify-between border-t border-slate-100 px-1 pt-3">
-                    <div className="flex items-center gap-5">
+                <div className='flex items-center justify-between border-t border-slate-100 px-1 pt-3'>
+                    <div className='flex items-center gap-5'>
                         <div>
-                            <div className="text-[11px] font-medium uppercase tracking-wide text-slate-400">Thành tiền</div>
-                            <div className="text-sm font-semibold text-slate-700">{fmt(totals.price)}</div>
+                            <div className='text-[11px] font-medium tracking-wide text-slate-400 uppercase'>
+                                Thành tiền
+                            </div>
+                            <div className='text-sm font-semibold text-slate-700'>{fmt(totals.price)}</div>
                         </div>
-                        <Divider type="vertical" className="!h-7" />
+                        <Divider type='vertical' className='!h-7' />
                         <div>
-                            <div className="text-[11px] font-medium uppercase tracking-wide text-slate-400">Tổng VAT</div>
-                            <div className="text-sm font-semibold text-slate-700">{fmt(totals.vat)}</div>
+                            <div className='text-[11px] font-medium tracking-wide text-slate-400 uppercase'>
+                                Tổng VAT
+                            </div>
+                            <div className='text-sm font-semibold text-slate-700'>{fmt(totals.vat)}</div>
                         </div>
-                        <Divider type="vertical" className="!h-7" />
+                        <Divider type='vertical' className='!h-7' />
                         <div>
-                            <div className="text-[11px] font-medium uppercase tracking-wide text-slate-400">Tổng cộng</div>
-                            <div className="text-lg font-bold text-emerald-700">{fmt(totals.total)}</div>
+                            <div className='text-[11px] font-medium tracking-wide text-slate-400 uppercase'>
+                                Tổng cộng
+                            </div>
+                            <div className='text-lg font-bold text-emerald-700'>{fmt(totals.total)}</div>
                         </div>
                     </div>
 
@@ -420,9 +558,11 @@ const InternalDistributionModal: React.FC<Props> = ({ open, plantId, existingDra
                                 Thêm vào phiếu nháp
                             </Button>
                             <Button
-                                type="primary" icon={<CheckCircleOutlined />}
-                                loading={finalizeMutation.isPending} onClick={handleFinalize}
-                                className="bg-emerald-600 hover:!bg-emerald-700"
+                                type='primary'
+                                icon={<CheckCircleOutlined />}
+                                loading={finalizeMutation.isPending}
+                                onClick={handleFinalize}
+                                className='bg-emerald-600 hover:!bg-emerald-700'
                             >
                                 Chốt phiếu — trừ kho
                             </Button>
@@ -438,10 +578,11 @@ const InternalDistributionModal: React.FC<Props> = ({ open, plantId, existingDra
                                 Lưu nháp
                             </Button>
                             <Button
-                                type="primary" icon={<CheckCircleOutlined />}
+                                type='primary'
+                                icon={<CheckCircleOutlined />}
                                 loading={confirmMutation.isPending}
                                 onClick={handleConfirm}
-                                className="bg-emerald-600 hover:!bg-emerald-700"
+                                className='bg-emerald-600 hover:!bg-emerald-700'
                             >
                                 Xác nhận — trừ kho ngay
                             </Button>
@@ -450,67 +591,192 @@ const InternalDistributionModal: React.FC<Props> = ({ open, plantId, existingDra
                 </div>
             }
         >
-            <div className="flex flex-col">
+            <div className='flex flex-col'>
                 {/* ── Section 1: Thông tin phiếu ── */}
                 {!isDraftMode && (
-                    <div className="border-b border-slate-100 bg-slate-50 px-6 py-4">
-                        <div className="mb-3 text-[11px] font-semibold uppercase tracking-widest text-slate-400">
+                    <div className='border-b border-slate-100 bg-slate-50 px-6 py-4'>
+                        <div className='mb-3 text-[11px] font-semibold tracking-widest text-slate-400 uppercase'>
                             Thông tin phiếu
                         </div>
-                        <div className="grid grid-cols-4 gap-4">
+                        <div className='grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4'>
                             <div>
-                                <div className="mb-1 text-xs font-medium text-slate-500">
-                                    Người xin cấp <span className="text-red-500">*</span>
+                                <div className='mb-1 text-xs font-medium text-slate-500'>
+                                    Người xin cấp <span className='text-red-500'>*</span>
                                 </div>
-                                <Input value={requesterName} onChange={(e) => setRequesterName(e.target.value)} placeholder="Nguyễn Văn A" />
+                                <Input
+                                    value={requesterName}
+                                    onChange={(e) => setRequesterName(e.target.value)}
+                                    placeholder='Nguyễn Văn A'
+                                />
                             </div>
                             <div>
-                                <div className="mb-1 text-xs font-medium text-slate-500">Bộ phận</div>
-                                <Input value={targetDepartment} onChange={(e) => setTargetDepartment(e.target.value)} placeholder="Chuyền may, Kỹ thuật..." />
+                                <div className='mb-1 text-xs font-medium text-slate-500'>Bộ phận</div>
+                                <Input
+                                    value={targetDepartment}
+                                    onChange={(e) => setTargetDepartment(e.target.value)}
+                                    placeholder='Chuyền may, Kỹ thuật...'
+                                />
                             </div>
                             <div>
-                                <div className="mb-1 text-xs font-medium text-slate-500">Chuyền / Tổ</div>
-                                <Input value={targetLine} onChange={(e) => setTargetLine(e.target.value)} placeholder="Chuyền 1, Tổ cắt..." />
+                                <div className='mb-1 text-xs font-medium text-slate-500'>Chuyền / Tổ</div>
+                                <Input
+                                    value={targetLine}
+                                    onChange={(e) => setTargetLine(e.target.value)}
+                                    placeholder='Chuyền 1, Tổ cắt...'
+                                />
                             </div>
                             <div>
-                                <div className="mb-1 text-xs font-medium text-slate-500">Thời gian cấp</div>
-                                <DatePicker showTime className="w-full" format="DD/MM/YYYY HH:mm" value={distributedAt} onChange={(v) => v && setDistributedAt(v)} />
+                                <div className='mb-1 text-xs font-medium text-slate-500'>Thời gian cấp</div>
+                                <DatePicker
+                                    showTime
+                                    className='w-full'
+                                    format='DD/MM/YYYY HH:mm'
+                                    value={distributedAt}
+                                    onChange={(v) => v && setDistributedAt(v)}
+                                />
                             </div>
                         </div>
-                        <div className="mt-3">
-                            <div className="mb-1 text-xs font-medium text-slate-500">Ghi chú / Mục đích</div>
-                            <Input.TextArea rows={2} value={noteGeneral} onChange={(e) => setNoteGeneral(e.target.value)} placeholder="Mục đích sử dụng, lý do cấp phát..." />
+                        <div className='mt-3'>
+                            <div className='mb-1 text-xs font-medium text-slate-500'>Ghi chú / Mục đích</div>
+                            <Input.TextArea
+                                rows={2}
+                                value={noteGeneral}
+                                onChange={(e) => setNoteGeneral(e.target.value)}
+                                placeholder='Mục đích sử dụng, lý do cấp phát...'
+                            />
                         </div>
                     </div>
                 )}
 
+                {hasReturnable ? (
+                    <div className='border-b border-amber-200 bg-amber-50/70 px-4 py-4 sm:px-6'>
+                        <div className='mb-3 flex flex-wrap items-start justify-between gap-2'>
+                            <div>
+                                <div className='text-sm font-semibold text-slate-900'>Trách nhiệm CCDC tái sử dụng</div>
+                                <div className='mt-1 text-xs text-slate-600'>
+                                    Các dòng được đánh dấu tái sử dụng sẽ mở sổ đang giữ khi chốt phiếu.
+                                </div>
+                            </div>
+                            <Tag color='gold' className='!m-0'>
+                                Bắt buộc thu hồi
+                            </Tag>
+                        </div>
+                        {!campaigns.length ? (
+                            <Alert
+                                className='mb-3'
+                                showIcon
+                                type='warning'
+                                message='Cơ sở chưa có đợt mã hàng đang mở. Hãy tạo đợt tại trang CCDC & thu hồi trước khi chốt phiếu.'
+                            />
+                        ) : null}
+                        <div className='grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4'>
+                            <div>
+                                <div className='mb-1 text-xs font-medium text-slate-600'>Đối tượng giữ</div>
+                                <Segmented
+                                    block
+                                    value={holderType}
+                                    onChange={(value) => setHolderType(value as CustodyHolderType)}
+                                    options={[
+                                        { label: 'Công nhân', value: 'employee' },
+                                        { label: 'Tổ / chuyền', value: 'team' },
+                                    ]}
+                                />
+                            </div>
+                            <div>
+                                <div className='mb-1 text-xs font-medium text-slate-600'>
+                                    {holderType === 'employee' ? 'Công nhân nhận' : 'Tên tổ / chuyền'}
+                                </div>
+                                {holderType === 'employee' ? (
+                                    <Select
+                                        showSearch
+                                        optionFilterProp='label'
+                                        value={recipientId}
+                                        className='w-full'
+                                        placeholder='Chọn mã công nhân'
+                                        options={recipients.map((recipient) => ({
+                                            value: recipient.id,
+                                            label: `${recipient.employeeCode} · ${recipient.fullName}${recipient.lineName ? ` · ${recipient.lineName}` : ''}`,
+                                        }))}
+                                        onChange={(value) => {
+                                            setRecipientId(value);
+                                            const recipient = recipients.find((item) => item.id === value);
+                                            if (!recipient) return;
+                                            setRequesterName(recipient.fullName);
+                                            setTargetDepartment(recipient.department || '');
+                                            setTargetLine(recipient.lineName || '');
+                                        }}
+                                    />
+                                ) : (
+                                    <Input
+                                        value={holderName}
+                                        onChange={(event) => setHolderName(event.target.value)}
+                                        placeholder='Ví dụ: Chuyền CM1'
+                                    />
+                                )}
+                            </div>
+                            <div>
+                                <div className='mb-1 text-xs font-medium text-slate-600'>Đợt mã hàng</div>
+                                <Select
+                                    showSearch
+                                    optionFilterProp='label'
+                                    value={usageCampaignId}
+                                    className='w-full'
+                                    placeholder='Chọn mã hàng đang chạy'
+                                    options={campaigns.map((campaign) => ({
+                                        value: campaign.id,
+                                        label: `${campaign.itemCode}${campaign.orderCode ? ` · ${campaign.orderCode}` : ''} · ${campaign.campaignCode}`,
+                                    }))}
+                                    onChange={setUsageCampaignId}
+                                />
+                            </div>
+                            <div>
+                                <div className='mb-1 text-xs font-medium text-slate-600'>Hạn dự kiến trả</div>
+                                <DatePicker
+                                    className='w-full'
+                                    format='DD/MM/YYYY'
+                                    value={expectedReturnAt}
+                                    onChange={setExpectedReturnAt}
+                                    disabledDate={(current) =>
+                                        Boolean(current && current.isBefore(distributedAt, 'day'))
+                                    }
+                                    placeholder='Theo cấu hình vật tư'
+                                />
+                            </div>
+                        </div>
+                    </div>
+                ) : null}
+
                 {/* ── Section 2: Danh sách vật tư ── */}
-                <div className="px-6 py-4">
-                    <div className="mb-3 flex items-center justify-between gap-2">
-                        <span className="text-[11px] font-semibold uppercase tracking-widest text-slate-400">
+                <div className='px-6 py-4'>
+                    <div className='mb-3 flex items-center justify-between gap-2'>
+                        <span className='text-[11px] font-semibold tracking-widest text-slate-400 uppercase'>
                             Danh sách vật tư cấp phát
                         </span>
                         <Space size={8}>
                             <input
                                 ref={scanInputRef}
-                                type="file"
-                                accept="image/*"
+                                type='file'
+                                accept='image/*'
                                 multiple
-                                className="hidden"
+                                className='hidden'
                                 onChange={(e) => void handleScanFiles(e.target.files)}
                             />
-                            <Tooltip title="Chụp/chọn ảnh phiếu cấp phát — AI đọc rồi điền sẵn danh sách vật tư. Có thể dán ảnh (Ctrl+V).">
+                            <Tooltip title='Chụp/chọn ảnh phiếu cấp phát — AI đọc rồi điền sẵn danh sách vật tư. Có thể dán ảnh (Ctrl+V).'>
                                 <Button
-                                    size="small"
+                                    size='small'
                                     icon={<ScanOutlined />}
                                     loading={scanning}
                                     onClick={() => scanInputRef.current?.click()}
-                                    className="border-violet-400 text-violet-600 hover:!border-violet-500 hover:!text-violet-700"
+                                    className='border-violet-400 text-violet-600 hover:!border-violet-500 hover:!text-violet-700'
                                 >
                                     {scanning ? 'Đang quét...' : 'Quét phiếu (AI)'}
                                 </Button>
                             </Tooltip>
-                            <Button size="small" icon={<PlusOutlined />} onClick={() => setRows((p) => [...p, newRow()])}>
+                            <Button
+                                size='small'
+                                icon={<PlusOutlined />}
+                                onClick={() => setRows((p) => [...p, newRow()])}
+                            >
                                 Thêm dòng
                             </Button>
                         </Space>
@@ -518,43 +784,65 @@ const InternalDistributionModal: React.FC<Props> = ({ open, plantId, existingDra
 
                     {scanReview && (
                         <Alert
-                            type={scanReview.verifyStatus === 'skipped' || scanReview.verifyFlagged ? 'warning' : 'success'}
+                            type={
+                                scanReview.verifyStatus === 'skipped' || scanReview.verifyFlagged
+                                    ? 'warning'
+                                    : 'success'
+                            }
                             showIcon
-                            className="mb-3"
+                            className='mb-3'
                             closable
                             onClose={() => setScanReview(null)}
                             message={
-                                <span className="text-xs">
+                                <span className='text-xs'>
                                     Đã quét <b>{scanReview.total}</b> dòng từ “{scanReview.fileName}”:{' '}
-                                    <b className="text-emerald-700">{scanReview.autofilled}</b> khớp tồn kho (điền sẵn) ·{' '}
-                                    <b className="text-orange-600">{scanReview.manual}</b> cần chọn tay
+                                    <b className='text-emerald-700'>{scanReview.autofilled}</b> khớp tồn kho (điền sẵn)
+                                    · <b className='text-orange-600'>{scanReview.manual}</b> cần chọn tay
                                     {scanReview.verifyFlagged ? (
-                                        <> · <b className="text-red-600">{scanReview.verifyFlagged}</b> dòng lệch 2 lần đọc ⚠</>
+                                        <>
+                                            {' '}
+                                            · <b className='text-red-600'>{scanReview.verifyFlagged}</b> dòng lệch 2 lần
+                                            đọc ⚠
+                                        </>
                                     ) : null}
-                                    {scanReview.verifyStatus === 'skipped' ? ' · CHƯA đối chiếu chéo — rà kỹ' : ''}
-                                    . Kiểm tra lại vật tư, số lượng và đơn giá trước khi chốt.
+                                    {scanReview.verifyStatus === 'skipped' ? ' · CHƯA đối chiếu chéo — rà kỹ' : ''}.
+                                    Kiểm tra lại vật tư, số lượng và đơn giá trước khi chốt.
                                 </span>
                             }
                         />
                     )}
 
-                    <div className="overflow-hidden rounded-lg border border-slate-200">
+                    <div className='overflow-hidden rounded-lg border border-slate-200'>
                         {/* Table layout - tránh vỡ cột với Ant Design components */}
-                        <table className="w-full border-collapse text-sm">
+                        <table className='w-full border-collapse text-sm'>
                             <thead>
-                                <tr className="border-b border-slate-200 bg-slate-50 text-[11px] font-semibold uppercase tracking-wider text-slate-400">
-                                    <th className="px-3 py-2 text-left" style={{ width: '30%' }}>Vật tư</th>
-                                    <th className="px-2 py-2 text-center" style={{ width: 52 }}>ĐVT</th>
-                                    <th className="px-2 py-2 text-right" style={{ width: 72 }}>Tồn kho</th>
-                                    <th className="px-2 py-2 text-right" style={{ width: 80 }}>SL cấp</th>
-                                    <th className="px-2 py-2 text-right" style={{ width: 100 }}>Đơn giá</th>
-                                    <th className="px-2 py-2 text-right" style={{ width: 60 }}>VAT%</th>
-                                    <th className="px-2 py-2 text-right" style={{ width: 90 }}>Tổng tiền</th>
-                                    <th className="px-2 py-2 text-left">Ghi chú</th>
+                                <tr className='border-b border-slate-200 bg-slate-50 text-[11px] font-semibold tracking-wider text-slate-400 uppercase'>
+                                    <th className='px-3 py-2 text-left' style={{ width: '30%' }}>
+                                        Vật tư
+                                    </th>
+                                    <th className='px-2 py-2 text-center' style={{ width: 52 }}>
+                                        ĐVT
+                                    </th>
+                                    <th className='px-2 py-2 text-right' style={{ width: 72 }}>
+                                        Tồn kho
+                                    </th>
+                                    <th className='px-2 py-2 text-right' style={{ width: 80 }}>
+                                        SL cấp
+                                    </th>
+                                    <th className='px-2 py-2 text-right' style={{ width: 100 }}>
+                                        Đơn giá
+                                    </th>
+                                    <th className='px-2 py-2 text-right' style={{ width: 60 }}>
+                                        VAT%
+                                    </th>
+                                    <th className='px-2 py-2 text-right' style={{ width: 90 }}>
+                                        Tổng tiền
+                                    </th>
+                                    <th className='px-2 py-2 text-left'>Ghi chú</th>
                                     <th style={{ width: 36 }} />
                                 </tr>
                             </thead>
-                            <tbody className="divide-y divide-slate-100">
+                            <tbody className='divide-y divide-slate-100'>
                                 {rows.map((row) => {
                                     const inv = row.materialId ? inventoryMap.get(row.materialId) : undefined;
                                     const stock = inv?.currentStock ?? 0;
@@ -564,83 +852,126 @@ const InternalDistributionModal: React.FC<Props> = ({ open, plantId, existingDra
 
                                     return (
                                         <tr key={row.key} className={isOver ? 'bg-red-50/50' : 'hover:bg-slate-50/60'}>
-                                            <td className="px-3 py-2">
+                                            <td className='px-3 py-2'>
                                                 <Select
-                                                    showSearch optionFilterProp="label"
-                                                    placeholder={row.scanName ? '📷 Chọn vật tư khớp...' : 'Chọn vật tư...'}
-                                                    size="small"
+                                                    showSearch
+                                                    optionFilterProp='label'
+                                                    placeholder={
+                                                        row.scanName ? '📷 Chọn vật tư khớp...' : 'Chọn vật tư...'
+                                                    }
+                                                    size='small'
                                                     status={row.scanName ? 'warning' : undefined}
-                                                    loading={invLoading} style={{ width: '100%' }}
+                                                    loading={invLoading}
+                                                    style={{ width: '100%' }}
                                                     value={row.materialId}
                                                     options={materialOptions}
                                                     optionRender={(opt) => {
                                                         const s = (opt.data as any).stock;
+                                                        const mode = (opt.data as any).reuseTrackingMode;
                                                         return (
-                                                            <div className="flex items-center justify-between gap-2">
-                                                                <span className="flex-1 truncate text-xs">{opt.label}</span>
-                                                                <Tag color={s > 0 ? 'success' : 'warning'} className="!m-0 !text-[10px]">
+                                                            <div className='flex items-center justify-between gap-2'>
+                                                                <span className='flex-1 truncate text-xs'>
+                                                                    {opt.label}
+                                                                </span>
+                                                                {mode !== 'none' ? (
+                                                                    <Tag color='gold' className='!m-0 !text-[10px]'>
+                                                                        Thu hồi
+                                                                    </Tag>
+                                                                ) : null}
+                                                                <Tag
+                                                                    color={s > 0 ? 'success' : 'warning'}
+                                                                    className='!m-0 !text-[10px]'
+                                                                >
                                                                     {fmt(s)} {(opt.data as any).unit}
                                                                 </Tag>
                                                             </div>
                                                         );
                                                     }}
-                                                    onChange={(v) => patchRow(row.key, { materialId: v, scanName: undefined })}
+                                                    onChange={(v) =>
+                                                        patchRow(row.key, { materialId: v, scanName: undefined })
+                                                    }
                                                 />
+                                                {inv?.material?.reuseTrackingMode &&
+                                                inv.material.reuseTrackingMode !== 'none' ? (
+                                                    <div className='mt-1 text-[11px] font-medium text-amber-700'>
+                                                        CCDC phải theo dõi và thu hồi
+                                                    </div>
+                                                ) : null}
                                                 {row.scanName && !row.materialId && (
                                                     <div
-                                                        className="mt-1 flex items-center gap-1 truncate text-[11px] text-violet-600"
+                                                        className='mt-1 flex items-center gap-1 truncate text-[11px] text-violet-600'
                                                         title={`AI đọc: ${row.scanName}`}
                                                     >
-                                                        <ScanOutlined className="shrink-0" />
-                                                        <span className="truncate">AI đọc: {row.scanName}</span>
+                                                        <ScanOutlined className='shrink-0' />
+                                                        <span className='truncate'>AI đọc: {row.scanName}</span>
                                                     </div>
                                                 )}
                                             </td>
-                                            <td className="px-2 py-2 text-center text-xs text-slate-500">{unit || '—'}</td>
-                                            <td className={`px-2 py-2 text-right text-xs font-medium ${isOver ? 'text-red-500' : 'text-slate-400'}`}>
+                                            <td className='px-2 py-2 text-center text-xs text-slate-500'>
+                                                {unit || '—'}
+                                            </td>
+                                            <td
+                                                className={`px-2 py-2 text-right text-xs font-medium ${isOver ? 'text-red-500' : 'text-slate-400'}`}
+                                            >
                                                 {row.materialId ? fmt(stock) : '—'}
                                             </td>
-                                            <td className="px-2 py-2">
+                                            <td className='px-2 py-2'>
                                                 <InputNumber
-                                                    size="small" min={0} value={row.quantity}
-                                                    controls={false} style={{ width: '100%' }}
-                                                    className={isOver ? '[&_input]:!text-red-600 [&_input]:!font-semibold' : ''}
+                                                    size='small'
+                                                    min={0}
+                                                    value={row.quantity}
+                                                    controls={false}
+                                                    style={{ width: '100%' }}
+                                                    className={
+                                                        isOver ? '[&_input]:!font-semibold [&_input]:!text-red-600' : ''
+                                                    }
                                                     onChange={(v) => patchRow(row.key, { quantity: Number(v ?? 0) })}
                                                 />
                                             </td>
-                                            <td className="px-2 py-2">
+                                            <td className='px-2 py-2'>
                                                 <InputNumber
-                                                    size="small" min={0} value={row.unitPrice}
-                                                    controls={false} style={{ width: '100%' }}
+                                                    size='small'
+                                                    min={0}
+                                                    value={row.unitPrice}
+                                                    controls={false}
+                                                    style={{ width: '100%' }}
                                                     formatter={(v) => `${v}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')}
                                                     parser={(v) => Number(String(v).replace(/,/g, '')) as any}
                                                     onChange={(v) => patchRow(row.key, { unitPrice: Number(v ?? 0) })}
                                                 />
                                             </td>
-                                            <td className="px-2 py-2">
+                                            <td className='px-2 py-2'>
                                                 <InputNumber
-                                                    size="small" min={0} max={100} value={row.vatRate}
-                                                    controls={false} style={{ width: '100%' }}
+                                                    size='small'
+                                                    min={0}
+                                                    max={100}
+                                                    value={row.vatRate}
+                                                    controls={false}
+                                                    style={{ width: '100%' }}
                                                     formatter={(v) => `${v}%`}
                                                     parser={(v) => Number(String(v).replace('%', '')) as any}
                                                     onChange={(v) => patchRow(row.key, { vatRate: Number(v ?? 0) })}
                                                 />
                                             </td>
-                                            <td className="px-2 py-2 text-right text-sm font-bold text-emerald-700">
+                                            <td className='px-2 py-2 text-right text-sm font-bold text-emerald-700'>
                                                 {totalPrice > 0 ? fmt(totalPrice) : '—'}
                                             </td>
-                                            <td className="px-2 py-2">
+                                            <td className='px-2 py-2'>
                                                 <Input
-                                                    size="small" value={row.note}
-                                                    placeholder="Ghi chú..."
+                                                    size='small'
+                                                    value={row.note}
+                                                    placeholder='Ghi chú...'
                                                     style={{ width: '100%' }}
                                                     onChange={(e) => patchRow(row.key, { note: e.target.value })}
                                                 />
                                             </td>
-                                            <td className="px-2 py-2 text-center">
-                                                <Tooltip title="Xoá dòng">
+                                            <td className='px-2 py-2 text-center'>
+                                                <Tooltip title='Xoá dòng'>
                                                     <Button
-                                                        type="text" danger size="small" icon={<DeleteOutlined />}
+                                                        type='text'
+                                                        danger
+                                                        size='small'
+                                                        icon={<DeleteOutlined />}
                                                         disabled={rows.length === 1}
                                                         onClick={() => removeRow(row.key)}
                                                     />

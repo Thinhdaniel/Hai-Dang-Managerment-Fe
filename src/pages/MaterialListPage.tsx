@@ -405,6 +405,11 @@ const MaterialListPage: React.FC = () => {
                                 Dưới ngưỡng tồn kho
                             </Tag>
                         ) : null}
+                        {record.reuseTrackingMode && record.reuseTrackingMode !== 'none' ? (
+                            <Tag color='cyan' className='mr-0 w-fit'>
+                                {record.reuseTrackingMode === 'serialized' ? 'Thu hồi từng chiếc' : 'Theo dõi thu hồi'}
+                            </Tag>
+                        ) : null}
                     </div>
                 );
             },
@@ -667,6 +672,13 @@ const MaterialListPage: React.FC = () => {
                                                     Dưới ngưỡng
                                                 </Tag>
                                             ) : null}
+                                            {material.reuseTrackingMode && material.reuseTrackingMode !== 'none' ? (
+                                                <Tag color='cyan'>
+                                                    {material.reuseTrackingMode === 'serialized'
+                                                        ? 'Thu hồi từng chiếc'
+                                                        : 'Theo dõi thu hồi'}
+                                                </Tag>
+                                            ) : null}
                                         </span>
                                         <span className='material-mobile-card__meta'>
                                             <span>Nhóm: {material.category || '-'}</span>
@@ -825,6 +837,20 @@ const MaterialListPage: React.FC = () => {
                                 <Descriptions.Item label='Tổng tồn hiện tại'>
                                     {formatNumber(detailSummary.totalCurrentStock)}
                                 </Descriptions.Item>
+                                <Descriptions.Item label='Theo dõi sau cấp'>
+                                    {detailSummary.reuseTrackingMode === 'serialized'
+                                        ? 'Thu hồi theo từng chiếc'
+                                        : detailSummary.reuseTrackingMode === 'quantity'
+                                          ? 'Thu hồi theo số lượng'
+                                          : 'Vật tư tiêu hao'}
+                                </Descriptions.Item>
+                                {detailSummary.reuseTrackingMode && detailSummary.reuseTrackingMode !== 'none' ? (
+                                    <Descriptions.Item label='Hạn trả mặc định'>
+                                        {detailSummary.defaultReturnDays
+                                            ? `${detailSummary.defaultReturnDays} ngày`
+                                            : 'Theo từng lần cấp'}
+                                    </Descriptions.Item>
+                                ) : null}
                             </Descriptions>
 
                             <div className='mt-4'>

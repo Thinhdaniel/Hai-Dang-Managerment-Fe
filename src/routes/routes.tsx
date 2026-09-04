@@ -39,6 +39,7 @@ const SupplyRequestPage = lazy(() => import('../pages/SupplyRequestPage'));
 const TechnicalPurchaseRequestPage = lazy(() => import('../pages/TechnicalPurchaseRequestPage'));
 const PurchaseOrderPage = lazy(() => import('../pages/PurchaseOrderPage'));
 const DistributionPage = lazy(() => import('../pages/DistributionPage'));
+const MaterialCustodyPage = lazy(() => import('../pages/MaterialCustodyPage'));
 const MaterialReportPage = lazy(() => import('../pages/MaterialReportPage'));
 const FacilityCostReportPage = lazy(() => import('../pages/FacilityCostReportPage'));
 const AiAnalyticsStudioPage = lazy(() => import('../pages/AiAnalyticsStudioPage'));
@@ -173,6 +174,7 @@ export const router = createBrowserRouter([
                 element: guarded('/materials/purchase-orders', <PurchaseOrderPage />),
             },
             { path: 'materials/distributions', element: guarded('/materials/distributions', <DistributionPage />) },
+            { path: 'materials/custody', element: guarded('/materials/custody', <MaterialCustodyPage />) },
             { path: 'materials/reports', element: guarded('/materials/reports', <MaterialReportPage />) },
             { path: 'reports/facility-costs', element: guarded('/reports/facility-costs', <FacilityCostReportPage />) },
             { path: 'ai-analytics', element: guarded('/ai-analytics', <AiAnalyticsStudioPage />) },

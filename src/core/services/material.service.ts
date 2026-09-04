@@ -54,6 +54,7 @@ export type InventoryTransactionRelatedType = 'purchase_order' | 'distribution' 
 // Phân loại bản chất chi phí: consumable+spare_part = OPEX (tính chi phí vận hành);
 // tool+asset = CAPEX (mua sắm/đầu tư, tách riêng). Rỗng = chưa phân loại.
 export type MaterialCostType = 'consumable' | 'spare_part' | 'tool' | 'asset';
+export type MaterialReuseTrackingMode = 'none' | 'quantity' | 'serialized';
 
 export const MATERIAL_COST_TYPE_LABEL: Record<MaterialCostType, string> = {
     consumable: 'Vật tư tiêu hao',
@@ -72,6 +73,9 @@ export interface Material {
     name: string;
     category?: string;
     costType?: MaterialCostType;
+    reuseTrackingMode?: MaterialReuseTrackingMode;
+    defaultReturnDays?: number;
+    conditionCheckRequired?: boolean;
     unit: string;
     minStockLevel?: number;
     description?: string;
@@ -92,6 +96,9 @@ export interface MaterialPayload {
     minStockLevel?: number;
     description?: string;
     trackInventory?: boolean;
+    reuseTrackingMode?: MaterialReuseTrackingMode;
+    defaultReturnDays?: number;
+    conditionCheckRequired?: boolean;
     isActive?: boolean;
 }
 
@@ -597,6 +604,8 @@ export interface DistributionItem {
     inventorySkipReason?: string;
     adjustReason?: string;
     note?: string;
+    reuseTrackingMode?: MaterialReuseTrackingMode;
+    custodyAssignmentId?: string;
 }
 
 export interface DistributionItemPayload {
@@ -616,6 +625,7 @@ export interface DistributionItemPayload {
     inventorySkipReason?: string;
     adjustReason?: string;
     note?: string;
+    reuseTrackingMode?: MaterialReuseTrackingMode;
 }
 
 export interface Distribution {
@@ -640,6 +650,12 @@ export interface Distribution {
     updatedAt: string;
     confirmedAt?: string;
     requesterName?: string;
+    holderType?: 'employee' | 'team';
+    recipientId?: string;
+    holderCode?: string;
+    holderName?: string;
+    usageCampaignId?: string;
+    expectedReturnAt?: string;
     targetDepartment?: string;
     targetLine?: string;
     isCompensation?: boolean;
@@ -684,6 +700,12 @@ export interface DistributionPayload {
 export interface InternalDistributionPayload {
     distributedAt?: string;
     requesterName: string;
+    holderType?: 'employee' | 'team';
+    recipientId?: string;
+    holderCode?: string;
+    holderName?: string;
+    usageCampaignId?: string;
+    expectedReturnAt?: string;
     targetDepartment?: string;
     targetLine?: string;
     items: DistributionItemPayload[];
@@ -1306,10 +1328,10 @@ export const distributionService = {
     createInternal: (data: InternalDistributionPayload): Promise<Distribution> =>
         api.post<Distribution, InternalDistributionPayload>(`${DISTRIBUTIONS_BASE}/internal`, data),
 
-    appendInternalItems: (id: string, items: DistributionItemPayload[]): Promise<Distribution> =>
-        api.post<Distribution, { items: DistributionItemPayload[] }>(`${DISTRIBUTIONS_BASE}/${id}/internal/items`, {
-            items,
-        }),
+    appendInternalItems: (
+        id: string,
+        data: { items: DistributionItemPayload[] } & Partial<Omit<InternalDistributionPayload, 'items' | 'status'>>
+    ): Promise<Distribution> => api.post(`${DISTRIBUTIONS_BASE}/${id}/internal/items`, data),
 
     finalizeInternalDraft: (id: string): Promise<Distribution> =>
         api.patch<Distribution>(`${DISTRIBUTIONS_BASE}/${id}/internal/finalize`),
