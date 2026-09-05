@@ -75,7 +75,8 @@ const getCanvasPoint = (canvas: HTMLCanvasElement, event: React.PointerEvent<HTM
     };
 };
 
-const getLineWidth = (canvas: HTMLCanvasElement) => Math.max(8, Math.round(Math.min(canvas.width, canvas.height) * 0.012));
+const getLineWidth = (canvas: HTMLCanvasElement) =>
+    Math.max(8, Math.round(Math.min(canvas.width, canvas.height) * 0.012));
 
 const prepareContext = (ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement, color: string) => {
     ctx.lineCap = 'round';
@@ -89,7 +90,15 @@ const drawCircle = (ctx: CanvasRenderingContext2D, start: Point, end: Point) => 
     const width = end.x - start.x;
     const height = end.y - start.y;
     ctx.beginPath();
-    ctx.ellipse(start.x + width / 2, start.y + height / 2, Math.abs(width / 2), Math.abs(height / 2), 0, 0, Math.PI * 2);
+    ctx.ellipse(
+        start.x + width / 2,
+        start.y + height / 2,
+        Math.abs(width / 2),
+        Math.abs(height / 2),
+        0,
+        0,
+        Math.PI * 2
+    );
     ctx.stroke();
 };
 
@@ -110,7 +119,13 @@ const drawArrow = (ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement, sta
     ctx.stroke();
 };
 
-const drawText = (ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement, point: Point, text: string, color: string) => {
+const drawText = (
+    ctx: CanvasRenderingContext2D,
+    canvas: HTMLCanvasElement,
+    point: Point,
+    text: string,
+    color: string
+) => {
     const value = text.trim() || 'Lỗi';
     const fontSize = Math.max(34, Math.round(Math.min(canvas.width, canvas.height) * 0.045));
     const padding = Math.round(fontSize * 0.36);
@@ -144,7 +159,6 @@ const canvasToFile = (canvas: HTMLCanvasElement, sourceFile?: File): Promise<Fil
                     reject(new Error('Không xuất được ảnh'));
                     return;
                 }
-
                 const baseName = (sourceFile?.name || 'chat-image').replace(/\.[^.]+$/, '');
                 resolve(
                     new File([blob], `${baseName}-marked.jpg`, {
@@ -339,13 +353,21 @@ const ImageAnnotationModal: React.FC<ImageAnnotationModalProps> = ({ open, file,
                 </div>
 
                 <div className='chat-annotator__toolbar'>
-                    <Segmented value={tool} options={TOOL_OPTIONS} onChange={(value) => setTool(value as AnnotationTool)} />
+                    <Segmented
+                        value={tool}
+                        options={TOOL_OPTIONS}
+                        onChange={(value) => setTool(value as AnnotationTool)}
+                    />
                     <div className='chat-annotator__colors'>
                         {COLORS.map((item) => (
                             <button
                                 key={item}
                                 type='button'
-                                className={item === color ? 'chat-annotator__color chat-annotator__color--active' : 'chat-annotator__color'}
+                                className={
+                                    item === color
+                                        ? 'chat-annotator__color chat-annotator__color--active'
+                                        : 'chat-annotator__color'
+                                }
                                 style={{ background: item }}
                                 onClick={() => setColor(item)}
                                 aria-label={`Chọn màu ${item}`}
@@ -362,10 +384,20 @@ const ImageAnnotationModal: React.FC<ImageAnnotationModalProps> = ({ open, file,
                     />
                     <Space size={6} className='chat-annotator__actions'>
                         <Tooltip title='Hoàn tác'>
-                            <Button icon={<UndoOutlined />} onClick={handleUndo} disabled={!ready || historyRef.current.length <= 1} />
+                            <Button
+                                icon={<UndoOutlined />}
+                                onClick={handleUndo}
+                                disabled={!ready || historyRef.current.length <= 1}
+                            />
                         </Tooltip>
                         <Button onClick={onClose}>Hủy</Button>
-                        <Button type='primary' icon={<CheckOutlined />} loading={loading} disabled={!ready} onClick={handleApply}>
+                        <Button
+                            type='primary'
+                            icon={<CheckOutlined />}
+                            loading={loading}
+                            disabled={!ready}
+                            onClick={handleApply}
+                        >
                             Áp dụng
                         </Button>
                     </Space>
