@@ -104,13 +104,19 @@ const exportReplayReport = (result: IncidentReplayResult) => {
             <h2>Metrics</h2>
             <table><thead><tr><th>Chỉ số</th><th>Kỳ này</th><th>Kỳ trước</th><th>Chênh</th></tr></thead><tbody>
             ${result.metrics
-                .map((m) => `<tr><td>${escHtml(m.label)}</td><td>${escHtml(fmtReplayValue(m.current, m.unit))}</td><td>${escHtml(fmtReplayValue(m.previous, m.unit))}</td><td>${escHtml(fmtReplayValue(m.delta, m.unit))} (${escHtml(m.deltaPct)}%)</td></tr>`)
+                .map(
+                    (m) =>
+                        `<tr><td>${escHtml(m.label)}</td><td>${escHtml(fmtReplayValue(m.current, m.unit))}</td><td>${escHtml(fmtReplayValue(m.previous, m.unit))}</td><td>${escHtml(fmtReplayValue(m.delta, m.unit))} (${escHtml(m.deltaPct)}%)</td></tr>`
+                )
                 .join('')}
             </tbody></table>
             <h2>Top nguyên nhân</h2>
             ${(result.rootCauseChains || [])
                 .slice(0, 5)
-                .map((c) => `<div class="box"><b>${escHtml(c.title)}</b><div class="muted">Tin cậy ${escHtml(c.confidence)}% · ${escHtml(fmtReplayValue(c.value, 'vnd'))}</div><ul>${c.steps.map((s) => `<li>${escHtml(s)}</li>`).join('')}</ul></div>`)
+                .map(
+                    (c) =>
+                        `<div class="box"><b>${escHtml(c.title)}</b><div class="muted">Tin cậy ${escHtml(c.confidence)}% · ${escHtml(fmtReplayValue(c.value, 'vnd'))}</div><ul>${c.steps.map((s) => `<li>${escHtml(s)}</li>`).join('')}</ul></div>`
+                )
                 .join('')}
             <h2>Hành động đề xuất</h2>
             ${(result.recommendations || []).map((r) => `<div class="box"><b>${escHtml(r.title)}</b><div>${escHtml(r.description)}</div></div>`).join('')}
@@ -182,7 +188,8 @@ const priorityTone: Record<string, string> = {
 
 const buildOption = (chart: AnalyticsChart): EChartsCoreOption => {
     const isMoney = chart.unit === 'đ';
-    const fmt = (v: number) => (isMoney ? `${Math.round(v).toLocaleString('vi-VN')}đ` : `${Number(v).toLocaleString('vi-VN')}`);
+    const fmt = (v: number) =>
+        isMoney ? `${Math.round(v).toLocaleString('vi-VN')}đ` : `${Number(v).toLocaleString('vi-VN')}`;
 
     if (chart.type === 'pie') {
         return {
@@ -229,15 +236,21 @@ const buildOption = (chart: AnalyticsChart): EChartsCoreOption => {
 const ResultChart: React.FC<{ chart: AnalyticsChart | null; height?: number }> = ({ chart, height = 320 }) => {
     const option = useMemo(() => (chart ? buildOption(chart) : ({} as EChartsCoreOption)), [chart]);
     if (!chart || !chart.categories.length) {
-        return <Empty description='Không vẽ được biểu đồ — xem bảng số bên dưới' image={Empty.PRESENTED_IMAGE_SIMPLE} />;
+        return (
+            <Empty description='Không vẽ được biểu đồ — xem bảng số bên dưới' image={Empty.PRESENTED_IMAGE_SIMPLE} />
+        );
     }
     return <EChart option={option} height={height} />;
 };
 
 // Bảng đối chiếu số (giám đốc kiểm chứng), nhất là với kết quả "tham khảo" từ AI.
-const DataTable: React.FC<{ table?: { columns: string[]; rows: (string | number)[][] }; unit?: string }> = ({ table, unit }) => {
+const DataTable: React.FC<{ table?: { columns: string[]; rows: (string | number)[][] }; unit?: string }> = ({
+    table,
+    unit,
+}) => {
     if (!table?.rows?.length) return null;
-    const fmt = (v: string | number) => (typeof v === 'number' ? (unit === 'đ' ? `${v.toLocaleString('vi-VN')}đ` : v.toLocaleString('vi-VN')) : v);
+    const fmt = (v: string | number) =>
+        typeof v === 'number' ? (unit === 'đ' ? `${v.toLocaleString('vi-VN')}đ` : v.toLocaleString('vi-VN')) : v;
     return (
         <div className='mt-2 max-h-56 overflow-auto rounded-lg border border-slate-200'>
             <table className='w-full text-[12.5px]'>
@@ -254,7 +267,10 @@ const DataTable: React.FC<{ table?: { columns: string[]; rows: (string | number)
                     {table.rows.map((r, i) => (
                         <tr key={i} className='border-t border-slate-100'>
                             {r.map((cell, j) => (
-                                <td key={j} className={`px-3 py-1.5 ${j === 0 ? 'text-slate-700' : 'text-right font-medium text-slate-800'}`}>
+                                <td
+                                    key={j}
+                                    className={`px-3 py-1.5 ${j === 0 ? 'text-slate-700' : 'text-right font-medium text-slate-800'}`}
+                                >
                                     {fmt(cell)}
                                 </td>
                             ))}
@@ -281,10 +297,22 @@ const PinnedCard: React.FC<{ pin: Pin; onRemove: (id: string) => void }> = ({ pi
             extra={
                 <span className='flex items-center gap-1'>
                     <Tooltip title='Làm mới'>
-                        <Button type='text' size='small' icon={<ReloadOutlined />} loading={isFetching} onClick={() => refetch()} />
+                        <Button
+                            type='text'
+                            size='small'
+                            icon={<ReloadOutlined />}
+                            loading={isFetching}
+                            onClick={() => refetch()}
+                        />
                     </Tooltip>
                     <Tooltip title='Bỏ ghim'>
-                        <Button type='text' size='small' danger icon={<DeleteOutlined />} onClick={() => onRemove(pin.id)} />
+                        <Button
+                            type='text'
+                            size='small'
+                            danger
+                            icon={<DeleteOutlined />}
+                            onClick={() => onRemove(pin.id)}
+                        />
                     </Tooltip>
                 </span>
             }
@@ -360,14 +388,15 @@ const IncidentReplayPanel: React.FC = () => {
             <div className='-m-6 mb-5 border-b border-slate-100 bg-gradient-to-br from-slate-950 via-blue-950 to-cyan-900 px-6 py-5 text-white'>
                 <div className='flex flex-wrap items-start justify-between gap-3'>
                     <div>
-                        <div className='flex items-center gap-2 text-[12px] font-bold uppercase tracking-[0.18em] text-cyan-200'>
+                        <div className='flex items-center gap-2 text-[12px] font-bold tracking-[0.18em] text-cyan-200 uppercase'>
                             <HistoryOutlined /> AI Incident Replay
                         </div>
                         <Title level={4} className='!mt-1 !mb-1 !text-white'>
                             Dựng lại nguyên nhân bất thường
                         </Title>
                         <div className='max-w-2xl text-[13px] text-slate-200'>
-                            AI gom dữ liệu mua hàng, cấp phát, bảo trì và hiện trạng máy thành timeline điều tra. Số liệu gốc luôn hiển thị để đối soát.
+                            AI gom dữ liệu mua hàng, cấp phát, bảo trì và hiện trạng máy thành timeline điều tra. Số
+                            liệu gốc luôn hiển thị để đối soát.
                         </div>
                     </div>
                     <Tag className='!m-0 !rounded-full !border-white/20 !bg-white/10 !px-3 !py-1 !text-cyan-50'>
@@ -419,7 +448,9 @@ const IncidentReplayPanel: React.FC = () => {
 
             {history.length ? (
                 <div className='mt-4 rounded-xl border border-slate-100 bg-slate-50 p-3'>
-                    <div className='mb-2 text-[12px] font-bold uppercase tracking-wide text-slate-500'>Replay gần đây</div>
+                    <div className='mb-2 text-[12px] font-bold tracking-wide text-slate-500 uppercase'>
+                        Replay gần đây
+                    </div>
                     <div className='flex gap-2 overflow-x-auto pb-1'>
                         {history.map((item) => (
                             <div
@@ -429,13 +460,20 @@ const IncidentReplayPanel: React.FC = () => {
                                 <div className='truncate text-[12px] font-bold text-slate-800'>{item.question}</div>
                                 <div className='mt-1 text-[11px] text-slate-500'>
                                     {item.periodLabel} · score {item.caseScore ?? '-'}
-                                    {item.workflowStatus ? ` · ${REPLAY_WF_LABEL[item.workflowStatus] || item.workflowStatus}` : ''}
+                                    {item.workflowStatus
+                                        ? ` · ${REPLAY_WF_LABEL[item.workflowStatus] || item.workflowStatus}`
+                                        : ''}
                                 </div>
                                 <div className='mt-2 flex gap-1.5'>
                                     <Button size='small' onClick={() => historyDetailMut.mutate(item.id)}>
                                         Xem nhanh
                                     </Button>
-                                    <Button size='small' type='link' className='!px-1' onClick={() => navigate(`/ai-analytics/incident-replay/${item.id}`)}>
+                                    <Button
+                                        size='small'
+                                        type='link'
+                                        className='!px-1'
+                                        onClick={() => navigate(`/ai-analytics/incident-replay/${item.id}`)}
+                                    >
                                         Mở hồ sơ
                                     </Button>
                                 </div>
@@ -456,12 +494,8 @@ const IncidentReplayPanel: React.FC = () => {
                         <Tag color='blue' className='!m-0 !rounded-full'>
                             {domainLabel[result.focus] || 'Tổng hợp'}
                         </Tag>
-                        <Tag className='!m-0 !rounded-full'>
-                            Kỳ này: {result.periodLabel}
-                        </Tag>
-                        <Tag className='!m-0 !rounded-full'>
-                            Kỳ trước: {result.previousPeriodLabel}
-                        </Tag>
+                        <Tag className='!m-0 !rounded-full'>Kỳ này: {result.periodLabel}</Tag>
+                        <Tag className='!m-0 !rounded-full'>Kỳ trước: {result.previousPeriodLabel}</Tag>
                         <Tag color={result.aiUsed ? 'green' : 'orange'} className='!m-0 !rounded-full'>
                             {result.aiUsed ? 'AI phân tích' : 'Dự phòng'}
                         </Tag>
@@ -478,16 +512,32 @@ const IncidentReplayPanel: React.FC = () => {
                         </Button>
                         {result.historyId ? (
                             <>
-                                <Button size='small' type='primary' onClick={() => navigate(`/ai-analytics/incident-replay/${result.historyId}`)}>
+                                <Button
+                                    size='small'
+                                    type='primary'
+                                    onClick={() => navigate(`/ai-analytics/incident-replay/${result.historyId}`)}
+                                >
                                     Mở Case File
                                 </Button>
-                                <Button size='small' loading={feedbackMut.isPending} onClick={() => feedbackMut.mutate('accurate')}>
+                                <Button
+                                    size='small'
+                                    loading={feedbackMut.isPending}
+                                    onClick={() => feedbackMut.mutate('accurate')}
+                                >
                                     Đúng
                                 </Button>
-                                <Button size='small' loading={feedbackMut.isPending} onClick={() => feedbackMut.mutate('wrong')}>
+                                <Button
+                                    size='small'
+                                    loading={feedbackMut.isPending}
+                                    onClick={() => feedbackMut.mutate('wrong')}
+                                >
                                     Sai
                                 </Button>
-                                <Button size='small' loading={feedbackMut.isPending} onClick={() => feedbackMut.mutate('missing_data')}>
+                                <Button
+                                    size='small'
+                                    loading={feedbackMut.isPending}
+                                    onClick={() => feedbackMut.mutate('missing_data')}
+                                >
                                     Thiếu dữ liệu
                                 </Button>
                             </>
@@ -496,7 +546,9 @@ const IncidentReplayPanel: React.FC = () => {
 
                     {result.scope?.applied ? (
                         <div className='rounded-xl border border-cyan-100 bg-cyan-50 px-4 py-2'>
-                            <div className='text-[12px] font-bold uppercase tracking-wide text-cyan-800'>Phạm vi phân tích</div>
+                            <div className='text-[12px] font-bold tracking-wide text-cyan-800 uppercase'>
+                                Phạm vi phân tích
+                            </div>
                             <div className='mt-1 flex flex-wrap gap-1.5'>
                                 {result.scope.notes.map((note) => (
                                     <Tag key={note} color='cyan' className='!m-0 !rounded-full'>
@@ -509,17 +561,25 @@ const IncidentReplayPanel: React.FC = () => {
 
                     <div className='grid grid-cols-1 gap-3 lg:grid-cols-[220px_1fr]'>
                         <div className='relative overflow-hidden rounded-2xl border border-slate-200 bg-white p-4 shadow-sm'>
-                            <div className='absolute -right-10 -top-10 h-28 w-28 rounded-full bg-cyan-100 blur-2xl' />
+                            <div className='absolute -top-10 -right-10 h-28 w-28 rounded-full bg-cyan-100 blur-2xl' />
                             <div className='relative'>
-                                <div className='text-[12px] font-semibold uppercase tracking-wide text-slate-500'>Incident Score</div>
+                                <div className='text-[12px] font-semibold tracking-wide text-slate-500 uppercase'>
+                                    Incident Score
+                                </div>
                                 <div className='mt-3 flex items-end gap-2'>
-                                    <span className='text-[44px] font-black leading-none text-slate-950'>{result.caseScore}</span>
+                                    <span className='text-[44px] leading-none font-black text-slate-950'>
+                                        {result.caseScore}
+                                    </span>
                                     <span className='pb-1 text-sm font-semibold text-slate-400'>/100</span>
                                 </div>
-                                <div className={`mt-3 inline-flex rounded-full border px-3 py-1 text-[12px] font-bold ${caseSeverityMeta[result.caseSeverity]?.className}`}>
+                                <div
+                                    className={`mt-3 inline-flex rounded-full border px-3 py-1 text-[12px] font-bold ${caseSeverityMeta[result.caseSeverity]?.className}`}
+                                >
                                     {caseSeverityMeta[result.caseSeverity]?.label || result.caseSeverity}
                                 </div>
-                                <div className='mt-2 text-[12px] text-slate-500'>{caseSeverityMeta[result.caseSeverity]?.hint}</div>
+                                <div className='mt-2 text-[12px] text-slate-500'>
+                                    {caseSeverityMeta[result.caseSeverity]?.hint}
+                                </div>
                             </div>
                         </div>
 
@@ -529,7 +589,10 @@ const IncidentReplayPanel: React.FC = () => {
                             </div>
                             <div className='grid grid-cols-1 gap-2 sm:grid-cols-3'>
                                 {result.rootCauseChains.slice(0, 3).map((chain, idx) => (
-                                    <div key={`${chain.title}-${idx}`} className={`rounded-xl border px-3 py-2 ${replayTone[chain.severity]}`}>
+                                    <div
+                                        key={`${chain.title}-${idx}`}
+                                        className={`rounded-xl border px-3 py-2 ${replayTone[chain.severity]}`}
+                                    >
                                         <div className='truncate text-[12px] font-bold'>{chain.title}</div>
                                         <div className='mt-1 text-[11px] opacity-80'>
                                             Tin cậy {chain.confidence}% · {fmtReplayValue(chain.value, 'vnd')}
@@ -573,7 +636,10 @@ const IncidentReplayPanel: React.FC = () => {
                             </div>
                             <div className='grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3'>
                                 {result.anomalies.slice(0, 6).map((anomaly, idx) => (
-                                    <div key={`${anomaly.title}-${idx}`} className={`rounded-xl border p-3 ${replayTone[anomaly.severity]}`}>
+                                    <div
+                                        key={`${anomaly.title}-${idx}`}
+                                        className={`rounded-xl border p-3 ${replayTone[anomaly.severity]}`}
+                                    >
                                         <div className='flex items-start justify-between gap-2'>
                                             <div className='min-w-0'>
                                                 <div className='truncate text-[13px] font-bold'>{anomaly.title}</div>
@@ -608,21 +674,38 @@ const IncidentReplayPanel: React.FC = () => {
                             </div>
                             <div className='grid grid-cols-1 gap-3 lg:grid-cols-2'>
                                 {result.rootCauseChains.slice(0, 4).map((chain, idx) => (
-                                    <div key={`${chain.title}-${idx}`} className='rounded-xl border border-slate-100 bg-slate-50 p-3'>
+                                    <div
+                                        key={`${chain.title}-${idx}`}
+                                        className='rounded-xl border border-slate-100 bg-slate-50 p-3'
+                                    >
                                         <div className='flex flex-wrap items-start justify-between gap-2'>
                                             <div className='min-w-0'>
-                                                <div className='truncate text-[13px] font-bold text-slate-900'>{chain.title}</div>
+                                                <div className='truncate text-[13px] font-bold text-slate-900'>
+                                                    {chain.title}
+                                                </div>
                                                 <div className='mt-1 text-[11px] text-slate-500'>
                                                     {domainLabel[chain.domain]} · độ tin cậy {chain.confidence}%
                                                 </div>
                                             </div>
-                                            <Tag color={chain.severity === 'danger' ? 'red' : chain.severity === 'warning' ? 'orange' : 'blue'} className='!m-0 !rounded-full'>
+                                            <Tag
+                                                color={
+                                                    chain.severity === 'danger'
+                                                        ? 'red'
+                                                        : chain.severity === 'warning'
+                                                          ? 'orange'
+                                                          : 'blue'
+                                                }
+                                                className='!m-0 !rounded-full'
+                                            >
                                                 {fmtReplayValue(chain.value, 'vnd')}
                                             </Tag>
                                         </div>
                                         <div className='mt-3 space-y-1.5'>
                                             {chain.steps.slice(0, 4).map((step, stepIdx) => (
-                                                <div key={step} className='flex gap-2 text-[12px] leading-5 text-slate-600'>
+                                                <div
+                                                    key={step}
+                                                    className='flex gap-2 text-[12px] leading-5 text-slate-600'
+                                                >
                                                     <span className='mt-1 flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-white text-[10px] font-bold text-slate-500'>
                                                         {stepIdx + 1}
                                                     </span>
@@ -652,16 +735,26 @@ const IncidentReplayPanel: React.FC = () => {
                             </div>
                             <div className='grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3'>
                                 {result.recommendations.map((rec) => (
-                                    <div key={rec.title} className='rounded-xl border border-slate-100 bg-gradient-to-br from-white to-slate-50 p-3'>
+                                    <div
+                                        key={rec.title}
+                                        className='rounded-xl border border-slate-100 bg-gradient-to-br from-white to-slate-50 p-3'
+                                    >
                                         <div className='flex items-start justify-between gap-2'>
                                             <div className='text-[13px] font-bold text-slate-900'>{rec.title}</div>
                                             <Tag color={priorityTone[rec.priority]} className='!m-0 !rounded-full'>
                                                 {rec.priority}
                                             </Tag>
                                         </div>
-                                        <div className='mt-2 text-[12px] leading-5 text-slate-600'>{rec.description}</div>
+                                        <div className='mt-2 text-[12px] leading-5 text-slate-600'>
+                                            {rec.description}
+                                        </div>
                                         {rec.route ? (
-                                            <Button size='small' type='link' className='!mt-1 !px-0' onClick={() => navigate(rec.route!)}>
+                                            <Button
+                                                size='small'
+                                                type='link'
+                                                className='!mt-1 !px-0'
+                                                onClick={() => navigate(rec.route!)}
+                                            >
                                                 Mở module liên quan
                                             </Button>
                                         ) : null}
@@ -681,7 +774,9 @@ const IncidentReplayPanel: React.FC = () => {
                                     <div key={group.key} className='rounded-xl border border-slate-100 bg-slate-50 p-3'>
                                         <div className='mb-2 flex items-center justify-between gap-2'>
                                             <div>
-                                                <div className='text-[13px] font-bold text-slate-900'>{group.title}</div>
+                                                <div className='text-[13px] font-bold text-slate-900'>
+                                                    {group.title}
+                                                </div>
                                                 <div className='text-[11px] text-slate-500'>
                                                     Tổng {fmtReplayValue(group.total, 'vnd')}
                                                 </div>
@@ -694,13 +789,29 @@ const IncidentReplayPanel: React.FC = () => {
                                                 return (
                                                     <div key={row.label} className='rounded-lg bg-white px-3 py-2'>
                                                         <div className='flex items-center justify-between gap-2'>
-                                                            <div className='min-w-0 truncate text-[12px] font-semibold text-slate-700'>{row.label}</div>
-                                                            <div className='text-[12px] font-bold text-slate-900'>{fmtReplayValue(row.value, 'vnd')}</div>
+                                                            <div className='min-w-0 truncate text-[12px] font-semibold text-slate-700'>
+                                                                {row.label}
+                                                            </div>
+                                                            <div className='text-[12px] font-bold text-slate-900'>
+                                                                {fmtReplayValue(row.value, 'vnd')}
+                                                            </div>
                                                         </div>
                                                         <div className='mt-1 flex items-center justify-between gap-2 text-[11px] text-slate-500'>
-                                                            <span>{row.sharePct}% nhóm · {row.count} dòng</span>
-                                                            <span className={up ? 'font-semibold text-rose-600' : row.delta < 0 ? 'font-semibold text-emerald-600' : ''}>
-                                                                {up ? '+' : ''}{fmtReplayValue(row.delta, 'vnd')} · {up ? '+' : ''}{row.deltaPct}%
+                                                            <span>
+                                                                {row.sharePct}% nhóm · {row.count} dòng
+                                                            </span>
+                                                            <span
+                                                                className={
+                                                                    up
+                                                                        ? 'font-semibold text-rose-600'
+                                                                        : row.delta < 0
+                                                                          ? 'font-semibold text-emerald-600'
+                                                                          : ''
+                                                                }
+                                                            >
+                                                                {up ? '+' : ''}
+                                                                {fmtReplayValue(row.delta, 'vnd')} · {up ? '+' : ''}
+                                                                {row.deltaPct}%
                                                             </span>
                                                         </div>
                                                     </div>
@@ -718,13 +829,20 @@ const IncidentReplayPanel: React.FC = () => {
                             const up = metric.delta > 0;
                             const neutral = metric.delta === 0;
                             return (
-                                <div key={metric.key} className='rounded-xl border border-slate-200 bg-white p-3 shadow-sm'>
+                                <div
+                                    key={metric.key}
+                                    className='rounded-xl border border-slate-200 bg-white p-3 shadow-sm'
+                                >
                                     <div className='text-[12px] font-medium text-slate-500'>{metric.label}</div>
                                     <div className='mt-1 text-[20px] font-bold text-slate-900'>
                                         {fmtReplayValue(metric.current, metric.unit)}
                                     </div>
-                                    <div className={`mt-1 text-[12px] font-semibold ${neutral ? 'text-slate-500' : up ? 'text-rose-600' : 'text-emerald-600'}`}>
-                                        {neutral ? 'Không đổi' : `${up ? '+' : ''}${fmtReplayValue(metric.delta, metric.unit)} (${up ? '+' : ''}${metric.deltaPct}%)`}
+                                    <div
+                                        className={`mt-1 text-[12px] font-semibold ${neutral ? 'text-slate-500' : up ? 'text-rose-600' : 'text-emerald-600'}`}
+                                    >
+                                        {neutral
+                                            ? 'Không đổi'
+                                            : `${up ? '+' : ''}${fmtReplayValue(metric.delta, metric.unit)} (${up ? '+' : ''}${metric.deltaPct}%)`}
                                     </div>
                                     <div className='mt-1 text-[11px] text-slate-400'>
                                         Kỳ trước: {fmtReplayValue(metric.previous, metric.unit)}
@@ -742,10 +860,15 @@ const IncidentReplayPanel: React.FC = () => {
                             {result.drivers.length ? (
                                 <div className='space-y-2'>
                                     {result.drivers.slice(0, 8).map((driver, idx) => (
-                                        <div key={`${driver.label}-${idx}`} className='rounded-lg border border-slate-100 bg-slate-50 px-3 py-2'>
+                                        <div
+                                            key={`${driver.label}-${idx}`}
+                                            className='rounded-lg border border-slate-100 bg-slate-50 px-3 py-2'
+                                        >
                                             <div className='flex items-start justify-between gap-2'>
                                                 <div className='min-w-0'>
-                                                    <div className='truncate text-[13px] font-semibold text-slate-800'>{driver.label}</div>
+                                                    <div className='truncate text-[13px] font-semibold text-slate-800'>
+                                                        {driver.label}
+                                                    </div>
                                                     <div className='text-[11px] text-slate-500'>
                                                         {domainLabel[driver.domain]} · {driver.count} dòng/sự kiện
                                                     </div>
@@ -777,16 +900,26 @@ const IncidentReplayPanel: React.FC = () => {
                                             <div className='flex flex-wrap items-start justify-between gap-2'>
                                                 <div className='min-w-0'>
                                                     <div className='flex flex-wrap items-center gap-2'>
-                                                        <span className='text-[13px] font-bold text-slate-800'>{event.title}</span>
-                                                        <span className={`rounded-full border px-2 py-0.5 text-[10.5px] font-semibold ${replayTone[event.severity]}`}>
+                                                        <span className='text-[13px] font-bold text-slate-800'>
+                                                            {event.title}
+                                                        </span>
+                                                        <span
+                                                            className={`rounded-full border px-2 py-0.5 text-[10.5px] font-semibold ${replayTone[event.severity]}`}
+                                                        >
                                                             {domainLabel[event.type]}
                                                         </span>
                                                     </div>
-                                                    <div className='mt-1 text-[12px] text-slate-500'>{event.subtitle}</div>
+                                                    <div className='mt-1 text-[12px] text-slate-500'>
+                                                        {event.subtitle}
+                                                    </div>
                                                 </div>
                                                 <div className='text-right'>
-                                                    <div className='text-[12px] font-bold text-slate-900'>{fmtReplayValue(event.value, 'vnd')}</div>
-                                                    <div className='text-[11px] text-slate-400'>{replayDate(event.at)}</div>
+                                                    <div className='text-[12px] font-bold text-slate-900'>
+                                                        {fmtReplayValue(event.value, 'vnd')}
+                                                    </div>
+                                                    <div className='text-[11px] text-slate-400'>
+                                                        {replayDate(event.at)}
+                                                    </div>
                                                 </div>
                                             </div>
                                             {event.evidence?.length ? (
@@ -819,7 +952,10 @@ const AiAnalyticsStudioPage: React.FC = () => {
     const [result, setResult] = useState<AnalyticsResult | null>(null);
     const [pins, setPins] = useState<Pin[]>(() => loadPins());
 
-    const { data: catalog } = useQuery({ queryKey: ['analytics-catalog'], queryFn: () => aiAnalyticsService.catalog() });
+    const { data: catalog } = useQuery({
+        queryKey: ['analytics-catalog'],
+        queryFn: () => aiAnalyticsService.catalog(),
+    });
 
     const queryMut = useMutation({
         mutationFn: (q: string) => aiAnalyticsService.query({ question: q }),
@@ -872,7 +1008,10 @@ const AiAnalyticsStudioPage: React.FC = () => {
         <div className='flex flex-col gap-5'>
             {/* Header */}
             <div className='rounded-2xl border border-slate-200 bg-white p-5 shadow-sm'>
-                <div className='flex items-center gap-2 text-sm font-bold tracking-wide uppercase' style={{ color: ACCENT }}>
+                <div
+                    className='flex items-center gap-2 text-sm font-bold tracking-wide uppercase'
+                    style={{ color: ACCENT }}
+                >
                     <RobotOutlined /> AI Analytics Studio
                 </div>
                 <Title level={3} className='!mt-1 !mb-1'>
@@ -983,7 +1122,9 @@ const AiAnalyticsStudioPage: React.FC = () => {
                     <div className='mt-2 rounded-lg bg-slate-50 px-3 py-2 text-[13px] text-slate-600'>
                         {result.narrative}
                     </div>
-                    {!result.trusted || !result.chart ? <DataTable table={result.table} unit={result.chart?.unit} /> : null}
+                    {!result.trusted || !result.chart ? (
+                        <DataTable table={result.table} unit={result.chart?.unit} />
+                    ) : null}
                 </Card>
             ) : (
                 <Card className='rounded-2xl border-dashed border-slate-200'>

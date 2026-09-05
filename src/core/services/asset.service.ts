@@ -30,7 +30,8 @@ export const assetService = {
 
     getById: (id: string): Promise<Asset> => api.get<Asset>(`${BASE}/${id}`),
 
-    ensurePublicId: (id: string): Promise<AssetPublicIdResponse> => api.post<AssetPublicIdResponse>(`${BASE}/${id}/public-id`),
+    ensurePublicId: (id: string): Promise<AssetPublicIdResponse> =>
+        api.post<AssetPublicIdResponse>(`${BASE}/${id}/public-id`),
 
     create: (data: Omit<Asset, 'id' | 'createdAt' | 'updatedAt'> & { typeCode?: string }): Promise<Asset> =>
         api.post<Asset>(BASE, data),

@@ -144,9 +144,7 @@ const ProductionCommandRibbon = ({
     };
 
     const menuItems: MenuProps['items'] = [
-        canManage && day
-            ? { key: 'export', icon: <DownloadOutlined />, label: 'Xuất Excel báo cáo ngày' }
-            : null,
+        canManage && day ? { key: 'export', icon: <DownloadOutlined />, label: 'Xuất Excel báo cáo ngày' } : null,
         onSetup && (!day || day.status === 'draft') && canManage
             ? { key: 'setup', icon: <SettingOutlined />, label: 'Thiết lập danh mục & khung giờ' }
             : null,
@@ -227,12 +225,7 @@ const ProductionCommandRibbon = ({
                 ) : null}
             </div>
 
-            <Modal
-                open={auditOpen}
-                title='Lịch sử trạng thái'
-                footer={null}
-                onCancel={() => setAuditOpen(false)}
-            >
+            <Modal open={auditOpen} title='Lịch sử trạng thái' footer={null} onCancel={() => setAuditOpen(false)}>
                 <div className='production-status-audit'>
                     {day?.statusHistory?.length ? (
                         [...day.statusHistory]

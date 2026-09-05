@@ -140,7 +140,9 @@ const LuckyWheelSvg = ({
                     style={{
                         transform: `rotate(${rotation}deg)`,
                         transformOrigin: '210px 210px',
-                        transition: spinning ? 'transform 7.8s cubic-bezier(0.12, 0.72, 0.08, 1)' : 'transform 520ms ease',
+                        transition: spinning
+                            ? 'transform 7.8s cubic-bezier(0.12, 0.72, 0.08, 1)'
+                            : 'transform 520ms ease',
                     }}
                     filter='url(#wheelShadow)'
                 >
@@ -148,7 +150,14 @@ const LuckyWheelSvg = ({
                     {count === 1 ? (
                         // Còn đúng 1 người: arc 360 độ bị suy biến nên vẽ nguyên hình tròn.
                         <g>
-                            <circle cx='210' cy='210' r='188' fill={PALETTE[0]} stroke='rgba(255,255,255,0.72)' strokeWidth='2' />
+                            <circle
+                                cx='210'
+                                cy='210'
+                                r='188'
+                                fill={PALETTE[0]}
+                                stroke='rgba(255,255,255,0.72)'
+                                strokeWidth='2'
+                            />
                             <text
                                 x={polarToCartesian(210, 210, labelRadius, 90).x}
                                 y={polarToCartesian(210, 210, labelRadius, 90).y}
@@ -163,43 +172,52 @@ const LuckyWheelSvg = ({
                             </text>
                         </g>
                     ) : (
-                    activeParticipants.map((participant, index) => {
-                        const start = index * angle;
-                        const end = start + angle;
-                        const mid = start + angle / 2;
-                        const point = polarToCartesian(210, 210, labelRadius, mid);
-                        const normalizedMid = ((mid % 360) + 360) % 360;
-                        // Chữ xếp dọc theo bán kính; nửa trái lật 180° + đổi anchor để không bao giờ ngược chữ.
-                        const isLeftHalf = normalizedMid > 180;
-                        const labelRotation = isLeftHalf ? mid + 90 : mid - 90;
-                        const active = participant.active !== false;
-                        return (
-                            <g key={`${participant._id || participant.name}-${index}`} opacity={active ? 1 : 0.38}>
-                                <path
-                                    d={describeArc(210, 210, 188, start, end)}
-                                    fill={PALETTE[index % PALETTE.length]}
-                                    stroke='rgba(255,255,255,0.72)'
-                                    strokeWidth='2'
-                                />
-                                <text
-                                    x={point.x}
-                                    y={point.y}
-                                    textAnchor={isLeftHalf ? 'start' : 'end'}
-                                    dominantBaseline='middle'
-                                    transform={`rotate(${labelRotation} ${point.x} ${point.y})`}
-                                    className='lucky-wheel-segment-label'
-                                    style={{ '--wheel-label-size': `${labelFontSize}px` } as React.CSSProperties}
-                                >
-                                    {participant.name.length > 16 ? `${participant.name.slice(0, 15)}...` : participant.name}
-                                </text>
-                            </g>
-                        );
-                    })
+                        activeParticipants.map((participant, index) => {
+                            const start = index * angle;
+                            const end = start + angle;
+                            const mid = start + angle / 2;
+                            const point = polarToCartesian(210, 210, labelRadius, mid);
+                            const normalizedMid = ((mid % 360) + 360) % 360;
+                            // Chữ xếp dọc theo bán kính; nửa trái lật 180° + đổi anchor để không bao giờ ngược chữ.
+                            const isLeftHalf = normalizedMid > 180;
+                            const labelRotation = isLeftHalf ? mid + 90 : mid - 90;
+                            const active = participant.active !== false;
+                            return (
+                                <g key={`${participant._id || participant.name}-${index}`} opacity={active ? 1 : 0.38}>
+                                    <path
+                                        d={describeArc(210, 210, 188, start, end)}
+                                        fill={PALETTE[index % PALETTE.length]}
+                                        stroke='rgba(255,255,255,0.72)'
+                                        strokeWidth='2'
+                                    />
+                                    <text
+                                        x={point.x}
+                                        y={point.y}
+                                        textAnchor={isLeftHalf ? 'start' : 'end'}
+                                        dominantBaseline='middle'
+                                        transform={`rotate(${labelRotation} ${point.x} ${point.y})`}
+                                        className='lucky-wheel-segment-label'
+                                        style={{ '--wheel-label-size': `${labelFontSize}px` } as React.CSSProperties}
+                                    >
+                                        {participant.name.length > 16
+                                            ? `${participant.name.slice(0, 15)}...`
+                                            : participant.name}
+                                    </text>
+                                </g>
+                            );
+                        })
                     )}
                     <circle cx='210' cy='210' r='188' fill='url(#wheelSheen)' pointerEvents='none' />
                 </g>
                 {/* Trục giữa đứng yên như nắp trục vòng quay thật — không xoay theo bánh xe. */}
-                <circle cx='210' cy='210' r='72' fill='url(#wheelCenter)' stroke='rgba(255,255,255,0.9)' strokeWidth='8' />
+                <circle
+                    cx='210'
+                    cy='210'
+                    r='72'
+                    fill='url(#wheelCenter)'
+                    stroke='rgba(255,255,255,0.9)'
+                    strokeWidth='8'
+                />
                 <text x='210' y='198' textAnchor='middle' className='lucky-wheel-brand'>
                     HAIDANG
                 </text>
@@ -398,7 +416,9 @@ const LuckyWheelPage: React.FC = () => {
                     soundEnabled: true,
                 },
             };
-            return selectedEvent?._id ? luckyWheelService.update(selectedEvent._id, payload) : luckyWheelService.create(payload);
+            return selectedEvent?._id
+                ? luckyWheelService.update(selectedEvent._id, payload)
+                : luckyWheelService.create(payload);
         },
         onSuccess: (event) => {
             setSelectedId(event._id);
@@ -481,14 +501,19 @@ const LuckyWheelPage: React.FC = () => {
     const watchedTheme = Form.useWatch('theme', form) as LuckyWheelTheme | undefined;
     const currentTheme = themeMeta[watchedTheme || selectedEvent?.settings?.theme || 'haidang-night'];
     const watchedName = Form.useWatch('name', form) as string | undefined;
-    const participants = selectedEvent?.participants || parseParticipantText(form.getFieldValue('participantsText') || defaultNames.join('\n'));
+    const participants =
+        selectedEvent?.participants ||
+        parseParticipantText(form.getFieldValue('participantsText') || defaultNames.join('\n'));
     const activeParticipants = participants.filter((item) => item.active !== false);
     const activeCount = activeParticipants.length;
     // Bánh xe chỉ vẽ người còn trên vòng — người đã trúng biến mất, các múi chia lại.
     // Khi tất cả đã trúng thì vẽ đủ danh sách (mờ) thay vì bánh xe rỗng.
     const wheelParticipants = activeParticipants.length ? activeParticipants : participants;
-    wheelParticipantsRef.current = wheelParticipants;
     const winners = selectedEvent?.winners || [];
+
+    useEffect(() => {
+        wheelParticipantsRef.current = wheelParticipants;
+    }, [wheelParticipants]);
 
     if (!hasDirectorAccess(user?.role)) {
         return <Navigate to='/dashboard' replace />;
@@ -522,7 +547,8 @@ const LuckyWheelPage: React.FC = () => {
                     <span className='lucky-wheel-eyebrow'>Sự kiện nội bộ · Hải Đăng</span>
                     <h2 className='lucky-wheel-title'>{selectedEvent?.name || watchedName || 'Sự kiện may mắn'}</h2>
                     <p className='lucky-wheel-desc'>
-                        {selectedEvent?.description || 'Kết quả quay ngẫu nhiên từ máy chủ và được lưu lịch sử minh bạch.'}
+                        {selectedEvent?.description ||
+                            'Kết quả quay ngẫu nhiên từ máy chủ và được lưu lịch sử minh bạch.'}
                     </p>
                 </div>
 
@@ -583,7 +609,11 @@ const LuckyWheelPage: React.FC = () => {
                     Nhập mỗi người một dòng. Có thể dùng: Tên | Mã | Cơ sở
                 </Text>
                 <Form form={form} layout='vertical'>
-                    <Form.Item name='name' label='Tên sự kiện' rules={[{ required: true, message: 'Nhập tên sự kiện' }]}>
+                    <Form.Item
+                        name='name'
+                        label='Tên sự kiện'
+                        rules={[{ required: true, message: 'Nhập tên sự kiện' }]}
+                    >
                         <Input placeholder='Ví dụ: Quay may mắn cuối tháng' />
                     </Form.Item>
                     <Form.Item name='description' label='Ghi chú'>
@@ -594,7 +624,12 @@ const LuckyWheelPage: React.FC = () => {
                     </Form.Item>
                     <div className='grid grid-cols-1 gap-3 sm:grid-cols-2'>
                         <Form.Item name='theme' label='Theme'>
-                            <Select options={Object.entries(themeMeta).map(([value, meta]) => ({ value, label: meta.label }))} />
+                            <Select
+                                options={Object.entries(themeMeta).map(([value, meta]) => ({
+                                    value,
+                                    label: meta.label,
+                                }))}
+                            />
                         </Form.Item>
                         <Form.Item name='confettiEnabled' label='Pháo giấy' valuePropName='checked'>
                             <Switch />
@@ -657,9 +692,13 @@ const LuckyWheelPage: React.FC = () => {
                                     description={
                                         <Space size={6} wrap>
                                             {winner.code ? <Text className='text-xs'>{winner.code}</Text> : null}
-                                            {winner.plantName ? <Text className='text-xs'>{winner.plantName}</Text> : null}
+                                            {winner.plantName ? (
+                                                <Text className='text-xs'>{winner.plantName}</Text>
+                                            ) : null}
                                             <Tooltip title={formatDateTime(winner.spunAt)}>
-                                                <Text className='text-xs text-slate-400'>{formatDateTime(winner.spunAt)}</Text>
+                                                <Text className='text-xs text-slate-400'>
+                                                    {formatDateTime(winner.spunAt)}
+                                                </Text>
                                             </Tooltip>
                                         </Space>
                                     }

@@ -18,12 +18,11 @@ export const DEFAULT_NEURAL_VOICE = 'vi-VN-HoaiMyNeural';
 // Đổi hệ số (1.18) -> chuỗi prosody SSML ("+18%") cho Edge TTS.
 const toEdgePct = (n: number) => `${n >= 1 ? '+' : ''}${Math.round((n - 1) * 100)}%`;
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 type SpeechRecognitionLike = any;
 
 const getRecognitionCtor = (): (new () => SpeechRecognitionLike) | null => {
     if (typeof window === 'undefined') return null;
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
     const w = window as any;
     return w.SpeechRecognition || w.webkitSpeechRecognition || null;
 };
@@ -110,7 +109,6 @@ export const useVoiceChat = () => {
             finalRef.current = '';
             handlersRef.current = handlers;
 
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
             rec.onresult = (e: any) => {
                 // Dựng lại TOÀN BỘ transcript từ đầu mỗi sự kiện (KHÔNG cộng dồn) -> tránh lặp chữ/câu.
                 let interim = '';
@@ -192,7 +190,10 @@ export const useVoiceChat = () => {
                     const token = getStoredAccessToken();
                     const resp = await fetch(`${API_BASE_URL}/ai/tts`, {
                         method: 'POST',
-                        headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+                        headers: {
+                            'Content-Type': 'application/json',
+                            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+                        },
                         credentials: 'include',
                         body: JSON.stringify({ text: chunk, voice, rate, pitch }),
                     });
@@ -261,7 +262,8 @@ export const useVoiceChat = () => {
             const all = synth.getVoices();
             const vi = all.filter((v) => v.lang?.toLowerCase().startsWith('vi'));
             // Tự động: ưu tiên giọng NỮ tiếng Việt (trẻ/tự nhiên hơn) nếu có.
-            const autoVi = vi.find((v) => /female|nữ|hoaimy|hoai my|\bmy\b|linh|lan|huong|mai|thu/i.test(v.name)) || vi[0];
+            const autoVi =
+                vi.find((v) => /female|nữ|hoaimy|hoai my|\bmy\b|linh|lan|huong|mai|thu/i.test(v.name)) || vi[0];
             const chosen = (opts.voiceURI && all.find((v) => v.voiceURI === opts.voiceURI)) || autoVi;
             if (chosen) {
                 u.voice = chosen;

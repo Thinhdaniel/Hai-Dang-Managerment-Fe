@@ -18,9 +18,9 @@ const { Text } = Typography;
 
 // OKLCH role pills
 const ROLE_PILL: Record<User['role'], { bg: string; text: string; label: string }> = {
-    admin:    { bg: 'oklch(0.96 0.04 25)',  text: 'oklch(0.36 0.18 25)',  label: USER_ROLE_LABEL.admin },
-    manager:  { bg: 'oklch(0.95 0.05 255)', text: 'oklch(0.36 0.16 255)', label: USER_ROLE_LABEL.manager },
-    staff:    { bg: 'oklch(0.96 0.04 145)', text: 'oklch(0.32 0.14 145)', label: USER_ROLE_LABEL.staff },
+    admin: { bg: 'oklch(0.96 0.04 25)', text: 'oklch(0.36 0.18 25)', label: USER_ROLE_LABEL.admin },
+    manager: { bg: 'oklch(0.95 0.05 255)', text: 'oklch(0.36 0.16 255)', label: USER_ROLE_LABEL.manager },
+    staff: { bg: 'oklch(0.96 0.04 145)', text: 'oklch(0.32 0.14 145)', label: USER_ROLE_LABEL.staff },
     director: { bg: 'oklch(0.95 0.06 300)', text: 'oklch(0.36 0.18 300)', label: USER_ROLE_LABEL.director },
     line_leader: { bg: 'oklch(0.95 0.05 265)', text: 'oklch(0.34 0.17 265)', label: USER_ROLE_LABEL.line_leader },
     qc: { bg: 'oklch(0.96 0.04 190)', text: 'oklch(0.32 0.12 190)', label: USER_ROLE_LABEL.qc },
@@ -124,9 +124,7 @@ const UserList: React.FC = () => {
         const timeoutId = window.setTimeout(() => {
             const normalizedSearch = normalizeSearchTerm(draftFilters.search);
 
-            setPagination((current) =>
-                current.page === DEFAULT_PAGE ? current : { ...current, page: DEFAULT_PAGE }
-            );
+            setPagination((current) => (current.page === DEFAULT_PAGE ? current : { ...current, page: DEFAULT_PAGE }));
             setFilters((current) =>
                 current.search === normalizedSearch
                     ? current
@@ -146,7 +144,11 @@ const UserList: React.FC = () => {
         enabled: canViewUsers,
     });
 
-    const { data: userResponse, isLoading, isFetching } = useQuery({
+    const {
+        data: userResponse,
+        isLoading,
+        isFetching,
+    } = useQuery({
         queryKey: ['users', queryParams],
         queryFn: async () => normalizeUserListResponse(await userService.getAll(queryParams), queryParams),
         enabled: canViewUsers,
@@ -338,12 +340,14 @@ const UserList: React.FC = () => {
             render: (isActive: boolean) => (
                 <span
                     className='inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-semibold'
-                    style={isActive
-                        ? { background: 'oklch(0.96 0.04 145)', color: 'oklch(0.32 0.14 145)' }
-                        : { background: 'oklch(0.96 0.01 250)', color: 'oklch(0.52 0.04 250)' }}
+                    style={
+                        isActive
+                            ? { background: 'oklch(0.96 0.04 145)', color: 'oklch(0.32 0.14 145)' }
+                            : { background: 'oklch(0.96 0.01 250)', color: 'oklch(0.52 0.04 250)' }
+                    }
                 >
                     <span
-                        className='h-1.5 w-1.5 rounded-full flex-shrink-0'
+                        className='h-1.5 w-1.5 flex-shrink-0 rounded-full'
                         style={{ background: isActive ? 'oklch(0.52 0.18 145)' : 'oklch(0.64 0.04 250)' }}
                     />
                     {isActive ? 'Hoạt động' : 'Ngưng'}
@@ -417,28 +421,28 @@ const UserList: React.FC = () => {
             <div className='ul-s flex flex-wrap gap-px overflow-hidden rounded-xl border border-slate-200 bg-slate-200'>
                 {[
                     { label: 'Tổng tài khoản', value: stats.total, accent: 'oklch(0.18 0.012 250)' },
-                    { label: 'Quản trị viên', value: stats.admin,   accent: 'oklch(0.44 0.16 25)'  },
-                    { label: 'Quản lý',         value: stats.manager, accent: 'oklch(0.44 0.14 255)' },
-                    { label: 'Nhân viên',        value: stats.staff,   accent: 'oklch(0.42 0.14 145)' },
+                    { label: 'Quản trị viên', value: stats.admin, accent: 'oklch(0.44 0.16 25)' },
+                    { label: 'Quản lý', value: stats.manager, accent: 'oklch(0.44 0.14 255)' },
+                    { label: 'Nhân viên', value: stats.staff, accent: 'oklch(0.42 0.14 145)' },
                 ].map(({ label, value, accent }) => (
                     <div key={label} className='ul-stat flex min-w-[110px] flex-1 flex-col gap-0.5 bg-white px-6 py-4'>
                         <span className='text-[11px] font-medium text-slate-400'>{label}</span>
-                        <span className='text-base font-bold' style={{ color: accent }}>{value}</span>
+                        <span className='text-base font-bold' style={{ color: accent }}>
+                            {value}
+                        </span>
                     </div>
                 ))}
             </div>
 
             {/* Filter bar — no card wrapper */}
             <div className='ul-f flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center'>
-                <div className='flex-1 min-w-[200px]'>
+                <div className='min-w-[200px] flex-1'>
                     <Input
                         allowClear
                         prefix={<SearchOutlined className='text-slate-400' />}
                         placeholder='Tên hoặc email...'
                         value={draftFilters.search}
-                        onChange={(event) =>
-                            setDraftFilters((current) => ({ ...current, search: event.target.value }))
-                        }
+                        onChange={(event) => setDraftFilters((current) => ({ ...current, search: event.target.value }))}
                         onPressEnter={handleApplyFilters}
                         className='rounded-lg'
                     />
@@ -450,9 +454,9 @@ const UserList: React.FC = () => {
                     value={draftFilters.role}
                     onChange={(value) => setDraftFilters((current) => ({ ...current, role: value }))}
                     options={[
-                        { value: 'admin',       label: USER_ROLE_LABEL.admin },
-                        { value: 'manager',     label: USER_ROLE_LABEL.manager },
-                        { value: 'staff',       label: USER_ROLE_LABEL.staff },
+                        { value: 'admin', label: USER_ROLE_LABEL.admin },
+                        { value: 'manager', label: USER_ROLE_LABEL.manager },
+                        { value: 'staff', label: USER_ROLE_LABEL.staff },
                         { value: 'line_leader', label: USER_ROLE_LABEL.line_leader },
                         { value: 'qc', label: USER_ROLE_LABEL.qc },
                     ]}
@@ -475,15 +479,23 @@ const UserList: React.FC = () => {
                     value={draftFilters.isActive}
                     onChange={(value) => setDraftFilters((current) => ({ ...current, isActive: value }))}
                     options={[
-                        { value: true,  label: 'Hoạt động' },
+                        { value: true, label: 'Hoạt động' },
                         { value: false, label: 'Ngừng hoạt động' },
                     ]}
                 />
                 <div className='flex gap-2'>
-                    <Button type='primary' onClick={handleApplyFilters} className='rounded-lg bg-blue-600 hover:!bg-blue-700'>
+                    <Button
+                        type='primary'
+                        onClick={handleApplyFilters}
+                        className='rounded-lg bg-blue-600 hover:!bg-blue-700'
+                    >
                         Lọc
                     </Button>
-                    <Button icon={<ReloadOutlined />} onClick={handleResetFilters} className='rounded-lg text-slate-500'>
+                    <Button
+                        icon={<ReloadOutlined />}
+                        onClick={handleResetFilters}
+                        className='rounded-lg text-slate-500'
+                    >
                         Làm mới
                     </Button>
                 </div>
@@ -491,7 +503,7 @@ const UserList: React.FC = () => {
 
             {/* Table — no card wrapper */}
             <div className='ul-t overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm'>
-                <div className='[&_.ant-table]:!bg-white [&_.ant-table-row:hover_td]:!bg-blue-50/30 [&_.ant-table-thead_th]:!bg-slate-50 [&_.ant-table-thead_th]:!text-[11px] [&_.ant-table-thead_th]:!font-bold [&_.ant-table-thead_th]:!tracking-[0.07em] [&_.ant-table-thead_th]:!text-slate-400 [&_.ant-table-cell]:!transition-colors [&_.ant-table-cell]:!duration-100'>
+                <div className='[&_.ant-table]:!bg-white [&_.ant-table-cell]:!transition-colors [&_.ant-table-cell]:!duration-100 [&_.ant-table-row:hover_td]:!bg-blue-50/30 [&_.ant-table-thead_th]:!bg-slate-50 [&_.ant-table-thead_th]:!text-[11px] [&_.ant-table-thead_th]:!font-bold [&_.ant-table-thead_th]:!tracking-[0.07em] [&_.ant-table-thead_th]:!text-slate-400'>
                     <Table<User>
                         rowKey='id'
                         columns={columns}

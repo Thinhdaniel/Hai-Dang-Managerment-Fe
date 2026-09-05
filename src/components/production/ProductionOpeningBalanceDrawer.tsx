@@ -70,8 +70,7 @@ type ImportValues = {
 
 const number = (value = 0) => new Intl.NumberFormat('vi-VN').format(Number(value || 0));
 const money = (value = 0) => `${number(value)} đ`;
-const errorMessage = (error: unknown) =>
-    error instanceof Error ? error.message : 'Không thể xử lý sản lượng đầu kỳ';
+const errorMessage = (error: unknown) => (error instanceof Error ? error.message : 'Không thể xử lý sản lượng đầu kỳ');
 
 const ProductionOpeningBalanceDrawer = ({ open, plantId, onClose, onChanged }: Props) => {
     const { isCompact: isMobile } = useResponsive();
@@ -110,7 +109,7 @@ const ProductionOpeningBalanceDrawer = ({ open, plantId, onClose, onChanged }: P
             balanceQuery.data?.coverage.cutoffDate
                 ? dayjs(balanceQuery.data.coverage.cutoffDate)
                 : dayjs().subtract(1, 'day'),
-        [balanceQuery.data?.coverage.cutoffDate]
+        [balanceQuery.data]
     );
 
     useEffect(() => {
@@ -353,7 +352,9 @@ const ProductionOpeningBalanceDrawer = ({ open, plantId, onClose, onChanged }: P
                                 <div>
                                     <strong>{batch.code}</strong>
                                     <small>
-                                        {batch.sourceType === 'excel' ? batch.sourceFileName || 'Excel' : 'Nhập thủ công'}
+                                        {batch.sourceType === 'excel'
+                                            ? batch.sourceFileName || 'Excel'
+                                            : 'Nhập thủ công'}
                                         {' · '}
                                         {dayjs(batch.confirmedAt).format('DD/MM/YYYY HH:mm')}
                                     </small>

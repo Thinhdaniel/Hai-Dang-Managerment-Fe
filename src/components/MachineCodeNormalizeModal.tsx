@@ -75,7 +75,6 @@ const MachineCodeNormalizeModal: React.FC<Props> = ({ open, onClose }) => {
             loadPreview();
             loadTypeCodes();
         }
-        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [open]);
 
     const dirtyTypeRows = useMemo(
@@ -89,7 +88,9 @@ const MachineCodeNormalizeModal: React.FC<Props> = ({ open, onClose }) => {
             const data = await assetService.aiSuggestTypeCodes();
             setTypeRows((prev) => toEditable(data.rows, prev));
             const changed = data.rows.filter((row) => row.aiCode && row.aiCode !== (row.currentCode ?? '')).length;
-            message.success(changed ? `AI đề xuất đổi ${changed} mã loại — xem lại rồi bấm Lưu` : 'AI thấy mã hiện tại đã ổn');
+            message.success(
+                changed ? `AI đề xuất đổi ${changed} mã loại — xem lại rồi bấm Lưu` : 'AI thấy mã hiện tại đã ổn'
+            );
         } catch {
             message.error('AI gợi ý thất bại, thử lại sau');
         } finally {

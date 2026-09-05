@@ -1164,7 +1164,9 @@ function OverviewTab({
                         `Chi phí mua vật tư: <b>${fmtCurrency(row.purchaseCost)}</b> (${row.purchaseOrderCount} đơn, ${row.purchaseItemCount} dòng)`,
                     ];
                     if (!row.canPurchase) {
-                        lines.push('<span style="color:#64748b">Do CS1 mua theo nhu cầu của cơ sở này (cơ sở không trực tiếp đặt mua).</span>');
+                        lines.push(
+                            '<span style="color:#64748b">Do CS1 mua theo nhu cầu của cơ sở này (cơ sở không trực tiếp đặt mua).</span>'
+                        );
                     }
                     return lines.join('<br/>');
                 },

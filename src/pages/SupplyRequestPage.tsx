@@ -56,11 +56,7 @@ import { api } from '../core/lib/api';
 import { normalizeSearchTerm } from '../core/lib/search';
 import { consumeAssistantAction, type MaterialAssistantDraft } from '../core/lib/assistant-actions';
 import { plantService } from '../core/services';
-import {
-    aiMaterialMatchService,
-    aiOcrService,
-    type AiMaterialMatchItem,
-} from '../core/services/ai-help.service';
+import { aiMaterialMatchService, aiOcrService, type AiMaterialMatchItem } from '../core/services/ai-help.service';
 import type {
     PurchaseRequest,
     PurchaseRequestPayload,
@@ -338,9 +334,7 @@ const FormDrawer: React.FC<{
                 materialName: item.materialName,
                 unit: item.unit ?? '',
                 quantityRequested:
-                    item.quantityRequested && Number(item.quantityRequested) > 0
-                        ? Number(item.quantityRequested)
-                        : 1,
+                    item.quantityRequested && Number(item.quantityRequested) > 0 ? Number(item.quantityRequested) : 1,
                 // Dòng 2 lần đọc không thống nhất -> chèn cảnh báo lên đầu ghi chú.
                 note: [item.verifyNote ? `⚠ ${item.verifyNote}` : '', item.purpose, item.note]
                     .filter(Boolean)
@@ -348,7 +342,9 @@ const FormDrawer: React.FC<{
             }));
             const offset = meaningfulItems.length;
             const requestDate = result.header?.requestDate ? dayjs(result.header.requestDate) : undefined;
-            const noteFromOcr = normalizeText([result.header?.purpose, result.header?.note].filter(Boolean).join(' · '));
+            const noteFromOcr = normalizeText(
+                [result.header?.purpose, result.header?.note].filter(Boolean).join(' · ')
+            );
 
             form.setFieldsValue({
                 requestDate: requestDate?.isValid() ? requestDate : form.getFieldValue('requestDate') || dayjs(),
@@ -423,9 +419,9 @@ const FormDrawer: React.FC<{
     // Nhận 1 hoặc NHIỀU ảnh (chọn file hoặc dán ảnh chụp màn hình) — quét tuần tự, dòng nối tiếp nhau.
     const scanBusyRef = useRef(false);
     const handleScanSupplyFile = async (files?: File | File[] | FileList | null) => {
-        const list = (!files ? [] : files instanceof FileList ? Array.from(files) : Array.isArray(files) ? files : [files]).filter(
-            (file) => file.type.startsWith('image/')
-        );
+        const list = (
+            !files ? [] : files instanceof FileList ? Array.from(files) : Array.isArray(files) ? files : [files]
+        ).filter((file) => file.type.startsWith('image/'));
         if (!list.length || scanBusyRef.current) return;
         scanBusyRef.current = true;
         setScanningSupply(true);
@@ -613,8 +609,8 @@ const FormDrawer: React.FC<{
                                 <div className='min-w-0'>
                                     <div className='font-semibold text-slate-900'>AI quét phiếu đề xuất cấp</div>
                                     <div className='text-xs text-slate-500'>
-                                        Chọn 1 hoặc nhiều ảnh, hoặc dán ảnh chụp màn hình (Ctrl+V) thẳng vào đây —
-                                        AI đọc rồi điền vào danh sách để kiểm tra trước khi gửi.
+                                        Chọn 1 hoặc nhiều ảnh, hoặc dán ảnh chụp màn hình (Ctrl+V) thẳng vào đây — AI
+                                        đọc rồi điền vào danh sách để kiểm tra trước khi gửi.
                                     </div>
                                 </div>
                             </div>
@@ -636,7 +632,8 @@ const FormDrawer: React.FC<{
                                     scanReview.needsConfirm ||
                                     (scanReview.plantName &&
                                         defaultPlantName &&
-                                        normalizeSearchTerm(scanReview.plantName) !== normalizeSearchTerm(defaultPlantName))
+                                        normalizeSearchTerm(scanReview.plantName) !==
+                                            normalizeSearchTerm(defaultPlantName))
                                         ? 'warning'
                                         : 'success'
                                 }
@@ -651,7 +648,9 @@ const FormDrawer: React.FC<{
                                         <div>
                                             {[
                                                 scanReview.strong ? `${scanReview.strong} dòng khớp chắc` : '',
-                                                scanReview.needsConfirm ? `${scanReview.needsConfirm} dòng cần xác nhận` : '',
+                                                scanReview.needsConfirm
+                                                    ? `${scanReview.needsConfirm} dòng cần xác nhận`
+                                                    : '',
                                                 scanReview.unmatched
                                                     ? `${scanReview.unmatched} dòng chưa có trong danh mục`
                                                     : '',
@@ -662,11 +661,19 @@ const FormDrawer: React.FC<{
                                                 .filter(Boolean)
                                                 .join(' · ')}
                                         </div>
-                                        {(scanReview.plantName || scanReview.requesterName || scanReview.requestDate) && (
+                                        {(scanReview.plantName ||
+                                            scanReview.requesterName ||
+                                            scanReview.requestDate) && (
                                             <div className='text-slate-500'>
-                                                {scanReview.plantName ? `Phiếu ghi cơ sở: ${scanReview.plantName}. ` : ''}
-                                                {scanReview.requesterName ? `Người nhận: ${scanReview.requesterName}. ` : ''}
-                                                {scanReview.requestDate ? `Ngày phiếu: ${dayjs(scanReview.requestDate).format('DD/MM/YYYY')}. ` : ''}
+                                                {scanReview.plantName
+                                                    ? `Phiếu ghi cơ sở: ${scanReview.plantName}. `
+                                                    : ''}
+                                                {scanReview.requesterName
+                                                    ? `Người nhận: ${scanReview.requesterName}. `
+                                                    : ''}
+                                                {scanReview.requestDate
+                                                    ? `Ngày phiếu: ${dayjs(scanReview.requestDate).format('DD/MM/YYYY')}. `
+                                                    : ''}
                                                 Form vẫn dùng cơ sở tài khoản: {defaultPlantName || 'chưa rõ'}.
                                             </div>
                                         )}
@@ -731,104 +738,104 @@ const FormDrawer: React.FC<{
                                             key={field.key}
                                             className='rounded-2xl border border-slate-200 bg-white p-3.5 transition-all hover:border-blue-300 hover:shadow-sm sm:p-4'
                                         >
-                                        <div className='mb-2.5 flex items-center justify-between'>
-                                            <span className='inline-flex h-6 min-w-[30px] items-center justify-center rounded-lg bg-blue-50 px-2 text-xs font-bold text-blue-600'>
-                                                #{index + 1}
-                                            </span>
-                                            <Tooltip title='Xoá vật tư này'>
-                                                <Button
-                                                    type='text'
-                                                    danger
-                                                    size='small'
-                                                    disabled={fields.length === 1}
-                                                    icon={<DeleteOutlined />}
-                                                    onClick={() => {
-                                                        clearScanHints();
-                                                        remove(field.name);
-                                                    }}
-                                                />
-                                            </Tooltip>
-                                        </div>
-                                        {match && (
-                                            <div className='mb-3 rounded-xl border border-slate-100 bg-slate-50 px-3 py-2'>
-                                                <div className='flex flex-wrap items-center gap-2'>
-                                                    <Tag color={tone.color} className='m-0 font-semibold'>
-                                                        {tone.label} · {match.confidence}%
-                                                    </Tag>
-                                                    <span className='min-w-0 flex-1 truncate text-xs font-medium text-slate-600'>
-                                                        {candidate
-                                                            ? `${candidate.code} · ${candidate.name}`
-                                                            : match.reason}
-                                                    </span>
-                                                </div>
-                                                {match.warnings?.length > 0 && (
-                                                    <div className='mt-1 text-xs text-orange-600'>
-                                                        {match.warnings[0]}
-                                                    </div>
-                                                )}
+                                            <div className='mb-2.5 flex items-center justify-between'>
+                                                <span className='inline-flex h-6 min-w-[30px] items-center justify-center rounded-lg bg-blue-50 px-2 text-xs font-bold text-blue-600'>
+                                                    #{index + 1}
+                                                </span>
+                                                <Tooltip title='Xoá vật tư này'>
+                                                    <Button
+                                                        type='text'
+                                                        danger
+                                                        size='small'
+                                                        disabled={fields.length === 1}
+                                                        icon={<DeleteOutlined />}
+                                                        onClick={() => {
+                                                            clearScanHints();
+                                                            remove(field.name);
+                                                        }}
+                                                    />
+                                                </Tooltip>
                                             </div>
-                                        )}
-                                        <Form.Item
-                                            name={[field.name, 'materialName']}
-                                            label='Tên vật tư'
-                                            className='mb-3'
-                                            rules={[{ required: true, message: 'Nhập tên vật tư' }]}
-                                        >
-                                            <Input
-                                                placeholder='VD: Vải cotton, Chỉ may, Kim máy...'
-                                                maxLength={200}
-                                                size='large'
-                                                allowClear
-                                            />
-                                        </Form.Item>
-                                        <div className='grid grid-cols-2 gap-3 sm:grid-cols-[150px_150px_minmax(0,1fr)]'>
+                                            {match && (
+                                                <div className='mb-3 rounded-xl border border-slate-100 bg-slate-50 px-3 py-2'>
+                                                    <div className='flex flex-wrap items-center gap-2'>
+                                                        <Tag color={tone.color} className='m-0 font-semibold'>
+                                                            {tone.label} · {match.confidence}%
+                                                        </Tag>
+                                                        <span className='min-w-0 flex-1 truncate text-xs font-medium text-slate-600'>
+                                                            {candidate
+                                                                ? `${candidate.code} · ${candidate.name}`
+                                                                : match.reason}
+                                                        </span>
+                                                    </div>
+                                                    {match.warnings?.length > 0 && (
+                                                        <div className='mt-1 text-xs text-orange-600'>
+                                                            {match.warnings[0]}
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            )}
                                             <Form.Item
-                                                name={[field.name, 'unit']}
-                                                label='Đơn vị tính'
-                                                className='mb-0'
-                                                rules={[{ required: true, message: 'Nhập ĐVT' }]}
-                                            >
-                                                <AutoComplete
-                                                    options={UNIT_OPTIONS}
-                                                    placeholder='Cái, Kg, Mét...'
-                                                    size='large'
-                                                    allowClear
-                                                    filterOption={(input, option) =>
-                                                        normalizeSearchTerm(String(option?.value ?? '')).includes(
-                                                            normalizeSearchTerm(input)
-                                                        )
-                                                    }
-                                                />
-                                            </Form.Item>
-                                            <Form.Item
-                                                name={[field.name, 'quantityRequested']}
-                                                label='Số lượng'
-                                                className='mb-0'
-                                                rules={[{ required: true, message: 'Nhập SL' }]}
-                                            >
-                                                <InputNumber<number>
-                                                    min={1}
-                                                    className='w-full'
-                                                    size='large'
-                                                    formatter={(v) =>
-                                                        `${v ?? ''}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')
-                                                    }
-                                                    parser={parseNum}
-                                                />
-                                            </Form.Item>
-                                            <Form.Item
-                                                name={[field.name, 'note']}
-                                                label='Ghi chú'
-                                                className='col-span-2 mb-0 sm:col-span-1'
+                                                name={[field.name, 'materialName']}
+                                                label='Tên vật tư'
+                                                className='mb-3'
+                                                rules={[{ required: true, message: 'Nhập tên vật tư' }]}
                                             >
                                                 <Input
-                                                    placeholder='Quy cách, màu sắc... (nếu có)'
-                                                    maxLength={250}
+                                                    placeholder='VD: Vải cotton, Chỉ may, Kim máy...'
+                                                    maxLength={200}
                                                     size='large'
+                                                    allowClear
                                                 />
                                             </Form.Item>
+                                            <div className='grid grid-cols-2 gap-3 sm:grid-cols-[150px_150px_minmax(0,1fr)]'>
+                                                <Form.Item
+                                                    name={[field.name, 'unit']}
+                                                    label='Đơn vị tính'
+                                                    className='mb-0'
+                                                    rules={[{ required: true, message: 'Nhập ĐVT' }]}
+                                                >
+                                                    <AutoComplete
+                                                        options={UNIT_OPTIONS}
+                                                        placeholder='Cái, Kg, Mét...'
+                                                        size='large'
+                                                        allowClear
+                                                        filterOption={(input, option) =>
+                                                            normalizeSearchTerm(String(option?.value ?? '')).includes(
+                                                                normalizeSearchTerm(input)
+                                                            )
+                                                        }
+                                                    />
+                                                </Form.Item>
+                                                <Form.Item
+                                                    name={[field.name, 'quantityRequested']}
+                                                    label='Số lượng'
+                                                    className='mb-0'
+                                                    rules={[{ required: true, message: 'Nhập SL' }]}
+                                                >
+                                                    <InputNumber<number>
+                                                        min={1}
+                                                        className='w-full'
+                                                        size='large'
+                                                        formatter={(v) =>
+                                                            `${v ?? ''}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')
+                                                        }
+                                                        parser={parseNum}
+                                                    />
+                                                </Form.Item>
+                                                <Form.Item
+                                                    name={[field.name, 'note']}
+                                                    label='Ghi chú'
+                                                    className='col-span-2 mb-0 sm:col-span-1'
+                                                >
+                                                    <Input
+                                                        placeholder='Quy cách, màu sắc... (nếu có)'
+                                                        maxLength={250}
+                                                        size='large'
+                                                    />
+                                                </Form.Item>
+                                            </div>
                                         </div>
-                                    </div>
                                     );
                                 })}
 

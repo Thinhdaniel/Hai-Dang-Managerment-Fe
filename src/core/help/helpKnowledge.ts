@@ -176,8 +176,7 @@ export const HELP_TOPICS: HelpTopic[] = [
         category: 'material',
         routes: ['/materials'],
         keywords: ['danh muc vat tu', 'them vat tu', 'ma vat tu', 'import vat tu', 'don vi tinh', 'ton toi thieu'],
-        summary:
-            'Danh mục vật tư là dữ liệu gốc cho tồn kho, đề xuất mua, đề xuất cấp phát, đặt hàng và báo cáo.',
+        summary: 'Danh mục vật tư là dữ liệu gốc cho tồn kho, đề xuất mua, đề xuất cấp phát, đặt hàng và báo cáo.',
         steps: [
             'Vào Danh mục vật tư để thêm, sửa, tìm kiếm hoặc import vật tư từ Excel.',
             'Mỗi vật tư cần có mã vật tư, tên vật tư và đơn vị tính. Nhóm vật tư và tồn tối thiểu nên nhập để lọc và cảnh báo thiếu hàng.',
@@ -243,8 +242,7 @@ export const HELP_TOPICS: HelpTopic[] = [
         category: 'material',
         routes: ['/materials/supply-requests'],
         keywords: ['de xuat cap vat tu', 'yeu cau cap vat tu', 'xin cap vat tu', 'supply request'],
-        summary:
-            'Đề xuất cấp vật tư dùng khi cơ sở hoặc bộ phận cần xin vật tư từ kho/cơ sở chính thay vì mua mới.',
+        summary: 'Đề xuất cấp vật tư dùng khi cơ sở hoặc bộ phận cần xin vật tư từ kho/cơ sở chính thay vì mua mới.',
         steps: [
             'Vào Đề xuất cấp vật tư.',
             'Tạo phiếu mới, chọn cơ sở yêu cầu, vật tư, số lượng cần cấp và mục đích sử dụng.',
@@ -363,8 +361,7 @@ export const HELP_TOPICS: HelpTopic[] = [
         category: 'report',
         routes: ['/materials/reports', '/materials/suppliers'],
         keywords: ['bao cao ncc', 'chi phi nha cung cap', 'supplier report', 'nha cung cap nao mua nhieu'],
-        summary:
-            'Dùng để xem NCC nào có nhiều đơn, tổng giá trị mua cao và phục vụ đối chiếu công nợ/mua sắm.',
+        summary: 'Dùng để xem NCC nào có nhiều đơn, tổng giá trị mua cao và phục vụ đối chiếu công nợ/mua sắm.',
         steps: [
             'Vào Báo cáo vật tư và chọn khoảng ngày cần phân tích.',
             'Nếu chỉ xem một NCC, chọn nhà cung cấp trong bộ lọc.',
@@ -405,8 +402,7 @@ export const HELP_TOPICS: HelpTopic[] = [
         category: 'report',
         routes: ['/materials/reports', '/materials/distributions'],
         keywords: ['bao cao cap phat', 'chi phi cap phat', 'xuat kho theo co so', 'distribution cost'],
-        summary:
-            'Báo cáo cấp phát cho biết chi phí và số phiếu xuất theo cơ sở hoặc theo thời gian.',
+        summary: 'Báo cáo cấp phát cho biết chi phí và số phiếu xuất theo cơ sở hoặc theo thời gian.',
         steps: [
             'Vào Báo cáo vật tư.',
             'Chọn khoảng ngày, cơ sở hoặc nhóm vật tư cần xem.',
@@ -540,9 +536,7 @@ const ADVANCED_HELP_TOPICS: HelpTopic[] = [
             'Chỉ sửa trạng thái mà không tạo phiếu nghiệp vụ nên không có lịch sử đối soát.',
             'Đổi mã máy sau khi đã phát sinh QR hoặc phiếu điều chuyển làm lệch hồ sơ giấy.',
         ],
-        notes: [
-            'Chi tiết máy là nơi đối chiếu cuối cùng khi có tranh chấp về vị trí, người giữ hoặc tình trạng máy.',
-        ],
+        notes: ['Chi tiết máy là nơi đối chiếu cuối cùng khi có tranh chấp về vị trí, người giữ hoặc tình trạng máy.'],
     },
     {
         id: 'master-data-plants-brands',
@@ -571,9 +565,7 @@ const ADVANCED_HELP_TOPICS: HelpTopic[] = [
             'Tạo nhiều cơ sở trùng nghĩa như CS1, Cơ sở 1, Kho chính làm báo cáo bị tách dòng.',
             'Xóa mềm dữ liệu nền rồi tạo lại bản mới khiến lịch sử cũ và dữ liệu mới không còn cùng khóa.',
         ],
-        notes: [
-            'Dữ liệu nền nên được chuẩn hóa trước khi import máy và vật tư hàng loạt.',
-        ],
+        notes: ['Dữ liệu nền nên được chuẩn hóa trước khi import máy và vật tư hàng loạt.'],
     },
     {
         id: 'material-import-catalog',
@@ -655,10 +647,7 @@ const ADVANCED_HELP_TOPICS: HelpTopic[] = [
         keywords: ['lich su kho', 'giao dich kho', 'dieu chinh ton', 'nhap kho', 'xuat kho'],
         summary:
             'Lịch sử kho cho biết tồn tăng giảm do nhập, xuất, cấp phát hoặc điều chỉnh. Đây là nơi đối soát khi số lượng thực tế và hệ thống lệch nhau.',
-        prerequisites: [
-            'Đã có vật tư và tồn kho theo cơ sở.',
-            'Biết khoảng thời gian hoặc mã vật tư cần kiểm tra.',
-        ],
+        prerequisites: ['Đã có vật tư và tồn kho theo cơ sở.', 'Biết khoảng thời gian hoặc mã vật tư cần kiểm tra.'],
         steps: [
             'Vào Vật tư > Kho vật tư.',
             'Tìm vật tư hoặc lọc theo nhóm/cơ sở để mở đúng dòng tồn.',
@@ -676,9 +665,7 @@ const ADVANCED_HELP_TOPICS: HelpTopic[] = [
             'Điều chỉnh tồn để sửa lỗi phiếu cấp phát trong khi phiếu gốc vẫn sai.',
             'Không kiểm tra cơ sở nên tưởng thiếu hàng toàn hệ thống trong khi chỉ thiếu tại một cơ sở.',
         ],
-        notes: [
-            'Điều chỉnh tồn là thao tác nhạy cảm, nên có lý do và người chịu trách nhiệm rõ ràng.',
-        ],
+        notes: ['Điều chỉnh tồn là thao tác nhạy cảm, nên có lý do và người chịu trách nhiệm rõ ràng.'],
     },
     {
         id: 'supply-request-full-flow',
@@ -749,9 +736,7 @@ const ADVANCED_HELP_TOPICS: HelpTopic[] = [
             'Bấm xác nhận nhận hàng trước khi phiếu được xuất kho. Hệ thống sẽ chặn vì trạng thái chưa hợp lệ.',
             'Xuất kho khi hàng chưa rời kho thực tế làm tồn hệ thống giảm sớm.',
         ],
-        notes: [
-            'Nên coi nút Xuất kho như điểm chốt trách nhiệm của kho xuất. Sau bước này tồn đã thay đổi.',
-        ],
+        notes: ['Nên coi nút Xuất kho như điểm chốt trách nhiệm của kho xuất. Sau bước này tồn đã thay đổi.'],
         related: ['supply-request-full-flow', 'material-report-distribution'],
     },
     {
@@ -784,9 +769,7 @@ const ADVANCED_HELP_TOPICS: HelpTopic[] = [
             'Lưu nháp rồi tưởng tồn đã trừ.',
             'Không nhập bộ phận/chuyền nhận nên cuối tháng khó phân bổ chi phí.',
         ],
-        notes: [
-            'Với cấp phát dùng ngay trong nội bộ, luồng này nhanh hơn đề xuất cấp vật tư liên cơ sở.',
-        ],
+        notes: ['Với cấp phát dùng ngay trong nội bộ, luồng này nhanh hơn đề xuất cấp vật tư liên cơ sở.'],
     },
     {
         id: 'express-dispatch-flow',
@@ -853,9 +836,7 @@ const ADVANCED_HELP_TOPICS: HelpTopic[] = [
             'Nhầm đề xuất mua với đề xuất cấp vật tư. Nếu kho chính có hàng sẵn thì nên dùng đề xuất cấp.',
             'Không nhập mục đích hoặc người đề xuất làm phiếu thiếu căn cứ duyệt.',
         ],
-        notes: [
-            'Đề xuất mua là bước nhu cầu và phê duyệt, chưa có nghĩa là hàng đã đặt hoặc đã nhập kho.',
-        ],
+        notes: ['Đề xuất mua là bước nhu cầu và phê duyệt, chưa có nghĩa là hàng đã đặt hoặc đã nhập kho.'],
         related: ['purchase-order-full-flow', 'supply-request-full-flow'],
     },
     {
@@ -891,9 +872,7 @@ const ADVANCED_HELP_TOPICS: HelpTopic[] = [
             'Tạo đơn hàng từ phiếu chưa duyệt khiến mất bước kiểm soát.',
             'Không cập nhật nhà cung cấp đúng làm báo cáo theo nhà cung cấp sai.',
         ],
-        notes: [
-            'Đơn đặt hàng là điểm nối giữa đề xuất mua, nhà cung cấp, tồn kho và báo cáo chi phí.',
-        ],
+        notes: ['Đơn đặt hàng là điểm nối giữa đề xuất mua, nhà cung cấp, tồn kho và báo cáo chi phí.'],
         related: ['purchase-request-full-flow', 'material-report-supplier-price'],
     },
     {
@@ -933,7 +912,14 @@ const ADVANCED_HELP_TOPICS: HelpTopic[] = [
         title: 'Đọc và xuất báo cáo vật tư',
         category: 'report',
         routes: ['/materials/reports'],
-        keywords: ['bao cao vat tu', 'bao cao chi phi', 'top vat tu', 'so sanh gia', 'bao cao nha cung cap', 'xuat excel'],
+        keywords: [
+            'bao cao vat tu',
+            'bao cao chi phi',
+            'top vat tu',
+            'so sanh gia',
+            'bao cao nha cung cap',
+            'xuat excel',
+        ],
         summary:
             'Báo cáo vật tư tổng hợp chi phí mua, cấp phát, vật tư tiêu thụ nhiều, nhà cung cấp và so sánh giá theo khoảng thời gian.',
         prerequisites: [
@@ -965,7 +951,11 @@ const ADVANCED_HELP_TOPICS: HelpTopic[] = [
         notes: [
             'Khi gửi báo cáo cho quản lý, nên ghi rõ khoảng ngày, cơ sở và bộ lọc đã dùng để tránh hiểu sai số liệu.',
         ],
-        related: ['material-inventory-history-adjust', 'purchase-order-full-flow', 'distribution-facility-transfer-flow'],
+        related: [
+            'material-inventory-history-adjust',
+            'purchase-order-full-flow',
+            'distribution-facility-transfer-flow',
+        ],
     },
     {
         id: 'permission-role-real-usage',
@@ -975,10 +965,7 @@ const ADVANCED_HELP_TOPICS: HelpTopic[] = [
         keywords: ['phan quyen', 'admin', 'manager', 'staff', 'director', 'khong thay menu', 'tai khoan'],
         summary:
             'Phân quyền quyết định người dùng thấy menu nào và được làm thao tác nào. Khi triển khai thật cần phân rõ người nhập liệu, người duyệt, người xuất kho và người xem báo cáo.',
-        prerequisites: [
-            'Admin có quyền quản lý tài khoản.',
-            'Danh sách cơ sở đã đúng để gán user.plantId.',
-        ],
+        prerequisites: ['Admin có quyền quản lý tài khoản.', 'Danh sách cơ sở đã đúng để gán user.plantId.'],
         steps: [
             'Vào Người dùng để tạo hoặc cập nhật tài khoản.',
             'Gán vai trò theo trách nhiệm: staff nhập liệu/xem dữ liệu cơ bản, manager xử lý và duyệt nghiệp vụ, director xem/duyệt cấp cao nếu có, admin quản trị hệ thống.',
@@ -996,9 +983,7 @@ const ADVANCED_HELP_TOPICS: HelpTopic[] = [
             'Đổi vai trò nhưng người dùng chưa đăng nhập lại nên UI vẫn giữ quyền cũ.',
             'Gán sai cơ sở khiến không thấy dữ liệu hoặc thấy sai dữ liệu.',
         ],
-        notes: [
-            'Để vận hành thực tế, nên lập bảng phân quyền theo chức danh trước khi bàn giao hệ thống.',
-        ],
+        notes: ['Để vận hành thực tế, nên lập bảng phân quyền theo chức danh trước khi bàn giao hệ thống.'],
     },
 ];
 
@@ -1040,7 +1025,9 @@ export const searchHelpTopics = (query: string, pathname: string, limit = 4) => 
                 ...(topic.notes ?? []),
             ].join(' ')
         );
-        const exactKeywordScore = topic.keywords.some((keyword) => normalizeText(keyword).includes(normalizedQuery)) ? 12 : 0;
+        const exactKeywordScore = topic.keywords.some((keyword) => normalizeText(keyword).includes(normalizedQuery))
+            ? 12
+            : 0;
         const routeScore = topic.routes.some((route) => routeMatches(pathname, route)) ? 4 : 0;
         const titleScore = normalizeText(topic.title).includes(normalizedQuery) ? 8 : 0;
         const tokenScore = queryTokens.reduce((score, token) => score + (haystack.includes(token) ? 2 : 0), 0);

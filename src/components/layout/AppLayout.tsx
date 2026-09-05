@@ -98,9 +98,7 @@ const AppLayout: React.FC = () => {
             {!isDesktop ? <MobileBottomNav onOpenMenu={() => setMobileSidebarOpen(true)} /> : null}
 
             {/* Trợ lý vận hành toàn cục — truy cập ở mọi trang; ẩn nút khi cửa sổ đang mở */}
-            {!assistantOpen ? (
-                <AssistantLauncher isDesktop={isDesktop} onClick={() => setAssistantOpen(true)} />
-            ) : null}
+            {!assistantOpen ? <AssistantLauncher isDesktop={isDesktop} onClick={() => setAssistantOpen(true)} /> : null}
             {assistantOpen ? (
                 <Suspense fallback={null}>
                     <AssetAssistantDrawer open={assistantOpen} onClose={() => setAssistantOpen(false)} />

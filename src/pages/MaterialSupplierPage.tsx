@@ -88,13 +88,13 @@ type SupplierFormModalProps = {
 };
 
 const PURCHASE_ORDER_STATUS_META: Record<PurchaseOrderStatus, { color: string; label: string }> = {
-    draft:     { color: 'default',    label: 'Bản nháp' },
-    sent:      { color: 'gold',       label: 'Đã gửi NCC' },
-    confirmed: { color: 'blue',       label: 'Đã xác nhận' },
-    ordered:   { color: 'processing', label: 'Đang đặt hàng' },
+    draft: { color: 'default', label: 'Bản nháp' },
+    sent: { color: 'gold', label: 'Đã gửi NCC' },
+    confirmed: { color: 'blue', label: 'Đã xác nhận' },
+    ordered: { color: 'processing', label: 'Đang đặt hàng' },
     partially_received: { color: 'cyan', label: 'Nhận một phần' },
-    received:  { color: 'green',      label: 'Đã nhận hàng' },
-    cancelled: { color: 'error',      label: 'Đã huỷ' },
+    received: { color: 'green', label: 'Đã nhận hàng' },
+    cancelled: { color: 'error', label: 'Đã huỷ' },
 };
 
 const createDefaultFilters = (): SupplierFilterState => ({

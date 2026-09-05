@@ -72,10 +72,7 @@ export const stackedTooltipFormatter = makeAxisTooltipFormatter({ showTotal: tru
 
 // Nhãn giá trị cho bar NGANG. Desktop: để ngoài bên phải cột. Mobile: dồn vào
 // trong đầu cột (chữ trắng có viền) để không bị mép chart cắt và để bar rộng hơn.
-export const horizontalBarValueLabel = (
-    isMobile: boolean,
-    formatter: (params: { dataIndex: number }) => string
-) =>
+export const horizontalBarValueLabel = (isMobile: boolean, formatter: (params: { dataIndex: number }) => string) =>
     isMobile
         ? {
               show: true,
@@ -97,5 +94,4 @@ export const horizontalBarValueLabel = (
           };
 
 // grid.right cho bar ngang: mobile thu nhỏ (nhãn đã nằm trong cột) để bar rộng hơn.
-export const horizontalGridRight = (isMobile: boolean, desktopRight: number) =>
-    isMobile ? 12 : desktopRight;
+export const horizontalGridRight = (isMobile: boolean, desktopRight: number) => (isMobile ? 12 : desktopRight);

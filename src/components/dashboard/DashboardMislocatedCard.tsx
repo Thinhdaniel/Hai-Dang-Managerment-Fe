@@ -19,7 +19,10 @@ const DashboardMislocatedCard = ({ data, loading }: DashboardMislocatedCardProps
             className='h-full overflow-hidden rounded-2xl border border-slate-200 shadow-sm'
             title={<span className='text-base font-semibold text-slate-800'>Máy lệch vị trí (GPS)</span>}
             extra={
-                <Tag color={items.length > 0 ? 'orange' : 'green'} className='rounded-full px-2.5 py-0.5 text-xs font-semibold'>
+                <Tag
+                    color={items.length > 0 ? 'orange' : 'green'}
+                    className='rounded-full px-2.5 py-0.5 text-xs font-semibold'
+                >
                     {items.length} máy
                 </Tag>
             }

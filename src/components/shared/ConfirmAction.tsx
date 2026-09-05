@@ -1,5 +1,5 @@
 import { Popconfirm, type PopconfirmProps } from 'antd';
-import type { ReactNode } from 'react';
+import type { ReactElement } from 'react';
 
 /**
  * ConfirmAction — Reusable confirmation wrapper for critical user actions.
@@ -12,10 +12,7 @@ import type { ReactNode } from 'react';
 
 export type ConfirmIntent = 'danger' | 'warning' | 'primary';
 
-const intentConfig: Record<
-    ConfirmIntent,
-    { okClassName: string; okText: string }
-> = {
+const intentConfig: Record<ConfirmIntent, { okClassName: string; okText: string }> = {
     danger: {
         okClassName: 'bg-rose-600 hover:bg-rose-700 border-none',
         okText: 'Xác nhận xóa',
@@ -31,7 +28,8 @@ const intentConfig: Record<
 };
 
 interface ConfirmActionProps extends Omit<PopconfirmProps, 'okText' | 'cancelText' | 'okButtonProps'> {
-    children: ReactNode;
+    /** Popconfirm needs exactly one element so it can attach trigger events safely. */
+    children: ReactElement;
     intent?: ConfirmIntent;
     /** Override the ok button label */
     okLabel?: string;
@@ -55,7 +53,7 @@ const ConfirmAction = ({
             description={description}
             okText={okLabel ?? okText}
             cancelText='Hủy'
-            okButtonProps={{ className: okClassName }}
+            okButtonProps={{ className: okClassName, danger: intent === 'danger' }}
             onConfirm={onConfirm}
             disabled={disabled}
             {...rest}

@@ -110,8 +110,30 @@ const STATUS_OPTIONS: Array<{ value: PurchaseRequestStatus; label: string }> = [
 ];
 
 const COMMON_UNITS = [
-    'Cái', 'Chiếc', 'Bộ', 'Đôi', 'Kg', 'Gram', 'Tấn', 'Mét', 'Cuộn', 'Tấm', 'Hộp', 'Thùng',
-    'Bao', 'Bó', 'Gói', 'Túi', 'Lít', 'Can', 'Bình', 'Lọ', 'Chai', 'Ống', 'Viên', 'Cây',
+    'Cái',
+    'Chiếc',
+    'Bộ',
+    'Đôi',
+    'Kg',
+    'Gram',
+    'Tấn',
+    'Mét',
+    'Cuộn',
+    'Tấm',
+    'Hộp',
+    'Thùng',
+    'Bao',
+    'Bó',
+    'Gói',
+    'Túi',
+    'Lít',
+    'Can',
+    'Bình',
+    'Lọ',
+    'Chai',
+    'Ống',
+    'Viên',
+    'Cây',
 ];
 const UNIT_OPTIONS = COMMON_UNITS.map((u) => ({ value: u }));
 
@@ -345,7 +367,6 @@ const FormDrawer: React.FC<{
                 items: [emptyItem()],
             });
         }
-        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [open, initialValues, defaultRequesterName, form]);
 
     const toggleExtra = (name: number, key: 'note' | 'images') =>
@@ -387,7 +408,13 @@ const FormDrawer: React.FC<{
             maskClosable={false}
             styles={{
                 header: { borderBottom: '1px solid #f1f5f9' },
-                body: { padding: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden', background: '#f8fafc' },
+                body: {
+                    padding: 0,
+                    display: 'flex',
+                    flexDirection: 'column',
+                    overflow: 'hidden',
+                    background: '#f8fafc',
+                },
             }}
             title={
                 <div className='flex items-center gap-3'>
@@ -501,7 +528,12 @@ const FormDrawer: React.FC<{
                                     <div className='flex flex-col items-center justify-center gap-3 rounded-2xl border border-dashed border-slate-300 bg-white py-12 text-slate-400'>
                                         <InboxOutlined style={{ fontSize: 32 }} />
                                         <span className='text-sm'>Chưa có vật tư nào</span>
-                                        <Button type='primary' ghost icon={<PlusOutlined />} onClick={() => add(emptyItem())}>
+                                        <Button
+                                            type='primary'
+                                            ghost
+                                            icon={<PlusOutlined />}
+                                            onClick={() => add(emptyItem())}
+                                        >
                                             Thêm vật tư đầu tiên
                                         </Button>
                                     </div>
@@ -588,7 +620,10 @@ const FormDrawer: React.FC<{
                                                         }
                                                     />
                                                 </Form.Item>
-                                                <Form.Item name={[field.name, 'assetId']} className='mb-0 min-w-0 flex-1'>
+                                                <Form.Item
+                                                    name={[field.name, 'assetId']}
+                                                    className='mb-0 min-w-0 flex-1'
+                                                >
                                                     <Select
                                                         allowClear
                                                         showSearch
@@ -644,7 +679,13 @@ const FormDrawer: React.FC<{
                                 })}
 
                                 {fields.length > 0 && (
-                                    <Button type='dashed' block icon={<PlusOutlined />} onClick={() => add(emptyItem())} className='h-11'>
+                                    <Button
+                                        type='dashed'
+                                        block
+                                        icon={<PlusOutlined />}
+                                        onClick={() => add(emptyItem())}
+                                        className='h-11'
+                                    >
                                         Thêm vật tư
                                     </Button>
                                 )}
@@ -804,7 +845,11 @@ const TechnicalPurchaseRequestPage: React.FC = () => {
     };
 
     const isOwner = (r?: PurchaseRequest | null) =>
-        Boolean(r && user?.id && (typeof r.requestedBy === 'string' ? r.requestedBy : (r.requestedBy as any)?.id) === user.id);
+        Boolean(
+            r &&
+            user?.id &&
+            (typeof r.requestedBy === 'string' ? r.requestedBy : (r.requestedBy as any)?.id) === user.id
+        );
     const canEdit = (r?: PurchaseRequest | null) => Boolean(r && r.status === 'pending' && (isManager || isOwner(r)));
 
     const columns: TableColumnsType<PurchaseRequest> = [
@@ -1083,7 +1128,11 @@ const TechnicalPurchaseRequestPage: React.FC = () => {
                                 onChange: (page, limit) => setPagination({ page, limit }),
                                 showTotal: (total) => `${total} phiếu`,
                             }}
-                            locale={{ emptyText: <Empty description='Không có phiếu nào' image={Empty.PRESENTED_IMAGE_SIMPLE} /> }}
+                            locale={{
+                                emptyText: (
+                                    <Empty description='Không có phiếu nào' image={Empty.PRESENTED_IMAGE_SIMPLE} />
+                                ),
+                            }}
                         />
                     </div>
                 )}
@@ -1266,7 +1315,8 @@ const TechnicalPurchaseRequestPage: React.FC = () => {
                                         </div>
                                         <div className='min-w-0 flex-1'>
                                             <div className='truncate text-sm font-semibold text-slate-900'>
-                                                {selectedRequest.requesterName || resolveUser(selectedRequest.requestedBy)}
+                                                {selectedRequest.requesterName ||
+                                                    resolveUser(selectedRequest.requestedBy)}
                                             </div>
                                             <div className='text-xs text-slate-400'>
                                                 {selectedRequest.department || 'Kỹ thuật'} ·{' '}
@@ -1309,50 +1359,57 @@ const TechnicalPurchaseRequestPage: React.FC = () => {
                                     )}
                                 </div>
                             ) : (
-                            <div className='overflow-hidden rounded-2xl border border-slate-200 bg-white'>
-                                <div className='border-b border-slate-100 bg-slate-50 px-4 py-2.5 text-xs font-semibold tracking-wider text-slate-400 uppercase'>
-                                    Thông tin phiếu
+                                <div className='overflow-hidden rounded-2xl border border-slate-200 bg-white'>
+                                    <div className='border-b border-slate-100 bg-slate-50 px-4 py-2.5 text-xs font-semibold tracking-wider text-slate-400 uppercase'>
+                                        Thông tin phiếu
+                                    </div>
+                                    <div className='p-4 sm:p-5'>
+                                        <Descriptions
+                                            column={2}
+                                            size='small'
+                                            labelStyle={{ color: '#94a3b8', fontWeight: 500 }}
+                                        >
+                                            <Descriptions.Item label='Mã phiếu'>
+                                                <Text copyable className='font-mono font-semibold text-blue-700'>
+                                                    {selectedRequest.requestCode}
+                                                </Text>
+                                            </Descriptions.Item>
+                                            <Descriptions.Item label='Trạng thái'>
+                                                <StatusTag status={selectedRequest.status} />
+                                            </Descriptions.Item>
+                                            <Descriptions.Item label='Họ và tên'>
+                                                {selectedRequest.requesterName ||
+                                                    resolveUser(selectedRequest.requestedBy)}
+                                            </Descriptions.Item>
+                                            <Descriptions.Item label='Bộ phận'>
+                                                {selectedRequest.department || 'Kỹ thuật'}
+                                            </Descriptions.Item>
+                                            <Descriptions.Item label='Ngày đề nghị'>
+                                                {fmtDate(selectedRequest.requestDate || selectedRequest.createdAt)}
+                                            </Descriptions.Item>
+                                            <Descriptions.Item label='Người tạo'>
+                                                {resolveUser(selectedRequest.requestedBy)}
+                                            </Descriptions.Item>
+                                            {selectedRequest.approvedBy && (
+                                                <Descriptions.Item label='Người duyệt'>
+                                                    {resolveUser(selectedRequest.approvedBy)}
+                                                </Descriptions.Item>
+                                            )}
+                                            {selectedRequest.approvedAt && (
+                                                <Descriptions.Item label='Ngày duyệt'>
+                                                    {fmtDateTime(selectedRequest.approvedAt)}
+                                                </Descriptions.Item>
+                                            )}
+                                            {selectedRequest.note && (
+                                                <Descriptions.Item label='Ghi chú' span={2}>
+                                                    <Paragraph className='mb-0 text-slate-700'>
+                                                        {selectedRequest.note}
+                                                    </Paragraph>
+                                                </Descriptions.Item>
+                                            )}
+                                        </Descriptions>
+                                    </div>
                                 </div>
-                                <div className='p-4 sm:p-5'>
-                                    <Descriptions column={2} size='small' labelStyle={{ color: '#94a3b8', fontWeight: 500 }}>
-                                        <Descriptions.Item label='Mã phiếu'>
-                                            <Text copyable className='font-mono font-semibold text-blue-700'>
-                                                {selectedRequest.requestCode}
-                                            </Text>
-                                        </Descriptions.Item>
-                                        <Descriptions.Item label='Trạng thái'>
-                                            <StatusTag status={selectedRequest.status} />
-                                        </Descriptions.Item>
-                                        <Descriptions.Item label='Họ và tên'>
-                                            {selectedRequest.requesterName || resolveUser(selectedRequest.requestedBy)}
-                                        </Descriptions.Item>
-                                        <Descriptions.Item label='Bộ phận'>
-                                            {selectedRequest.department || 'Kỹ thuật'}
-                                        </Descriptions.Item>
-                                        <Descriptions.Item label='Ngày đề nghị'>
-                                            {fmtDate(selectedRequest.requestDate || selectedRequest.createdAt)}
-                                        </Descriptions.Item>
-                                        <Descriptions.Item label='Người tạo'>
-                                            {resolveUser(selectedRequest.requestedBy)}
-                                        </Descriptions.Item>
-                                        {selectedRequest.approvedBy && (
-                                            <Descriptions.Item label='Người duyệt'>
-                                                {resolveUser(selectedRequest.approvedBy)}
-                                            </Descriptions.Item>
-                                        )}
-                                        {selectedRequest.approvedAt && (
-                                            <Descriptions.Item label='Ngày duyệt'>
-                                                {fmtDateTime(selectedRequest.approvedAt)}
-                                            </Descriptions.Item>
-                                        )}
-                                        {selectedRequest.note && (
-                                            <Descriptions.Item label='Ghi chú' span={2}>
-                                                <Paragraph className='mb-0 text-slate-700'>{selectedRequest.note}</Paragraph>
-                                            </Descriptions.Item>
-                                        )}
-                                    </Descriptions>
-                                </div>
-                            </div>
                             )}
 
                             {/* Items — mobile: card list; desktop: table */}
@@ -1428,80 +1485,87 @@ const TechnicalPurchaseRequestPage: React.FC = () => {
                                         ))}
                                     </div>
                                 ) : (
-                                <Table
-                                    dataSource={selectedRequest.items}
-                                    rowKey={(_, idx) => String(idx)}
-                                    pagination={false}
-                                    size='small'
-                                    className='[&_.ant-table-thead_th]:bg-slate-50'
-                                    columns={[
-                                        {
-                                            title: '#',
-                                            key: 'idx',
-                                            width: 40,
-                                            align: 'center' as const,
-                                            render: (_: any, __: any, idx: number) => (
-                                                <span className='text-xs text-slate-400'>{idx + 1}</span>
-                                            ),
-                                        },
-                                        {
-                                            title: 'Tên vật tư',
-                                            key: 'name',
-                                            render: (_: any, r: any) => (
-                                                <div>
-                                                    <span className='font-medium text-slate-800'>
-                                                        {r.materialName || '—'}
-                                                    </span>
-                                                    {r.assetCode || r.consumedByRequestCode ? (
-                                                        <div className='mt-1 flex flex-wrap gap-1'>
-                                                            {r.assetCode ? (
-                                                                <Tag color='geekblue' className='!m-0'>
-                                                                    <ToolOutlined /> {r.assetCode}
-                                                                    {r.assetName ? ` · ${r.assetName}` : ''}
-                                                                </Tag>
-                                                            ) : null}
-                                                            {r.consumedByRequestCode ? (
-                                                                <Tag color='cyan' className='!m-0'>
-                                                                    Đã vào {r.consumedByRequestCode}
-                                                                </Tag>
-                                                            ) : null}
-                                                        </div>
-                                                    ) : null}
-                                                    {r.imageUrls?.length ? (
-                                                        <div className='mt-1.5 flex gap-1.5'>
-                                                            <Image.PreviewGroup>
-                                                                {r.imageUrls.map((url: string) => (
-                                                                    <Image
-                                                                        key={url}
-                                                                        src={url}
-                                                                        width={38}
-                                                                        height={38}
-                                                                        style={{ objectFit: 'cover', borderRadius: 6 }}
-                                                                        alt='Ảnh vật tư'
-                                                                    />
-                                                                ))}
-                                                            </Image.PreviewGroup>
-                                                        </div>
-                                                    ) : null}
-                                                </div>
-                                            ),
-                                        },
-                                        { title: 'ĐVT', dataIndex: 'unit', width: 80 },
-                                        {
-                                            title: 'Số lượng',
-                                            dataIndex: 'quantityRequested',
-                                            width: 100,
-                                            align: 'right' as const,
-                                            render: (v: number) => <span className='font-semibold'>{fmtNum(v)}</span>,
-                                        },
-                                        {
-                                            title: 'Ghi chú',
-                                            dataIndex: 'note',
-                                            width: 160,
-                                            render: (v?: string) => <span className='text-sm text-slate-400'>{v || '—'}</span>,
-                                        },
-                                    ]}
-                                />
+                                    <Table
+                                        dataSource={selectedRequest.items}
+                                        rowKey={(_, idx) => String(idx)}
+                                        pagination={false}
+                                        size='small'
+                                        className='[&_.ant-table-thead_th]:bg-slate-50'
+                                        columns={[
+                                            {
+                                                title: '#',
+                                                key: 'idx',
+                                                width: 40,
+                                                align: 'center' as const,
+                                                render: (_: any, __: any, idx: number) => (
+                                                    <span className='text-xs text-slate-400'>{idx + 1}</span>
+                                                ),
+                                            },
+                                            {
+                                                title: 'Tên vật tư',
+                                                key: 'name',
+                                                render: (_: any, r: any) => (
+                                                    <div>
+                                                        <span className='font-medium text-slate-800'>
+                                                            {r.materialName || '—'}
+                                                        </span>
+                                                        {r.assetCode || r.consumedByRequestCode ? (
+                                                            <div className='mt-1 flex flex-wrap gap-1'>
+                                                                {r.assetCode ? (
+                                                                    <Tag color='geekblue' className='!m-0'>
+                                                                        <ToolOutlined /> {r.assetCode}
+                                                                        {r.assetName ? ` · ${r.assetName}` : ''}
+                                                                    </Tag>
+                                                                ) : null}
+                                                                {r.consumedByRequestCode ? (
+                                                                    <Tag color='cyan' className='!m-0'>
+                                                                        Đã vào {r.consumedByRequestCode}
+                                                                    </Tag>
+                                                                ) : null}
+                                                            </div>
+                                                        ) : null}
+                                                        {r.imageUrls?.length ? (
+                                                            <div className='mt-1.5 flex gap-1.5'>
+                                                                <Image.PreviewGroup>
+                                                                    {r.imageUrls.map((url: string) => (
+                                                                        <Image
+                                                                            key={url}
+                                                                            src={url}
+                                                                            width={38}
+                                                                            height={38}
+                                                                            style={{
+                                                                                objectFit: 'cover',
+                                                                                borderRadius: 6,
+                                                                            }}
+                                                                            alt='Ảnh vật tư'
+                                                                        />
+                                                                    ))}
+                                                                </Image.PreviewGroup>
+                                                            </div>
+                                                        ) : null}
+                                                    </div>
+                                                ),
+                                            },
+                                            { title: 'ĐVT', dataIndex: 'unit', width: 80 },
+                                            {
+                                                title: 'Số lượng',
+                                                dataIndex: 'quantityRequested',
+                                                width: 100,
+                                                align: 'right' as const,
+                                                render: (v: number) => (
+                                                    <span className='font-semibold'>{fmtNum(v)}</span>
+                                                ),
+                                            },
+                                            {
+                                                title: 'Ghi chú',
+                                                dataIndex: 'note',
+                                                width: 160,
+                                                render: (v?: string) => (
+                                                    <span className='text-sm text-slate-400'>{v || '—'}</span>
+                                                ),
+                                            },
+                                        ]}
+                                    />
                                 )}
                             </div>
                         </div>

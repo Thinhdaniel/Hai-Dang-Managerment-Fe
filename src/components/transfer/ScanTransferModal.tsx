@@ -91,7 +91,9 @@ const ScanTransferModal: React.FC<ScanTransferModalProps> = ({ open, onClose, on
                             currentPlantId: asset.plantId,
                         },
                     });
-                    message.warning(`"${asset.name}" khác cơ sở xuất phát với máy đầu tiên — không thể chung một lệnh.`);
+                    message.warning(
+                        `"${asset.name}" khác cơ sở xuất phát với máy đầu tiên — không thể chung một lệnh.`
+                    );
                     return;
                 }
             }

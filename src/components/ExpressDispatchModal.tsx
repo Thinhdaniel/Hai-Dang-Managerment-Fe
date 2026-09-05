@@ -31,7 +31,13 @@ const { Text } = Typography;
 const fmtVND = (v?: number) =>
     new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND', maximumFractionDigits: 0 }).format(v ?? 0);
 
-type ItemRow = ExpressDispatchItem & { key: string; totalPrice: number; vatAmount: number; totalWithVat: number; showQuickSupplier?: boolean };
+type ItemRow = ExpressDispatchItem & {
+    key: string;
+    totalPrice: number;
+    vatAmount: number;
+    totalWithVat: number;
+    showQuickSupplier?: boolean;
+};
 
 const EMPTY_ROW = (): ItemRow => ({
     key: String(Date.now() + Math.random()),
@@ -85,12 +91,10 @@ const ExpressDispatchModal: React.FC<Props> = ({ open, onClose, onSuccess }) => 
         enabled: open,
     });
 
-    const plants = Array.isArray(plantsRes) ? plantsRes : (plantsRes as any)?.data ?? [];
+    const plants = Array.isArray(plantsRes) ? plantsRes : ((plantsRes as any)?.data ?? []);
     const receiverPlants = plants.filter((p: any) => p.id !== MAIN_PLANT_ID);
-    
-    const suppliers = Array.isArray(suppliersRes) 
-        ? suppliersRes 
-        : (suppliersRes as any)?.data ?? [];
+
+    const suppliers = Array.isArray(suppliersRes) ? suppliersRes : ((suppliersRes as any)?.data ?? []);
 
     const grandTotal = rows.reduce((s, r) => s + r.totalPrice, 0);
     const grandVat = rows.reduce((s, r) => s + r.vatAmount, 0);
@@ -102,9 +106,13 @@ const ExpressDispatchModal: React.FC<Props> = ({ open, onClose, onSuccess }) => 
             message.success(
                 <span>
                     Xuất thẳng thành công!&nbsp;
-                    <Text strong className='text-blue-600'>{res.orderCode}</Text>
+                    <Text strong className='text-blue-600'>
+                        {res.orderCode}
+                    </Text>
                     &nbsp;→&nbsp;
-                    <Text strong className='text-green-600'>{res.distributionCode}</Text>
+                    <Text strong className='text-green-600'>
+                        {res.distributionCode}
+                    </Text>
                 </span>
             );
             queryClient.invalidateQueries({ queryKey: ['distributions'] });
@@ -125,10 +133,10 @@ const ExpressDispatchModal: React.FC<Props> = ({ open, onClose, onSuccess }) => 
     };
 
     useEffect(() => {
-        if (!open) { 
-            setRows([EMPTY_ROW()]); 
-            setToPlantId(undefined); 
-            setGlobalNote(''); 
+        if (!open) {
+            setRows([EMPTY_ROW()]);
+            setToPlantId(undefined);
+            setGlobalNote('');
             setSubmitted(false);
         }
     }, [open]);
@@ -144,21 +152,26 @@ const ExpressDispatchModal: React.FC<Props> = ({ open, onClose, onSuccess }) => 
             }
             return false;
         });
-        
-        if (invalid) { 
-            message.warning('Vui lòng điền đầy đủ và đúng định dạng cho tất cả các dòng'); 
-            return; 
+
+        if (invalid) {
+            message.warning('Vui lòng điền đầy đủ và đúng định dạng cho tất cả các dòng');
+            return;
         }
-        if (!toPlantId) { message.warning('Vui lòng chọn cơ sở nhận'); return; }
+        if (!toPlantId) {
+            message.warning('Vui lòng chọn cơ sở nhận');
+            return;
+        }
 
         const payload: ExpressDispatchPayload = {
             items: rows.map(({ key, totalPrice, vatAmount, totalWithVat, showQuickSupplier, ...item }) => ({
                 ...item,
-                quickSupplier: item.quickSupplier ? {
-                    name: item.quickSupplier.name,
-                    phone: item.quickSupplier.phone || undefined,
-                    address: item.quickSupplier.address || undefined,
-                } : undefined,
+                quickSupplier: item.quickSupplier
+                    ? {
+                          name: item.quickSupplier.name,
+                          phone: item.quickSupplier.phone || undefined,
+                          address: item.quickSupplier.address || undefined,
+                      }
+                    : undefined,
             })),
             toPlantId,
             note: globalNote.trim() || undefined,
@@ -173,7 +186,9 @@ const ExpressDispatchModal: React.FC<Props> = ({ open, onClose, onSuccess }) => 
             width: 180,
             render: (v, r) => (
                 <Input
-                    size='small' value={v} placeholder='Aptomat 40A...'
+                    size='small'
+                    value={v}
+                    placeholder='Aptomat 40A...'
                     onChange={(e) => setRows((prev) => patch(prev, r.key, { materialName: e.target.value }))}
                     status={submitted && !v.trim() ? 'error' : undefined}
                 />
@@ -185,7 +200,9 @@ const ExpressDispatchModal: React.FC<Props> = ({ open, onClose, onSuccess }) => 
             width: 80,
             render: (v, r) => (
                 <Input
-                    size='small' value={v} placeholder='cái'
+                    size='small'
+                    value={v}
+                    placeholder='cái'
                     onChange={(e) => setRows((prev) => patch(prev, r.key, { unit: e.target.value }))}
                     status={submitted && !v.trim() ? 'error' : undefined}
                 />
@@ -197,7 +214,10 @@ const ExpressDispatchModal: React.FC<Props> = ({ open, onClose, onSuccess }) => 
             width: 80,
             render: (v, r) => (
                 <InputNumber
-                    size='small' min={1} value={v} className='w-full'
+                    size='small'
+                    min={1}
+                    value={v}
+                    className='w-full'
                     onChange={(val) => setRows((prev) => patch(prev, r.key, { quantity: Number(val ?? 1) }))}
                 />
             ),
@@ -208,7 +228,10 @@ const ExpressDispatchModal: React.FC<Props> = ({ open, onClose, onSuccess }) => 
             width: 120,
             render: (v, r) => (
                 <InputNumber
-                    size='small' min={0} value={v} className='w-full'
+                    size='small'
+                    min={0}
+                    value={v}
+                    className='w-full'
                     formatter={(val) => `${val}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')}
                     parser={(val) => Number(val?.replace(/,/g, '') ?? 0) as any}
                     onChange={(val) => setRows((prev) => patch(prev, r.key, { unitPrice: Number(val ?? 0) }))}
@@ -221,7 +244,11 @@ const ExpressDispatchModal: React.FC<Props> = ({ open, onClose, onSuccess }) => 
             width: 70,
             render: (v, r) => (
                 <InputNumber
-                    size='small' min={0} max={100} value={v} className='w-full'
+                    size='small'
+                    min={0}
+                    max={100}
+                    value={v}
+                    className='w-full'
                     onChange={(val) => setRows((prev) => patch(prev, r.key, { vatRate: Number(val ?? 0) }))}
                 />
             ),
@@ -242,13 +269,19 @@ const ExpressDispatchModal: React.FC<Props> = ({ open, onClose, onSuccess }) => 
                     {!r.showQuickSupplier ? (
                         <div className='flex gap-1'>
                             <Select
-                                size='small' className='flex-1' placeholder='Chọn NCC'
+                                size='small'
+                                className='flex-1'
+                                placeholder='Chọn NCC'
                                 value={v || undefined}
-                                onChange={(val) => setRows((prev) => patch(prev, r.key, { supplierId: val, quickSupplier: undefined }))}
+                                onChange={(val) =>
+                                    setRows((prev) => patch(prev, r.key, { supplierId: val, quickSupplier: undefined }))
+                                }
                                 options={suppliers.map((s: any) => ({ value: s.id, label: s.name }))}
                                 showSearch
                                 filterOption={(input, opt) =>
-                                    String(opt?.label ?? '').toLowerCase().includes(input.toLowerCase())
+                                    String(opt?.label ?? '')
+                                        .toLowerCase()
+                                        .includes(input.toLowerCase())
                                 }
                                 status={submitted && !v && !r.quickSupplier ? 'error' : undefined}
                             />
@@ -256,7 +289,11 @@ const ExpressDispatchModal: React.FC<Props> = ({ open, onClose, onSuccess }) => 
                                 <Button
                                     size='small'
                                     icon={<ShopOutlined />}
-                                    onClick={() => setRows((prev) => patch(prev, r.key, { showQuickSupplier: true, supplierId: undefined }))}
+                                    onClick={() =>
+                                        setRows((prev) =>
+                                            patch(prev, r.key, { showQuickSupplier: true, supplierId: undefined })
+                                        )
+                                    }
                                 />
                             </Tooltip>
                         </div>
@@ -266,9 +303,16 @@ const ExpressDispatchModal: React.FC<Props> = ({ open, onClose, onSuccess }) => 
                                 size='small'
                                 placeholder='Tên NCC *'
                                 value={r.quickSupplier?.name || ''}
-                                onChange={(e) => setRows((prev) => patch(prev, r.key, { 
-                                    quickSupplier: { ...r.quickSupplier, name: e.target.value } as QuickSupplier 
-                                }))}
+                                onChange={(e) =>
+                                    setRows((prev) =>
+                                        patch(prev, r.key, {
+                                            quickSupplier: {
+                                                ...r.quickSupplier,
+                                                name: e.target.value,
+                                            } as QuickSupplier,
+                                        })
+                                    )
+                                }
                                 status={submitted && !r.quickSupplier?.name?.trim() ? 'error' : undefined}
                             />
                             <div className='flex gap-1'>
@@ -278,18 +322,33 @@ const ExpressDispatchModal: React.FC<Props> = ({ open, onClose, onSuccess }) => 
                                     value={r.quickSupplier?.phone || ''}
                                     onChange={(e) => {
                                         const val = e.target.value.replace(/[^0-9]/g, '');
-                                        setRows((prev) => patch(prev, r.key, { 
-                                            quickSupplier: { ...r.quickSupplier, phone: val } as QuickSupplier 
-                                        }));
+                                        setRows((prev) =>
+                                            patch(prev, r.key, {
+                                                quickSupplier: { ...r.quickSupplier, phone: val } as QuickSupplier,
+                                            })
+                                        );
                                     }}
                                     maxLength={11}
-                                    status={submitted && r.quickSupplier?.phone && !/^[0-9]{10,11}$/.test(r.quickSupplier.phone) ? 'error' : undefined}
+                                    status={
+                                        submitted &&
+                                        r.quickSupplier?.phone &&
+                                        !/^[0-9]{10,11}$/.test(r.quickSupplier.phone)
+                                            ? 'error'
+                                            : undefined
+                                    }
                                 />
                                 <Tooltip title='Chọn từ danh sách'>
                                     <Button
                                         size='small'
                                         icon={<ShopOutlined />}
-                                        onClick={() => setRows((prev) => patch(prev, r.key, { showQuickSupplier: false, quickSupplier: undefined }))}
+                                        onClick={() =>
+                                            setRows((prev) =>
+                                                patch(prev, r.key, {
+                                                    showQuickSupplier: false,
+                                                    quickSupplier: undefined,
+                                                })
+                                            )
+                                        }
                                     />
                                 </Tooltip>
                             </div>
@@ -304,7 +363,10 @@ const ExpressDispatchModal: React.FC<Props> = ({ open, onClose, onSuccess }) => 
             render: (_, r) => (
                 <Tooltip title='Xóa dòng'>
                     <Button
-                        size='small' type='text' danger icon={<DeleteOutlined />}
+                        size='small'
+                        type='text'
+                        danger
+                        icon={<DeleteOutlined />}
                         disabled={rows.length === 1}
                         onClick={() => setRows((prev) => prev.filter((x) => x.key !== r.key))}
                     />
@@ -321,7 +383,9 @@ const ExpressDispatchModal: React.FC<Props> = ({ open, onClose, onSuccess }) => 
                 <Space>
                     <ThunderboltOutlined className='text-orange-500' />
                     <span>Xuất thẳng khẩn cấp</span>
-                    <Tag color='orange' className='ml-1 font-normal'>Fast-track</Tag>
+                    <Tag color='orange' className='ml-1 font-normal'>
+                        Fast-track
+                    </Tag>
                 </Space>
             }
             width={1000}
@@ -331,11 +395,15 @@ const ExpressDispatchModal: React.FC<Props> = ({ open, onClose, onSuccess }) => 
                         Tạo <Text strong>PO + Phiếu cấp phát</Text> trong 1 thao tác
                     </Text>
                     <Space>
-                        <Button onClick={handleClose} disabled={mutation.isPending}>Hủy</Button>
+                        <Button onClick={handleClose} disabled={mutation.isPending}>
+                            Hủy
+                        </Button>
                         <Button
-                            type='primary' icon={<ThunderboltOutlined />}
-                            loading={mutation.isPending} onClick={handleSubmit}
-                            className='bg-orange-500 hover:!bg-orange-600 border-orange-500 hover:!border-orange-600'
+                            type='primary'
+                            icon={<ThunderboltOutlined />}
+                            loading={mutation.isPending}
+                            onClick={handleSubmit}
+                            className='border-orange-500 bg-orange-500 hover:!border-orange-600 hover:!bg-orange-600'
                         >
                             Xác nhận xuất thẳng
                         </Button>
@@ -346,8 +414,8 @@ const ExpressDispatchModal: React.FC<Props> = ({ open, onClose, onSuccess }) => 
         >
             <div className='mb-4 rounded-lg border border-orange-200 bg-orange-50 px-4 py-3 text-sm text-orange-700'>
                 <ThunderboltOutlined className='mr-2' />
-                Dành cho trường hợp <strong>mua và xuất ngay</strong> không qua quy trình duyệt.
-                Hệ thống tự ghi nhận lịch sử nhập/xuất kho để phục vụ thống kê cuối tháng.
+                Dành cho trường hợp <strong>mua và xuất ngay</strong> không qua quy trình duyệt. Hệ thống tự ghi nhận
+                lịch sử nhập/xuất kho để phục vụ thống kê cuối tháng.
             </div>
 
             <Row gutter={16} className='mb-3'>
@@ -356,12 +424,16 @@ const ExpressDispatchModal: React.FC<Props> = ({ open, onClose, onSuccess }) => 
                         Cơ sở nhận <span className='text-red-500'>*</span>
                     </div>
                     <Select
-                        className='w-full' placeholder='Chọn cơ sở nhận hàng'
-                        value={toPlantId} onChange={setToPlantId}
+                        className='w-full'
+                        placeholder='Chọn cơ sở nhận hàng'
+                        value={toPlantId}
+                        onChange={setToPlantId}
                         options={receiverPlants.map((p: any) => ({ value: p.id, label: p.name }))}
                         showSearch
                         filterOption={(input, opt) =>
-                            String(opt?.label ?? '').toLowerCase().includes(input.toLowerCase())
+                            String(opt?.label ?? '')
+                                .toLowerCase()
+                                .includes(input.toLowerCase())
                         }
                         status={submitted && !toPlantId ? 'error' : undefined}
                     />
@@ -369,7 +441,8 @@ const ExpressDispatchModal: React.FC<Props> = ({ open, onClose, onSuccess }) => 
                 <Col span={14}>
                     <div className='mb-1 text-sm font-medium text-slate-700'>Ghi chú / Lý do khẩn cấp</div>
                     <Input
-                        value={globalNote} onChange={(e) => setGlobalNote(e.target.value)}
+                        value={globalNote}
+                        onChange={(e) => setGlobalNote(e.target.value)}
                         placeholder='VD: Alo khẩn từ anh Hùng - Yên Bái cần gấp...'
                     />
                 </Col>
@@ -388,7 +461,9 @@ const ExpressDispatchModal: React.FC<Props> = ({ open, onClose, onSuccess }) => 
             </div>
 
             <Button
-                type='dashed' icon={<PlusOutlined />} className='mt-2 w-full'
+                type='dashed'
+                icon={<PlusOutlined />}
+                className='mt-2 w-full'
                 onClick={() => setRows((prev) => [...prev, EMPTY_ROW()])}
             >
                 Thêm vật tư

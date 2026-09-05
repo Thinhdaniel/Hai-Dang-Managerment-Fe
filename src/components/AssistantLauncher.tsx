@@ -79,7 +79,14 @@ const AssistantLauncher: React.FC<Props> = ({ onClick, isDesktop }) => {
     const onPointerDown = (e: React.PointerEvent<HTMLButtonElement>) => {
         const rect = btnRef.current?.getBoundingClientRect();
         if (!rect) return;
-        drag.current = { startX: e.clientX, startY: e.clientY, baseX: rect.left, baseY: rect.top, moved: false, active: true };
+        drag.current = {
+            startX: e.clientX,
+            startY: e.clientY,
+            baseX: rect.left,
+            baseY: rect.top,
+            moved: false,
+            active: true,
+        };
         btnRef.current?.setPointerCapture(e.pointerId);
     };
 

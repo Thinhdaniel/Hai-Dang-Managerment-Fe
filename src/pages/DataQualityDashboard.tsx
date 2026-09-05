@@ -32,12 +32,7 @@ import { useQuery } from '@tanstack/react-query';
 import { Navigate, useNavigate } from 'react-router-dom';
 import { useAuth } from '../core/contexts/AuthContext';
 import { dataQualityService } from '../core/services/data-quality.service';
-import type {
-    DataQualityCategory,
-    DataQualityCategoryKey,
-    DataQualityCheck,
-    DataQualitySeverity,
-} from '../core/types';
+import type { DataQualityCategory, DataQualityCategoryKey, DataQualityCheck, DataQualitySeverity } from '../core/types';
 import { isSuperAdmin } from '../core/lib/permissions';
 
 const { Text, Title } = Typography;
@@ -113,13 +108,7 @@ const DataQualityDashboard: React.FC = () => {
     const { user } = useAuth();
     const [selectedCategoryKey, setSelectedCategoryKey] = useState<DataQualityCategoryKey | 'all'>('all');
 
-    const {
-        data,
-        isLoading,
-        isFetching,
-        refetch,
-        dataUpdatedAt,
-    } = useQuery({
+    const { data, isLoading, isFetching, refetch, dataUpdatedAt } = useQuery({
         queryKey: ['data-quality', 'overview'],
         queryFn: dataQualityService.getOverview,
         enabled: isSuperAdmin(user?.role),
@@ -135,7 +124,8 @@ const DataQualityDashboard: React.FC = () => {
         [categories, selectedCategoryKey]
     );
     const checks = useMemo(
-        () => sortChecks(selectedCategory ? selectedCategory.checks : categories.flatMap((category) => category.checks)),
+        () =>
+            sortChecks(selectedCategory ? selectedCategory.checks : categories.flatMap((category) => category.checks)),
         [categories, selectedCategory]
     );
     const issueChecks = checks.filter((item) => item.count > 0);
@@ -257,13 +247,18 @@ const DataQualityDashboard: React.FC = () => {
                                         >
                                             {meta.icon}
                                         </span>
-                                        <Tag color={category.score >= 80 ? 'green' : category.score >= 60 ? 'gold' : 'red'}>
+                                        <Tag
+                                            color={
+                                                category.score >= 80 ? 'green' : category.score >= 60 ? 'gold' : 'red'
+                                            }
+                                        >
                                             {category.score}/100
                                         </Tag>
                                     </div>
                                     <Text className='block text-sm font-black text-slate-900'>{category.title}</Text>
                                     <Text className='mt-1 block text-xs font-semibold text-slate-500'>
-                                        {formatNumber(category.issueCount)} vấn đề · {formatNumber(category.totalRecords)} bản ghi
+                                        {formatNumber(category.issueCount)} vấn đề ·{' '}
+                                        {formatNumber(category.totalRecords)} bản ghi
                                     </Text>
                                 </button>
                             );
@@ -307,7 +302,10 @@ const DataQualityDashboard: React.FC = () => {
                                                         </Tag>
                                                         <Tag className='m-0 font-bold'>{check.ratio}%</Tag>
                                                     </Space>
-                                                    <Title level={5} className='!mt-3 !mb-1 !font-black !text-slate-950'>
+                                                    <Title
+                                                        level={5}
+                                                        className='!mt-3 !mb-1 !font-black !text-slate-950'
+                                                    >
                                                         {check.title}
                                                     </Title>
                                                     <Text className='block text-sm leading-5 font-medium text-slate-600'>
@@ -326,7 +324,13 @@ const DataQualityDashboard: React.FC = () => {
 
                                             <Alert
                                                 className='mt-3 rounded-xl border-0 bg-white/70'
-                                                type={check.severity === 'critical' ? 'error' : check.severity === 'warning' ? 'warning' : 'info'}
+                                                type={
+                                                    check.severity === 'critical'
+                                                        ? 'error'
+                                                        : check.severity === 'warning'
+                                                          ? 'warning'
+                                                          : 'info'
+                                                }
                                                 showIcon
                                                 message={<span className='font-bold'>{check.action}</span>}
                                             />
@@ -351,7 +355,9 @@ const DataQualityDashboard: React.FC = () => {
                                                             ].filter(Boolean)}
                                                         >
                                                             <List.Item.Meta
-                                                                avatar={<CheckCircleOutlined className='mt-1 text-slate-400' />}
+                                                                avatar={
+                                                                    <CheckCircleOutlined className='mt-1 text-slate-400' />
+                                                                }
                                                                 title={
                                                                     <Tooltip title={record.label}>
                                                                         <span className='line-clamp-1 font-bold text-slate-900'>
@@ -361,7 +367,9 @@ const DataQualityDashboard: React.FC = () => {
                                                                 }
                                                                 description={
                                                                     <span className='text-xs font-semibold text-slate-500'>
-                                                                        {[record.code, record.meta].filter(Boolean).join(' · ') || record.id}
+                                                                        {[record.code, record.meta]
+                                                                            .filter(Boolean)
+                                                                            .join(' · ') || record.id}
                                                                     </span>
                                                                 }
                                                             />

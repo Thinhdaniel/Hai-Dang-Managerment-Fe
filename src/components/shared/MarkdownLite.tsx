@@ -3,9 +3,15 @@ import React from 'react';
 // Render markdown tối giản cho narrative do AI sinh (##/### heading, **bold**, - / N. list).
 // Không dùng thư viện markdown vì chỉ cần vài cú pháp cơ bản; React tự escape text nên an toàn XSS.
 const renderInline = (text: string): React.ReactNode[] =>
-    text.split(/(\*\*[^*]+\*\*)/g).map((part, i) =>
-        part.startsWith('**') && part.endsWith('**') ? <strong key={i}>{part.slice(2, -2)}</strong> : <React.Fragment key={i}>{part}</React.Fragment>
-    );
+    text
+        .split(/(\*\*[^*]+\*\*)/g)
+        .map((part, i) =>
+            part.startsWith('**') && part.endsWith('**') ? (
+                <strong key={i}>{part.slice(2, -2)}</strong>
+            ) : (
+                <React.Fragment key={i}>{part}</React.Fragment>
+            )
+        );
 
 const MarkdownLite: React.FC<{ text: string; className?: string }> = ({ text, className }) => {
     const lines = (text || '').split('\n');
@@ -39,7 +45,14 @@ const MarkdownLite: React.FC<{ text: string; className?: string }> = ({ text, cl
             flushList(`list-${idx}`);
             const level = headerMatch[1].length;
             blocks.push(
-                <div key={idx} className={level <= 2 ? 'mb-1 mt-3 text-[13px] font-bold text-slate-900 first:mt-0' : 'mb-1 mt-2 text-[12.5px] font-bold text-slate-800 first:mt-0'}>
+                <div
+                    key={idx}
+                    className={
+                        level <= 2
+                            ? 'mt-3 mb-1 text-[13px] font-bold text-slate-900 first:mt-0'
+                            : 'mt-2 mb-1 text-[12.5px] font-bold text-slate-800 first:mt-0'
+                    }
+                >
                     {renderInline(headerMatch[2])}
                 </div>
             );

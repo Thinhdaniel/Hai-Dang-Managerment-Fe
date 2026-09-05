@@ -54,29 +54,42 @@ const AuthPageShell = ({ eyebrow, title, subtitle, children }: AuthPageShellProp
                     style={{ background: 'oklch(0.13 0.012 250)' }}
                 >
                     {/* Ambient glow — breathes, never distracts */}
-                    <div className='auth-glow pointer-events-none absolute -top-[20%] -left-[10%] h-[70%] w-[70%] rounded-full blur-[140px]'
-                         style={{ background: 'oklch(0.55 0.22 250)' }} />
+                    <div
+                        className='auth-glow pointer-events-none absolute -top-[20%] -left-[10%] h-[70%] w-[70%] rounded-full blur-[140px]'
+                        style={{ background: 'oklch(0.55 0.22 250)' }}
+                    />
 
                     <div className='relative z-10'>
                         <div className='auth-panel-logo mb-12 flex h-11 w-11 items-center justify-center rounded-lg bg-white p-2 shadow-sm'>
-                            <img src={COMPANY_LOGO_URL} alt='Hải Đăng Garment logo' className='h-full w-full object-contain' />
+                            <img
+                                src={COMPANY_LOGO_URL}
+                                alt='Hải Đăng Garment logo'
+                                className='h-full w-full object-contain'
+                            />
                         </div>
 
-                        <h1 className='auth-panel-h1 text-4xl font-semibold tracking-tight lg:text-5xl lg:leading-[1.12]'
-                            style={{ color: 'oklch(0.97 0.005 250)' }}>
+                        <h1
+                            className='auth-panel-h1 text-4xl font-semibold tracking-tight lg:text-5xl lg:leading-[1.12]'
+                            style={{ color: 'oklch(0.97 0.005 250)' }}
+                        >
                             Hệ thống quản lý
                             <br />
                             <span style={{ color: 'oklch(0.60 0.015 250)' }}>thiết bị Hải Đăng.</span>
                         </h1>
 
-                        <p className='auth-panel-sub mt-6 max-w-sm text-base leading-relaxed'
-                           style={{ color: 'oklch(0.55 0.015 250)' }}>
-                            Kiểm soát vận hành, giám sát bảo trì và luân chuyển tài sản theo thời gian thực cho khối sản xuất.
+                        <p
+                            className='auth-panel-sub mt-6 max-w-sm text-base leading-relaxed'
+                            style={{ color: 'oklch(0.55 0.015 250)' }}
+                        >
+                            Kiểm soát vận hành, giám sát bảo trì và luân chuyển tài sản theo thời gian thực cho khối sản
+                            xuất.
                         </p>
                     </div>
 
-                    <div className='auth-panel-foot relative z-10 flex items-center justify-between border-t pt-8 text-sm'
-                         style={{ borderColor: 'oklch(0.22 0.01 250)', color: 'oklch(0.45 0.01 250)' }}>
+                    <div
+                        className='auth-panel-foot relative z-10 flex items-center justify-between border-t pt-8 text-sm'
+                        style={{ borderColor: 'oklch(0.22 0.01 250)', color: 'oklch(0.45 0.01 250)' }}
+                    >
                         <span>&copy; {new Date().getFullYear()} Hai Dang Garment</span>
                         <span>v1.0</span>
                     </div>
@@ -87,12 +100,20 @@ const AuthPageShell = ({ eyebrow, title, subtitle, children }: AuthPageShellProp
                     <div className='auth-form-panel mx-auto w-full max-w-sm'>
                         {/* Mobile-only logo + heading */}
                         <div className='mb-10 lg:hidden'>
-                            <div className='mb-5 flex h-10 w-10 items-center justify-center rounded-lg border bg-white shadow-sm'
-                                 style={{ borderColor: 'oklch(0.90 0.005 250)' }}>
-                                <img src={COMPANY_LOGO_URL} alt='Hải Đăng Garment logo' className='h-full w-full object-contain' />
+                            <div
+                                className='mb-5 flex h-10 w-10 items-center justify-center rounded-lg border bg-white shadow-sm'
+                                style={{ borderColor: 'oklch(0.90 0.005 250)' }}
+                            >
+                                <img
+                                    src={COMPANY_LOGO_URL}
+                                    alt='Hải Đăng Garment logo'
+                                    className='h-full w-full object-contain'
+                                />
                             </div>
-                            <h1 className='text-2xl font-semibold tracking-tight'
-                                style={{ color: 'oklch(0.16 0.012 250)' }}>
+                            <h1
+                                className='text-2xl font-semibold tracking-tight'
+                                style={{ color: 'oklch(0.16 0.012 250)' }}
+                            >
                                 Hệ thống quản lý thiết bị
                             </h1>
                         </div>
@@ -100,14 +121,14 @@ const AuthPageShell = ({ eyebrow, title, subtitle, children }: AuthPageShellProp
                         {/* Form header */}
                         <div className='mb-8'>
                             <Text
-                                className='mb-2 block text-[11px] font-bold uppercase tracking-[0.2em]'
+                                className='mb-2 block text-[11px] font-bold tracking-[0.2em] uppercase'
                                 style={{ color: 'oklch(0.50 0.18 250)' }}
                             >
                                 {eyebrow}
                             </Text>
                             <Title
                                 level={2}
-                                className='!mb-2 !mt-1 !font-semibold !tracking-tight'
+                                className='!mt-1 !mb-2 !font-semibold !tracking-tight'
                                 style={{ color: 'oklch(0.16 0.012 250)' }}
                             >
                                 {title}

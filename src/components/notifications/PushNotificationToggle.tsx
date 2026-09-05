@@ -59,8 +59,7 @@ const isStandalonePwa = () =>
     (window.matchMedia('(display-mode: standalone)').matches ||
         (navigator as Navigator & { standalone?: boolean }).standalone === true);
 
-const isMobileDevice = () =>
-    typeof navigator !== 'undefined' && /Android|iPad|iPhone|iPod/i.test(navigator.userAgent);
+const isMobileDevice = () => typeof navigator !== 'undefined' && /Android|iPad|iPhone|iPod/i.test(navigator.userAgent);
 
 const buildTelegramAppDeepLink = (deepLink?: string) => {
     if (!deepLink) return undefined;
@@ -203,7 +202,9 @@ const PushNotificationToggle = () => {
                 if (Date.now() >= timeoutAt) {
                     clearTelegramPollTimer();
                     setTelegramPolling(false);
-                    message.warning('Chưa xác nhận được Telegram. Nếu Telegram chỉ hiện /start, hãy bấm Gửi rồi quay lại app.');
+                    message.warning(
+                        'Chưa xác nhận được Telegram. Nếu Telegram chỉ hiện /start, hãy bấm Gửi rồi quay lại app.'
+                    );
                     return;
                 }
 
@@ -266,7 +267,10 @@ const PushNotificationToggle = () => {
     const canTest = state.supported && state.enabled && (state.subscribed || state.activeDevices > 0);
     const activeDevices = devices.filter((device) => device.isActive);
     const shouldShowIosGuide = isAppleMobile() && !isStandalonePwa();
-    const telegramAppDeepLink = useMemo(() => buildTelegramAppDeepLink(telegramLink?.deepLink), [telegramLink?.deepLink]);
+    const telegramAppDeepLink = useMemo(
+        () => buildTelegramAppDeepLink(telegramLink?.deepLink),
+        [telegramLink?.deepLink]
+    );
 
     const handleEnable = async () => {
         try {
@@ -491,7 +495,8 @@ const PushNotificationToggle = () => {
                         </p>
                         {telegramStatus.linked ? (
                             <Text className='mt-1 block text-[11px] text-slate-400'>
-                                Đã nối {telegramStatus.telegramUsername ? `@${telegramStatus.telegramUsername}` : 'Telegram'}
+                                Đã nối{' '}
+                                {telegramStatus.telegramUsername ? `@${telegramStatus.telegramUsername}` : 'Telegram'}
                                 {telegramStatus.linkedAt ? ` · ${formatDateTime(telegramStatus.linkedAt)}` : ''}
                             </Text>
                         ) : null}
@@ -530,8 +535,8 @@ const PushNotificationToggle = () => {
                             </Tag>
                         </div>
                         <p className='mt-1 mb-2 text-[11px] leading-5 text-sky-700'>
-                            Nếu iPhone không tự mở app, bấm <b>Mở Telegram</b>, sau đó bấm <b>Start</b> hoặc{' '}
-                            <b>Gửi</b> lệnh /start trong bot rồi quay lại Hải Đăng MS.
+                            Nếu iPhone không tự mở app, bấm <b>Mở Telegram</b>, sau đó bấm <b>Start</b> hoặc <b>Gửi</b>{' '}
+                            lệnh /start trong bot rồi quay lại Hải Đăng MS.
                         </p>
                         <Space wrap size={8}>
                             <Button

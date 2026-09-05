@@ -1,11 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { AudioOutlined, CloseOutlined, StopOutlined } from '@ant-design/icons';
 import { App, Button, Tooltip } from 'antd';
-import {
-    formatVoiceDuration,
-    getSupportedChatAudioMimeType,
-    getVoiceFileExtension,
-} from '../../core/lib/chatMedia';
+import { formatVoiceDuration, getSupportedChatAudioMimeType, getVoiceFileExtension } from '../../core/lib/chatMedia';
 
 export type ChatVoiceNoteDraft = {
     uid: string;
@@ -82,7 +78,9 @@ const VoiceRecorderButton: React.FC<VoiceRecorderButtonProps> = ({
         try {
             const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
             const preferredMimeType = getSupportedChatAudioMimeType();
-            const recorder = preferredMimeType ? new MediaRecorder(stream, { mimeType: preferredMimeType }) : new MediaRecorder(stream);
+            const recorder = preferredMimeType
+                ? new MediaRecorder(stream, { mimeType: preferredMimeType })
+                : new MediaRecorder(stream);
 
             streamRef.current = stream;
             recorderRef.current = recorder;

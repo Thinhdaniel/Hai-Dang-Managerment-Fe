@@ -1,6 +1,13 @@
 import React, { lazy, useMemo, useState } from 'react';
 import { App, Button, Input, Table, Tooltip, type TableColumnsType } from 'antd';
-import { DeleteOutlined, EditOutlined, PlusOutlined, ReloadOutlined, SearchOutlined, TagsOutlined } from '@ant-design/icons';
+import {
+    DeleteOutlined,
+    EditOutlined,
+    PlusOutlined,
+    ReloadOutlined,
+    SearchOutlined,
+    TagsOutlined,
+} from '@ant-design/icons';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import dayjs from 'dayjs';
 import ConfirmAction from '../components/shared/ConfirmAction';
@@ -174,7 +181,7 @@ const BrandList: React.FC = () => {
 
             <div className='grid grid-cols-1 gap-4 sm:grid-cols-2'>
                 <div className='rounded-xl border border-slate-200 bg-white p-5 shadow-sm'>
-                    <div className='mb-1 text-xs font-bold uppercase tracking-wider text-slate-500'>Tổng nhãn hiệu</div>
+                    <div className='mb-1 text-xs font-bold tracking-wider text-slate-500 uppercase'>Tổng nhãn hiệu</div>
                     <div className='flex items-center justify-between'>
                         <div className='text-3xl font-bold text-slate-800'>{stats.total}</div>
                         <div className='flex h-12 w-12 items-center justify-center rounded-xl bg-blue-50 text-2xl text-blue-600'>
@@ -183,7 +190,7 @@ const BrandList: React.FC = () => {
                     </div>
                 </div>
                 <div className='rounded-xl border border-slate-200 bg-white p-5 shadow-sm'>
-                    <div className='mb-1 text-xs font-bold uppercase tracking-wider text-slate-500'>Có mô tả</div>
+                    <div className='mb-1 text-xs font-bold tracking-wider text-slate-500 uppercase'>Có mô tả</div>
                     <div className='text-3xl font-bold text-slate-800'>{stats.withDescription}</div>
                 </div>
             </div>

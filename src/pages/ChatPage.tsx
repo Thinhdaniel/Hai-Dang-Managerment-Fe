@@ -1169,10 +1169,13 @@ const ChatPage: React.FC = () => {
 
             {archivedView ? (
                 <div className='mx-3 mt-2 flex items-center justify-between rounded-xl border border-amber-200 bg-amber-50 px-3 py-2'>
-                    <Text className='text-[12px] font-semibold text-amber-800'>
-                        Lưu trữ · hội thoại im hơn 90 ngày
-                    </Text>
-                    <Button type='link' size='small' onClick={toggleArchivedView} className='!h-auto !px-0 !text-[12px]'>
+                    <Text className='text-[12px] font-semibold text-amber-800'>Lưu trữ · hội thoại im hơn 90 ngày</Text>
+                    <Button
+                        type='link'
+                        size='small'
+                        onClick={toggleArchivedView}
+                        className='!h-auto !px-0 !text-[12px]'
+                    >
                         ← Quay lại
                     </Button>
                 </div>

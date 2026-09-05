@@ -95,9 +95,7 @@ const DashboardAuditCard: React.FC = () => {
                                 {audit.stats.warning} cảnh báo
                             </Tag>
                         ) : null}
-                        {audit.stats?.info ? (
-                            <Tag className='!m-0'>{audit.stats.info} lưu ý</Tag>
-                        ) : null}
+                        {audit.stats?.info ? <Tag className='!m-0'>{audit.stats.info} lưu ý</Tag> : null}
                         {runMut.isPending ? <Spin size='small' /> : null}
                     </div>
 

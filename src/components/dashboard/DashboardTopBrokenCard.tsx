@@ -51,12 +51,16 @@ const DashboardTopBrokenCard = ({ data, loading }: DashboardTopBrokenCardProps) 
                                 <div className='mt-1 h-1.5 overflow-hidden rounded-full bg-slate-100'>
                                     <div
                                         className='h-full rounded-full bg-gradient-to-r from-amber-500 to-amber-400'
-                                        style={{ width: `${maxCount > 0 ? Math.max(8, (item.count / maxCount) * 100) : 0}%` }}
+                                        style={{
+                                            width: `${maxCount > 0 ? Math.max(8, (item.count / maxCount) * 100) : 0}%`,
+                                        }}
                                     />
                                 </div>
                                 <div className='mt-1 flex items-center gap-2 text-[11px] text-slate-400'>
                                     <span>{item.plantName || 'Chưa rõ cơ sở'}</span>
-                                    {item.lastDate ? <span>· Gần nhất {dayjs(item.lastDate).format('DD/MM/YYYY')}</span> : null}
+                                    {item.lastDate ? (
+                                        <span>· Gần nhất {dayjs(item.lastDate).format('DD/MM/YYYY')}</span>
+                                    ) : null}
                                 </div>
                             </div>
                             <Tooltip title='Số lần bảo trì'>

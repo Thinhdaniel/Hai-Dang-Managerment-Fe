@@ -1197,127 +1197,124 @@ const ModalForm: React.FC<ModalFormProps> = ({
 
     // Đổ kết quả đọc (từ ảnh OCR hoặc tin nhắn báo giá) vào bảng -> tự khớp danh mục.
     const applyInvoiceOcrResult = async (result: InvoiceOcrResponse, source: 'image' | 'text' = 'image') => {
-            // Dò "Cơ sở"/"Nhà cung cấp" từ tên đọc được -> id (khớp không dấu, ưu tiên trùng khít).
-            const findOption = (opts: { value: string; label: string }[], name?: string) => {
-                const q = normalizeSearchText(name);
-                if (!q) return undefined;
-                return (
-                    opts.find((o) => normalizeSearchText(o.label) === q) ||
-                    opts.find((o) => {
-                        const l = normalizeSearchText(o.label);
-                        return l.includes(q) || q.includes(l);
-                    })
-                );
-            };
-            const parseDate = (value?: string) => {
-                if (!value) return undefined;
-                const d = dayjs(value);
-                return d.isValid() ? d : undefined;
-            };
-            const invoiceTag = result.header?.invoiceNo ? `HĐ ${result.header.invoiceNo}` : '';
+        // Dò "Cơ sở"/"Nhà cung cấp" từ tên đọc được -> id (khớp không dấu, ưu tiên trùng khít).
+        const findOption = (opts: { value: string; label: string }[], name?: string) => {
+            const q = normalizeSearchText(name);
+            if (!q) return undefined;
+            return (
+                opts.find((o) => normalizeSearchText(o.label) === q) ||
+                opts.find((o) => {
+                    const l = normalizeSearchText(o.label);
+                    return l.includes(q) || q.includes(l);
+                })
+            );
+        };
+        const parseDate = (value?: string) => {
+            if (!value) return undefined;
+            const d = dayjs(value);
+            return d.isValid() ? d : undefined;
+        };
+        const invoiceTag = result.header?.invoiceNo ? `HĐ ${result.header.invoiceNo}` : '';
 
-            let matchedPlants = 0;
-            let matchedSuppliers = 0;
-            const scannedRows = result.items.map((it) => {
-                const qReq =
-                    it.quantityRequested && it.quantityRequested > 0
-                        ? it.quantityRequested
-                        : it.quantity && it.quantity > 0
-                          ? it.quantity
-                          : 1;
-                const qBuy = it.quantity && it.quantity > 0 ? it.quantity : qReq;
-                const plant = findOption(plantOptions, it.plantName);
-                // NCC theo dòng; báo giá NCC gửi thì NCC nằm ở tiêu đề (letterhead) -> fallback header.
-                const supplierText = it.supplierName ?? result.header?.supplierName;
-                const supplier = findOption(supplierOptions, supplierText);
-                if (plant) matchedPlants += 1;
-                if (supplier) matchedSuppliers += 1;
-                return computeRow({
-                    ...newRow(),
-                    materialName: it.materialName,
-                    unit: it.unit ?? '',
-                    quantityRequested: qReq,
-                    quantityOrdered: qBuy,
-                    unitPrice: it.unitPrice ?? 0,
-                    vatRate: it.vatRate != null ? it.vatRate : 8,
-                    plantId: plant?.value ?? mainPlantId,
-                    proposedBy: it.proposedBy ?? '',
-                    supplierId: supplier?.value,
-                    supplierName: supplier?.label ?? supplierText,
-                    purpose: it.purpose ?? '',
-                    // Dòng 2 lần đọc không thống nhất -> chèn cảnh báo vào ghi chú cho người rà thấy ngay.
-                    note: [it.verifyNote ? `⚠ ${it.verifyNote}` : '', it.note || invoiceTag]
-                        .filter(Boolean)
-                        .join(' · '),
-                    orderDate: parseDate(it.orderDate),
-                    receivedDate: parseDate(it.receivedDate),
-                });
+        let matchedPlants = 0;
+        let matchedSuppliers = 0;
+        const scannedRows = result.items.map((it) => {
+            const qReq =
+                it.quantityRequested && it.quantityRequested > 0
+                    ? it.quantityRequested
+                    : it.quantity && it.quantity > 0
+                      ? it.quantity
+                      : 1;
+            const qBuy = it.quantity && it.quantity > 0 ? it.quantity : qReq;
+            const plant = findOption(plantOptions, it.plantName);
+            // NCC theo dòng; báo giá NCC gửi thì NCC nằm ở tiêu đề (letterhead) -> fallback header.
+            const supplierText = it.supplierName ?? result.header?.supplierName;
+            const supplier = findOption(supplierOptions, supplierText);
+            if (plant) matchedPlants += 1;
+            if (supplier) matchedSuppliers += 1;
+            return computeRow({
+                ...newRow(),
+                materialName: it.materialName,
+                unit: it.unit ?? '',
+                quantityRequested: qReq,
+                quantityOrdered: qBuy,
+                unitPrice: it.unitPrice ?? 0,
+                vatRate: it.vatRate != null ? it.vatRate : 8,
+                plantId: plant?.value ?? mainPlantId,
+                proposedBy: it.proposedBy ?? '',
+                supplierId: supplier?.value,
+                supplierName: supplier?.label ?? supplierText,
+                purpose: it.purpose ?? '',
+                // Dòng 2 lần đọc không thống nhất -> chèn cảnh báo vào ghi chú cho người rà thấy ngay.
+                note: [it.verifyNote ? `⚠ ${it.verifyNote}` : '', it.note || invoiceTag].filter(Boolean).join(' · '),
+                orderDate: parseDate(it.orderDate),
+                receivedDate: parseDate(it.receivedDate),
             });
+        });
 
-            // Form đang trống (chỉ dòng mặc định rỗng) -> thay; ngược lại nối thêm.
-            setItems((prev) => {
-                const meaningful = prev.filter((r) => r.materialName.trim() || r.unitPrice > 0);
-                return meaningful.length ? [...meaningful, ...scannedRows] : scannedRows;
+        // Form đang trống (chỉ dòng mặc định rỗng) -> thay; ngược lại nối thêm.
+        setItems((prev) => {
+            const meaningful = prev.filter((r) => r.materialName.trim() || r.unitPrice > 0);
+            return meaningful.length ? [...meaningful, ...scannedRows] : scannedRows;
+        });
+        setSelectedKey(scannedRows[0].key);
+        markRecent(scannedRows.map((r) => r.key));
+
+        // Đối chiếu toán học: tổng các dòng lệch "Cộng tiền hàng" trên phiếu -> có dòng đọc sai.
+        if (result.totals?.mismatch) {
+            notification.warning({
+                title: 'Tổng tiền chưa khớp với phiếu',
+                description: `Tổng tính từ các dòng ${fmtVND(result.totals.computed)} ≠ "Cộng tiền hàng" trên phiếu ${fmtVND(result.totals.stated)} — có dòng đọc sai SL/đơn giá hoặc sót dòng, kiểm tra lại.`,
+                duration: 0,
             });
-            setSelectedKey(scannedRows[0].key);
-            markRecent(scannedRows.map((r) => r.key));
+        }
+        const vatNote = result.derivedVatRate != null ? `VAT ${result.derivedVatRate}% suy từ dòng tổng tiền thuế` : '';
+        const flagged = result.verification?.flagged ?? 0;
+        if (source === 'text') {
+            notification.success({
+                title: `Đã đọc ${scannedRows.length} dòng từ tin nhắn báo giá`,
+                description: [
+                    matchedSuppliers ? `${matchedSuppliers} NCC đã dò` : '',
+                    'Kiểm tra lại số lượng, đơn giá trước khi lưu.',
+                ]
+                    .filter(Boolean)
+                    .join(' · '),
+            });
+        } else if (result.verification?.status === 'verified') {
+            (flagged ? notification.warning : notification.success)({
+                title: `Đã quét ${scannedRows.length} dòng — đối chiếu 2 lần đọc`,
+                description: [
+                    `${result.verification.agreed ?? 0} dòng khớp cả 2 lần`,
+                    flagged ? `${flagged} dòng LỆCH/chỉ 1 lần thấy — xem cảnh báo ⚠ ở ghi chú` : '',
+                    result.totals && !result.totals.mismatch ? 'tổng tiền khớp phiếu ✓' : '',
+                    vatNote,
+                    matchedPlants ? `${matchedPlants} cơ sở` : '',
+                    matchedSuppliers ? `${matchedSuppliers} NCC đã dò` : '',
+                ]
+                    .filter(Boolean)
+                    .join(' · '),
+            });
+        } else {
+            notification.warning({
+                title: `Đã quét ${scannedRows.length} dòng từ hóa đơn (CHƯA đối chiếu chéo)`,
+                description:
+                    result.verification?.note ||
+                    'Lần đọc 2 không chạy được — hãy rà kỹ số lượng, đơn giá trước khi lưu.',
+            });
+        }
 
-            // Đối chiếu toán học: tổng các dòng lệch "Cộng tiền hàng" trên phiếu -> có dòng đọc sai.
-            if (result.totals?.mismatch) {
-                notification.warning({
-                    title: 'Tổng tiền chưa khớp với phiếu',
-                    description: `Tổng tính từ các dòng ${fmtVND(result.totals.computed)} ≠ "Cộng tiền hàng" trên phiếu ${fmtVND(result.totals.stated)} — có dòng đọc sai SL/đơn giá hoặc sót dòng, kiểm tra lại.`,
-                    duration: 0,
-                });
-            }
-            const vatNote =
-                result.derivedVatRate != null ? `VAT ${result.derivedVatRate}% suy từ dòng tổng tiền thuế` : '';
-            const flagged = result.verification?.flagged ?? 0;
-            if (source === 'text') {
-                notification.success({
-                    title: `Đã đọc ${scannedRows.length} dòng từ tin nhắn báo giá`,
-                    description: [
-                        matchedSuppliers ? `${matchedSuppliers} NCC đã dò` : '',
-                        'Kiểm tra lại số lượng, đơn giá trước khi lưu.',
-                    ]
-                        .filter(Boolean)
-                        .join(' · '),
-                });
-            } else if (result.verification?.status === 'verified') {
-                (flagged ? notification.warning : notification.success)({
-                    title: `Đã quét ${scannedRows.length} dòng — đối chiếu 2 lần đọc`,
-                    description: [
-                        `${result.verification.agreed ?? 0} dòng khớp cả 2 lần`,
-                        flagged ? `${flagged} dòng LỆCH/chỉ 1 lần thấy — xem cảnh báo ⚠ ở ghi chú` : '',
-                        result.totals && !result.totals.mismatch ? 'tổng tiền khớp phiếu ✓' : '',
-                        vatNote,
-                        matchedPlants ? `${matchedPlants} cơ sở` : '',
-                        matchedSuppliers ? `${matchedSuppliers} NCC đã dò` : '',
-                    ]
-                        .filter(Boolean)
-                        .join(' · '),
-                });
-            } else {
-                notification.warning({
-                    title: `Đã quét ${scannedRows.length} dòng từ hóa đơn (CHƯA đối chiếu chéo)`,
-                    description:
-                        result.verification?.note ||
-                        'Lần đọc 2 không chạy được — hãy rà kỹ số lượng, đơn giá trước khi lưu.',
-                });
-            }
-
-            // Khớp danh mục cho các dòng vừa quét (tái dùng AI material-match).
-            try {
-                const match = await aiMaterialMatchService.match(
-                    scannedRows.map((r) => ({ key: r.key, materialName: r.materialName, unit: r.unit, note: r.note }))
-                );
-                setAiMatches((prev) => ({
-                    ...prev,
-                    ...Object.fromEntries(match.items.map((item) => [item.key, item])),
-                }));
-            } catch {
-                /* Bỏ qua: người dùng vẫn có thể bấm "AI khớp vật tư" thủ công. */
-            }
+        // Khớp danh mục cho các dòng vừa quét (tái dùng AI material-match).
+        try {
+            const match = await aiMaterialMatchService.match(
+                scannedRows.map((r) => ({ key: r.key, materialName: r.materialName, unit: r.unit, note: r.note }))
+            );
+            setAiMatches((prev) => ({
+                ...prev,
+                ...Object.fromEntries(match.items.map((item) => [item.key, item])),
+            }));
+        } catch {
+            /* Bỏ qua: người dùng vẫn có thể bấm "AI khớp vật tư" thủ công. */
+        }
     };
 
     // Quét ảnh hóa đơn/phiếu mua -> OCR trích dòng -> đổ vào bảng.
@@ -1364,7 +1361,10 @@ const ModalForm: React.FC<ModalFormProps> = ({
             setQuoteTextOpen(false);
             setQuoteText('');
         } catch {
-            notification.error({ title: 'Không đọc được tin nhắn báo giá', description: 'AI đang bận, thử lại sau nhé.' });
+            notification.error({
+                title: 'Không đọc được tin nhắn báo giá',
+                description: 'AI đang bận, thử lại sau nhé.',
+            });
         } finally {
             setParsingQuote(false);
         }
@@ -1394,9 +1394,7 @@ const ModalForm: React.FC<ModalFormProps> = ({
                             disabled={!techPoolChecked.length}
                             onClick={() =>
                                 addFromTechnicalPool(
-                                    availableTechPool.filter((row) =>
-                                        techPoolChecked.includes(techPoolKeyOf(row))
-                                    )
+                                    availableTechPool.filter((row) => techPoolChecked.includes(techPoolKeyOf(row)))
                                 )
                             }
                         >
@@ -1483,14 +1481,16 @@ const ModalForm: React.FC<ModalFormProps> = ({
             onCancel={() => setQuoteTextOpen(false)}
         >
             <div className='mb-2 text-xs text-slate-500'>
-                Dán nguyên tin nhắn Zalo/SMS của nhà cung cấp (tên hàng + giá + số lượng). AI sẽ trích từng dòng vật
-                tư và điền vào bảng — giá viết tắt kiểu “35k”, “1tr2” đều hiểu được.
+                Dán nguyên tin nhắn Zalo/SMS của nhà cung cấp (tên hàng + giá + số lượng). AI sẽ trích từng dòng vật tư
+                và điền vào bảng — giá viết tắt kiểu “35k”, “1tr2” đều hiểu được.
             </div>
             <Input.TextArea
                 rows={8}
                 value={quoteText}
                 onChange={(event) => setQuoteText(event.target.value)}
-                placeholder={'Vd: Ống nhựa PU 8x5mm 100m giá 6.5k/m\nMỏ dưới vắt sổ Pegasus 35k/chiếc, lấy 10 chiếc\nMỏ trên Jack 55k x 20c'}
+                placeholder={
+                    'Vd: Ống nhựa PU 8x5mm 100m giá 6.5k/m\nMỏ dưới vắt sổ Pegasus 35k/chiếc, lấy 10 chiếc\nMỏ trên Jack 55k x 20c'
+                }
             />
         </Modal>
     );
@@ -2959,9 +2959,7 @@ const ModalForm: React.FC<ModalFormProps> = ({
                                 icon={<ToolOutlined />}
                                 onClick={() => setTechPoolOpen(true)}
                                 style={
-                                    availableTechPool.length
-                                        ? { color: '#0e7490', borderColor: '#67e8f9' }
-                                        : undefined
+                                    availableTechPool.length ? { color: '#0e7490', borderColor: '#67e8f9' } : undefined
                                 }
                             >
                                 Kỹ thuật chờ mua{availableTechPool.length ? ` (${availableTechPool.length})` : ''}
@@ -3404,8 +3402,8 @@ const DetailDrawer: React.FC<DrawerProps> = ({
                                                     </div>
                                                 )}
                                                 <div className='text-[11px] text-slate-400'>
-                                                    Đã đối chiếu {review.checkedItems} dòng với {review.historyDepth} phiếu
-                                                    lịch sử.
+                                                    Đã đối chiếu {review.checkedItems} dòng với {review.historyDepth}{' '}
+                                                    phiếu lịch sử.
                                                 </div>
                                             </div>
                                         ) : (

@@ -481,7 +481,6 @@ const DetailDrawer: React.FC<DrawerProps> = ({
         };
         window.addEventListener('paste', onPaste);
         return () => window.removeEventListener('paste', onPaste);
-        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [receiveOpen]);
 
     // Lấy danh sách phiếu trả của PO này

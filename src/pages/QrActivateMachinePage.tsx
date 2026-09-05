@@ -343,7 +343,10 @@ const QrActivateMachinePage: React.FC = () => {
                                                                 className='w-full'
                                                                 min={0}
                                                                 formatter={(value) =>
-                                                                    `${value ?? ''}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')
+                                                                    `${value ?? ''}`.replace(
+                                                                        /\B(?=(\d{3})+(?!\d))/g,
+                                                                        ','
+                                                                    )
                                                                 }
                                                                 parser={(value) =>
                                                                     Number(String(value ?? '').replace(/,/g, ''))
@@ -360,7 +363,11 @@ const QrActivateMachinePage: React.FC = () => {
                                                                 placeholder='{"tocDo": "5000 mũi/phút", "congSuat": 15}'
                                                             />
                                                         </Form.Item>
-                                                        <Form.Item name='note' label='Ghi chú' className='lg:col-span-2'>
+                                                        <Form.Item
+                                                            name='note'
+                                                            label='Ghi chú'
+                                                            className='lg:col-span-2'
+                                                        >
                                                             <Input.TextArea
                                                                 rows={3}
                                                                 placeholder='Ghi chú hiện trạng, phụ kiện, lưu ý vận hành...'

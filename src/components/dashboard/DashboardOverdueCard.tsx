@@ -70,7 +70,9 @@ const DashboardOverdueCard = ({ data, loading }: DashboardOverdueCardProps) => {
                                     {item.plantName ? <span>· {item.plantName}</span> : null}
                                 </div>
                             </div>
-                            <span className={`flex shrink-0 items-center gap-1 text-sm font-bold ${daysColor(item.daysOpen)}`}>
+                            <span
+                                className={`flex shrink-0 items-center gap-1 text-sm font-bold ${daysColor(item.daysOpen)}`}
+                            >
                                 <ClockCircleOutlined className='text-xs' />
                                 {item.daysOpen} ngày
                             </span>
