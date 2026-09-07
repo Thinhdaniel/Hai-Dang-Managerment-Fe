@@ -1333,8 +1333,8 @@ export const distributionService = {
         data: { items: DistributionItemPayload[] } & Partial<Omit<InternalDistributionPayload, 'items' | 'status'>>
     ): Promise<Distribution> => api.post(`${DISTRIBUTIONS_BASE}/${id}/internal/items`, data),
 
-    finalizeInternalDraft: (id: string): Promise<Distribution> =>
-        api.patch<Distribution>(`${DISTRIBUTIONS_BASE}/${id}/internal/finalize`),
+    finalizeInternalDraft: (id: string, data?: Record<string, unknown>): Promise<Distribution> =>
+        api.patch<Distribution>(`${DISTRIBUTIONS_BASE}/${id}/internal/finalize`, data),
 
     update: (
         id: string,

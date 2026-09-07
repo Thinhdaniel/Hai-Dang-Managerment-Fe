@@ -38,6 +38,7 @@ export interface MaterialUsageCampaign {
     note?: string;
     assignmentCount: number;
     issuedQuantity: number;
+    transferredInQuantity: number;
     outstandingQuantity: number;
     holderCount: number;
 }
@@ -93,6 +94,30 @@ export interface ReusableMaterialStock {
     repairQuantity: number;
     damagedQuantity: number;
     lastMovementAt?: string;
+    availableReferenceValue?: number;
+    repairReferenceValue?: number;
+    damagedReferenceValue?: number;
+}
+
+export type ReusableBucket = 'available' | 'repair' | 'damaged';
+export type ReusableAction = 'repair_complete' | 'mark_damaged' | 'dispose';
+export interface ReusableProcessPayload {
+    action: ReusableAction;
+    fromBucket: ReusableBucket;
+    quantity: number;
+    referenceUnitPrice?: number;
+    note: string;
+}
+export interface ReusableMovement {
+    id: string;
+    type: ReusableAction | 'return' | 'reissue';
+    fromBucket?: ReusableBucket;
+    toBucket?: ReusableBucket;
+    quantity: number;
+    referenceValue?: number;
+    note?: string;
+    performedBy?: { fullName?: string; name?: string; email?: string };
+    occurredAt: string;
 }
 
 export interface MaterialCustodySummary {
@@ -167,6 +192,10 @@ const recipientImportForm = (file: File, plantId?: string) => {
 };
 
 export const materialCustodyService = {
+    processReusableStock: (id: string, data: ReusableProcessPayload): Promise<void> =>
+        api.post(`${BASE}/reusable-stock/${id}/process`, data),
+    getReusableMovements: (id: string, page = 1): Promise<PaginatedResponse<ReusableMovement>> =>
+        api.get(`${BASE}/reusable-stock/${id}/movements`, { params: { page, limit: 15 } }),
     getSummary: (plantId?: string): Promise<MaterialCustodySummary> =>
         api.get(`${BASE}/summary`, { params: { plantId } }),
     exportReport: (params?: Record<string, unknown>): Promise<Blob> =>
@@ -234,6 +263,7 @@ export const materialCustodyService = {
     getReusableStock: (plantId?: string): Promise<ReusableMaterialStock[]> =>
         api.get(`${BASE}/reusable-stock`, { params: { plantId } }),
     reissue: (data: {
+        referenceUnitPrice?: number;
         plantId?: string;
         materialId: string;
         quantity: number;

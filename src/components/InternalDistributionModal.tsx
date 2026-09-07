@@ -32,7 +32,8 @@ import {
     type MaterialInventory,
 } from '../core/services/material.service';
 import { aiMaterialMatchService, aiOcrService } from '../core/services/ai-help.service';
-import { materialCustodyService, type CustodyHolderType } from '../core/services/material-custody.service';
+import { type CustodyHolderType } from '../core/services/material-custody.service';
+import CustodyReferenceSelect from './material-custody/CustodyReferenceSelect';
 
 const fmt = (v?: number) => (v ?? 0).toLocaleString('vi-VN');
 
@@ -142,21 +143,6 @@ const InternalDistributionModal: React.FC<Props> = ({ open, plantId, existingDra
         () => new Map((inventoryRows as MaterialInventory[]).map((r) => [r.materialId, r])),
         [inventoryRows]
     );
-
-    const { data: recipientResponse } = useQuery({
-        queryKey: ['material-custody', 'recipients', plantId],
-        queryFn: () => materialCustodyService.getRecipients({ plantId, isActive: true, limit: 200 }),
-        enabled: open && Boolean(plantId),
-        staleTime: 60_000,
-    });
-    const { data: campaignResponse } = useQuery({
-        queryKey: ['material-custody', 'campaigns', plantId, 'active'],
-        queryFn: () => materialCustodyService.getCampaigns({ plantId, status: 'active', limit: 100 }),
-        enabled: open && Boolean(plantId),
-        staleTime: 30_000,
-    });
-    const recipients = recipientResponse?.data || [];
-    const campaigns = campaignResponse?.data || [];
 
     const hasReturnable = useMemo(
         () =>
@@ -346,7 +332,7 @@ const InternalDistributionModal: React.FC<Props> = ({ open, plantId, existingDra
         recipientId: hasReturnable && holderType === 'employee' ? recipientId : undefined,
         holderName: hasReturnable && holderType === 'team' ? holderName.trim() || undefined : undefined,
         usageCampaignId: hasReturnable ? usageCampaignId : undefined,
-        expectedReturnAt: hasReturnable && expectedReturnAt ? expectedReturnAt.endOf('day').toISOString() : undefined,
+        expectedReturnAt: hasReturnable && expectedReturnAt ? expectedReturnAt.endOf('day').toISOString() : '',
     });
 
     const validate = (checkStock = true) => {
@@ -459,7 +445,14 @@ const InternalDistributionModal: React.FC<Props> = ({ open, plantId, existingDra
 
     // ── Mutation: chốt phiếu draft
     const finalizeMutation = useMutation({
-        mutationFn: () => distributionService.finalizeInternalDraft(existingDraft!.id),
+        mutationFn: () =>
+            distributionService.finalizeInternalDraft(existingDraft!.id, {
+                requesterName: requesterName.trim(),
+                targetDepartment: targetDepartment.trim(),
+                targetLine: targetLine.trim(),
+                ...buildCustodyPayload(),
+                note: noteGeneral.trim(),
+            }),
         onSuccess: async (dist) => {
             await invalidate();
             message.success('Đã chốt phiếu — tồn kho đã được cập nhật!');
@@ -478,6 +471,17 @@ const InternalDistributionModal: React.FC<Props> = ({ open, plantId, existingDra
         if (validate(false)) appendMutation.mutate();
     };
     const handleFinalize = () => {
+        if (rows.some((row) => row.materialId)) {
+            message.warning('Còn vật tư chưa thêm vào phiếu. Hãy bấm thêm vật tư trước khi chốt.');
+            return;
+        }
+        if (
+            hasReturnable &&
+            (!usageCampaignId || (holderType === 'employee' ? !recipientId : !holderName.trim() && !targetLine.trim()))
+        ) {
+            message.error('Vui lòng chọn đợt mã hàng và người hoặc tổ nhận trước khi chốt');
+            return;
+        }
         Modal.confirm({
             title: 'Chốt phiếu cấp phát nội bộ?',
             content: 'Tồn kho sẽ bị trừ ngay lập tức. Không thể hoàn tác.',
@@ -661,14 +665,6 @@ const InternalDistributionModal: React.FC<Props> = ({ open, plantId, existingDra
                                 Bắt buộc thu hồi
                             </Tag>
                         </div>
-                        {!campaigns.length ? (
-                            <Alert
-                                className='mb-3'
-                                showIcon
-                                type='warning'
-                                message='Cơ sở chưa có đợt mã hàng đang mở. Hãy tạo đợt tại trang CCDC & thu hồi trước khi chốt phiếu.'
-                            />
-                        ) : null}
                         <div className='grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4'>
                             <div>
                                 <div className='mb-1 text-xs font-medium text-slate-600'>Đối tượng giữ</div>
@@ -687,20 +683,13 @@ const InternalDistributionModal: React.FC<Props> = ({ open, plantId, existingDra
                                     {holderType === 'employee' ? 'Công nhân nhận' : 'Tên tổ / chuyền'}
                                 </div>
                                 {holderType === 'employee' ? (
-                                    <Select
-                                        showSearch
-                                        optionFilterProp='label'
+                                    <CustodyReferenceSelect
+                                        kind='recipient'
+                                        plantId={plantId}
                                         value={recipientId}
-                                        className='w-full'
-                                        placeholder='Chọn mã công nhân'
-                                        options={recipients.map((recipient) => ({
-                                            value: recipient.id,
-                                            label: `${recipient.employeeCode} · ${recipient.fullName}${recipient.lineName ? ` · ${recipient.lineName}` : ''}`,
-                                        }))}
-                                        onChange={(value) => {
-                                            setRecipientId(value);
-                                            const recipient = recipients.find((item) => item.id === value);
-                                            if (!recipient) return;
+                                        selectedLabel={requesterName}
+                                        onChange={setRecipientId}
+                                        onRecipientSelect={(recipient) => {
                                             setRequesterName(recipient.fullName);
                                             setTargetDepartment(recipient.department || '');
                                             setTargetLine(recipient.lineName || '');
@@ -716,16 +705,10 @@ const InternalDistributionModal: React.FC<Props> = ({ open, plantId, existingDra
                             </div>
                             <div>
                                 <div className='mb-1 text-xs font-medium text-slate-600'>Đợt mã hàng</div>
-                                <Select
-                                    showSearch
-                                    optionFilterProp='label'
+                                <CustodyReferenceSelect
+                                    kind='campaign'
+                                    plantId={plantId}
                                     value={usageCampaignId}
-                                    className='w-full'
-                                    placeholder='Chọn mã hàng đang chạy'
-                                    options={campaigns.map((campaign) => ({
-                                        value: campaign.id,
-                                        label: `${campaign.itemCode}${campaign.orderCode ? ` · ${campaign.orderCode}` : ''} · ${campaign.campaignCode}`,
-                                    }))}
                                     onChange={setUsageCampaignId}
                                 />
                             </div>

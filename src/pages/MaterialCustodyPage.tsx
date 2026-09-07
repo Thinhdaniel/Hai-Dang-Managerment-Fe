@@ -1,4 +1,7 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
+import CustodyReferenceSelect from '../components/material-custody/CustodyReferenceSelect';
+import ReusableStockActions from '../components/material-custody/ReusableStockActions';
 import dayjs, { type Dayjs } from 'dayjs';
 import {
     Alert,
@@ -13,6 +16,7 @@ import {
     InputNumber,
     Modal,
     Popconfirm,
+    Pagination,
     Progress,
     Segmented,
     Select,
@@ -93,6 +97,7 @@ const sourceLabel = (source: MaterialCustodyAssignment['sourceType']) => {
 };
 
 type TargetFormValues = {
+    referenceUnitPrice?: number;
     quantity: number;
     holderType: CustodyHolderType;
     recipientId?: string;
@@ -115,10 +120,16 @@ const MaterialCustodyPage: React.FC = () => {
     const { message } = App.useApp();
     const queryClient = useQueryClient();
     const canChoosePlant = isAdmin(role) || isDirector(role);
+    const [searchParams, setSearchParams] = useSearchParams();
+    const campaignFilter = searchParams.get('campaignId') || undefined;
     const [plantId, setPlantId] = useState(user?.plantId || undefined);
     const [assignmentSearch, setAssignmentSearch] = useState('');
     const [assignmentStatus, setAssignmentStatus] = useState<CustodyAssignmentStatus | undefined>();
     const [assignmentPage, setAssignmentPage] = useState(1);
+    const [campaignPage, setCampaignPage] = useState(1);
+    const [recipientPage, setRecipientPage] = useState(1);
+    const [recipientSearch, setRecipientSearch] = useState('');
+    const [campaignSearch, setCampaignSearch] = useState('');
     const [campaignStatus, setCampaignStatus] = useState<CustodyCampaignStatus | undefined>();
     const [resolveTarget, setResolveTarget] = useState<MaterialCustodyAssignment | null>(null);
     const [transferTarget, setTransferTarget] = useState<MaterialCustodyAssignment | null>(null);
@@ -140,7 +151,12 @@ const MaterialCustodyPage: React.FC = () => {
     const reissueHolderType = Form.useWatch('holderType', reissueForm) || 'employee';
     const openingBalanceHolderType = Form.useWatch('holderType', openingBalanceForm) || 'employee';
 
-    const effectivePlantId = plantId || user?.plantId;
+    const effectivePlantId = (canChoosePlant && searchParams.get('plantId')) || plantId || user?.plantId;
+    useEffect(() => {
+        setAssignmentPage(1);
+        setCampaignPage(1);
+        setRecipientPage(1);
+    }, [effectivePlantId, campaignFilter]);
     const invalidate = async () => {
         await queryClient.invalidateQueries({ queryKey: ['material-custody'] });
     };
@@ -163,31 +179,40 @@ const MaterialCustodyPage: React.FC = () => {
             assignmentSearch,
             assignmentStatus,
             assignmentPage,
+            campaignFilter,
         ],
         queryFn: () =>
             materialCustodyService.getAssignments({
                 plantId: effectivePlantId,
                 search: assignmentSearch || undefined,
                 status: assignmentStatus,
+                campaignId: campaignFilter,
                 page: assignmentPage,
                 limit: 15,
             }),
         enabled: Boolean(effectivePlantId),
     });
     const campaignsQuery = useQuery({
-        queryKey: ['material-custody', 'campaigns', effectivePlantId, campaignStatus],
+        queryKey: ['material-custody', 'campaigns', effectivePlantId, campaignStatus, campaignPage, campaignSearch],
         queryFn: () =>
-            materialCustodyService.getCampaigns({ plantId: effectivePlantId, status: campaignStatus, limit: 100 }),
-        enabled: Boolean(effectivePlantId),
-    });
-    const activeCampaignsQuery = useQuery({
-        queryKey: ['material-custody', 'campaigns', effectivePlantId, 'active-options'],
-        queryFn: () => materialCustodyService.getCampaigns({ plantId: effectivePlantId, status: 'active', limit: 100 }),
+            materialCustodyService.getCampaigns({
+                plantId: effectivePlantId,
+                status: campaignStatus,
+                limit: 20,
+                page: campaignPage,
+                search: campaignSearch,
+            }),
         enabled: Boolean(effectivePlantId),
     });
     const recipientsQuery = useQuery({
-        queryKey: ['material-custody', 'recipients', effectivePlantId],
-        queryFn: () => materialCustodyService.getRecipients({ plantId: effectivePlantId, limit: 200 }),
+        queryKey: ['material-custody', 'recipients', effectivePlantId, recipientPage, recipientSearch],
+        queryFn: () =>
+            materialCustodyService.getRecipients({
+                plantId: effectivePlantId,
+                limit: 20,
+                page: recipientPage,
+                search: recipientSearch,
+            }),
         enabled: Boolean(effectivePlantId),
     });
     const reusableQuery = useQuery({
@@ -213,19 +238,8 @@ const MaterialCustodyPage: React.FC = () => {
     const summary = summaryQuery.data;
     const assignments = assignmentsQuery.data?.data || [];
     const campaigns = campaignsQuery.data?.data || [];
-    const activeCampaigns = activeCampaignsQuery.data?.data || [];
     const recipients = recipientsQuery.data?.data || [];
-    const activeRecipients = recipients.filter((item) => item.isActive);
     const reusableStock = reusableQuery.data || [];
-
-    const campaignOptions = activeCampaigns.map((campaign) => ({
-        value: campaign.id,
-        label: `${campaign.itemCode}${campaign.orderCode ? ` · ${campaign.orderCode}` : ''} · ${campaign.campaignCode}`,
-    }));
-    const recipientOptions = activeRecipients.map((recipient) => ({
-        value: recipient.id,
-        label: `${recipient.employeeCode} · ${recipient.fullName}${recipient.lineName ? ` · ${recipient.lineName}` : ''}`,
-    }));
 
     const resolveMutation = useMutation({
         mutationFn: (values: { quantity: number; resolution: CustodyResolution; note?: string }) =>
@@ -242,7 +256,7 @@ const MaterialCustodyPage: React.FC = () => {
         mutationFn: (values: TargetFormValues) =>
             materialCustodyService.transferAssignment(transferTarget!.id, {
                 ...values,
-                dueAt: values.dueAt?.toISOString(),
+                dueAt: values.dueAt?.endOf('day').toISOString(),
             }),
         onSuccess: async () => {
             await invalidate();
@@ -258,7 +272,7 @@ const MaterialCustodyPage: React.FC = () => {
                 ...values,
                 plantId: effectivePlantId,
                 materialId: reissueTarget!.materialId,
-                dueAt: values.dueAt?.toISOString(),
+                dueAt: values.dueAt?.endOf('day').toISOString(),
             }),
         onSuccess: async () => {
             await invalidate();
@@ -342,6 +356,7 @@ const MaterialCustodyPage: React.FC = () => {
         mutationFn: () =>
             materialCustodyService.exportReport({
                 plantId: effectivePlantId,
+                campaignId: campaignFilter,
                 search: assignmentSearch || undefined,
                 status: assignmentStatus,
             }),
@@ -492,7 +507,9 @@ const MaterialCustodyPage: React.FC = () => {
             render: (_, row) => (
                 <div>
                     <b>{row.holderCount}</b> người/tổ
-                    <div className='text-xs text-slate-500'>{row.assignmentCount} dòng cấp phát</div>
+                    <div className='text-xs text-slate-500'>{row.assignmentCount} dòng theo dõi</div>
+                    <div className='text-xs text-slate-500'>Cấp / đầu kỳ: {fmt(row.issuedQuantity)}</div>
+                    <div className='text-xs text-slate-500'>Nhận chuyển: {fmt(row.transferredInQuantity)}</div>
                 </div>
             ),
         },
@@ -584,12 +601,7 @@ const MaterialCustodyPage: React.FC = () => {
                     label='Công nhân nhận'
                     rules={[{ required: true, message: 'Chọn công nhân nhận' }]}
                 >
-                    <Select
-                        showSearch
-                        optionFilterProp='label'
-                        options={recipientOptions}
-                        placeholder='Mã CN · Họ tên'
-                    />
+                    <CustodyReferenceSelect key={effectivePlantId} kind='recipient' plantId={effectivePlantId} />
                 </Form.Item>
             ) : (
                 <Form.Item
@@ -601,12 +613,7 @@ const MaterialCustodyPage: React.FC = () => {
                 </Form.Item>
             )}
             <Form.Item name='campaignId' label='Đợt mã hàng' rules={[{ required: true, message: 'Chọn đợt mã hàng' }]}>
-                <Select
-                    showSearch
-                    optionFilterProp='label'
-                    options={campaignOptions}
-                    placeholder='Chọn mã hàng đang sử dụng'
-                />
+                <CustodyReferenceSelect key={effectivePlantId} kind='campaign' plantId={effectivePlantId} />
             </Form.Item>
             <Form.Item name='dueAt' label='Hạn dự kiến trả'>
                 <DatePicker className='w-full' format='DD/MM/YYYY' />
@@ -619,6 +626,19 @@ const MaterialCustodyPage: React.FC = () => {
 
     const assignmentTab = (
         <div className='space-y-4'>
+            {campaignFilter && (
+                <Tag
+                    closable
+                    onClose={() =>
+                        setSearchParams((params) => {
+                            params.delete('campaignId');
+                            return params;
+                        })
+                    }
+                >
+                    Đang lọc đợt từ thông báo
+                </Tag>
+            )}
             <div className='flex flex-col justify-between gap-3 lg:flex-row'>
                 <div className='flex flex-col gap-3 sm:flex-row lg:flex-1'>
                     <Input.Search
@@ -667,13 +687,7 @@ const MaterialCustodyPage: React.FC = () => {
                     dataSource={assignments}
                     loading={assignmentsQuery.isLoading}
                     scroll={{ x: 1050 }}
-                    pagination={{
-                        current: assignmentsQuery.data?.page || assignmentPage,
-                        pageSize: 15,
-                        total: assignmentsQuery.data?.total || 0,
-                        showSizeChanger: false,
-                        onChange: setAssignmentPage,
-                    }}
+                    pagination={false}
                 />
             </div>
             <div className='space-y-3 md:hidden'>
@@ -717,10 +731,20 @@ const MaterialCustodyPage: React.FC = () => {
                         </div>
                     </div>
                 ))}
+                {assignmentsQuery.isFetching && <div role='status'>Đang tải...</div>}
                 {!assignments.length && !assignmentsQuery.isLoading ? (
                     <Empty description='Chưa có vật tư đang theo dõi' />
                 ) : null}
             </div>
+            <Pagination
+                simple
+                responsive
+                current={assignmentPage}
+                pageSize={15}
+                total={assignmentsQuery.data?.total || 0}
+                showSizeChanger={false}
+                onChange={setAssignmentPage}
+            />
         </div>
     );
 
@@ -731,7 +755,10 @@ const MaterialCustodyPage: React.FC = () => {
                     allowClear
                     placeholder='Mọi trạng thái'
                     value={campaignStatus}
-                    onChange={setCampaignStatus}
+                    onChange={(value) => {
+                        setCampaignStatus(value);
+                        setCampaignPage(1);
+                    }}
                     className='w-full sm:w-52'
                     options={Object.entries(CAMPAIGN_STATUS).map(([value, item]) => ({ value, label: item.label }))}
                 />
@@ -746,13 +773,28 @@ const MaterialCustodyPage: React.FC = () => {
                     Mở đợt mã hàng
                 </Button>
             </div>
+            <Input.Search
+                allowClear
+                placeholder='Tìm mã hàng, đợt sử dụng'
+                onSearch={(value) => {
+                    setCampaignSearch(value);
+                    setCampaignPage(1);
+                }}
+            />
             <Table
                 rowKey='id'
                 columns={campaignColumns}
                 dataSource={campaigns}
                 loading={campaignsQuery.isLoading}
                 scroll={{ x: 850 }}
-                pagination={false}
+                pagination={{
+                    current: campaignPage,
+                    pageSize: 20,
+                    total: campaignsQuery.data?.total || 0,
+                    showSizeChanger: false,
+                    onChange: setCampaignPage,
+                    simple: true,
+                }}
             />
         </div>
     );
@@ -795,6 +837,7 @@ const MaterialCustodyPage: React.FC = () => {
                                 <div className='text-xs text-slate-500'>Hỏng</div>
                             </div>
                         </div>
+                        <ReusableStockActions row={row} onSuccess={invalidate} />
                     </div>
                 ))}
             </div>
@@ -804,6 +847,14 @@ const MaterialCustodyPage: React.FC = () => {
 
     const recipientTab = (
         <div className='space-y-4'>
+            <Input.Search
+                allowClear
+                placeholder='Tìm mã CN, họ tên, tổ/chuyền'
+                onSearch={(value) => {
+                    setRecipientSearch(value);
+                    setRecipientPage(1);
+                }}
+            />
             <div className='flex flex-wrap justify-end gap-2'>
                 <Button icon={<UploadOutlined />} onClick={() => setRecipientImportOpen(true)}>
                     Import Excel
@@ -818,7 +869,14 @@ const MaterialCustodyPage: React.FC = () => {
                 dataSource={recipients}
                 loading={recipientsQuery.isLoading}
                 scroll={{ x: 680 }}
-                pagination={false}
+                pagination={{
+                    current: recipientPage,
+                    pageSize: 20,
+                    total: recipientsQuery.data?.total || 0,
+                    showSizeChanger: false,
+                    onChange: setRecipientPage,
+                    simple: true,
+                }}
             />
         </div>
     );
@@ -863,6 +921,16 @@ const MaterialCustodyPage: React.FC = () => {
 
     return (
         <div className='space-y-4 pb-8'>
+            {[summaryQuery, assignmentsQuery, campaignsQuery, recipientsQuery, reusableQuery].some(
+                (query) => query.isError
+            ) && (
+                <Alert
+                    type='error'
+                    showIcon
+                    message='Không tải được một phần dữ liệu. Vui lòng tải lại trước khi đối soát.'
+                    action={<Button onClick={() => void invalidate()}>Tải lại</Button>}
+                />
+            )}
             <PageHeader
                 title='CCDC & thu hồi'
                 subtitle='Theo dõi vật tư tái sử dụng từ lúc cấp cho công nhân đến khi thu hồi theo mã hàng'
@@ -873,6 +941,7 @@ const MaterialCustodyPage: React.FC = () => {
                                 value={effectivePlantId}
                                 onChange={(value) => {
                                     setPlantId(value);
+                                    setSearchParams({});
                                     setAssignmentPage(1);
                                 }}
                                 className='min-w-48'
@@ -970,7 +1039,12 @@ const MaterialCustodyPage: React.FC = () => {
                 ) : null}
                 <Form form={resolveForm} layout='vertical' onFinish={(values) => resolveMutation.mutate(values)}>
                     <Form.Item name='quantity' label='Số lượng xử lý' rules={[{ required: true }]}>
-                        <InputNumber min={0.000001} max={resolveTarget?.outstandingQuantity} className='w-full' />
+                        <InputNumber
+                            min={0.000001}
+                            max={resolveTarget?.outstandingQuantity}
+                            precision={resolveTarget?.trackingMode === 'serialized' ? 0 : 6}
+                            className='w-full'
+                        />
                     </Form.Item>
                     <Form.Item name='resolution' label='Tình trạng' rules={[{ required: true }]}>
                         <Segmented block options={RESOLUTION_OPTIONS} />
@@ -1001,7 +1075,12 @@ const MaterialCustodyPage: React.FC = () => {
                         label={`Số lượng chuyển (tối đa ${fmt(transferTarget?.outstandingQuantity)})`}
                         rules={[{ required: true }]}
                     >
-                        <InputNumber min={0.000001} max={transferTarget?.outstandingQuantity} className='w-full' />
+                        <InputNumber
+                            min={0.000001}
+                            max={transferTarget?.outstandingQuantity}
+                            precision={transferTarget?.trackingMode === 'serialized' ? 0 : 6}
+                            className='w-full'
+                        />
                     </Form.Item>
                     {targetFields(transferHolderType)}
                 </Form>
@@ -1023,9 +1102,24 @@ const MaterialCustodyPage: React.FC = () => {
                 />
                 <Form form={reissueForm} layout='vertical' onFinish={(values) => reissueMutation.mutate(values)}>
                     <Form.Item name='quantity' label='Số lượng cấp' rules={[{ required: true }]}>
-                        <InputNumber min={0.000001} max={reissueTarget?.availableQuantity} className='w-full' />
+                        <InputNumber
+                            min={0.000001}
+                            max={reissueTarget?.availableQuantity}
+                            precision={reissueTarget?.trackingMode === 'serialized' ? 0 : 6}
+                            className='w-full'
+                        />
                     </Form.Item>
                     {targetFields(reissueHolderType)}
+                    {reissueTarget?.availableReferenceValue === undefined && (
+                        <Form.Item
+                            name='referenceUnitPrice'
+                            label='Đơn giá tham chiếu tồn cũ (đ)'
+                            rules={[{ required: true, message: 'Xác nhận đơn giá tồn cũ' }]}
+                            extra='Chỉ dùng theo dõi giá trị đang giữ, không ghi thêm chi phí.'
+                        >
+                            <InputNumber min={0} className='w-full' />
+                        </Form.Item>
+                    )}
                 </Form>
             </Modal>
 
