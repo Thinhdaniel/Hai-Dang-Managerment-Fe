@@ -95,6 +95,8 @@ export interface ProductionRun {
     unit: string;
     unitPriceSnapshot: number;
     hourlyQuota: number;
+    quotaQuantity?: number;
+    quotaMinutes?: number;
     startedSlotKey: string;
     endedSlotKey?: string;
     plannedEndSlotKey?: string;
@@ -1021,6 +1023,7 @@ export type ConfigureProductionLinePayload = {
     workerCountConfirmed?: boolean;
     itemId?: string;
     hourlyQuota?: number;
+    quotaQuantity?: number;
     startSlotKey?: string;
     operationTrackingEnabled?: boolean;
 };

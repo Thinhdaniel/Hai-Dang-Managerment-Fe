@@ -838,8 +838,9 @@ const ProductionPlanningPage = () => {
                             label='Khoán mỗi giờ'
                             name='hourlyQuota'
                             rules={[{ required: true, message: 'Nhập khoán giờ' }]}
+                            extra='Có thể nhập số lẻ. Khi lên bảng chuyền, hệ thống tự chia thành số sản phẩm nguyên và giữ đúng tổng.'
                         >
-                            <InputNumber min={1} precision={0} className='w-full' addonAfter='SP/giờ' />
+                            <InputNumber min={0.01} precision={2} className='w-full' addonAfter='SP/giờ' />
                         </Form.Item>
                     </div>
                     <div className='production-form-two-columns'>

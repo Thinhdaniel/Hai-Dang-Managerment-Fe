@@ -12,6 +12,12 @@ import {
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useMemo, useState } from 'react';
 import { createProductionMutationId } from '../../core/lib/productionOutbox';
+import {
+    productionQuotaSummaryText,
+    quotaQuantityForRun,
+    quotaQuantityFromHourlyRate,
+    summarizeProductionQuota,
+} from '../../core/lib/productionQuota';
 import { slotRangeLabel } from '../../core/lib/productionSlot';
 import { useResponsive } from '../../core/hooks/useResponsive';
 import { productionService } from '../../core/services/production.service';
@@ -36,7 +42,7 @@ type Props = {
 type SetupValues = {
     workerCount: number;
     itemId?: string;
-    hourlyQuota?: number;
+    quotaQuantity?: number;
     startSlotKey?: string;
 };
 
@@ -48,13 +54,13 @@ type EntryValues = {
 
 type RunValues = {
     itemId: string;
-    hourlyQuota: number;
+    quotaQuantity: number;
     startedSlotKey: string;
 };
 
 type CorrectionValues = {
     itemId: string;
-    hourlyQuota: number;
+    quotaQuantity: number;
     reason: string;
 };
 
@@ -75,7 +81,11 @@ const ProductionEntryDrawer = ({ open, actorId, day, line, items, slotKey, onlin
     const [showCorrection, setShowCorrection] = useState(false);
     const [operationDrawerOpen, setOperationDrawerOpen] = useState(false);
     const selectedRunId = Form.useWatch('runId', entryForm);
+    const setupDraftQuota = Form.useWatch('quotaQuantity', setupForm);
+    const setupDraftSlotKey = Form.useWatch('startSlotKey', setupForm);
+    const runDraftQuota = Form.useWatch('quotaQuantity', runForm);
     const runDraftSlotKey = Form.useWatch('startedSlotKey', runForm);
+    const correctionDraftQuota = Form.useWatch('quotaQuantity', correctionForm);
     const slot = day.timeSlots.find((item) => item.key === slotKey);
     const slotValue = line?.slotValues.find((item) => item.key === slotKey);
     const isReadOnly = day.status !== 'draft';
@@ -140,7 +150,7 @@ const ProductionEntryDrawer = ({ open, actorId, day, line, items, slotKey, onlin
         setupForm.setFieldsValue({
             workerCount: line.workerCount,
             itemId: activeRun?.itemId,
-            hourlyQuota: activeRun?.hourlyQuota,
+            quotaQuantity: quotaQuantityForRun(activeRun, day.timeSlots),
             startSlotKey: activeRun?.startedSlotKey || day.timeSlots.find((item) => item.isActive)?.key,
         });
         setShowSetup(!isReadOnly && !line.configured);
@@ -148,7 +158,13 @@ const ProductionEntryDrawer = ({ open, actorId, day, line, items, slotKey, onlin
         setShowCorrection(false);
         correctionForm.setFieldsValue({
             itemId: activeRun?.itemId,
-            hourlyQuota: activeRun?.hourlyQuota,
+            quotaQuantity: activeRun
+                ? quotaQuantityFromHourlyRate(
+                      activeRun.hourlyQuota,
+                      day.timeSlots,
+                      day.timeSlots.find((item) => item.isActive && item.kind !== 'overtime')?.key
+                  )
+                : undefined,
             reason: '',
         });
     }, [correctionForm, day.timeSlots, isReadOnly, line, open, setupForm]);
@@ -172,7 +188,7 @@ const ProductionEntryDrawer = ({ open, actorId, day, line, items, slotKey, onlin
         runForm.setFieldsValue({
             startedSlotKey: defaultChangeRunSlotKey,
             itemId: currentRun?.itemId,
-            hourlyQuota: currentRun?.hourlyQuota,
+            quotaQuantity: quotaQuantityForRun(currentRun, day.timeSlots, defaultChangeRunSlotKey),
         });
     }, [defaultChangeRunSlotKey, eligibleRuns, entryForm, line, open, runForm, slotKey, slotValue?.runId]);
 
@@ -311,6 +327,13 @@ const ProductionEntryDrawer = ({ open, actorId, day, line, items, slotKey, onlin
     );
     const operationReportedForSlot = operationValuesForSlot.filter((value) => value.reported).length;
     const operationTemplateCount = selectedItem?.operationTemplates?.length || 0;
+    const setupQuotaSummary = summarizeProductionQuota(setupDraftQuota, day.timeSlots, setupDraftSlotKey);
+    const runQuotaSummary = summarizeProductionQuota(runDraftQuota, day.timeSlots, runDraftSlotKey);
+    const correctionQuotaSummary = summarizeProductionQuota(
+        correctionDraftQuota,
+        day.timeSlots,
+        day.timeSlots.find((item) => item.isActive && item.kind !== 'overtime')?.key
+    );
 
     return (
         <Drawer
@@ -498,11 +521,12 @@ const ProductionEntryDrawer = ({ open, actorId, day, line, items, slotKey, onlin
                                     />
                                 </Form.Item>
                                 <Form.Item
-                                    label='Khoán mỗi giờ'
-                                    name='hourlyQuota'
-                                    rules={[{ required: !line.runs.length, message: 'Nhập khoán giờ' }]}
+                                    label='Tổng khoán áp dụng'
+                                    name='quotaQuantity'
+                                    rules={[{ required: true, message: 'Nhập tổng khoán' }]}
+                                    extra={productionQuotaSummaryText(setupQuotaSummary)}
                                 >
-                                    <InputNumber min={0} precision={0} className='w-full' addonAfter='SP/giờ' />
+                                    <InputNumber min={0} precision={0} className='w-full' addonAfter='SP' />
                                 </Form.Item>
                             </>
                         )}
@@ -548,7 +572,7 @@ const ProductionEntryDrawer = ({ open, actorId, day, line, items, slotKey, onlin
                             {selectedRun ? (
                                 <div className='production-entry-plan-tags'>
                                     {selectedRun.source === 'plan' ? <Tag color='green'>Theo kế hoạch</Tag> : null}
-                                    <Tag color='blue'>Khoán {selectedRun.hourlyQuota}/giờ</Tag>
+                                    <Tag color='blue'>Khoán khung {slotValue?.target || 0} SP</Tag>
                                     <Button size='small' icon={<SettingOutlined />} onClick={() => setShowSetup(true)}>
                                         Sửa thiết lập
                                     </Button>
@@ -590,13 +614,13 @@ const ProductionEntryDrawer = ({ open, actorId, day, line, items, slotKey, onlin
                                     />
                                 </Form.Item>
                                 <div className='pd-qty-steps'>
-                                    {selectedRun?.hourlyQuota ? (
+                                    {slotValue?.target ? (
                                         <button
                                             type='button'
                                             className='pd-qty-quota'
-                                            onClick={() => fillQuantity(selectedRun.hourlyQuota)}
+                                            onClick={() => fillQuantity(slotValue.target)}
                                         >
-                                            = Khoán {selectedRun.hourlyQuota.toLocaleString('vi-VN')}
+                                            = Khoán khung {slotValue.target.toLocaleString('vi-VN')}
                                         </button>
                                     ) : null}
                                     <button type='button' onClick={() => adjustQuantity(10)}>
@@ -673,11 +697,12 @@ const ProductionEntryDrawer = ({ open, actorId, day, line, items, slotKey, onlin
                                 </Form.Item>
                                 <div className='production-form-two-columns'>
                                     <Form.Item
-                                        label='Khoán mỗi giờ'
-                                        name='hourlyQuota'
-                                        rules={[{ required: true, message: 'Nhập khoán giờ' }]}
+                                        label='Tổng khoán còn lại'
+                                        name='quotaQuantity'
+                                        rules={[{ required: true, message: 'Nhập tổng khoán áp dụng' }]}
+                                        extra={productionQuotaSummaryText(runQuotaSummary)}
                                     >
-                                        <InputNumber min={0} precision={0} className='w-full' addonAfter='SP/giờ' />
+                                        <InputNumber min={0} precision={0} className='w-full' addonAfter='SP' />
                                     </Form.Item>
                                     <Form.Item label='Áp dụng từ' name='startedSlotKey' rules={[{ required: true }]}>
                                         <Select options={changeRunSlotOptions} />
@@ -754,11 +779,12 @@ const ProductionEntryDrawer = ({ open, actorId, day, line, items, slotKey, onlin
                                             />
                                         </Form.Item>
                                         <Form.Item
-                                            label='Khoán đúng mỗi giờ'
-                                            name='hourlyQuota'
-                                            rules={[{ required: true, message: 'Nhập khoán giờ đúng' }]}
+                                            label='Tổng khoán đúng cả ngày'
+                                            name='quotaQuantity'
+                                            rules={[{ required: true, message: 'Nhập tổng khoán đúng' }]}
+                                            extra={productionQuotaSummaryText(correctionQuotaSummary)}
                                         >
-                                            <InputNumber min={0} precision={0} className='w-full' addonAfter='SP/giờ' />
+                                            <InputNumber min={0} precision={0} className='w-full' addonAfter='SP' />
                                         </Form.Item>
                                         <Form.Item
                                             label='Lý do điều chỉnh'

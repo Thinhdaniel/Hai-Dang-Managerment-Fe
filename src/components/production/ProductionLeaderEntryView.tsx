@@ -19,6 +19,11 @@ import {
     saveProductionEntryDraft,
 } from '../../core/lib/productionDraft';
 import { evaluateProductionEntry } from '../../core/lib/productionEntryGuard';
+import {
+    productionQuotaSummaryText,
+    quotaQuantityForRun,
+    summarizeProductionQuota,
+} from '../../core/lib/productionQuota';
 import { slotRangeLabel } from '../../core/lib/productionSlot';
 import { productionService } from '../../core/services/production.service';
 import type { ProductionDay, ProductionItem, ProductionLineRecord, ProductionRun } from '../../core/types/production';
@@ -103,7 +108,7 @@ const ProductionLeaderEntryView = ({
     const [workerCount, setWorkerCount] = useState(line.workerCount);
     const [showChangeRun, setShowChangeRun] = useState(false);
     const [nextItemId, setNextItemId] = useState('');
-    const [nextQuota, setNextQuota] = useState<number | null>(null);
+    const [nextQuotaQuantity, setNextQuotaQuantity] = useState<number | null>(null);
     const [nextSlotKey, setNextSlotKey] = useState(slotKey);
     const [trackOperations, setTrackOperations] = useState(Boolean(line.operationTrackingEnabled));
     const [operationDrawerOpen, setOperationDrawerOpen] = useState(false);
@@ -232,15 +237,23 @@ const ProductionLeaderEntryView = ({
         if (pendingEntry) removeProductionEntryDraft(draftScope);
         const currentRun = line.runs.find((run) => run.id === defaultRunId) || eligibleRuns[eligibleRuns.length - 1];
         setNextItemId(currentRun?.itemId || '');
-        setNextQuota(currentRun?.hourlyQuota ?? null);
+        setNextQuotaQuantity(
+            quotaQuantityForRun(
+                currentRun,
+                day.timeSlots,
+                line.configured ? defaultChangeRunSlotKey || currentRun?.startedSlotKey : currentRun?.startedSlotKey
+            ) ?? null
+        );
         setNextSlotKey(defaultChangeRunSlotKey || slotKey);
     }, [
         actorId,
+        day.timeSlots,
         defaultChangeRunSlotKey,
         draftScope,
         eligibleRuns,
         hydrationKey,
         line.entries,
+        line.configured,
         line.runs,
         pendingEntry,
         readOnly,
@@ -304,7 +317,7 @@ const ProductionLeaderEntryView = ({
                           workerCount,
                           workerCountConfirmed: true,
                           itemId: nextItemId,
-                          hourlyQuota: nextQuota ?? undefined,
+                          quotaQuantity: nextQuotaQuantity ?? undefined,
                           startSlotKey: nextSlotKey,
                           operationTrackingEnabled: trackOperations,
                       }
@@ -321,7 +334,7 @@ const ProductionLeaderEntryView = ({
         mutationFn: () =>
             productionService.createRun(day.id, line.lineId, {
                 itemId: nextItemId,
-                hourlyQuota: nextQuota || 0,
+                quotaQuantity: nextQuotaQuantity || 0,
                 startedSlotKey: nextSlotKey,
             }),
         onSuccess: async () => {
@@ -381,7 +394,8 @@ const ProductionLeaderEntryView = ({
         setRemoteChanged(false);
     };
     const slotDurationHours = slot ? Math.max(0, slot.endMinute - slot.startMinute) / 60 : 0;
-    const selectedRunTarget = slot?.kind === 'overtime' ? 0 : Number(selectedRun?.hourlyQuota || 0) * slotDurationHours;
+    const selectedRunTarget =
+        slot?.kind === 'overtime' ? 0 : Math.round(Number(selectedRun?.hourlyQuota || 0) * slotDurationHours);
     const target = slotValue?.runId === runId ? slotValue.target : selectedRunTarget;
     const actual = quantity ?? 0;
     const achievement = target > 0 ? (actual / target) * 100 : actual > 0 ? 100 : 0;
@@ -402,6 +416,7 @@ const ProductionLeaderEntryView = ({
     const operationValuesForSlot = (line.operationSlotValues || []).filter(
         (value) => value.key === slotKey && (value.due || value.reported)
     );
+    const nextQuotaSummary = summarizeProductionQuota(nextQuotaQuantity, day.timeSlots, nextSlotKey);
     const operationReportedForSlot = operationValuesForSlot.filter((value) => value.reported).length;
     const operationAvailable = Boolean(operationValuesForSlot.length || selectedItem?.operationTemplates?.length);
     const persistDraft = useCallback(() => {
@@ -528,7 +543,7 @@ const ProductionLeaderEntryView = ({
         const setupRun = [...line.runs].reverse().find((run) => run.status === 'active') || line.runs[0];
         const setupItem = items.find((item) => item.id === (hasPlan ? setupRun?.itemId : nextItemId));
         const setupOperationCount = setupItem?.operationTemplates?.length || 0;
-        const setupReady = workerCount >= 0 && (hasPlan || (Boolean(nextItemId) && nextQuota !== null));
+        const setupReady = workerCount >= 0 && (hasPlan || (Boolean(nextItemId) && nextQuotaQuantity !== null));
         return (
             <section className='leader-entry-view'>
                 <header className='leader-entry-view__header'>
@@ -582,15 +597,18 @@ const ProductionLeaderEntryView = ({
                                 />
                             </label>
                             <label>
-                                <span>Khoán mỗi giờ</span>
+                                <span>Tổng khoán áp dụng</span>
                                 <InputNumber
                                     min={0}
                                     precision={0}
                                     inputMode='numeric'
-                                    value={nextQuota}
-                                    addonAfter='SP/giờ'
-                                    onChange={(value) => setNextQuota(value === null ? null : Number(value))}
+                                    value={nextQuotaQuantity}
+                                    addonAfter='SP'
+                                    onChange={(value) => setNextQuotaQuantity(value === null ? null : Number(value))}
                                 />
+                                <small className='leader-entry-quota-hint'>
+                                    {productionQuotaSummaryText(nextQuotaSummary)}
+                                </small>
                             </label>
                             <label>
                                 <span>Bắt đầu từ khung</span>
@@ -971,15 +989,18 @@ const ProductionLeaderEntryView = ({
                                 />
                             </label>
                             <label>
-                                <span>Khoán mỗi giờ</span>
+                                <span>Tổng khoán còn lại</span>
                                 <InputNumber
                                     min={0}
                                     precision={0}
                                     inputMode='numeric'
-                                    value={nextQuota}
-                                    addonAfter='SP/giờ'
-                                    onChange={(value) => setNextQuota(value === null ? null : Number(value))}
+                                    value={nextQuotaQuantity}
+                                    addonAfter='SP'
+                                    onChange={(value) => setNextQuotaQuantity(value === null ? null : Number(value))}
                                 />
+                                <small className='leader-entry-quota-hint'>
+                                    {productionQuotaSummaryText(nextQuotaSummary)}
+                                </small>
                             </label>
                             <label>
                                 <span>Áp dụng từ</span>
@@ -991,7 +1012,7 @@ const ProductionLeaderEntryView = ({
                                 icon={<RetweetOutlined />}
                                 disabled={
                                     !nextItemId ||
-                                    nextQuota === null ||
+                                    nextQuotaQuantity === null ||
                                     !online ||
                                     !changeRunSlotOptions.some((item) => item.value === nextSlotKey && !item.disabled)
                                 }

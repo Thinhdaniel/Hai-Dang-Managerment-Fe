@@ -322,7 +322,7 @@ export const productionService = {
     createRun: (
         dayId: string,
         lineId: string,
-        payload: { itemId: string; hourlyQuota: number; startedSlotKey: string }
+        payload: { itemId: string; quotaQuantity: number; startedSlotKey: string; hourlyQuota?: number }
     ): Promise<ProductionLineRecord> => api.post(`${BASE}/days/${dayId}/lines/${lineId}/runs`, payload),
 
     configureOperationTracks: (
@@ -334,7 +334,7 @@ export const productionService = {
     correctLineSetup: (
         dayId: string,
         lineId: string,
-        payload: { itemId: string; hourlyQuota: number; reason: string; confirmed: true }
+        payload: { itemId: string; quotaQuantity: number; reason: string; confirmed: true; hourlyQuota?: number }
     ): Promise<ProductionLineRecord> => api.post(`${BASE}/days/${dayId}/lines/${lineId}/correct-setup`, payload),
 
     deleteRun: (dayId: string, lineId: string, runId: string): Promise<ProductionLineRecord> =>

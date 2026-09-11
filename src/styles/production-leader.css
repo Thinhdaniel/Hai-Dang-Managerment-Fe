@@ -1226,6 +1226,14 @@
     line-height: 46px !important;
 }
 
+.leader-entry-quota-hint {
+    display: block;
+    color: var(--leader-muted);
+    font-size: 11px;
+    font-weight: 500;
+    line-height: 1.45;
+}
+
 .leader-entry-setup__intro {
     display: flex;
     align-items: center;
