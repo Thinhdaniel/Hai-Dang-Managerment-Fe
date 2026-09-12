@@ -28,6 +28,7 @@ import type {
     ProductionReminderSettings,
     ProductionReminderStatus,
     ProductionReminderTestResult,
+    ProductionScheduleTemplate,
     SaveProductionEntryPayload,
     SaveProductionOperationEntryPayload,
     SaveProductionQcEntryPayload,
@@ -116,6 +117,18 @@ export const productionService = {
 
     sendReminderTest: (plantId: string, recipientId?: string): Promise<ProductionReminderTestResult> =>
         api.post(`${BASE}/reminders/test`, { plantId, ...(recipientId ? { recipientId } : {}) }),
+
+    getScheduleTemplates: (plantId: string): Promise<ProductionScheduleTemplate[]> =>
+        api.get(`${BASE}/schedule-templates`, { params: { plantId } }),
+
+    updateScheduleTemplate: (
+        plantId: string,
+        weekday: number,
+        payload: { isWorkingDay: boolean; timeSlots: ProductionTimeSlot[] }
+    ): Promise<ProductionScheduleTemplate> => api.put(`${BASE}/schedule-templates/${weekday}`, { plantId, ...payload }),
+
+    resetScheduleTemplate: (plantId: string, weekday: number): Promise<ProductionScheduleTemplate> =>
+        api.delete(`${BASE}/schedule-templates/${weekday}`, { params: { plantId } }),
 
     getReport: (params: {
         plantId: string;
@@ -302,6 +315,9 @@ export const productionService = {
 
     updateTimeSlots: (dayId: string, timeSlots: ProductionTimeSlot[]): Promise<ProductionDay> =>
         api.patch(`${BASE}/days/${dayId}/time-slots`, { timeSlots }),
+
+    applyScheduleTemplate: (dayId: string): Promise<ProductionDay> =>
+        api.post(`${BASE}/days/${dayId}/apply-schedule-template`),
 
     // Biên chế chuyền của riêng một ngày — không đụng danh mục chuyền chung.
     addDayLine: (dayId: string, lineId: string): Promise<ProductionDay> =>

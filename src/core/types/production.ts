@@ -87,6 +87,31 @@ export interface ProductionTimeSlot {
     isActive: boolean;
 }
 
+export type ProductionScheduleSource =
+    | 'legacy'
+    | 'system_default'
+    | 'weekly_template'
+    | 'manual_override'
+    | 'plan_snapshot'
+    | 'day_snapshot';
+
+export interface ProductionScheduleTemplate {
+    id?: string;
+    plantId: string;
+    weekday: number;
+    weekdayLabel: string;
+    isWorkingDay: boolean;
+    timeSlots: ProductionTimeSlot[];
+    source: 'custom' | 'system_default';
+    revision: number;
+    summary: {
+        regularMinutes: number;
+        overtimeMinutes: number;
+        activeSlotCount: number;
+    };
+    updatedAt?: string;
+}
+
 export interface ProductionRun {
     id: string;
     itemId: string;
@@ -416,6 +441,9 @@ export interface ProductionDay {
     reopenedBy?: ProductionActor;
     statusHistory: ProductionDayStatusEvent[];
     financialsVisible?: boolean;
+    scheduleSource?: ProductionScheduleSource;
+    scheduleWeekday?: number;
+    scheduleRevision?: number;
     timeSlots: ProductionTimeSlot[];
     lines: ProductionLineRecord[];
     summary: ProductionDaySummary;
@@ -922,6 +950,9 @@ export interface ProductionPlan {
     productionDate: string;
     status: ProductionPlanStatus;
     revision: number;
+    scheduleSource?: ProductionScheduleSource;
+    scheduleWeekday?: number;
+    scheduleRevision?: number;
     timeSlots: ProductionTimeSlot[];
     allocations: ProductionPlanAllocation[];
     summary: ProductionPlanSummary;

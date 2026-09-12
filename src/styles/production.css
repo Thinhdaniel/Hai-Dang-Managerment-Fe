@@ -4859,6 +4859,224 @@
     flex: 1;
 }
 
+/* Lịch sản xuất theo thứ và ngoại lệ của từng ngày. */
+.production-weekly-schedule {
+    padding: 14px;
+    border: 1px solid var(--pd-border);
+    border-radius: 8px;
+    background: var(--pd-surface);
+}
+
+.production-weekday-picker {
+    display: grid;
+    overflow: hidden;
+    margin-bottom: 14px;
+    border: 1px solid var(--pd-border);
+    border-radius: 8px;
+    grid-template-columns: repeat(7, minmax(0, 1fr));
+}
+
+.production-weekday-picker button {
+    display: flex;
+    min-width: 0;
+    min-height: 58px;
+    padding: 8px 4px;
+    align-items: center;
+    justify-content: center;
+    flex-direction: column;
+    border: 0;
+    border-right: 1px solid var(--pd-border);
+    color: var(--pd-ink-2);
+    background: #fff;
+    cursor: pointer;
+}
+
+.production-weekday-picker button:last-child {
+    border-right: 0;
+}
+
+.production-weekday-picker button span {
+    font-size: 13px;
+    font-weight: 750;
+}
+
+.production-weekday-picker button small {
+    overflow: hidden;
+    max-width: 100%;
+    color: var(--pd-ink-3);
+    font-size: 10px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.production-weekday-picker button.is-active {
+    color: #fff;
+    background: #155eef;
+}
+
+.production-weekday-picker button.is-active small {
+    color: #dbe7ff;
+}
+
+.production-schedule-toolbar {
+    display: grid;
+    min-height: 58px;
+    margin-bottom: 12px;
+    padding: 9px 12px;
+    align-items: center;
+    border-top: 1px solid var(--pd-border);
+    border-bottom: 1px solid var(--pd-border);
+    grid-template-columns: minmax(150px, 1fr) auto minmax(190px, 0.8fr);
+    gap: 12px;
+}
+
+.production-schedule-toolbar label {
+    display: flex;
+    flex-direction: column;
+}
+
+.production-schedule-toolbar label span,
+.production-schedule-summary span,
+.production-day-slot-summary span {
+    color: var(--pd-ink-3);
+    font-size: 11px;
+}
+
+.production-schedule-toolbar label strong {
+    color: var(--pd-ink);
+    font-size: 13px;
+}
+
+.production-schedule-summary,
+.production-day-slot-summary {
+    display: grid;
+    margin-bottom: 12px;
+    border-top: 1px solid var(--pd-border);
+    border-bottom: 1px solid var(--pd-border);
+    background: #f8fafc;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.production-schedule-summary > div,
+.production-day-slot-summary > div {
+    display: flex;
+    min-width: 0;
+    padding: 10px 12px;
+    flex-direction: column;
+    border-right: 1px solid var(--pd-border);
+}
+
+.production-schedule-summary > div:last-child,
+.production-day-slot-summary > div:last-child {
+    border-right: 0;
+}
+
+.production-schedule-summary strong,
+.production-day-slot-summary strong {
+    color: var(--pd-ink);
+    font-size: 16px;
+    font-variant-numeric: tabular-nums;
+}
+
+.production-schedule-slot-form {
+    margin-top: 14px;
+    padding-top: 12px;
+    border-top: 1px solid var(--pd-border);
+}
+
+.production-schedule-slots {
+    margin-top: 12px;
+    border-top: 1px solid var(--pd-border);
+}
+
+.production-schedule-slots.is-disabled {
+    opacity: 0.58;
+}
+
+.production-schedule-slot-row {
+    display: grid;
+    min-height: 58px;
+    padding: 8px 4px;
+    align-items: center;
+    border-bottom: 1px solid var(--pd-border);
+    grid-template-columns: 34px minmax(110px, 1fr) 82px 42px 36px 36px;
+    gap: 7px;
+}
+
+.production-schedule-slot-icon {
+    display: grid;
+    width: 30px;
+    height: 30px;
+    place-items: center;
+    border-radius: 7px;
+    color: #175cd3;
+    background: #eff4ff;
+}
+
+.production-schedule-slot-icon.is-overtime {
+    color: #b54708;
+    background: #fff4e5;
+}
+
+.production-schedule-slot-copy {
+    display: flex;
+    min-width: 0;
+    flex-direction: column;
+}
+
+.production-schedule-slot-copy strong {
+    color: var(--pd-ink);
+    font-size: 13px;
+}
+
+.production-schedule-slot-copy span {
+    color: var(--pd-ink-3);
+    font-size: 11px;
+    font-variant-numeric: tabular-nums;
+}
+
+.production-schedule-actions {
+    position: sticky;
+    z-index: 3;
+    bottom: -14px;
+    display: flex;
+    margin: 14px -14px -14px;
+    padding: 11px 14px;
+    justify-content: flex-end;
+    border-top: 1px solid var(--pd-border);
+    background: #fff;
+    gap: 8px;
+}
+
+.production-overtime-toggle {
+    display: flex;
+    min-height: 62px;
+    margin-bottom: 14px;
+    padding: 10px 12px;
+    align-items: center;
+    justify-content: space-between;
+    border-left: 3px solid #f79009;
+    background: #fffaeb;
+    gap: 12px;
+}
+
+.production-overtime-toggle > div {
+    display: flex;
+    min-width: 0;
+    flex-direction: column;
+}
+
+.production-overtime-toggle strong {
+    color: #7a2e0e;
+    font-size: 13px;
+}
+
+.production-overtime-toggle span {
+    color: #93370d;
+    font-size: 11px;
+    line-height: 1.45;
+}
+
 /* Popover lịch sử trạng thái */
 .production-status-audit {
     display: flex;
@@ -7743,6 +7961,73 @@
 }
 
 @media (max-width: 767px) {
+    .production-weekly-schedule {
+        padding: 10px;
+    }
+
+    .production-weekday-picker button {
+        min-height: 52px;
+        padding: 6px 2px;
+    }
+
+    .production-weekday-picker button small {
+        font-size: 9px;
+    }
+
+    .production-schedule-toolbar {
+        padding: 9px 4px;
+        grid-template-columns: minmax(0, 1fr) auto;
+    }
+
+    .production-schedule-copy {
+        width: 100%;
+        grid-column: 1 / -1;
+    }
+
+    .production-schedule-summary,
+    .production-day-slot-summary {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .production-schedule-summary > div:nth-child(2),
+    .production-day-slot-summary > div:nth-child(2) {
+        border-right: 0;
+    }
+
+    .production-schedule-summary > div:last-child,
+    .production-day-slot-summary > div:last-child {
+        grid-column: 1 / -1;
+        border-top: 1px solid var(--pd-border);
+    }
+
+    .production-schedule-slot-row {
+        grid-template-columns: 30px minmax(0, 1fr) 74px 40px;
+    }
+
+    .production-schedule-slot-row > .ant-btn:nth-last-child(2) {
+        grid-column: 3;
+    }
+
+    .production-schedule-slot-row > .ant-btn:last-child {
+        grid-column: 4;
+    }
+
+    .production-schedule-actions {
+        bottom: calc(-12px - env(safe-area-inset-bottom));
+        margin: 14px -10px calc(-10px - env(safe-area-inset-bottom));
+        padding: 10px 10px calc(10px + env(safe-area-inset-bottom));
+        flex-wrap: wrap;
+    }
+
+    .production-schedule-actions .ant-btn-primary {
+        width: 100%;
+        order: -1;
+    }
+
+    .production-overtime-toggle {
+        align-items: flex-start;
+    }
+
     .production-operation-modal {
         max-width: calc(100vw - 16px);
         margin: 8px auto;

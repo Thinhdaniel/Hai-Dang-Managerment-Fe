@@ -399,6 +399,7 @@ const ProductionPlanningPage = () => {
         if (start === undefined || end === undefined) return 0;
         const hours = activeSlots
             .slice(start, end + 1)
+            .filter((slot) => slot.kind !== 'overtime')
             .reduce((sum, slot) => sum + (slot.endMinute - slot.startMinute) / 60, 0);
         return Math.round(hours * draft.hourlyQuota);
     };

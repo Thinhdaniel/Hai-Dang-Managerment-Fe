@@ -41,6 +41,7 @@ import type {
     ProductionUnitPriceMode,
 } from '../../core/types/production';
 import ProductionOperationTemplateModal from './ProductionOperationTemplateModal';
+import ProductionWeeklyScheduleSettings from './ProductionWeeklyScheduleSettings';
 
 const { Text, Title } = Typography;
 
@@ -930,16 +931,70 @@ const ProductionSetupDrawer = ({ open, plantId, day, onClose }: Props) => {
         </div>
     );
 
+    const dayRegularMinutes = draftSlots
+        .filter((slot) => slot.isActive && slot.kind === 'regular')
+        .reduce((sum, slot) => sum + slot.endMinute - slot.startMinute, 0);
+    const dayOvertimeMinutes = draftSlots
+        .filter((slot) => slot.isActive && slot.kind === 'overtime')
+        .reduce((sum, slot) => sum + slot.endMinute - slot.startMinute, 0);
+    const saturdayOvertimeSlot =
+        dayjs(day?.productionDate).day() === 6
+            ? draftSlots.find((slot) => slot.kind === 'overtime' && slot.startMinute === 17 * 60)
+            : undefined;
+    const scheduleSourceLabel =
+        day?.scheduleSource === 'weekly_template'
+            ? 'Mẫu tuần của cơ sở'
+            : day?.scheduleSource === 'system_default'
+              ? 'Mặc định hệ thống'
+              : day?.scheduleSource === 'plan_snapshot'
+                ? 'Theo kế hoạch sản xuất'
+                : day?.scheduleSource === 'manual_override'
+                  ? 'Ngoại lệ riêng của ngày'
+                  : 'Lịch dữ liệu cũ';
+
     const slotsTab = day ? (
         <div className='production-setup-section'>
             <div className='production-setup-heading'>
                 <div>
                     <Title level={5}>Khung giờ ngày {dayjs(day.productionDate).format('DD/MM/YYYY')}</Title>
-                    <Text type='secondary'>
-                        Khung giờ chỉ áp dụng cho ngày đang xem, không có công thức cố định 10 tiếng.
-                    </Text>
+                    <Text type='secondary'>{scheduleSourceLabel}. Thay đổi tại đây chỉ áp dụng cho ngày đang xem.</Text>
+                </div>
+                <Tag color={day.scheduleSource === 'manual_override' ? 'gold' : 'blue'}>
+                    {day.scheduleSource === 'manual_override' ? 'Lịch riêng' : 'Theo mẫu'}
+                </Tag>
+            </div>
+            <div className='production-day-slot-summary'>
+                <div>
+                    <span>Giờ thường</span>
+                    <strong>{(dayRegularMinutes / 60).toLocaleString('vi-VN')} giờ</strong>
+                </div>
+                <div>
+                    <span>Tăng ca đang bật</span>
+                    <strong>{(dayOvertimeMinutes / 60).toLocaleString('vi-VN')} giờ</strong>
+                </div>
+                <div>
+                    <span>Khung hoạt động</span>
+                    <strong>{draftSlots.filter((slot) => slot.isActive).length}</strong>
                 </div>
             </div>
+            {saturdayOvertimeSlot ? (
+                <div className='production-overtime-toggle'>
+                    <div>
+                        <strong>Tăng ca Thứ Bảy 17-18h</strong>
+                        <span>Chỉ bật khi có làm thực tế; không làm thì hệ thống sẽ không nhắc nhập.</span>
+                    </div>
+                    <Switch
+                        checked={saturdayOvertimeSlot.isActive}
+                        onChange={(isActive) =>
+                            setDraftSlots((current) =>
+                                current.map((slot) =>
+                                    slot.key === saturdayOvertimeSlot.key ? { ...slot, isActive } : slot
+                                )
+                            )
+                        }
+                    />
+                </div>
+            ) : null}
             <Form form={slotForm} layout='vertical' onFinish={saveSlotDraft}>
                 <div className='production-slot-form-grid'>
                     <Form.Item
@@ -1046,7 +1101,12 @@ const ProductionSetupDrawer = ({ open, plantId, day, onClose }: Props) => {
                     { key: 'lines', label: 'Danh mục chuyền', children: lineTab },
                     { key: 'items', label: 'Mã hàng', children: itemTab },
                     { key: 'operations', label: 'Công đoạn', children: operationTab },
-                    { key: 'slots', label: 'Khung giờ', children: slotsTab },
+                    {
+                        key: 'weekly-schedule',
+                        label: 'Lịch tuần',
+                        children: <ProductionWeeklyScheduleSettings plantId={plantId} day={day} />,
+                    },
+                    { key: 'slots', label: 'Khung giờ ngày', children: slotsTab },
                 ]}
             />
             <ProductionOperationTemplateModal
