@@ -64,6 +64,7 @@ type ItemFormValues = {
     name?: string;
     unit?: string;
     unitPrice?: number;
+    planningHourlyQuota?: number;
     unitPriceMode?: ProductionUnitPriceMode;
     unitPriceEffectiveFrom?: Dayjs;
     unitPriceChangeReason?: string;
@@ -191,6 +192,7 @@ const ProductionSetupDrawer = ({ open, plantId, day, onClose }: Props) => {
                 name: values.name,
                 unit: values.unit,
                 unitPrice: values.unitPrice,
+                planningHourlyQuota: values.planningHourlyQuota,
             };
             if (!editingItem) return productionService.createItem({ plantId, ...catalogValues });
 
@@ -280,6 +282,7 @@ const ProductionSetupDrawer = ({ open, plantId, day, onClose }: Props) => {
             name: item.name,
             unit: item.unit,
             unitPrice: item.unitPrice,
+            planningHourlyQuota: item.planningHourlyQuota,
             unitPriceMode: 'recalculate_from_date',
             unitPriceEffectiveFrom: dayjs(day?.productionDate || undefined),
             unitPriceChangeReason: undefined,
@@ -748,7 +751,7 @@ const ProductionSetupDrawer = ({ open, plantId, day, onClose }: Props) => {
                             setEditingItem(null);
                             setForcePriceRecalculation(false);
                             itemForm.resetFields();
-                            itemForm.setFieldsValue({ unit: 'SP', unitPrice: 0 });
+                            itemForm.setFieldsValue({ unit: 'SP', unitPrice: 0, planningHourlyQuota: 0 });
                         }}
                     >
                         Hủy sửa
@@ -773,6 +776,14 @@ const ProductionSetupDrawer = ({ open, plantId, day, onClose }: Props) => {
                         rules={[{ required: true, message: 'Nhập đơn giá' }]}
                     >
                         <InputNumber min={0} precision={0} className='w-full' addonAfter='đ' />
+                    </Form.Item>
+                    <Form.Item
+                        label='Năng suất chuẩn'
+                        name='planningHourlyQuota'
+                        initialValue={0}
+                        tooltip='Sản lượng một chuyền có thể hoàn thành trong một giờ với mã hàng này'
+                    >
+                        <InputNumber min={0} precision={2} className='w-full' addonAfter='SP/giờ' />
                     </Form.Item>
                 </div>
                 {editingItem && !itemPriceChanged && !forcePriceRecalculation ? (
@@ -923,7 +934,7 @@ const ProductionSetupDrawer = ({ open, plantId, day, onClose }: Props) => {
                                     {!item.isActive ? <Tag>Đã tắt</Tag> : null}
                                 </span>
                             }
-                            description={`${item.name || 'Chưa đặt tên'} · ${money(item.unitPrice)} đ/${item.unit} · ${(item.operationTemplates || []).length} công đoạn`}
+                            description={`${item.name || 'Chưa đặt tên'} · ${money(item.unitPrice)} đ/${item.unit} · NS chuẩn ${item.planningHourlyQuota ? `${money(item.planningHourlyQuota)} SP/giờ` : 'chưa khai báo'} · ${(item.operationTemplates || []).length} công đoạn`}
                         />
                     </List.Item>
                 )}

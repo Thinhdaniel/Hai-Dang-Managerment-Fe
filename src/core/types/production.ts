@@ -34,11 +34,749 @@ export interface ProductionItem {
     name?: string;
     unit: string;
     unitPrice: number;
+    planningHourlyQuota: number;
     operationTemplates: ProductionItemOperationTemplate[];
     isActive: boolean;
     priceUpdate?: ProductionUnitPriceUpdateResult;
     createdAt?: string;
     updatedAt?: string;
+}
+
+export type ProductionOrderStatus = 'draft' | 'ready' | 'in_production' | 'paused' | 'completed' | 'cancelled';
+export type ProductionOrderDeadlineStatus = 'completed' | 'overdue' | 'due_soon' | 'on_schedule';
+
+export interface ProductionOrderProgress {
+    openingQuantity: number;
+    trackedQuantity: number;
+    producedQuantity: number;
+    remainingQuantity: number;
+    excessQuantity: number;
+    completionPercent: number;
+    futurePlannedQuantity: number;
+    unplannedQuantity: number;
+    lastProductionDate?: string;
+    activeLineCodes: string[];
+    deadlineStatus: ProductionOrderDeadlineStatus;
+    daysRemaining: number;
+}
+
+export interface ProductionOrderHistoryEvent {
+    id?: string;
+    type: 'created' | 'updated' | 'status_changed' | 'imported';
+    fromStatus?: ProductionOrderStatus;
+    toStatus?: ProductionOrderStatus;
+    note?: string;
+    actor?: ProductionActor;
+    at?: string;
+}
+
+export interface ProductionOrder {
+    id: string;
+    plantId: string;
+    plantName?: string;
+    plantCode?: string;
+    code: string;
+    customerName?: string;
+    itemId: string;
+    itemCode: string;
+    itemName?: string;
+    unit: string;
+    totalQuantity: number;
+    plannedStartDate?: string;
+    dueDate: string;
+    priority: ProductionPlanPriority;
+    status: ProductionOrderStatus;
+    note?: string;
+    sourceType: 'manual' | 'excel';
+    sourceFileName?: string;
+    revision: number;
+    progress?: ProductionOrderProgress;
+    history: ProductionOrderHistoryEvent[];
+    createdBy?: ProductionActor;
+    updatedBy?: ProductionActor;
+    createdAt?: string;
+    updatedAt?: string;
+}
+
+export interface ProductionOrderList {
+    plant: { id: string; name: string; code: string };
+    items: ProductionOrder[];
+    summary: {
+        totalOrders: number;
+        openOrders: number;
+        overdueOrders: number;
+        dueSoonOrders: number;
+        totalQuantity: number;
+        producedQuantity: number;
+        remainingQuantity: number;
+        unplannedQuantity: number;
+    };
+}
+
+export type ProductionOrderPayload = {
+    plantId: string;
+    code: string;
+    customerName?: string;
+    itemId: string;
+    totalQuantity: number;
+    plannedStartDate?: string | null;
+    dueDate: string;
+    priority?: ProductionPlanPriority;
+    status?: ProductionOrderStatus;
+    note?: string;
+};
+
+export interface ProductionOrderImportRow {
+    rowNumber: number;
+    code: string;
+    customerName?: string;
+    itemId?: string;
+    itemCode: string;
+    itemName?: string;
+    totalQuantity: number;
+    plannedStartDate?: string;
+    dueDate?: string;
+    priority: ProductionPlanPriority;
+    status: ProductionOrderStatus;
+    note?: string;
+    action: 'create' | 'update' | 'error';
+    existingId?: string;
+    errors: string[];
+}
+
+export interface ProductionOrderImportPreview {
+    plant: { id: string; name: string; code: string };
+    sourceFileName: string;
+    sourceSheet: string;
+    rows: ProductionOrderImportRow[];
+    summary: {
+        totalRows: number;
+        validRows: number;
+        errorRows: number;
+        createRows: number;
+        updateRows: number;
+        totalQuantity: number;
+    };
+}
+
+export type ProductionBomStatus = 'draft' | 'approved' | 'archived';
+export type ProductionMaterialReadinessStatus = 'ready' | 'partial' | 'shortage' | 'unknown';
+export type ProductionMaterialReservationStatus = 'reserved' | 'partial' | 'unreserved' | 'not_configured';
+
+export interface ProductionBomLine {
+    id?: string;
+    materialId: string;
+    materialCode?: string;
+    materialName: string;
+    unit: string;
+    quantityPerUnit: number;
+    wastagePercent: number;
+    isRequired: boolean;
+    operationName?: string;
+    note?: string;
+}
+
+export interface ProductionBom {
+    id: string;
+    plantId: string;
+    itemId: string;
+    itemCode: string;
+    itemName?: string;
+    version: number;
+    status: ProductionBomStatus;
+    effectiveFrom?: string;
+    note?: string;
+    revision: number;
+    lines: ProductionBomLine[];
+    approvedAt?: string;
+    approvedBy?: ProductionActor;
+    createdBy?: ProductionActor;
+    updatedBy?: ProductionActor;
+    createdAt?: string;
+    updatedAt?: string;
+}
+
+export interface ProductionBomList {
+    plant: { id: string; name: string; code: string };
+    items: ProductionBom[];
+}
+
+export interface ProductionMaterialInboundSource {
+    purchaseOrderId: string;
+    purchaseOrderCode?: string;
+    quantity: number;
+    expectedDate?: string;
+}
+
+export interface ProductionMaterialReadinessLine {
+    id: string;
+    materialId: string;
+    materialCode?: string;
+    materialName: string;
+    unit: string;
+    quantityPerUnit: number;
+    wastagePercent: number;
+    isRequired: boolean;
+    operationName?: string;
+    requiredQuantity: number;
+    onHandQuantity: number;
+    reservedForOrderQuantity: number;
+    reservedForOtherOrdersQuantity: number;
+    freeQuantity: number;
+    availableForOrderQuantity: number;
+    inboundQuantity: number;
+    confirmedInboundQuantity: number;
+    shortageQuantity: number;
+    status: Exclude<ProductionMaterialReadinessStatus, 'unknown'>;
+    readyDate?: string;
+    inboundSources: ProductionMaterialInboundSource[];
+}
+
+export interface ProductionMaterialReadinessOrder {
+    order: {
+        id: string;
+        code: string;
+        itemId: string;
+        itemCode: string;
+        itemName?: string;
+        customerName?: string;
+        totalQuantity: number;
+        plannedStartDate?: string;
+        dueDate: string;
+        priority: ProductionPlanPriority;
+        status: ProductionOrderStatus;
+    };
+    bom?: { id: string; version: number; revision: number };
+    status: ProductionMaterialReadinessStatus;
+    reservationStatus: ProductionMaterialReservationStatus;
+    materialReadyDate?: string;
+    lines: ProductionMaterialReadinessLine[];
+    summary: {
+        requiredLineCount: number;
+        readyLineCount: number;
+        shortageLineCount: number;
+        unknownInboundLineCount: number;
+    };
+    latestSnapshot?: { id: string; status: ProductionMaterialReadinessStatus; asOf: string };
+}
+
+export interface ProductionMaterialReadinessReport {
+    plant: { id: string; name: string; code: string };
+    asOf: string;
+    summary: {
+        orderCount: number;
+        readyCount: number;
+        partialCount: number;
+        shortageCount: number;
+        unknownCount: number;
+        shortageLineCount: number;
+        unconfirmedInboundLineCount: number;
+    };
+    items: ProductionMaterialReadinessOrder[];
+}
+
+export type ProductionCapacityCellStatus = 'free' | 'loaded' | 'full' | 'overtime' | 'overloaded';
+export type ProductionCapacityRiskCode =
+    | 'completed'
+    | 'overdue'
+    | 'data_gap'
+    | 'capacity_shortfall'
+    | 'late'
+    | 'needs_scheduling'
+    | 'covered';
+
+export interface ProductionCapacityAllocation {
+    id: string;
+    orderId?: string;
+    orderCode?: string;
+    itemId: string;
+    itemCode: string;
+    plannedQuantity: number;
+    hourlyQuota: number;
+    regularMinutes: number;
+    overtimeMinutes: number;
+    validWindow: boolean;
+}
+
+export interface ProductionCapacityCell {
+    date: string;
+    lineId: string;
+    lineCode: string;
+    regularCapacityMinutes: number;
+    availableOvertimeMinutes: number;
+    plannedRegularMinutes: number;
+    plannedOvertimeMinutes: number;
+    plannedQuantity: number;
+    nominalQuantityCapacity: number;
+    overloadQuantity: number;
+    regularCapacityHours: number;
+    plannedRegularHours: number;
+    plannedOvertimeHours: number;
+    freeRegularMinutes: number;
+    utilizationPercent: number;
+    outputLoadPercent: number;
+    status: ProductionCapacityCellStatus;
+    planStatus?: ProductionPlanStatus;
+    allocations: ProductionCapacityAllocation[];
+}
+
+export interface ProductionCapacityLine {
+    id: string;
+    code: string;
+    name?: string;
+    leaderName?: string;
+    cells: ProductionCapacityCell[];
+    summary: {
+        regularCapacityHours: number;
+        plannedRegularHours: number;
+        plannedOvertimeHours: number;
+        plannedQuantity: number;
+        overloadQuantity: number;
+        utilizationPercent: number;
+    };
+}
+
+export interface ProductionCapacityDay {
+    date: string;
+    weekday: number;
+    isWorkingDay: boolean;
+    planStatus?: ProductionPlanStatus;
+    planRevision: number;
+    regularMinutesPerLine: number;
+    availableOvertimeMinutesPerLine: number;
+    regularCapacityHours: number;
+    plannedRegularHours: number;
+    plannedOvertimeHours: number;
+    freeRegularHours: number;
+    utilizationPercent: number;
+    plannedQuantity: number;
+    overloadedLineCount: number;
+}
+
+export interface ProductionCapacitySuggestion {
+    date: string;
+    lineId: string;
+    lineCode: string;
+    quantity: number;
+    hours: number;
+    isAfterDue: boolean;
+}
+
+export interface ProductionMasterPlanSuggestionInput {
+    orderId: string;
+    date: string;
+    lineId: string;
+    quantity: number;
+    hourlyQuota: number;
+}
+
+export type ProductionMasterPlanBlockReason =
+    | 'past_date'
+    | 'order_missing'
+    | 'order_closed'
+    | 'line_missing'
+    | 'item_missing'
+    | 'published_plan'
+    | 'invalid_existing_plan'
+    | 'order_capacity'
+    | 'material_shortage'
+    | 'material_not_reserved'
+    | 'plan_limit'
+    | 'no_contiguous_slot';
+
+export interface ProductionMasterPlanPreviewRow extends ProductionMasterPlanSuggestionInput {
+    key: string;
+    orderCode?: string;
+    itemId?: string;
+    itemCode?: string;
+    lineCode?: string;
+    status: 'ready' | 'blocked';
+    reasonCode?: ProductionMasterPlanBlockReason;
+    message: string;
+    startSlotKey?: string;
+    endSlotKey?: string;
+    requiredMinutes?: number;
+    reservedMinutes?: number;
+    planStatus?: ProductionPlanStatus;
+    planRevision: number;
+    orderRevision: number;
+    willCreatePlan: boolean;
+}
+
+export interface ProductionMasterPlanPreview {
+    fingerprint: string;
+    generatedAt: string;
+    summary: {
+        selectedCount: number;
+        readyCount: number;
+        blockedCount: number;
+        readyQuantity: number;
+        affectedDayCount: number;
+    };
+    rows: ProductionMasterPlanPreviewRow[];
+}
+
+export interface ProductionMasterPlanApplyResult {
+    plantId: string;
+    planIds: string[];
+    orderIds: string[];
+    quantity: number;
+    allocationCount: number;
+}
+
+export interface ProductionCapacityOrderRisk {
+    id: string;
+    code: string;
+    customerName?: string;
+    itemId: string;
+    itemCode: string;
+    itemName?: string;
+    priority: ProductionPlanPriority;
+    status: ProductionOrderStatus;
+    plannedStartDate?: string;
+    dueDate: string;
+    remainingQuantity: number;
+    plannedInHorizon: number;
+    plannedByDue: number;
+    uncoveredByDue: number;
+    simulatedQuantity: number;
+    unallocatedQuantity: number;
+    suggestedBeforeDueQuantity: number;
+    suggestedAfterDueQuantity: number;
+    suggestedAllocations: ProductionCapacitySuggestion[];
+    projectedCompletionDate?: string;
+    hourlyRate: number;
+    rateSource: 'configured' | 'history' | 'missing';
+    rateSampleCount: number;
+    confidence: 'high' | 'medium' | 'low' | 'none';
+    riskCode: ProductionCapacityRiskCode;
+    riskLabel: string;
+    severity: number;
+    recommendation: string;
+    materialStatus: ProductionMaterialReadinessStatus;
+    materialReservationStatus: ProductionMaterialReservationStatus;
+    materialShortageLineCount: number;
+    materialReadyDate?: string;
+}
+
+export interface ProductionCapacityReport {
+    plant: { id: string; name: string; code: string };
+    range: { startDate: string; endDate: string; weeks: number; today: string };
+    summary: {
+        activeLineCount: number;
+        workingDayCount: number;
+        regularCapacityHours: number;
+        plannedRegularHours: number;
+        plannedOvertimeHours: number;
+        freeRegularHours: number;
+        utilizationPercent: number;
+        overloadedCellCount: number;
+        overloadQuantity: number;
+        atRiskOrderCount: number;
+        missingRateItemCount: number;
+        draftPlanDayCount: number;
+        suggestedQuantity: number;
+        suggestedBeforeDueQuantity: number;
+        suggestedAfterDueQuantity: number;
+        unallocatedQuantity: number;
+    };
+    days: ProductionCapacityDay[];
+    lines: ProductionCapacityLine[];
+    orders: ProductionCapacityOrderRisk[];
+    dataQuality: {
+        missingRateItems: Array<{ id: string; code?: string; name?: string }>;
+        invalidAllocationCount: number;
+    };
+}
+
+export type ProductionControlTowerSeverity = 'critical' | 'warning' | 'normal';
+export type ProductionControlTowerExceptionSeverity = 'critical' | 'warning' | 'info';
+export type ProductionControlTowerForecastConfidence = 'high' | 'medium' | 'low' | 'none';
+export type ProductionControlTowerForecastStatus = 'completed' | 'on_track' | 'at_risk' | 'late' | 'no_forecast';
+export type ProductionControlTowerExceptionAction =
+    | 'materials'
+    | 'master_plan'
+    | 'planning'
+    | 'monitor'
+    | 'sync_status'
+    | 'order';
+
+export interface ProductionControlTowerException {
+    code: string;
+    severity: ProductionControlTowerExceptionSeverity;
+    title: string;
+    description: string;
+    action: ProductionControlTowerExceptionAction;
+    orderId?: string;
+    orderCode?: string;
+    dueDate?: string;
+}
+
+export interface ProductionControlTowerOrder {
+    id: string;
+    code: string;
+    itemId: string;
+    itemCode: string;
+    itemName?: string;
+    customerName?: string;
+    totalQuantity: number;
+    dueDate: string;
+    plannedStartDate?: string;
+    priority: ProductionPlanPriority;
+    status: ProductionOrderStatus;
+    progress: ProductionOrderProgress;
+    material: {
+        status: ProductionMaterialReadinessStatus;
+        reservationStatus: ProductionMaterialReservationStatus;
+        shortageLineCount: number;
+        materialReadyDate?: string;
+    };
+    recentDailyRate: number;
+    recentSampleCount: number;
+    recentPerformancePercent?: number;
+    scheduledQuantity: number;
+    draftQuantity: number;
+    planCoveragePercent: number;
+    forecastDate?: string;
+    forecastVarianceDays?: number;
+    forecastConfidence: ProductionControlTowerForecastConfidence;
+    forecastStatus: ProductionControlTowerForecastStatus;
+    expectedStatus: ProductionOrderStatus;
+    dailyActual: Array<{ date: string; quantity: number }>;
+    plans: Array<{ date: string; quantity: number; status: ProductionPlanStatus }>;
+    exceptions: ProductionControlTowerException[];
+    severity: ProductionControlTowerSeverity;
+}
+
+export interface ProductionControlTowerReport {
+    plant: { id: string; name: string; code: string };
+    range: { today: string; historyStart: string; horizonEnd: string; windowDays: number };
+    summary: {
+        totalOrders: number;
+        openOrders: number;
+        criticalOrders: number;
+        warningOrders: number;
+        forecastLateOrders: number;
+        materialBlockedOrders: number;
+        statusMismatchOrders: number;
+        remainingQuantity: number;
+        unplannedQuantity: number;
+        actualToday: number;
+        planCoveragePercent: number;
+    };
+    orders: ProductionControlTowerOrder[];
+    exceptions: ProductionControlTowerException[];
+    generatedAt: string;
+}
+
+export type ProductionPilotStatus = 'draft' | 'active' | 'paused' | 'ready_for_signoff' | 'accepted' | 'cancelled';
+export type ProductionPilotDayStatus =
+    | 'pending_system'
+    | 'pending_reference'
+    | 'matched'
+    | 'variance'
+    | 'accepted_variance';
+export type ProductionPilotChecklistStatus = 'pending' | 'passed' | 'failed' | 'blocked' | 'not_applicable';
+export type ProductionPilotLimitationSeverity = 'critical' | 'high' | 'medium' | 'low';
+export type ProductionPilotLimitationStatus = 'open' | 'mitigated' | 'accepted' | 'resolved';
+export type ProductionPilotMetricKey =
+    | 'actualOutput'
+    | 'plannedOutput'
+    | 'openOrders'
+    | 'capacityUtilizationPercent'
+    | 'materialBlockedOrders'
+    | 'forecastLateOrders';
+
+export interface ProductionPilotMetrics {
+    actualOutput: number;
+    plannedOutput: number;
+    openOrders: number;
+    capacityUtilizationPercent: number;
+    materialBlockedOrders: number;
+    forecastLateOrders: number;
+}
+
+export interface ProductionPilotComparison {
+    key: ProductionPilotMetricKey;
+    systemValue: number;
+    referenceValue: number;
+    difference: number;
+    variancePercent: number;
+    tolerance: number;
+    passed: boolean;
+}
+
+export interface ProductionPilotDay {
+    id: string;
+    date: string;
+    status: ProductionPilotDayStatus;
+    passed: boolean;
+    systemSnapshot?: ProductionPilotMetrics & {
+        criticalOrders: number;
+        statusMismatchOrders: number;
+        planCoveragePercent: number;
+        capturedAt: string;
+        capturedBy?: { userId: string; name: string };
+    };
+    reference?: ProductionPilotMetrics & {
+        sourceSheet?: string;
+        note?: string;
+        enteredAt: string;
+        enteredBy?: { userId: string; name: string };
+    };
+    comparisons: ProductionPilotComparison[];
+    varianceAccepted: boolean;
+    varianceAcceptanceNote?: string;
+    varianceAcceptedAt?: string;
+    varianceAcceptedBy?: { userId: string; name: string };
+}
+
+export interface ProductionPilotChecklistItem {
+    code: string;
+    category: 'business' | 'security' | 'reliability' | 'data' | 'training' | 'rollback';
+    title: string;
+    description?: string;
+    mandatory: boolean;
+    status: ProductionPilotChecklistStatus;
+    evidence?: string;
+    updatedAt?: string;
+    updatedBy?: { userId: string; name: string };
+}
+
+export interface ProductionPilotLimitation {
+    id: string;
+    title: string;
+    impact: string;
+    mitigation?: string;
+    owner?: string;
+    dueDate?: string;
+    severity: ProductionPilotLimitationSeverity;
+    status: ProductionPilotLimitationStatus;
+    createdAt: string;
+    createdBy?: { userId: string; name: string };
+    updatedAt?: string;
+    updatedBy?: { userId: string; name: string };
+}
+
+export interface ProductionPilotSummary {
+    capturedDays: number;
+    referenceDays: number;
+    reconciledDays: number;
+    matchedDays: number;
+    acceptedVarianceDays: number;
+    varianceDays: number;
+    pendingDays: number;
+    minimumShadowDays: number;
+    checklistTotal: number;
+    checklistCompleted: number;
+    checklistFailed: number;
+    blockingLimitations: number;
+    shadowDaysPassed: boolean;
+    checklistPassed: boolean;
+    eligibleForSignoff: boolean;
+}
+
+export interface ProductionPilotRun {
+    id: string;
+    plantId: string;
+    plantName: string;
+    plantCode?: string;
+    code: string;
+    name: string;
+    sourceFileName?: string;
+    sourceDescription?: string;
+    startDate: string;
+    targetEndDate: string;
+    status: ProductionPilotStatus;
+    thresholds: {
+        minimumShadowDays: number;
+        quantityVariancePercent: number;
+        capacityVariancePoints: number;
+        countVariance: number;
+    };
+    summary: ProductionPilotSummary;
+    revision: number;
+    days?: ProductionPilotDay[];
+    checklist?: ProductionPilotChecklistItem[];
+    knownLimitations?: ProductionPilotLimitation[];
+    signoff?: {
+        signedAt: string;
+        signedBy?: { userId: string; name: string };
+        note: string;
+        version: number;
+    };
+    history?: Array<{
+        id: string;
+        type: string;
+        note?: string;
+        actor?: { userId: string; name: string };
+        at: string;
+    }>;
+    createdAt?: string;
+    updatedAt?: string;
+}
+
+export interface ProductionPilotRunList {
+    plant: { id: string; name: string; code?: string };
+    items: ProductionPilotRun[];
+}
+
+export type ProductionRolloutStage = 'disabled' | 'preparing' | 'pilot' | 'live' | 'paused';
+export type ProductionRolloutAction = 'setup' | 'users' | 'orders' | 'materials' | 'planning' | 'pilot';
+
+export interface ProductionRolloutReadinessCheck {
+    code: string;
+    label: string;
+    value: number | string;
+    passed: boolean;
+    requiredFor: 'pilot' | 'live';
+    action: ProductionRolloutAction;
+}
+
+export interface ProductionRolloutFacility {
+    plant: { id: string; name: string; code: string };
+    stage: ProductionRolloutStage;
+    previousStage?: Exclude<ProductionRolloutStage, 'disabled' | 'paused'>;
+    enabled: boolean;
+    revision: number;
+    wave?: number;
+    plannedGoLiveDate?: string;
+    ownerName?: string;
+    acceptedPilotRun?: { id: string; code: string; signedAt?: string };
+    lastProductionDate?: string;
+    lastTransitionAt?: string;
+    lastTransitionByName?: string;
+    lastTransitionReason?: string;
+    readiness: {
+        checks: ProductionRolloutReadinessCheck[];
+        pilotReady: boolean;
+        liveReady: boolean;
+        pilotBlockers: string[];
+        liveBlockers: string[];
+        passedCount: number;
+        totalCount: number;
+    };
+    history: Array<{
+        id: string;
+        fromStage: ProductionRolloutStage;
+        toStage: ProductionRolloutStage;
+        reason: string;
+        actorId: string;
+        actorName: string;
+        at: string;
+    }>;
+}
+
+export interface ProductionRolloutPortfolio {
+    generatedAt: string;
+    summary: {
+        totalPlants: number;
+        byStage: Record<ProductionRolloutStage, number>;
+        pilotReady: number;
+        liveReady: number;
+        enabledPlants: number;
+    };
+    facilities: ProductionRolloutFacility[];
 }
 
 export type ProductionUnitPriceMode = 'future_only' | 'recalculate_from_date';
@@ -911,6 +1649,7 @@ export interface ProductionPlanAllocation {
     itemName?: string;
     unit: string;
     unitPriceSnapshot: number;
+    orderId?: string;
     orderCode?: string;
     plannedQuantity: number;
     hourlyQuota: number;
@@ -1018,6 +1757,7 @@ export type ProductionPlanAllocationPayload = {
     id?: string;
     lineId: string;
     itemId: string;
+    orderId?: string;
     orderCode?: string;
     plannedQuantity: number;
     hourlyQuota: number;
@@ -1043,6 +1783,7 @@ export type ProductionItemPayload = {
     name?: string;
     unit?: string;
     unitPrice?: number;
+    planningHourlyQuota?: number;
     isActive?: boolean;
     unitPriceMode?: ProductionUnitPriceMode;
     unitPriceEffectiveFrom?: string;
@@ -1729,6 +2470,8 @@ export interface ProductionAccessStatus {
     plantName: string;
     plantCode: string;
     enabled: boolean;
+    stage: ProductionRolloutStage;
+    revision: number;
     globalAccess: boolean;
     canAccess: boolean;
     reason?: 'PRODUCTION_NOT_ENABLED';

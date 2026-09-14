@@ -109,7 +109,6 @@ const PlantList: React.FC = () => {
         address?: string;
         phone?: string;
         coordinates?: { lat: number; lng: number } | null;
-        productionAccess?: { enabled: boolean };
     }) => {
         if (editingPlant) {
             await updateMutation.mutateAsync({ id: editingPlant.id, data: values });
@@ -154,16 +153,26 @@ const PlantList: React.FC = () => {
             dataIndex: 'productionAccess',
             key: 'productionAccess',
             width: 160,
-            render: (_value, record) =>
-                record.productionAccess?.enabled ? (
+            render: (_value, record) => {
+                const stage =
+                    record.productionAccess?.stage || (record.productionAccess?.enabled ? 'live' : 'disabled');
+                const labels = {
+                    disabled: 'Chưa triển khai',
+                    preparing: 'Đang chuẩn bị',
+                    pilot: 'Đang pilot',
+                    live: 'Đang vận hành',
+                    paused: 'Tạm dừng',
+                } as const;
+                return record.productionAccess?.enabled ? (
                     <span className='inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-700'>
-                        <CheckCircleFilled /> Đã triển khai
+                        <CheckCircleFilled /> {labels[stage]}
                     </span>
                 ) : (
                     <span className='inline-flex items-center gap-1.5 rounded-full bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-500'>
-                        <StopOutlined /> Chưa triển khai
+                        <StopOutlined /> {labels[stage]}
                     </span>
-                ),
+                );
+            },
         },
         {
             title: 'MÁY ĐANG QUẢN LÝ',

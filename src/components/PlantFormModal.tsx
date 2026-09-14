@@ -1,8 +1,9 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { App, Button, Form, Input, InputNumber, Modal, Switch, Tooltip } from 'antd';
+import { App, Button, Form, Input, InputNumber, Modal, Tag, Tooltip } from 'antd';
 import { AimOutlined, ClusterOutlined, EnvironmentOutlined, LineChartOutlined } from '@ant-design/icons';
 import type { Plant } from '../core/types';
 import { getCurrentCoords, parseCoordsFromText } from '../core/lib/geolocation';
+import { useNavigate } from 'react-router-dom';
 
 type PlantFormValues = {
     name: string;
@@ -11,7 +12,6 @@ type PlantFormValues = {
     phone?: string;
     lat?: number | null;
     lng?: number | null;
-    productionEnabled: boolean;
 };
 
 type PlantSubmitValues = {
@@ -20,7 +20,6 @@ type PlantSubmitValues = {
     address?: string;
     phone?: string;
     coordinates?: { lat: number; lng: number } | null;
-    productionAccess?: { enabled: boolean };
 };
 
 type PlantFormModalProps = {
@@ -36,7 +35,8 @@ const normalizeValue = (value?: string | null) => sanitizeValue(value).toLowerCa
 
 const PlantFormModal: React.FC<PlantFormModalProps> = ({ open, onClose, onSubmit, initialValues, plants }) => {
     const [form] = Form.useForm<PlantFormValues>();
-    const { message, modal } = App.useApp();
+    const { message } = App.useApp();
+    const navigate = useNavigate();
     const [submitting, setSubmitting] = useState(false);
     const [locating, setLocating] = useState(false);
 
@@ -53,13 +53,11 @@ const PlantFormModal: React.FC<PlantFormModalProps> = ({ open, onClose, onSubmit
                 phone: initialValues.phone,
                 lat: initialValues.coordinates?.lat ?? null,
                 lng: initialValues.coordinates?.lng ?? null,
-                productionEnabled: initialValues.productionAccess?.enabled === true,
             });
             return;
         }
 
         form.resetFields();
-        form.setFieldValue('productionEnabled', false);
     }, [form, initialValues, open]);
 
     const handleUseCurrentLocation = async () => {
@@ -118,28 +116,7 @@ const PlantFormModal: React.FC<PlantFormModalProps> = ({ open, onClose, onSubmit
             address: sanitizeValue(values.address) || undefined,
             phone: sanitizeValue(values.phone) || undefined,
             coordinates: hasLat && hasLng ? { lat: values.lat as number, lng: values.lng as number } : null,
-            productionAccess: { enabled: values.productionEnabled === true },
         };
-
-        const productionStateChanged =
-            Boolean(initialValues) && values.productionEnabled !== (initialValues?.productionAccess?.enabled === true);
-        if (productionStateChanged) {
-            const enabling = values.productionEnabled === true;
-            const confirmed = await new Promise<boolean>((resolve) => {
-                modal.confirm({
-                    title: enabling ? 'Kích hoạt phân hệ Sản xuất?' : 'Tắt phân hệ Sản xuất?',
-                    content: enabling
-                        ? `Người dùng tại ${initialValues?.name} sẽ có thể nhập sản lượng, QC và nhận nhắc việc theo giờ.`
-                        : `Người dùng tại ${initialValues?.name} sẽ bị chặn khỏi Production và hệ thống dừng nhắc nhập sản. Dữ liệu cũ vẫn được giữ nguyên.`,
-                    okText: enabling ? 'Kích hoạt' : 'Tắt phân hệ',
-                    cancelText: 'Giữ nguyên',
-                    okButtonProps: { danger: !enabling },
-                    onOk: () => resolve(true),
-                    onCancel: () => resolve(false),
-                });
-            });
-            if (!confirmed) return;
-        }
 
         try {
             setSubmitting(true);
@@ -242,14 +219,36 @@ const PlantFormModal: React.FC<PlantFormModalProps> = ({ open, onClose, onSubmit
                             <div>
                                 <div className='text-sm font-semibold text-slate-800'>Phân hệ Sản xuất</div>
                                 <p className='mt-1 text-xs leading-5 text-slate-500'>
-                                    Chỉ bật khi cơ sở đã sẵn sàng nhập sản lượng, QC, kế hoạch và nhận nhắc việc theo
-                                    giờ. Việc tắt không ảnh hưởng máy móc, vật tư hoặc các phiếu hiện có.
+                                    Quyền truy cập được điều phối theo từng giai đoạn tại Trung tâm triển khai. Việc tạm
+                                    dừng không ảnh hưởng máy móc, vật tư hoặc dữ liệu Production đã có.
                                 </p>
                             </div>
                         </div>
-                        <Form.Item name='productionEnabled' valuePropName='checked' noStyle>
-                            <Switch checkedChildren='Đã bật' unCheckedChildren='Đang tắt' />
-                        </Form.Item>
+                        <div className='flex shrink-0 flex-col items-end gap-2'>
+                            <Tag color={initialValues?.productionAccess?.enabled ? 'green' : 'default'}>
+                                {initialValues?.productionAccess?.stage === 'pilot'
+                                    ? 'Đang pilot'
+                                    : initialValues?.productionAccess?.enabled
+                                      ? 'Đang vận hành'
+                                      : initialValues?.productionAccess?.stage === 'preparing'
+                                        ? 'Đang chuẩn bị'
+                                        : initialValues?.productionAccess?.stage === 'paused'
+                                          ? 'Tạm dừng'
+                                          : 'Chưa triển khai'}
+                            </Tag>
+                            {initialValues ? (
+                                <Button
+                                    size='small'
+                                    type='link'
+                                    onClick={() => {
+                                        onClose();
+                                        navigate('/production/rollout');
+                                    }}
+                                >
+                                    Trung tâm triển khai
+                                </Button>
+                            ) : null}
+                        </div>
                     </div>
                 </div>
 

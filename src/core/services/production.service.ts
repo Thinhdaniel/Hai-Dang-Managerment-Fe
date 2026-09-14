@@ -2,6 +2,8 @@ import api from '../lib/api';
 import type {
     ConfigureProductionLinePayload,
     ProductionBoard,
+    ProductionBom,
+    ProductionBomList,
     ProductionAccessStatus,
     ProductionDay,
     ProductionDayPage,
@@ -17,6 +19,28 @@ import type {
     ProductionOpeningBalanceBatch,
     ProductionOpeningBalanceList,
     ProductionOpeningBalancePreview,
+    ProductionCapacityReport,
+    ProductionControlTowerReport,
+    ProductionPilotChecklistStatus,
+    ProductionPilotLimitation,
+    ProductionPilotLimitationStatus,
+    ProductionPilotMetrics,
+    ProductionPilotRun,
+    ProductionPilotRunList,
+    ProductionPilotStatus,
+    ProductionRolloutFacility,
+    ProductionRolloutPortfolio,
+    ProductionRolloutStage,
+    ProductionMasterPlanApplyResult,
+    ProductionMasterPlanPreview,
+    ProductionMasterPlanSuggestionInput,
+    ProductionMaterialReadinessOrder,
+    ProductionMaterialReadinessReport,
+    ProductionMaterialReadinessStatus,
+    ProductionOrder,
+    ProductionOrderImportPreview,
+    ProductionOrderList,
+    ProductionOrderPayload,
     ProductionQcOpeningBalanceBatch,
     ProductionQcOpeningBalanceList,
     ProductionQcOpeningBalancePreview,
@@ -42,6 +66,20 @@ const BASE = '/production';
 export const productionService = {
     getAccess: (plantId?: string): Promise<ProductionAccessStatus> =>
         api.get(`${BASE}/access`, { params: plantId ? { plantId } : undefined }),
+
+    getRolloutPortfolio: (): Promise<ProductionRolloutPortfolio> => api.get(`${BASE}/rollout/portfolio`),
+
+    transitionRollout: (
+        plantId: string,
+        payload: {
+            revision: number;
+            toStage: ProductionRolloutStage;
+            reason: string;
+            wave?: number;
+            plannedGoLiveDate?: string | null;
+            ownerName?: string | null;
+        }
+    ): Promise<ProductionRolloutFacility> => api.post(`${BASE}/rollout/plants/${plantId}/transition`, payload),
 
     getLines: (plantId: string, includeInactive = false): Promise<ProductionLine[]> =>
         api.get(`${BASE}/lines`, { params: { plantId, includeInactive } }),
@@ -78,6 +116,193 @@ export const productionService = {
 
     updateItemOperations: (id: string, operations: ProductionOperationConfigPayload[]): Promise<ProductionItem> =>
         api.put(`${BASE}/items/${id}/operations`, { operations }),
+
+    getOrders: (params: {
+        plantId: string;
+        status?: string;
+        itemId?: string;
+        search?: string;
+    }): Promise<ProductionOrderList> => api.get(`${BASE}/orders`, { params }),
+
+    getOrder: (id: string): Promise<ProductionOrder> => api.get(`${BASE}/orders/${id}`),
+
+    createOrder: (payload: ProductionOrderPayload): Promise<ProductionOrder> => api.post(`${BASE}/orders`, payload),
+
+    updateOrder: (
+        id: string,
+        payload: Partial<Omit<ProductionOrderPayload, 'plantId'>> & { revision: number; changeReason: string }
+    ): Promise<ProductionOrder> => api.patch(`${BASE}/orders/${id}`, payload),
+
+    previewOrderImport: (file: File, plantId: string): Promise<ProductionOrderImportPreview> => {
+        const formData = new FormData();
+        formData.append('file', file);
+        formData.append('plantId', plantId);
+        return api.post<ProductionOrderImportPreview, FormData>(`${BASE}/orders/import/preview`, formData, {
+            headers: { 'Content-Type': 'multipart/form-data' },
+        });
+    },
+
+    confirmOrderImport: (
+        file: File,
+        plantId: string
+    ): Promise<{ createdCount: number; updatedCount: number; totalQuantity: number }> => {
+        const formData = new FormData();
+        formData.append('file', file);
+        formData.append('plantId', plantId);
+        return api.post(`${BASE}/orders/import/confirm`, formData, {
+            headers: { 'Content-Type': 'multipart/form-data' },
+        });
+    },
+
+    downloadOrderTemplate: (plantId: string): Promise<Blob> =>
+        api.get(`${BASE}/orders/import/template`, { params: { plantId }, responseType: 'blob' }),
+
+    getCapacity: (params: { plantId: string; startDate: string; weeks: number }): Promise<ProductionCapacityReport> =>
+        api.get(`${BASE}/capacity`, { params }),
+
+    getControlTower: (plantId: string, windowDays: number): Promise<ProductionControlTowerReport> =>
+        api.get(`${BASE}/control-tower`, { params: { plantId, windowDays } }),
+
+    syncControlTowerStatuses: (
+        plantId: string,
+        orderIds?: string[]
+    ): Promise<{
+        synchronizedCount: number;
+        changes: Array<{ orderId: string; code: string; fromStatus: string; toStatus: string }>;
+    }> => api.post(`${BASE}/control-tower/sync-statuses`, { plantId, ...(orderIds?.length ? { orderIds } : {}) }),
+
+    getPilotRuns: (plantId: string): Promise<ProductionPilotRunList> =>
+        api.get(`${BASE}/pilot-runs`, { params: { plantId } }),
+
+    getPilotRun: (id: string): Promise<ProductionPilotRun> => api.get(`${BASE}/pilot-runs/${id}`),
+
+    createPilotRun: (payload: {
+        plantId: string;
+        name: string;
+        sourceFileName?: string;
+        sourceDescription?: string;
+        startDate: string;
+        targetEndDate: string;
+        thresholds: ProductionPilotRun['thresholds'];
+    }): Promise<ProductionPilotRun> => api.post(`${BASE}/pilot-runs`, payload),
+
+    updatePilotStatus: (
+        id: string,
+        revision: number,
+        status: Exclude<ProductionPilotStatus, 'draft' | 'ready_for_signoff' | 'accepted'>,
+        note?: string
+    ): Promise<ProductionPilotRun> => api.patch(`${BASE}/pilot-runs/${id}/status`, { revision, status, note }),
+
+    capturePilotDay: (id: string, revision: number, date?: string): Promise<ProductionPilotRun> =>
+        api.post(`${BASE}/pilot-runs/${id}/days/capture`, { revision, date }),
+
+    savePilotReference: (
+        id: string,
+        date: string,
+        revision: number,
+        reference: ProductionPilotMetrics & { sourceSheet?: string; note?: string }
+    ): Promise<ProductionPilotRun> =>
+        api.put(`${BASE}/pilot-runs/${id}/days/${date}/reference`, { revision, reference }),
+
+    acceptPilotVariance: (id: string, date: string, revision: number, note: string): Promise<ProductionPilotRun> =>
+        api.post(`${BASE}/pilot-runs/${id}/days/${date}/accept-variance`, { revision, note }),
+
+    updatePilotChecklist: (
+        id: string,
+        code: string,
+        revision: number,
+        status: ProductionPilotChecklistStatus,
+        evidence: string
+    ): Promise<ProductionPilotRun> =>
+        api.patch(`${BASE}/pilot-runs/${id}/checklist/${code}`, { revision, status, evidence }),
+
+    addPilotLimitation: (
+        id: string,
+        revision: number,
+        limitation: Omit<ProductionPilotLimitation, 'id' | 'createdAt' | 'createdBy' | 'updatedAt' | 'updatedBy'>
+    ): Promise<ProductionPilotRun> => api.post(`${BASE}/pilot-runs/${id}/limitations`, { revision, limitation }),
+
+    updatePilotLimitation: (
+        id: string,
+        limitationId: string,
+        revision: number,
+        limitation: Partial<{
+            title: string;
+            impact: string;
+            mitigation: string;
+            owner: string;
+            dueDate: string;
+            severity: ProductionPilotLimitation['severity'];
+            status: ProductionPilotLimitationStatus;
+        }>
+    ): Promise<ProductionPilotRun> =>
+        api.patch(`${BASE}/pilot-runs/${id}/limitations/${limitationId}`, { revision, limitation }),
+
+    signoffPilotRun: (id: string, revision: number, note: string): Promise<ProductionPilotRun> =>
+        api.post(`${BASE}/pilot-runs/${id}/sign-off`, { revision, note }),
+
+    previewMasterPlan: (
+        plantId: string,
+        suggestions: ProductionMasterPlanSuggestionInput[]
+    ): Promise<ProductionMasterPlanPreview> =>
+        api.post(`${BASE}/capacity/apply-suggestions`, { plantId, suggestions, confirm: false }),
+
+    applyMasterPlan: (
+        plantId: string,
+        suggestions: ProductionMasterPlanSuggestionInput[],
+        expectedFingerprint: string
+    ): Promise<ProductionMasterPlanApplyResult> =>
+        api.post(`${BASE}/capacity/apply-suggestions`, {
+            plantId,
+            suggestions,
+            confirm: true,
+            expectedFingerprint,
+        }),
+
+    getBoms: (plantId: string, itemId?: string): Promise<ProductionBomList> =>
+        api.get(`${BASE}/boms`, { params: { plantId, itemId } }),
+
+    saveBomDraft: (
+        itemId: string,
+        payload: {
+            plantId: string;
+            revision: number;
+            effectiveFrom?: string;
+            note?: string;
+            changeReason: string;
+            lines: Array<{
+                materialId: string;
+                quantityPerUnit: number;
+                wastagePercent: number;
+                isRequired: boolean;
+                operationName?: string;
+                note?: string;
+            }>;
+        }
+    ): Promise<ProductionBom> => api.put(`${BASE}/items/${itemId}/bom`, payload),
+
+    approveBom: (id: string, revision: number, note: string): Promise<ProductionBom> =>
+        api.post(`${BASE}/boms/${id}/approve`, { revision, note }),
+
+    getMaterialReadiness: (
+        plantId: string,
+        status?: ProductionMaterialReadinessStatus
+    ): Promise<ProductionMaterialReadinessReport> =>
+        api.get(`${BASE}/material-readiness`, { params: { plantId, status } }),
+
+    reserveOrderMaterials: (orderId: string): Promise<ProductionMaterialReadinessOrder> =>
+        api.post(`${BASE}/orders/${orderId}/materials/reserve`),
+
+    releaseOrderMaterials: (
+        orderId: string,
+        reason: string
+    ): Promise<{ releasedCount: number; readiness: ProductionMaterialReadinessOrder }> =>
+        api.post(`${BASE}/orders/${orderId}/materials/release`, { reason }),
+
+    snapshotOrderMaterials: (
+        orderId: string
+    ): Promise<{ id: string; status: ProductionMaterialReadinessStatus; asOf: string }> =>
+        api.post(`${BASE}/orders/${orderId}/materials/snapshot`),
 
     lookupDay: (plantId: string, date: string): Promise<ProductionDay | null> =>
         api.get(`${BASE}/days/lookup`, { params: { plantId, date } }),

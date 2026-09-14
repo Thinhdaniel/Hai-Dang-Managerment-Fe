@@ -125,10 +125,25 @@ const ProductionAccessGate = ({ children }: { children: ReactNode }) => {
     }
 
     if (!accessQuery.data?.canAccess) {
+        const stage = accessQuery.data?.stage;
+        const paused = stage === 'paused';
+        const preparing = stage === 'preparing';
         return (
             <AccessState
-                title='Cơ sở chưa triển khai Sản xuất'
-                description='Phân hệ này hiện mới được triển khai tại các cơ sở đã kích hoạt. Các quyền và dữ liệu ở những phần khác của hệ thống không bị thay đổi.'
+                title={
+                    paused
+                        ? 'Production tại cơ sở đang tạm dừng'
+                        : preparing
+                          ? 'Cơ sở đang chuẩn bị triển khai'
+                          : 'Cơ sở chưa triển khai Sản xuất'
+                }
+                description={
+                    paused
+                        ? 'Ban điều hành đang tạm khóa quyền Production tại cơ sở. Dữ liệu đã nhập vẫn được bảo toàn và sẽ xuất hiện lại khi tiếp tục triển khai.'
+                        : preparing
+                          ? 'Cơ sở đang hoàn thiện dữ liệu nền, lịch làm việc và nhân sự trước khi chạy pilot. Các phần quản lý máy móc và vật tư vẫn hoạt động bình thường.'
+                          : 'Phân hệ này hiện mới được triển khai tại các cơ sở đã kích hoạt. Các quyền và dữ liệu ở những phần khác của hệ thống không bị thay đổi.'
+                }
                 retrying={accessQuery.isFetching}
                 onRetry={() => void accessQuery.refetch()}
             />

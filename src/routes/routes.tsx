@@ -55,6 +55,13 @@ const ProductionHistoryPage = lazy(() => import('../pages/ProductionHistoryPage'
 const ProductionMonitorPage = lazy(() => import('../pages/ProductionMonitorPage'));
 const ProductionBoardPage = lazy(() => import('../pages/ProductionBoardPage'));
 const ProductionPlanningPage = lazy(() => import('../pages/ProductionPlanningPage'));
+const ProductionOrdersPage = lazy(() => import('../pages/ProductionOrdersPage'));
+const ProductionMasterPlanPage = lazy(() => import('../pages/ProductionMasterPlanPage'));
+const ProductionMaterialReadinessPage = lazy(() => import('../pages/ProductionMaterialReadinessPage'));
+const ProductionCapacityPage = lazy(() => import('../pages/ProductionCapacityPage'));
+const ProductionControlTowerPage = lazy(() => import('../pages/ProductionControlTowerPage'));
+const ProductionPilotPage = lazy(() => import('../pages/ProductionPilotPage'));
+const ProductionRolloutPage = lazy(() => import('../pages/ProductionRolloutPage'));
 const ProductionReportPage = lazy(() => import('../pages/ProductionReportPage'));
 const ProductionDayReportPage = lazy(() => import('../pages/ProductionDayReportPage'));
 const LoginPage = lazy(() => import('../pages/LoginPage'));
@@ -204,6 +211,19 @@ export const router = createBrowserRouter([
                 element: guarded('/production/qc/reports', <ProductionQcReportPage />),
             },
             { path: 'planning', element: guarded('/production/planning', <ProductionPlanningPage />) },
+            { path: 'orders', element: guarded('/production/orders', <ProductionOrdersPage />) },
+            { path: 'master-plan', element: guarded('/production/master-plan', <ProductionMasterPlanPage />) },
+            {
+                path: 'materials',
+                element: guarded('/production/materials', <ProductionMaterialReadinessPage />),
+            },
+            { path: 'capacity', element: guarded('/production/capacity', <ProductionCapacityPage />) },
+            {
+                path: 'control-tower',
+                element: guarded('/production/control-tower', <ProductionControlTowerPage />),
+            },
+            { path: 'pilot', element: guarded('/production/pilot', <ProductionPilotPage />) },
+            { path: 'rollout', element: guarded('/production/rollout', <ProductionRolloutPage />) },
             { path: 'monitor', element: guarded('/production/monitor', <ProductionMonitorPage />) },
             { path: 'board', element: guarded('/production/board', <ProductionBoardPage />) },
             { path: 'reports', element: guarded('/production/reports', <ProductionReportPage />) },

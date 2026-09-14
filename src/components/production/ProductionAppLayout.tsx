@@ -4,14 +4,21 @@ import {
     AuditOutlined,
     BarChartOutlined,
     CalendarOutlined,
+    DashboardOutlined,
     DownOutlined,
     EditOutlined,
     EllipsisOutlined,
     FundProjectionScreenOutlined,
     HistoryOutlined,
+    InboxOutlined,
     LineChartOutlined,
     LogoutOutlined,
     PieChartOutlined,
+    ProfileOutlined,
+    ProjectOutlined,
+    RadarChartOutlined,
+    ExperimentOutlined,
+    DeploymentUnitOutlined,
     SwapOutlined,
     UserOutlined,
 } from '@ant-design/icons';
@@ -20,7 +27,14 @@ import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../core/contexts/AuthContext';
 import { useResponsive } from '../../core/hooks/useResponsive';
 import { useSocket } from '../../core/hooks/useSocket';
-import { can, getLandingPath, isLineLeader, isProductionOperator, isQc } from '../../core/lib/permissions';
+import {
+    can,
+    getLandingPath,
+    hasDirectorAccess,
+    isLineLeader,
+    isProductionOperator,
+    isQc,
+} from '../../core/lib/permissions';
 import { countProductionEntryDrafts } from '../../core/lib/productionDraft';
 import { listProductionOutbox } from '../../core/lib/productionOutbox';
 import '../../styles/production.css';
@@ -71,7 +85,47 @@ const ProductionAppLayout = () => {
     // không lối sang app quản lý máy/vật tư.
     const qcOnly = isQc(role);
     const operatorOnly = isProductionOperator(role);
+    const directorAccess = hasDirectorAccess(role);
     const navItems = [
+        manage ? { to: '/production/orders', end: false, icon: <ProfileOutlined />, label: 'Đơn hàng' } : null,
+        manage
+            ? {
+                  to: '/production/control-tower',
+                  end: false,
+                  icon: <RadarChartOutlined />,
+                  label: 'Control Tower',
+                  short: 'Điều phối',
+              }
+            : null,
+        directorAccess
+            ? {
+                  to: '/production/rollout',
+                  end: false,
+                  icon: <DeploymentUnitOutlined />,
+                  label: 'Triển khai cơ sở',
+                  short: 'Rollout',
+              }
+            : null,
+        manage
+            ? {
+                  to: '/production/pilot',
+                  end: false,
+                  icon: <ExperimentOutlined />,
+                  label: 'Pilot & UAT',
+                  short: 'Pilot',
+              }
+            : null,
+        manage ? { to: '/production/master-plan', end: false, icon: <ProjectOutlined />, label: 'Tổng thể' } : null,
+        manage
+            ? {
+                  to: '/production/materials',
+                  end: false,
+                  icon: <InboxOutlined />,
+                  label: 'Nguyên phụ liệu',
+                  short: 'Vật tư',
+              }
+            : null,
+        manage ? { to: '/production/capacity', end: false, icon: <DashboardOutlined />, label: 'Năng lực' } : null,
         manage ? { to: '/production/planning', end: false, icon: <CalendarOutlined />, label: 'Kế hoạch' } : null,
         !qcOnly
             ? { to: '/production', end: true, icon: <EditOutlined />, label: 'Nhập sản lượng', short: 'Nhập liệu' }

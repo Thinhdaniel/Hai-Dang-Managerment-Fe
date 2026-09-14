@@ -121,6 +121,18 @@ export interface Plant {
     coordinates?: { lat: number; lng: number };
     productionAccess?: {
         enabled: boolean;
+        stage?: 'disabled' | 'preparing' | 'pilot' | 'live' | 'paused';
+        previousStage?: 'preparing' | 'pilot' | 'live';
+        revision?: number;
+        wave?: number;
+        plannedGoLiveDate?: string;
+        ownerName?: string;
+        acceptedPilotRunId?: string;
+        acceptedPilotCode?: string;
+        lastTransitionAt?: string;
+        lastTransitionBy?: string;
+        lastTransitionByName?: string;
+        lastTransitionReason?: string;
         enabledAt?: string;
         enabledBy?: string;
         disabledAt?: string;

@@ -45,6 +45,7 @@ import { productionPlantLabel } from '../core/lib/productionAccess';
 import type {
     ProductionItem,
     ProductionLine,
+    ProductionOrder,
     ProductionPlan,
     ProductionPlanAllocation,
     ProductionPlanAllocationPayload,
@@ -66,6 +67,7 @@ type AllocationDraft = ProductionPlanAllocationPayload & {
 type AllocationFormValues = {
     lineId: string;
     itemId: string;
+    orderId?: string;
     orderCode?: string;
     plannedQuantity: number;
     hourlyQuota: number;
@@ -91,6 +93,7 @@ const toDraft = (allocation: ProductionPlanAllocation): AllocationDraft => ({
     id: allocation.id,
     lineId: allocation.lineId,
     itemId: allocation.itemId,
+    orderId: allocation.orderId,
     orderCode: allocation.orderCode,
     plannedQuantity: allocation.plannedQuantity,
     hourlyQuota: allocation.hourlyQuota,
@@ -131,6 +134,7 @@ const ProductionPlanningPage = () => {
     const [drawerOpen, setDrawerOpen] = useState(false);
     const [editingClientId, setEditingClientId] = useState<string | null>(null);
     const [planAction, setPlanAction] = useState<PlanAction>(null);
+    const [orderPrefillHandled, setOrderPrefillHandled] = useState(false);
     const productionDate = date.format('YYYY-MM-DD');
     const canSwitchPlant = isAdmin(role) || isDirector(role);
     const planKey = ['production', 'plan', plantId, productionDate] as const;
@@ -152,6 +156,12 @@ const ProductionPlanningPage = () => {
         enabled: Boolean(plantId),
         staleTime: 60 * 1000,
     });
+    const ordersQuery = useQuery({
+        queryKey: ['production', 'orders', plantId, 'planning'],
+        queryFn: () => productionService.getOrders({ plantId, status: 'open' }),
+        enabled: Boolean(plantId),
+        staleTime: 30_000,
+    });
     const planQuery = useQuery({
         queryKey: planKey,
         queryFn: () => productionService.lookupPlan(plantId, productionDate),
@@ -169,6 +179,7 @@ const ProductionPlanningPage = () => {
         setDirty(false);
         setChangeReason('');
         setDrafts([]);
+        setOrderPrefillHandled(false);
     }, [plantId, productionDate]);
 
     useEffect(() => {
@@ -200,8 +211,45 @@ const ProductionPlanningPage = () => {
     const slotIndex = useMemo(() => new Map(activeSlots.map((slot, index) => [slot.key, index])), [activeSlots]);
     const lines = linesQuery.data || [];
     const items = itemsQuery.data || [];
+    const orders = ordersQuery.data?.items || [];
     const lineById = useMemo(() => new Map(lines.map((line) => [line.id, line])), [lines]);
     const itemById = useMemo(() => new Map(items.map((item) => [item.id, item])), [items]);
+    const orderById = useMemo(() => new Map(orders.map((order) => [order.id, order])), [orders]);
+    const selectedOrderId = Form.useWatch('orderId', allocationForm);
+    const selectedOrder = selectedOrderId ? orderById.get(selectedOrderId) : undefined;
+    const maxAssignableQuantity = useMemo(() => {
+        if (!selectedOrder) return undefined;
+        const plannedInOtherAllocations = drafts
+            .filter((draft) => draft.clientId !== editingClientId && draft.orderId === selectedOrder.id)
+            .reduce((sum, draft) => sum + Number(draft.plannedQuantity || 0), 0);
+        return Math.max(0, Number(selectedOrder.progress?.unplannedQuantity || 0) - plannedInOtherAllocations);
+    }, [drafts, editingClientId, selectedOrder]);
+
+    useEffect(() => {
+        const requestedOrder = orderById.get(searchParams.get('orderId') || '');
+        if (orderPrefillHandled || !requestedOrder || !plan || plan.status !== 'draft' || !activeSlots.length) return;
+        const requestedLineId = searchParams.get('lineId') || undefined;
+        const requestedQuantity = Number(searchParams.get('quantity') || 0);
+        const requestedHourlyQuota = Number(searchParams.get('hourlyQuota') || 0);
+        const availableQuantity = Number(requestedOrder.progress?.unplannedQuantity || 0);
+        setEditingClientId(null);
+        allocationForm.resetFields();
+        allocationForm.setFieldsValue({
+            lineId: requestedLineId,
+            orderId: requestedOrder.id,
+            orderCode: requestedOrder.code,
+            itemId: requestedOrder.itemId,
+            plannedQuantity:
+                requestedQuantity > 0 ? Math.min(requestedQuantity, availableQuantity || requestedQuantity) : undefined,
+            hourlyQuota: requestedHourlyQuota > 0 ? requestedHourlyQuota : undefined,
+            priority: requestedOrder.priority,
+            dueDate: dayjs(requestedOrder.dueDate),
+            startSlotKey: activeSlots[0].key,
+            endSlotKey: activeSlots[activeSlots.length - 1].key,
+        });
+        setDrawerOpen(true);
+        setOrderPrefillHandled(true);
+    }, [activeSlots, allocationForm, orderById, orderPrefillHandled, plan, searchParams]);
 
     const sortedDrafts = useMemo(
         () =>
@@ -322,11 +370,21 @@ const ProductionPlanningPage = () => {
         }
         setEditingClientId(null);
         allocationForm.resetFields();
+        const requestedOrder = orderById.get(searchParams.get('orderId') || '');
         allocationForm.setFieldsValue({
+            orderId: requestedOrder?.id,
+            orderCode: requestedOrder?.code,
+            itemId: requestedOrder?.itemId,
             priority: 'normal',
             startSlotKey: activeSlots[0].key,
             endSlotKey: activeSlots[activeSlots.length - 1].key,
             dueDate: date,
+            ...(requestedOrder
+                ? {
+                      priority: requestedOrder.priority,
+                      dueDate: dayjs(requestedOrder.dueDate),
+                  }
+                : {}),
         });
         setDrawerOpen(true);
     };
@@ -336,6 +394,7 @@ const ProductionPlanningPage = () => {
         allocationForm.setFieldsValue({
             lineId: draft.lineId,
             itemId: draft.itemId,
+            orderId: draft.orderId,
             orderCode: draft.orderCode,
             plannedQuantity: draft.plannedQuantity,
             hourlyQuota: draft.hourlyQuota,
@@ -348,11 +407,27 @@ const ProductionPlanningPage = () => {
         setDrawerOpen(true);
     };
 
+    const selectOrder = (orderId?: string) => {
+        const order: ProductionOrder | undefined = orderId ? orderById.get(orderId) : undefined;
+        allocationForm.setFieldsValue({
+            orderId,
+            orderCode: order?.code,
+            itemId: order?.itemId,
+            priority: order?.priority || 'normal',
+            dueDate: order ? dayjs(order.dueDate) : date,
+        });
+    };
+
     const saveAllocationDraft = (values: AllocationFormValues) => {
         const startIndex = slotIndex.get(values.startSlotKey);
         const endIndex = slotIndex.get(values.endSlotKey);
         if (startIndex === undefined || endIndex === undefined || endIndex < startIndex) {
             message.warning('Khoảng giờ phân bổ không hợp lệ');
+            return;
+        }
+        const order = values.orderId ? orderById.get(values.orderId) : undefined;
+        if (order && maxAssignableQuantity !== undefined && Number(values.plannedQuantity) > maxAssignableQuantity) {
+            message.error(`Đơn hàng ${order.code} chỉ còn ${number(maxAssignableQuantity)} SP chưa xếp kế hoạch`);
             return;
         }
         const overlap = drafts.find((draft) => {
@@ -371,6 +446,7 @@ const ProductionPlanningPage = () => {
             id: previous?.id,
             lineId: values.lineId,
             itemId: values.itemId,
+            orderId: values.orderId,
             orderCode: values.orderCode?.trim() || undefined,
             plannedQuantity: values.plannedQuantity,
             hourlyQuota: values.hourlyQuota,
@@ -824,16 +900,62 @@ const ProductionPlanningPage = () => {
                             />
                         </Form.Item>
                     </div>
-                    <Form.Item label='Mã đơn hàng / Lệnh sản xuất' name='orderCode'>
-                        <Input maxLength={80} placeholder='VD: LSX-0726-01' />
+                    <Form.Item label='Đơn hàng sản xuất' name='orderId'>
+                        <Select
+                            allowClear
+                            showSearch
+                            optionFilterProp='label'
+                            loading={ordersQuery.isLoading}
+                            placeholder='Chọn đơn hàng đang mở'
+                            onChange={selectOrder}
+                            options={orders.map((order) => ({
+                                value: order.id,
+                                label: `${order.code} · ${order.itemCode} · chưa xếp ${number(order.progress?.unplannedQuantity)} SP`,
+                            }))}
+                        />
                     </Form.Item>
+                    <Form.Item name='orderCode' hidden>
+                        <Input />
+                    </Form.Item>
+                    {selectedOrder ? (
+                        <div className='production-plan-order-context'>
+                            <div>
+                                <span>Đơn hàng</span>
+                                <strong>{selectedOrder.code}</strong>
+                            </div>
+                            <div>
+                                <span>Còn phải sản xuất</span>
+                                <strong>{number(selectedOrder.progress?.remainingQuantity)} SP</strong>
+                            </div>
+                            <div>
+                                <span>Hạn giao</span>
+                                <strong>{dayjs(selectedOrder.dueDate).format('DD/MM/YYYY')}</strong>
+                            </div>
+                            <div>
+                                <span>Có thể phân bổ</span>
+                                <strong>{number(maxAssignableQuantity)} SP</strong>
+                            </div>
+                        </div>
+                    ) : editingClientId && allocationForm.getFieldValue('orderCode') ? (
+                        <Alert
+                            type='warning'
+                            showIcon
+                            message={`Mã đơn cũ ${allocationForm.getFieldValue('orderCode')} chưa có trong danh mục đơn hàng`}
+                        />
+                    ) : null}
                     <div className='production-form-two-columns'>
                         <Form.Item
                             label='Sản lượng kế hoạch'
                             name='plannedQuantity'
                             rules={[{ required: true, message: 'Nhập sản lượng kế hoạch' }]}
                         >
-                            <InputNumber min={1} precision={0} className='w-full' addonAfter='SP' />
+                            <InputNumber
+                                min={1}
+                                max={maxAssignableQuantity}
+                                precision={0}
+                                className='w-full'
+                                addonAfter='SP'
+                            />
                         </Form.Item>
                         <Form.Item
                             label='Khoán mỗi giờ'
