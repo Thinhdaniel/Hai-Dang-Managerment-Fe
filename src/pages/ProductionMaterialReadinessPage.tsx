@@ -32,6 +32,7 @@ import {
 import dayjs from 'dayjs';
 import { useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
+import { productionErrorMessage } from '../core/lib/production-error';
 import ProductionBomEditorModal from '../components/production/ProductionBomEditorModal';
 import { useAuth } from '../core/contexts/AuthContext';
 import { useResponsive } from '../core/hooks/useResponsive';
@@ -49,7 +50,14 @@ import type {
 
 const { Text, Title } = Typography;
 const number = (value = 0) => new Intl.NumberFormat('vi-VN', { maximumFractionDigits: 4 }).format(value);
-const errorText = (error: unknown) => (error instanceof Error ? error.message : 'Không thể xử lý dữ liệu vật tư');
+const errorText = (error: unknown) => productionErrorMessage(error, 'Không thể xử lý dữ liệu vật tư');
+const statusOptions = [
+    { label: 'Tất cả', value: 'all' },
+    { label: 'Đủ', value: 'ready' },
+    { label: 'Thiếu một phần', value: 'partial' },
+    { label: 'Thiếu', value: 'shortage' },
+    { label: 'Chưa có BOM', value: 'unknown' },
+];
 
 const statusMeta: Record<
     ProductionMaterialReadinessStatus,
@@ -84,14 +92,13 @@ const normalizeMaterials = (input: Awaited<ReturnType<typeof materialService.get
 
 const ProductionMaterialReadinessPage = () => {
     const { message, modal } = App.useApp();
-    const [searchParams] = useSearchParams();
+    const [searchParams, setSearchParams] = useSearchParams();
     const queryClient = useQueryClient();
     const { user, role } = useAuth();
     const { isCompact } = useResponsive();
     const { socket } = useSocket();
     const [plantId, setPlantId] = useState(searchParams.get('plantId') || user?.plantId || '');
     const [status, setStatus] = useState<'all' | ProductionMaterialReadinessStatus>('all');
-    const [selected, setSelected] = useState<ProductionMaterialReadinessOrder>();
     const [bomItem, setBomItem] = useState<{ id: string; code: string; name?: string }>();
     const [releaseOrder, setReleaseOrder] = useState<ProductionMaterialReadinessOrder>();
     const [releaseReason, setReleaseReason] = useState('Giải phóng tồn để điều chỉnh kế hoạch');
@@ -121,19 +128,25 @@ const ProductionMaterialReadinessPage = () => {
         staleTime: 300_000,
     });
     const report = readinessQuery.data;
+    const selected = report?.items.find((row) => row.order.id === searchParams.get('orderId'));
+    const setSelected = (row?: ProductionMaterialReadinessOrder) => {
+        setSearchParams(
+            (previous) => {
+                const next = new URLSearchParams(previous);
+                next.set('plantId', plantId);
+                if (row) next.set('orderId', row.order.id);
+                else next.delete('orderId');
+                return next;
+            },
+            { replace: true }
+        );
+    };
     const materials = normalizeMaterials(materialsQuery.data);
     const boms = bomsQuery.data?.items || [];
     const draftBom = bomItem ? boms.find((bom) => bom.itemId === bomItem.id && bom.status === 'draft') : undefined;
     const approvedBom = bomItem
         ? boms.find((bom) => bom.itemId === bomItem.id && bom.status === 'approved')
         : undefined;
-
-    useEffect(() => {
-        const orderId = searchParams.get('orderId');
-        if (!orderId || !report || selected?.order.id === orderId) return;
-        const order = report.items.find((item) => item.order.id === orderId);
-        if (order) setSelected(order);
-    }, [report, searchParams, selected?.order.id]);
 
     useEffect(() => {
         if (!socket) return;
@@ -348,7 +361,12 @@ const ProductionMaterialReadinessPage = () => {
                 <div className='production-material-controls'>
                     <Select
                         value={plantId || undefined}
-                        onChange={setPlantId}
+                        onChange={(nextPlantId) => {
+                            setPlantId(nextPlantId);
+                            setSearchParams({ plantId: nextPlantId }, { replace: true });
+                            setBomItem(undefined);
+                            setReleaseOrder(undefined);
+                        }}
                         disabled={!canSwitchPlant}
                         placeholder='Chọn cơ sở'
                         options={(plantsQuery.data || []).map((plant) => ({ value: plant.id, label: plant.name }))}
@@ -410,18 +428,21 @@ const ProductionMaterialReadinessPage = () => {
                     </section>
 
                     <div className='production-material-filter'>
-                        <Segmented
-                            block={isCompact}
-                            value={status}
-                            onChange={(value) => setStatus(value as typeof status)}
-                            options={[
-                                { label: 'Tất cả', value: 'all' },
-                                { label: 'Đủ', value: 'ready' },
-                                { label: 'Thiếu một phần', value: 'partial' },
-                                { label: 'Thiếu', value: 'shortage' },
-                                { label: 'Chưa có BOM', value: 'unknown' },
-                            ]}
-                        />
+                        {isCompact ? (
+                            <Select
+                                aria-label='Trạng thái nguyên phụ liệu'
+                                className='production-material-status'
+                                value={status}
+                                onChange={setStatus}
+                                options={statusOptions}
+                            />
+                        ) : (
+                            <Segmented
+                                value={status}
+                                onChange={(value) => setStatus(value as typeof status)}
+                                options={statusOptions}
+                            />
+                        )}
                         <Text type='secondary'>
                             Cập nhật lúc {report?.asOf ? dayjs(report.asOf).format('HH:mm DD/MM/YYYY') : '--'}
                         </Text>

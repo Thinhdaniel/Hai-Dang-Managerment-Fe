@@ -37,6 +37,7 @@ import {
 } from '../../core/lib/permissions';
 import { countProductionEntryDrafts } from '../../core/lib/productionDraft';
 import { listProductionOutbox } from '../../core/lib/productionOutbox';
+import { partitionProductionNavigation } from '../../core/lib/production-navigation';
 import '../../styles/production.css';
 
 const { Text } = Typography;
@@ -156,13 +157,7 @@ const ProductionAppLayout = () => {
         !operatorOnly ? { to: '/production/history', end: false, icon: <HistoryOutlined />, label: 'Lịch sử' } : null,
     ].filter((item): item is NonNullable<typeof item> => Boolean(item));
 
-    // Thanh tab dưới chia đều chiều ngang: quá 5 mục thì mỗi mục còn ~62px ở
-    // 390px, chữ dính nhau và bấm dễ trượt. Giữ 4 mục hay dùng, phần còn lại
-    // gom vào "Khác" mở bảng chọn từ đáy.
-    const MAX_TABS = 5;
-    const needsOverflow = isPhone && navItems.length > MAX_TABS;
-    const primaryNav = needsOverflow ? navItems.slice(0, MAX_TABS - 1) : navItems;
-    const overflowNav = needsOverflow ? navItems.slice(MAX_TABS - 1) : [];
+    const { primary: primaryNav, overflow: overflowNav } = partitionProductionNavigation(navItems);
     const overflowActive = overflowNav.some((item) =>
         item.end ? location.pathname === item.to : location.pathname.startsWith(item.to)
     );
@@ -267,12 +262,42 @@ const ProductionAppLayout = () => {
                         <div className='pd-leader-tag'>Báo sản lượng theo giờ</div>
                     ) : (
                         <nav className='pd-nav' aria-label='Điều hướng sản xuất'>
-                            {navItems.map((item) => (
+                            {primaryNav.map((item) => (
                                 <NavLink key={item.to} to={item.to} end={item.end}>
                                     {item.icon}
                                     <span>{item.label}</span>
                                 </NavLink>
                             ))}
+                            {overflowNav.length ? (
+                                <Dropdown
+                                    trigger={['click']}
+                                    menu={{
+                                        selectedKeys: overflowNav
+                                            .filter((item) =>
+                                                item.end
+                                                    ? location.pathname === item.to
+                                                    : location.pathname.startsWith(item.to)
+                                            )
+                                            .map((item) => item.to),
+                                        items: overflowNav.map((item) => ({
+                                            key: item.to,
+                                            icon: item.icon,
+                                            label: (
+                                                <NavLink to={item.to} end={item.end}>
+                                                    {item.label}
+                                                </NavLink>
+                                            ),
+                                        })),
+                                    }}
+                                >
+                                    <Button
+                                        className={overflowActive ? 'pd-nav-more is-active' : 'pd-nav-more'}
+                                        icon={<AppstoreOutlined />}
+                                    >
+                                        Chức năng <DownOutlined />
+                                    </Button>
+                                </Dropdown>
+                            ) : null}
                         </nav>
                     )}
 

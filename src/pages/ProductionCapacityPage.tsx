@@ -23,9 +23,12 @@ import {
     Typography,
     type TableColumnsType,
 } from 'antd';
-import dayjs, { type Dayjs } from 'dayjs';
+import dayjs from 'dayjs';
+import viVN from 'antd/locale/vi_VN';
+import { productionWeekStart as mondayOf } from '../core/lib/production-calendar';
+import { productionErrorMessage } from '../core/lib/production-error';
 import { useEffect, useMemo, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../core/contexts/AuthContext';
 import { useResponsive } from '../core/hooks/useResponsive';
 import { useSocket } from '../core/hooks/useSocket';
@@ -42,12 +45,7 @@ import type {
 
 const { Text, Title } = Typography;
 const number = (value = 0) => new Intl.NumberFormat('vi-VN', { maximumFractionDigits: 1 }).format(value);
-const errorMessage = (error: unknown) => (error instanceof Error ? error.message : 'Không thể tải dữ liệu năng lực');
-
-const mondayOf = (value: Dayjs) => {
-    const weekday = value.day();
-    return value.subtract(weekday === 0 ? 6 : weekday - 1, 'day').startOf('day');
-};
+const errorMessage = (error: unknown) => productionErrorMessage(error, 'Không thể tải dữ liệu năng lực');
 
 const riskTone: Record<ProductionCapacityRiskCode, { color: string; label: string }> = {
     completed: { color: 'green', label: 'Đã đủ' },
@@ -69,11 +67,14 @@ const cellLabel: Record<ProductionCapacityCell['status'], string> = {
 
 const ProductionCapacityPage = () => {
     const navigate = useNavigate();
+    const [searchParams] = useSearchParams();
     const queryClient = useQueryClient();
     const { user, role } = useAuth();
     const { socket } = useSocket();
     const { isCompact: isMobile } = useResponsive();
-    const [plantId, setPlantId] = useState(user?.plantId || '');
+    const [plantId, setPlantId] = useState(
+        (isAdmin(role) || isDirector(role) ? searchParams.get('plantId') : null) || user?.plantId || ''
+    );
     const [startDate, setStartDate] = useState(() => mondayOf(dayjs()));
     const [weeks, setWeeks] = useState(2);
     const [mobileWeek, setMobileWeek] = useState(0);
@@ -254,6 +255,7 @@ const ProductionCapacityPage = () => {
                     />
                     <DatePicker
                         picker='week'
+                        locale={viVN.DatePicker}
                         value={startDate}
                         allowClear={false}
                         format='[Tuần] WW · DD/MM/YYYY'

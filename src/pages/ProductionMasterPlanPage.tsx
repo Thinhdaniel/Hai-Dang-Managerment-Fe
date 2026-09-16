@@ -25,7 +25,10 @@ import {
     Tooltip,
     Typography,
 } from 'antd';
-import dayjs, { type Dayjs } from 'dayjs';
+import dayjs from 'dayjs';
+import viVN from 'antd/locale/vi_VN';
+import { productionWeekStart as mondayOf } from '../core/lib/production-calendar';
+import { productionErrorMessage } from '../core/lib/production-error';
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import MasterPlanApplyModal from '../components/production/MasterPlanApplyModal';
@@ -45,13 +48,7 @@ import type {
 
 const { Text, Title } = Typography;
 const number = (value = 0) => new Intl.NumberFormat('vi-VN', { maximumFractionDigits: 1 }).format(value);
-const errorMessage = (error: unknown) =>
-    error instanceof Error ? error.message : 'Không thể tải mô phỏng kế hoạch tổng thể';
-
-const mondayOf = (value: Dayjs) => {
-    const weekday = value.day();
-    return value.subtract(weekday === 0 ? 6 : weekday - 1, 'day').startOf('day');
-};
+const errorMessage = (error: unknown) => productionErrorMessage(error, 'Không thể tải mô phỏng kế hoạch tổng thể');
 
 type SuggestedBlock = ProductionCapacitySuggestion & {
     orderId: string;
@@ -323,6 +320,7 @@ const ProductionMasterPlanPage = () => {
                     />
                     <DatePicker
                         picker='week'
+                        locale={viVN.DatePicker}
                         value={startDate}
                         allowClear={false}
                         format='[Tuần] WW · DD/MM/YYYY'
@@ -681,7 +679,9 @@ const ProductionMasterPlanPage = () => {
                                                     </span>
                                                     <Button
                                                         type='link'
-                                                        onClick={() => navigate('/production/materials')}
+                                                        onClick={() =>
+                                                            navigate(`/production/materials?plantId=${plantId}`)
+                                                        }
                                                     >
                                                         Xử lý vật tư
                                                     </Button>
@@ -694,7 +694,9 @@ const ProductionMasterPlanPage = () => {
                                                     </span>
                                                     <Button
                                                         type='link'
-                                                        onClick={() => navigate('/production/materials')}
+                                                        onClick={() =>
+                                                            navigate(`/production/materials?plantId=${plantId}`)
+                                                        }
                                                     >
                                                         Khai báo
                                                     </Button>

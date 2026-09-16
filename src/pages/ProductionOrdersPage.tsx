@@ -36,7 +36,8 @@ import {
 } from 'antd';
 import dayjs, { type Dayjs } from 'dayjs';
 import { useCallback, useDeferredValue, useEffect, useMemo, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
+import { productionErrorMessage } from '../core/lib/production-error';
 import { useAuth } from '../core/contexts/AuthContext';
 import { useResponsive } from '../core/hooks/useResponsive';
 import { useSocket } from '../core/hooks/useSocket';
@@ -56,7 +57,7 @@ import type {
 const { Text, Title } = Typography;
 const { Dragger } = Upload;
 const number = (value = 0) => new Intl.NumberFormat('vi-VN').format(Number(value || 0));
-const errorMessage = (error: unknown) => (error instanceof Error ? error.message : 'Không thể xử lý đơn hàng');
+const errorMessage = (error: unknown) => productionErrorMessage(error, 'Không thể xử lý đơn hàng');
 
 const statusMeta: Record<ProductionOrderStatus, { label: string; color: string }> = {
     draft: { label: 'Chuẩn bị', color: 'default' },
@@ -105,13 +106,16 @@ const downloadBlob = (blob: Blob, filename: string) => {
 
 const ProductionOrdersPage = () => {
     const navigate = useNavigate();
+    const [searchParams, setSearchParams] = useSearchParams();
     const { message } = App.useApp();
     const queryClient = useQueryClient();
     const { user, role } = useAuth();
     const { socket } = useSocket();
     const { isPhone, isCompact: isMobile } = useResponsive();
     const [form] = Form.useForm<OrderFormValues>();
-    const [plantId, setPlantId] = useState(user?.plantId || '');
+    const [plantId, setPlantId] = useState(
+        (isAdmin(role) || isDirector(role) ? searchParams.get('plantId') : null) || user?.plantId || ''
+    );
     const [status, setStatus] = useState('open');
     const [search, setSearch] = useState('');
     const deferredSearch = useDeferredValue(search.trim());
@@ -259,6 +263,21 @@ const ProductionOrdersPage = () => {
         },
         [form]
     );
+
+    useEffect(() => {
+        const orderId = searchParams.get('orderId');
+        const focused = ordersQuery.data?.items.find((order) => order.id === orderId);
+        if (!focused) return;
+        openEdit(focused);
+        setSearchParams(
+            (previous) => {
+                const next = new URLSearchParams(previous);
+                next.delete('orderId');
+                return next;
+            },
+            { replace: true }
+        );
+    }, [ordersQuery.data, openEdit, searchParams, setSearchParams]);
 
     const data = ordersQuery.data;
     const orders = data?.items || [];

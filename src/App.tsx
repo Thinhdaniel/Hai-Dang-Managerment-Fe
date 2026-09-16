@@ -1,5 +1,6 @@
 import { QueryClientProvider } from '@tanstack/react-query';
 import { App as AntdApp, ConfigProvider } from 'antd';
+import viVN from 'antd/locale/vi_VN';
 import { router } from './routes/routes';
 import { RouterProvider } from 'react-router-dom';
 import { AuthProvider } from './core/contexts/AuthContext';
@@ -12,6 +13,7 @@ import ServiceWorkerManager from './components/pwa/ServiceWorkerManager';
 function App() {
     return (
         <ConfigProvider
+            locale={viVN}
             theme={{
                 token: {
                     colorPrimary: '#1890ff',

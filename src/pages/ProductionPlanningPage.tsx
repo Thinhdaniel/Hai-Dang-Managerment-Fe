@@ -34,6 +34,7 @@ import {
 import dayjs, { type Dayjs } from 'dayjs';
 import { useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
+import { productionErrorMessage } from '../core/lib/production-error';
 import { useAuth } from '../core/contexts/AuthContext';
 import { useSocket } from '../core/hooks/useSocket';
 import { isAdmin, isDirector } from '../core/lib/permissions';
@@ -54,7 +55,7 @@ import type {
 
 const { Text, Title } = Typography;
 const number = (value = 0) => new Intl.NumberFormat('vi-VN').format(value);
-const errorMessage = (error: unknown) => (error instanceof Error ? error.message : 'Không thể xử lý kế hoạch');
+const errorMessage = (error: unknown) => productionErrorMessage(error, 'Không thể xử lý kế hoạch');
 const createClientId = () =>
     globalThis.crypto?.randomUUID?.() || `plan-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
 

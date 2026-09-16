@@ -33,7 +33,7 @@ import {
 } from 'antd';
 import dayjs, { type Dayjs } from 'dayjs';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import ProductionCommandRibbon from '../components/production/ProductionCommandRibbon';
 import ProductionOperationMonitor from '../components/production/ProductionOperationMonitor';
 import { useAuth } from '../core/contexts/AuthContext';
@@ -77,12 +77,15 @@ const achievementTone = (percent: number) => {
 const ProductionMonitorPage = () => {
     const { isCompact: isMobile } = useResponsive();
     const navigate = useNavigate();
+    const [searchParams] = useSearchParams();
     const queryClient = useQueryClient();
     const pageRef = useRef<HTMLDivElement>(null);
     const { user, role } = useAuth();
     const { socket } = useSocket();
     const [date, setDate] = useState<Dayjs>(() => dayjs());
-    const [plantId, setPlantId] = useState(user?.plantId || '');
+    const [plantId, setPlantId] = useState(
+        (isAdmin(role) || isDirector(role) ? searchParams.get('plantId') : null) || user?.plantId || ''
+    );
     const [mobileView, setMobileView] = useState<MobileView>('overview');
     const [monitorMode, setMonitorMode] = useState<MonitorMode>('output');
     const [alertFilter, setAlertFilter] = useState<AlertFilter>('all');

@@ -27,6 +27,7 @@ import {
 import dayjs from 'dayjs';
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
+import { productionErrorMessage } from '../core/lib/production-error';
 import { useAuth } from '../core/contexts/AuthContext';
 import { useResponsive } from '../core/hooks/useResponsive';
 import { useSocket } from '../core/hooks/useSocket';
@@ -46,8 +47,7 @@ import type {
 const { Text, Title } = Typography;
 const number = (value = 0) => new Intl.NumberFormat('vi-VN', { maximumFractionDigits: 1 }).format(value);
 const date = (value?: string) => (value ? dayjs(value).format('DD/MM/YYYY') : 'Chưa xác định');
-const errorText = (error: unknown) =>
-    error instanceof Error ? error.message : 'Không thể tải trung tâm điều hành sản xuất';
+const errorText = (error: unknown) => productionErrorMessage(error, 'Không thể tải trung tâm điều hành sản xuất');
 
 const forecastMeta: Record<ProductionControlTowerForecastStatus, { label: string; color: string }> = {
     completed: { label: 'Hoàn thành', color: 'green' },
@@ -80,7 +80,7 @@ const exceptionIcon = (severity: ProductionControlTowerException['severity']) =>
 
 const ProductionControlTowerPage = () => {
     const navigate = useNavigate();
-    const [searchParams] = useSearchParams();
+    const [searchParams, setSearchParams] = useSearchParams();
     const { message } = App.useApp();
     const queryClient = useQueryClient();
     const { user, role } = useAuth();
@@ -89,7 +89,6 @@ const ProductionControlTowerPage = () => {
     const [plantId, setPlantId] = useState(searchParams.get('plantId') || user?.plantId || '');
     const [windowDays, setWindowDays] = useState(30);
     const [severity, setSeverity] = useState<'all' | ProductionControlTowerSeverity>('all');
-    const [selected, setSelected] = useState<ProductionControlTowerOrder>();
     const canSwitchPlant = isAdmin(role) || isDirector(role);
 
     const plantsQuery = useQuery({ queryKey: ['plants'], queryFn: () => plantService.getAll(), staleTime: 300_000 });
@@ -106,13 +105,19 @@ const ProductionControlTowerPage = () => {
         refetchInterval: 60_000,
     });
     const report = towerQuery.data;
-
-    useEffect(() => {
-        const focusOrderId = searchParams.get('orderId');
-        if (!focusOrderId || !report || selected?.id === focusOrderId) return;
-        const order = report.orders.find((item) => item.id === focusOrderId);
-        if (order) setSelected(order);
-    }, [report, searchParams, selected?.id]);
+    const selected = report?.orders.find((order) => order.id === searchParams.get('orderId'));
+    const setSelected = (order?: ProductionControlTowerOrder) => {
+        setSearchParams(
+            (previous) => {
+                const next = new URLSearchParams(previous);
+                next.set('plantId', plantId);
+                if (order) next.set('orderId', order.id);
+                else next.delete('orderId');
+                return next;
+            },
+            { replace: true }
+        );
+    };
 
     useEffect(() => {
         if (!socket) return;
@@ -299,7 +304,10 @@ const ProductionControlTowerPage = () => {
                 <div className='production-tower-controls'>
                     <Select
                         value={plantId || undefined}
-                        onChange={setPlantId}
+                        onChange={(nextPlantId) => {
+                            setPlantId(nextPlantId);
+                            setSearchParams({ plantId: nextPlantId }, { replace: true });
+                        }}
                         disabled={!canSwitchPlant}
                         loading={plantsQuery.isLoading}
                         options={(plantsQuery.data || []).map((plant) => ({

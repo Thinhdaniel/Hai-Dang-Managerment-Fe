@@ -2750,6 +2750,7 @@
 
 /* Production order backlog */
 .production-orders-page {
+    width: 100%;
     max-width: 1680px;
     margin: 0 auto;
 }
@@ -6396,6 +6397,29 @@
     align-items: center;
     gap: 2px;
     margin-inline: auto;
+    min-width: 0;
+}
+
+.pd-nav-more.is-active {
+    color: var(--pd-brand);
+    background: var(--pd-brand-soft);
+    border-color: var(--pd-brand);
+}
+
+@media (min-width: 992px) and (max-width: 1399px) {
+    .pd-header {
+        flex-wrap: wrap;
+        padding-top: max(10px, env(safe-area-inset-top));
+        gap: 8px 16px;
+    }
+
+    .pd-nav {
+        order: 3;
+        flex: 1 0 100%;
+        justify-content: center;
+        padding: 6px 0;
+        border-top: 1px solid var(--pd-border);
+    }
 }
 
 .pd-nav a {
@@ -6585,6 +6609,7 @@
     display: flex;
     min-height: 54px;
     flex: 1 1 0;
+    min-width: 0;
     flex-direction: column;
     align-items: center;
     justify-content: center;
@@ -6592,6 +6617,13 @@
     color: var(--pd-ink-3);
     font-size: var(--pd-fs-10-5);
     font-weight: 600;
+}
+
+.pd-tabbar a span:not(.anticon) {
+    max-width: 100%;
+    padding-inline: 2px;
+    text-align: center;
+    overflow-wrap: anywhere;
 }
 
 .pd-tabbar a .anticon {
@@ -6607,6 +6639,7 @@
 .pd-main {
     display: flex;
     width: 100%;
+    min-width: 0;
     max-width: 1560px;
     flex: 1;
     flex-direction: column;
@@ -11817,7 +11850,7 @@
     .production-master-selection {
         position: sticky;
         z-index: 5;
-        bottom: calc(8px + env(safe-area-inset-bottom));
+        bottom: calc(64px + env(safe-area-inset-bottom));
         padding: 10px;
         grid-template-columns: minmax(0, 1fr) auto;
         gap: 8px;
@@ -11930,7 +11963,13 @@
 }
 .production-material-page {
     display: grid;
+    min-width: 0;
+    grid-template-columns: minmax(0, 1fr);
     gap: 16px;
+}
+
+.production-material-page > * {
+    min-width: 0;
 }
 
 .production-material-header {
@@ -12017,6 +12056,12 @@
     align-items: center;
     justify-content: space-between;
     gap: 16px;
+}
+
+.production-material-status {
+    min-width: 0;
+    width: 230px;
+    max-width: 100%;
 }
 
 .production-material-list {
@@ -12407,6 +12452,7 @@
     .production-material-controls .ant-select {
         flex: 1;
         width: auto;
+        min-width: 0;
     }
     .production-material-policy .ant-alert-description {
         font-size: 12px;
@@ -12434,6 +12480,10 @@
     }
     .production-material-filter {
         display: grid;
+        grid-template-columns: minmax(0, 1fr);
+    }
+    .production-material-status {
+        width: 100%;
     }
     .production-material-filter .ant-segmented-group {
         overflow-x: auto;

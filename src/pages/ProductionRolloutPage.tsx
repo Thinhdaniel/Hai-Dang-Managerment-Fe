@@ -28,6 +28,7 @@ import {
 import dayjs, { type Dayjs } from 'dayjs';
 import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
+import { productionErrorMessage } from '../core/lib/production-error';
 import { productionService } from '../core/services/production.service';
 import type {
     ProductionRolloutAction,
@@ -98,7 +99,7 @@ type TransitionForm = {
 
 const dateTime = (value?: string) => (value ? dayjs(value).format('DD/MM/YYYY HH:mm') : 'Chưa có');
 const dateOnly = (value?: string) => (value ? dayjs(value).format('DD/MM/YYYY') : 'Chưa đặt');
-const errorMessage = (error: unknown) => (error instanceof Error ? error.message : 'Không thể cập nhật triển khai');
+const errorMessage = (error: unknown) => productionErrorMessage(error, 'Không thể cập nhật triển khai');
 
 const ProductionRolloutPage = () => {
     const { message } = App.useApp();
@@ -353,7 +354,9 @@ const ProductionRolloutPage = () => {
                                     </span>
                                     <b>{check.value || 0}</b>
                                     {!check.passed ? (
-                                        <Link to={actionMeta[check.action].to}>{actionMeta[check.action].label}</Link>
+                                        <Link to={`${actionMeta[check.action].to}?plantId=${detail.plant.id}`}>
+                                            {actionMeta[check.action].label}
+                                        </Link>
                                     ) : null}
                                 </div>
                             ))}
@@ -389,7 +392,7 @@ const ProductionRolloutPage = () => {
             <Modal
                 open={transitionOpen}
                 onCancel={() => setTransitionOpen(false)}
-                onOk={() => void form.validateFields().then((values) => transitionMutation.mutate(values))}
+                onOk={() => form.submit()}
                 confirmLoading={transitionMutation.isPending}
                 okText='Xác nhận chuyển giai đoạn'
                 cancelText='Hủy'
@@ -398,7 +401,12 @@ const ProductionRolloutPage = () => {
                 destroyOnHidden
             >
                 {selected ? (
-                    <Form form={form} layout='vertical' className='production-rollout-transition-form'>
+                    <Form
+                        form={form}
+                        layout='vertical'
+                        className='production-rollout-transition-form'
+                        onFinish={(values) => transitionMutation.mutate(values)}
+                    >
                         <div className='production-rollout-transition-path'>
                             <Tag color={stageMeta[selected.stage].color}>{stageMeta[selected.stage].label}</Tag>
                             <ArrowRightOutlined />

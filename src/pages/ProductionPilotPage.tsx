@@ -35,6 +35,8 @@ import {
 } from 'antd';
 import dayjs, { type Dayjs } from 'dayjs';
 import { useEffect, useMemo, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
+import { productionErrorMessage } from '../core/lib/production-error';
 import { useAuth } from '../core/contexts/AuthContext';
 import { hasDirectorAccess } from '../core/lib/permissions';
 import { productionPlantLabel } from '../core/lib/productionAccess';
@@ -60,7 +62,7 @@ const number = (value = 0) => new Intl.NumberFormat('vi-VN', { maximumFractionDi
 const dateLabel = (value: string) => dayjs(value).format('DD/MM/YYYY');
 const weekdayLabel = (value: string) =>
     ['Chủ Nhật', 'Thứ Hai', 'Thứ Ba', 'Thứ Tư', 'Thứ Năm', 'Thứ Sáu', 'Thứ Bảy'][dayjs(value).day()];
-const errorMessage = (error: unknown) => (error instanceof Error ? error.message : 'Không thể thực hiện thao tác');
+const errorMessage = (error: unknown) => productionErrorMessage(error, 'Không thể thực hiện thao tác');
 
 const statusMeta: Record<ProductionPilotStatus, { label: string; color: string }> = {
     draft: { label: 'Bản nháp', color: 'default' },
@@ -116,10 +118,13 @@ const workingDates = (run?: ProductionPilotRun) => {
 };
 
 const ProductionPilotPage = () => {
+    const [searchParams] = useSearchParams();
     const { message, modal } = App.useApp();
     const queryClient = useQueryClient();
     const { user, role } = useAuth();
-    const [plantId, setPlantId] = useState(user?.plantId || '');
+    const [plantId, setPlantId] = useState(
+        (hasDirectorAccess(role) ? searchParams.get('plantId') : null) || user?.plantId || ''
+    );
     const [selectedId, setSelectedId] = useState('');
     const [section, setSection] = useState<'shadow' | 'uat' | 'risk'>('shadow');
     const [createOpen, setCreateOpen] = useState(false);
@@ -368,6 +373,18 @@ const ProductionPilotPage = () => {
 
             {detailQuery.isLoading ? (
                 <Skeleton active paragraph={{ rows: 12 }} />
+            ) : listQuery.isError || detailQuery.isError ? (
+                <Alert
+                    type='error'
+                    showIcon
+                    title='Không tải được dữ liệu pilot'
+                    description={errorMessage(listQuery.error || detailQuery.error)}
+                    action={
+                        <Button onClick={() => void (listQuery.isError ? listQuery.refetch() : detailQuery.refetch())}>
+                            Thử lại
+                        </Button>
+                    }
+                />
             ) : !run ? (
                 <section className='production-pilot-empty'>
                     <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description='Chưa có hồ sơ pilot cho cơ sở này' />
