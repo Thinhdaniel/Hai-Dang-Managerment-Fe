@@ -1,8 +1,10 @@
+import '../styles/production-item-line-report.css';
 import {
     CalendarOutlined,
     CheckCircleFilled,
     CloudUploadOutlined,
     DownloadOutlined,
+    DeleteOutlined,
     EditOutlined,
     FileExcelOutlined,
     PlusOutlined,
@@ -91,6 +93,7 @@ type OrderFormValues = {
     status: ProductionOrderStatus;
     note?: string;
     changeReason?: string;
+    lineAssignments?: Array<{ lineId: string; quantity: number; startDate: Dayjs; dueDate: Dayjs }>;
 };
 
 const downloadBlob = (blob: Blob, filename: string) => {
@@ -141,6 +144,11 @@ const ProductionOrdersPage = () => {
         staleTime: 60_000,
     });
     const ordersKey = ['production', 'orders', plantId, status, deferredSearch] as const;
+    const linesQuery = useQuery({
+        queryKey: ['production', 'lines', plantId, 'assignments'],
+        queryFn: () => productionService.getLines(plantId, true),
+        enabled: Boolean(plantId),
+    });
     const ordersQuery = useQuery({
         queryKey: ordersKey,
         queryFn: () =>
@@ -186,6 +194,12 @@ const ProductionOrdersPage = () => {
                 customerName: values.customerName?.trim() || undefined,
                 itemId: values.itemId,
                 totalQuantity: values.totalQuantity,
+                lineAssignments: (values.lineAssignments || []).map((row) => ({
+                    lineId: row.lineId,
+                    quantity: row.quantity,
+                    startDate: row.startDate.format('YYYY-MM-DD'),
+                    dueDate: row.dueDate.format('YYYY-MM-DD'),
+                })),
                 plannedStartDate: values.plannedStartDate?.format('YYYY-MM-DD') || null,
                 dueDate: values.dueDate.format('YYYY-MM-DD'),
                 priority: values.priority,
@@ -252,6 +266,11 @@ const ProductionOrdersPage = () => {
                 customerName: order.customerName,
                 itemId: order.itemId,
                 totalQuantity: order.totalQuantity,
+                lineAssignments: (order.lineAssignments || []).map((row) => ({
+                    ...row,
+                    startDate: dayjs(row.startDate),
+                    dueDate: dayjs(row.dueDate),
+                })),
                 plannedStartDate: order.plannedStartDate ? dayjs(order.plannedStartDate) : null,
                 dueDate: dayjs(order.dueDate),
                 priority: order.priority,
@@ -615,6 +634,11 @@ const ProductionOrdersPage = () => {
                     form={form}
                     layout='vertical'
                     onFinish={(values) => saveMutation.mutate(values)}
+                    onValuesChange={(changed) => {
+                        if ('lineAssignments' in changed || 'totalQuantity' in changed) {
+                            void form.validateFields(['lineAssignments']).catch(() => {});
+                        }
+                    }}
                     requiredMark='optional'
                 >
                     <div className='production-order-form-grid'>
@@ -671,6 +695,113 @@ const ProductionOrdersPage = () => {
                             <DatePicker format='DD/MM/YYYY' className='w-full' />
                         </Form.Item>
                     </div>
+                    <section className='production-line-assignment-editor'>
+                        <Title level={5}>Phân giao cho tổ</Title>
+                        <Form.Item noStyle shouldUpdate>
+                            {({ getFieldValue }) => {
+                                const assigned = (getFieldValue('lineAssignments') || []).reduce(
+                                    (sum: number, row: { quantity?: number }) => sum + Number(row?.quantity || 0),
+                                    0
+                                );
+                                const total = Number(getFieldValue('totalQuantity') || 0);
+                                return (
+                                    <p>
+                                        Đã giao: <strong>{assigned.toLocaleString('vi-VN')} SP</strong> · Còn chưa giao:{' '}
+                                        <strong>{Math.max(0, total - assigned).toLocaleString('vi-VN')} SP</strong>
+                                    </p>
+                                );
+                            }}
+                        </Form.Item>
+                        <Form.List
+                            name='lineAssignments'
+                            rules={[
+                                {
+                                    validator: async (_, rows) => {
+                                        const values = rows || [];
+                                        if (
+                                            new Set(values.map((row: { lineId?: string }) => row?.lineId)).size !==
+                                            values.length
+                                        )
+                                            throw new Error('Mỗi tổ chỉ được phân giao một lần');
+                                        if (
+                                            values.reduce(
+                                                (n: number, row: { quantity?: number }) =>
+                                                    n + Number(row?.quantity || 0),
+                                                0
+                                            ) > Number(form.getFieldValue('totalQuantity') || 0)
+                                        )
+                                            throw new Error('Tổng phân giao vượt số lượng đơn hàng');
+                                    },
+                                },
+                            ]}
+                        >
+                            {(fields, { add, remove }, { errors }) => (
+                                <>
+                                    {fields.map((field) => (
+                                        <div key={field.key} className='production-line-assignment-row'>
+                                            <Form.Item
+                                                name={[field.name, 'lineId']}
+                                                label='Tổ'
+                                                rules={[{ required: true, message: 'Chọn tổ' }]}
+                                            >
+                                                <Select
+                                                    showSearch
+                                                    optionFilterProp='label'
+                                                    options={(linesQuery.data || []).map((line) => ({
+                                                        value: line.id,
+                                                        label: line.code + (line.isActive ? '' : ' (Đã tắt)'),
+                                                    }))}
+                                                />
+                                            </Form.Item>
+                                            <Form.Item
+                                                name={[field.name, 'quantity']}
+                                                label='Số lượng giao'
+                                                rules={[{ required: true, message: 'Nhập số lượng' }]}
+                                            >
+                                                <InputNumber min={1} precision={0} className='w-full' />
+                                            </Form.Item>
+                                            <Form.Item
+                                                name={[field.name, 'startDate']}
+                                                label='Bắt đầu'
+                                                rules={[{ required: true, message: 'Chọn ngày' }]}
+                                            >
+                                                <DatePicker format='DD/MM/YYYY' className='w-full' />
+                                            </Form.Item>
+                                            <Form.Item
+                                                name={[field.name, 'dueDate']}
+                                                label='Hạn hoàn thành'
+                                                rules={[{ required: true, message: 'Chọn ngày' }]}
+                                            >
+                                                <DatePicker format='DD/MM/YYYY' className='w-full' />
+                                            </Form.Item>
+                                            <Tooltip title='Bỏ phân giao'>
+                                                <Button
+                                                    danger
+                                                    icon={<DeleteOutlined />}
+                                                    aria-label='Bỏ phân giao'
+                                                    onClick={() => remove(field.name)}
+                                                />
+                                            </Tooltip>
+                                        </div>
+                                    ))}
+                                    <div className='ant-form-item-explain-error'>
+                                        <Form.ErrorList errors={errors} />
+                                    </div>
+                                    <Button
+                                        icon={<PlusOutlined />}
+                                        onClick={() =>
+                                            add({
+                                                startDate: form.getFieldValue('plannedStartDate') || dayjs(),
+                                                dueDate: form.getFieldValue('dueDate'),
+                                            })
+                                        }
+                                    >
+                                        Thêm tổ
+                                    </Button>
+                                </>
+                            )}
+                        </Form.List>
+                    </section>
                     <Form.Item label='Trạng thái' name='status'>
                         <Select
                             options={Object.entries(statusMeta).map(([value, meta]) => ({ value, label: meta.label }))}
@@ -715,6 +846,24 @@ const ProductionOrdersPage = () => {
                                             {event.note || 'Không có ghi chú'} · {event.actor?.name || 'Người dùng'} ·{' '}
                                             {event.at ? dayjs(event.at).format('DD/MM/YYYY HH:mm') : ''}
                                         </span>
+                                        {event.nextAssignments !== undefined && (
+                                            <span>
+                                                Phân giao:{' '}
+                                                {(event.previousAssignments || [])
+                                                    .map(
+                                                        (row) =>
+                                                            `${row.lineCode}: ${row.quantity.toLocaleString('vi-VN')} SP`
+                                                    )
+                                                    .join(', ') || 'Chưa giao'}
+                                                {' → '}
+                                                {event.nextAssignments
+                                                    .map(
+                                                        (row) =>
+                                                            `${row.lineCode}: ${row.quantity.toLocaleString('vi-VN')} SP`
+                                                    )
+                                                    .join(', ') || 'Chưa giao'}
+                                            </span>
+                                        )}
                                     </div>
                                 ),
                             }))}

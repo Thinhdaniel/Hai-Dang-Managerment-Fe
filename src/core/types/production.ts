@@ -68,6 +68,17 @@ export interface ProductionOrderHistoryEvent {
     note?: string;
     actor?: ProductionActor;
     at?: string;
+    previousAssignments?: ProductionLineAssignment[];
+    nextAssignments?: ProductionLineAssignment[];
+}
+
+export interface ProductionLineAssignment {
+    lineId: string;
+    lineCode?: string;
+    lineName?: string;
+    quantity: number;
+    startDate: string;
+    dueDate: string;
 }
 
 export interface ProductionOrder {
@@ -82,6 +93,7 @@ export interface ProductionOrder {
     itemName?: string;
     unit: string;
     totalQuantity: number;
+    lineAssignments?: ProductionLineAssignment[];
     plannedStartDate?: string;
     dueDate: string;
     priority: ProductionPlanPriority;
@@ -119,6 +131,7 @@ export type ProductionOrderPayload = {
     customerName?: string;
     itemId: string;
     totalQuantity: number;
+    lineAssignments?: ProductionLineAssignment[];
     plannedStartDate?: string | null;
     dueDate: string;
     priority?: ProductionPlanPriority;
@@ -1928,6 +1941,67 @@ export interface ProductionReportItem {
     cumulativeAmount?: number;
 }
 
+export type ProductionItemLineStatus =
+    | 'needs_review'
+    | 'missing_reports'
+    | 'behind'
+    | 'ahead'
+    | 'on_track'
+    | 'not_due'
+    | 'no_plan';
+export interface ProductionItemLineDay {
+    productionDate: string;
+    quantity: number;
+    targetQuantity: number;
+    plannedQuantity: number;
+    plannedToDateQuantity: number;
+    carryQuantity: number;
+    slots: Array<{
+        slotKey: string;
+        label: string;
+        target: number;
+        quantity: number;
+        reported: boolean;
+        due: boolean;
+        note: string;
+    }>;
+}
+export interface ProductionItemLineOrder {
+    key: string;
+    itemId: string;
+    itemCode: string;
+    itemName?: string;
+    unit: string;
+    lineId: string;
+    lineCode: string;
+    lineName?: string;
+    orderId?: string;
+    orderCode?: string;
+    openingQuantity: number;
+    periodQuantity: number;
+    cumulativeQuantity: number;
+    plannedQuantity: number;
+    plannedToDateQuantity: number;
+    planActualQuantity: number;
+    unlinkedQuantity: number;
+    missingReports: number;
+    assignedQuantity: number | null;
+    remainingQuantity: number | null;
+    overQuantity: number | null;
+    completionPercent: number | null;
+    deltaQuantity: number | null;
+    dueDate: string | null;
+    status: ProductionItemLineStatus;
+    days: ProductionItemLineDay[];
+}
+export interface ProductionItemLine extends Omit<
+    ProductionItemLineOrder,
+    'orderId' | 'orderCode' | 'days' | 'dueDate' | 'overQuantity'
+> {
+    orders: ProductionItemLineOrder[];
+    unassignedQuantity: number;
+}
+
 export interface ProductionReportOrder {
     orderKey: string;
     orderCode?: string;
@@ -2034,6 +2108,7 @@ export interface ProductionReport {
     trend: ProductionReportTrendPoint[];
     lines: ProductionReportLine[];
     items: ProductionReportItem[];
+    itemLines?: ProductionItemLine[];
     orders: ProductionReportOrder[];
     operations: ProductionReportOperation[];
     exceptionSummary: {

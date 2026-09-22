@@ -1,3 +1,4 @@
+import ProductionItemLineReport from '../components/production/ProductionItemLineReport';
 import {
     AlertOutlined,
     ApartmentOutlined,
@@ -131,6 +132,7 @@ const ProductionReportPage = () => {
     const [preset, setPreset] = useState<ReportPreset>('month');
     const [scope, setScope] = useState<ProductionReportScope>('all');
     const [tab, setTab] = useState<ReportTab>('lines');
+    const [itemView, setItemView] = useState('lines');
     const [openingBalanceOpen, setOpeningBalanceOpen] = useState(false);
     const canSwitchPlant = isAdmin(role) || isDirector(role);
 
@@ -171,9 +173,11 @@ const ProductionReportPage = () => {
         };
         socket.on('production:updated', handleUpdate);
         socket.on('production:plan-updated', handleUpdate);
+        socket.on('production:order-updated', handleUpdate);
         return () => {
             socket.off('production:updated', handleUpdate);
             socket.off('production:plan-updated', handleUpdate);
+            socket.off('production:order-updated', handleUpdate);
         };
     }, [plantId, queryClient, socket]);
 
@@ -1160,7 +1164,12 @@ const ProductionReportPage = () => {
                         type='primary'
                         icon={<FileExcelOutlined />}
                         loading={exportMutation.isPending}
-                        disabled={!report || (!report.summary.dayCount && !report.summary.cumulativeQuantity)}
+                        disabled={
+                            !report ||
+                            (!report.summary.dayCount &&
+                                !report.summary.cumulativeQuantity &&
+                                !report.itemLines?.length)
+                        }
                         onClick={() => exportMutation.mutate()}
                     >
                         Xuất Excel
@@ -1221,7 +1230,7 @@ const ProductionReportPage = () => {
                 <section className='production-report-loading'>
                     <Skeleton active paragraph={{ rows: 10 }} />
                 </section>
-            ) : report && (summary?.dayCount || summary?.cumulativeQuantity) ? (
+            ) : report && summary && (summary.dayCount || summary.cumulativeQuantity || report.itemLines?.length) ? (
                 <>
                     {scope === 'all' && summary.statusCounts.locked < summary.dayCount ? (
                         <Alert
@@ -1516,8 +1525,25 @@ const ProductionReportPage = () => {
                                 />
                             )
                         ) : null}
+                        {tab === 'items' && report.itemLines && (
+                            <Segmented
+                                className='pil-view-switch'
+                                value={itemView}
+                                onChange={(value) => setItemView(String(value))}
+                                options={[
+                                    { value: 'lines', label: 'Chi tiết từng tổ' },
+                                    { value: 'summary', label: 'Tổng hợp mã hàng' },
+                                ]}
+                            />
+                        )}
                         {tab === 'items' ? (
-                            isMobile ? (
+                            report.itemLines && itemView === 'lines' ? (
+                                <ProductionItemLineReport
+                                    rows={report.itemLines}
+                                    mobile={isMobile}
+                                    generatedAt={report.meta.generatedAt}
+                                />
+                            ) : isMobile ? (
                                 <div className='production-report-mobile-list'>
                                     {report.items.map(renderMobileItem)}
                                 </div>
