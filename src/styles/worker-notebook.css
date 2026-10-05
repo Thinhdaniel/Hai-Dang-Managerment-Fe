@@ -2,6 +2,7 @@
 .wn-header { background: #fff; border-bottom: 1px solid #dde7e7; }
 .wn-header-inner { max-width: 920px; margin: auto; min-height: 68px; padding: 0 24px; display: flex; justify-content: space-between; align-items: center; gap: 12px; }
 .wn-brand { display: flex; align-items: center; gap: 10px; font-size: 17px; font-weight: 750; color: #123c3b; }
+.wn-brand > span { flex-shrink: 0; white-space: nowrap; }
 .wn-brand-mark { width: 34px; height: 34px; display: grid; place-items: center; border-radius: 6px; background: #087f76; color: #fff; }
 .wn-header-right { display: flex; align-items: center; gap: 12px; min-width: 0; }
 .wn-user { max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
@@ -52,6 +53,8 @@
 .wn-month-heading strong { font-size: 19px; }
 .wn-month-heading button { width: 42px; height: 42px; border: 1px solid #d5e2e0; border-radius: 5px; background: white; display: grid; place-items: center; cursor: pointer; }
 .wn-month-heading button:disabled { opacity: .35; cursor: default; }
+.wn-month-heading .ant-picker { min-width: 0; max-width: 210px; min-height: 42px; border-color: #cddcdb; border-radius: 5px; }
+.wn-month-heading .ant-picker input { font-weight: 650; color: #183036; }
 .wn-month-stats { display: flex; gap: 16px; border-top: 1px solid #d9e6e4; border-bottom: 1px solid #d9e6e4; padding: 15px 0; margin-bottom: 19px; }
 .wn-month-stats div { flex: 1; display: flex; flex-direction: column; }
 .wn-month-stats strong { color: #087f76; font-size: 28px; line-height: 1; }
@@ -61,6 +64,8 @@
 .wn-weekdays span { text-align: center; color: #697f80; font-size: 12px; font-weight: 650; padding-bottom: 9px; }
 .wn-calendar-grid button { aspect-ratio: 1; min-width: 0; min-height: 42px; border: 1px solid transparent; background: #f4f8f7; border-radius: 5px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; font-weight: 650; cursor: pointer; }
 .wn-calendar-grid button.attended { background: #e2f4eb; color: #087950; }
+.wn-calendar-grid button.half-day { background: #fff2dc; color: #805b19; position: relative; }
+.wn-calendar-grid button small { position: absolute; right: 3px; top: 2px; font-size: 10px; }
 .wn-calendar-grid button.today { border-color: #087f76; }
 .wn-calendar-grid button:disabled { opacity: .35; cursor: default; }
 .wn-calendar-grid i { width: 4px; height: 4px; border-radius: 50%; background: transparent; }
@@ -69,6 +74,7 @@
 .wn-legend span { display: flex; align-items: center; gap: 6px; }
 .wn-legend i { width: 9px; height: 9px; border-radius: 50%; background: #59ad88; }
 .wn-legend i.noted { background: #e39231; }
+.wn-legend i.half-marked { background: #e4bf73; }
 .wn-breakdown { margin-top: 27px; }
 .wn-breakdown-row { padding: 12px 0; border-bottom: 1px solid #dce6e5; display: flex; justify-content: space-between; align-items: center; gap: 12px; }
 .wn-breakdown-row span { display: flex; flex-direction: column; min-width: 0; overflow-wrap: anywhere; }
@@ -84,6 +90,28 @@
 .wn-suggestions > span { display: block; color: #64777a; font-size: 12px; margin-bottom: 7px; }
 .wn-suggestions > div { display: flex; gap: 6px; overflow-x: auto; padding-bottom: 3px; }
 .wn-suggestions button { flex: none; border: 1px solid #cbdcda; border-radius: 5px; background: #f4f9f8; padding: 7px 10px; color: #27615b; cursor: pointer; }
+.wn-form-date { margin: 0; color: #61777a; text-transform: capitalize; }
+.wn-drawer .ant-segmented { padding: 5px; }
+.wn-drawer .ant-segmented-item-label { min-height: 40px; display: grid; place-items: center; }
+.wn-attendance-preview { display: flex; justify-content: space-between; gap: 12px; color: #087f76; background: #eff8f5; padding: 12px; border-radius: 5px; font-weight: 650; }
+.wn-report-attendance { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px; padding-bottom: 20px; border-bottom: 1px solid #dce6e5; }
+.wn-report-attendance div { display: flex; flex-direction: column; gap: 4px; }
+.wn-report-attendance strong { font-size: 22px; }
+.wn-report-attendance span { font-size: 12px; color: #61777a; }
+.wn-report-section { margin-top: 26px; }
+.wn-unit-totals { display: flex; gap: 12px 28px; flex-wrap: wrap; }
+.wn-unit-totals div { display: flex; align-items: baseline; gap: 7px; }
+.wn-unit-totals strong { font-size: 24px; }
+.wn-unit-totals span { color: #61777a; overflow-wrap: anywhere; }
+.wn-report .wn-breakdown-row small { font-size: 12px; }
+.wn-report .wn-breakdown-row > strong { max-width: 45%; white-space: normal; overflow-wrap: anywhere; text-align: right; }
+.wn-daily-report button { width: 100%; display: grid; grid-template-columns: 140px minmax(0, 1fr) 18px; align-items: center; gap: 12px; padding: 14px 0; background: transparent; border: 0; border-bottom: 1px solid #dce6e5; text-align: left; color: inherit; cursor: pointer; }
+.wn-daily-date, .wn-daily-values { display: flex; flex-direction: column; gap: 4px; min-width: 0; overflow-wrap: anywhere; }
+.wn-daily-date > span { font-size: 12px; color: #61777a; }
+.wn-daily-values { font-size: 13px; }
+.wn-daily-values > span:first-child { color: #61777a; }
+.wn-daily-values i { display: inline-block; width: 3px; height: 3px; background: #8ca2a1; border-radius: 50%; vertical-align: middle; margin: 0 5px; }
+.wn-page button:focus-visible { outline: 2px solid #087f76; outline-offset: 3px; }
 @media (max-width: 600px) {
   .wn-header-inner { padding: 0 16px; min-height: 60px; }
   .wn-user { max-width: 110px; font-size: 13px; }
@@ -97,4 +125,12 @@
   .wn-attendance .ant-btn { padding: 0 9px; font-size: 12px; }
   .wn-calendar { padding: 10px; }
   .wn-weekdays, .wn-calendar-grid { gap: 3px; }
+  .wn-tabs button { font-size: 13px; gap: 5px; }
+  .wn-report-attendance { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .wn-daily-report button { grid-template-columns: 82px minmax(0, 1fr) 18px; gap: 8px; }
+  .wn-daily-values { font-size: 12px; }
+}
+@media (max-width: 360px) {
+  .wn-header-right .wn-user { display: none; }
+  .wn-month-heading .ant-picker { max-width: 190px; }
 }

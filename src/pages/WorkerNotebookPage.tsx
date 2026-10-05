@@ -1,7 +1,9 @@
 import { useMemo, useState } from 'react';
-import { App, Button, Drawer, Input, InputNumber, Popconfirm, Spin } from 'antd';
+import { App, Button, DatePicker, Drawer, Input, InputNumber, Popconfirm, Segmented, Spin } from 'antd';
+import datePickerLocale from 'antd/es/date-picker/locale/vi_VN';
 import {
     CalendarDays,
+    ChartNoAxesCombined,
     Check,
     ChevronLeft,
     ChevronRight,
@@ -18,7 +20,9 @@ import {
     workerNotebookService,
     type NotebookEntry,
     type NotebookEntryInput,
+    type NotebookAttendanceInput,
 } from '../core/services/worker-notebook.service';
+import WorkerNotebookMonthReport from '../components/worker-notebook/WorkerNotebookMonthReport';
 import '../styles/worker-notebook.css';
 
 const vietnamToday = () => {
@@ -51,7 +55,12 @@ const WorkerNotebookPage = () => {
     const today = vietnamToday();
     const [selectedDate, setSelectedDate] = useState(today);
     const [month, setMonth] = useState(today.slice(0, 7));
-    const [view, setView] = useState<'day' | 'month'>('day');
+    const [view, setView] = useState<'day' | 'month' | 'report'>('day');
+    const [attendanceOpen, setAttendanceOpen] = useState(false);
+    const [attendanceDraft, setAttendanceDraft] = useState<NotebookAttendanceInput>({
+        attendanceType: 'off',
+        overtimeHours: 0,
+    });
     const [editorOpen, setEditorOpen] = useState(false);
     const [editingId, setEditingId] = useState<string | null>(null);
     const [draft, setDraft] = useState<NotebookEntryInput>(emptyEntry);
@@ -78,11 +87,13 @@ const WorkerNotebookPage = () => {
     };
 
     const attendance = useMutation({
-        mutationFn: (attended: boolean) => workerNotebookService.attendance(selectedDate, attended),
+        mutationFn: (input: NotebookAttendanceInput) => workerNotebookService.attendance(selectedDate, input),
         onSuccess: async () => {
+            setAttendanceOpen(false);
             await refresh();
+            message.success('Đã lưu chấm công');
         },
-        onError: () => message.error('Không lưu được điểm danh. Vui lòng thử lại.'),
+        onError: () => message.error('Không lưu được chấm công. Vui lòng thử lại.'),
     });
     const saveEntry = useMutation({
         mutationFn: () =>
@@ -129,7 +140,6 @@ const WorkerNotebookPage = () => {
         const next = dayjs(`${month}-01`).add(offset, 'month').format('YYYY-MM');
         if (next > today.slice(0, 7)) return;
         setMonth(next);
-        setView('month');
     };
     const monthStart = dayjs(`${month}-01`);
     const leadingDays = (monthStart.day() + 6) % 7;
@@ -182,7 +192,7 @@ const WorkerNotebookPage = () => {
                         className={view === 'day' ? 'active' : ''}
                         onClick={() => setView('day')}
                     >
-                        <ClipboardList size={18} /> Ghi chép ngày
+                        <ClipboardList size={18} /> Ghi ngày
                     </button>
                     <button
                         type='button'
@@ -192,6 +202,15 @@ const WorkerNotebookPage = () => {
                         onClick={() => setView('month')}
                     >
                         <CalendarDays size={18} /> Lịch tháng
+                    </button>
+                    <button
+                        type='button'
+                        role='tab'
+                        aria-selected={view === 'report'}
+                        className={view === 'report' ? 'active' : ''}
+                        onClick={() => setView('report')}
+                    >
+                        <ChartNoAxesCombined size={18} /> Báo cáo
                     </button>
                 </div>
 
@@ -223,24 +242,34 @@ const WorkerNotebookPage = () => {
                             </div>
                         ) : (
                             <>
-                                <section className='wn-attendance' aria-label='Điểm danh'>
+                                <section className='wn-attendance' aria-label='Chấm công'>
                                     <span className={`wn-attendance-icon ${day?.attended ? 'is-marked' : ''}`}>
                                         <Check size={24} />
                                     </span>
                                     <div className='wn-attendance-text'>
-                                        <strong>{day?.attended ? 'Đã điểm danh' : 'Chưa điểm danh'}</strong>
-                                        <small>
-                                            {day?.attended
-                                                ? 'Bạn đã ghi có mặt trong ngày này'
-                                                : 'Đánh dấu nếu bạn có mặt ngày này'}
-                                        </small>
+                                        <strong>
+                                            {day?.attendanceType === 'full'
+                                                ? 'Cả ngày · 1 công'
+                                                : day?.attendanceType === 'half'
+                                                  ? 'Nửa ngày · 0,5 công'
+                                                  : day?.overtimeHours
+                                                    ? 'Chỉ tăng ca'
+                                                    : 'Chưa ghi công / nghỉ'}
+                                        </strong>
+                                        <small>Tăng ca: {number(day?.overtimeHours ?? 0)} giờ</small>
                                     </div>
                                     <Button
                                         type={day?.attended ? 'default' : 'primary'}
                                         loading={attendance.isPending}
-                                        onClick={() => attendance.mutate(!day?.attended)}
+                                        onClick={() => {
+                                            setAttendanceDraft({
+                                                attendanceType: day?.attendanceType ?? 'off',
+                                                overtimeHours: day?.overtimeHours ?? 0,
+                                            });
+                                            setAttendanceOpen(true);
+                                        }}
                                     >
-                                        {day?.attended ? 'Bỏ đánh dấu' : 'Có mặt'}
+                                        <Pencil size={15} /> Chấm công
                                     </Button>
                                 </section>
 
@@ -315,7 +344,20 @@ const WorkerNotebookPage = () => {
                             <button type='button' aria-label='Tháng trước' onClick={() => changeMonth(-1)}>
                                 <ChevronLeft size={20} />
                             </button>
-                            <strong>Tháng {dayjs(`${month}-01`).format('MM/YYYY')}</strong>
+                            <DatePicker
+                                id='wn-report-month'
+                                picker='month'
+                                locale={datePickerLocale}
+                                format='[Tháng] MM/YYYY'
+                                inputReadOnly
+                                allowClear={false}
+                                aria-label='Chọn tháng báo cáo'
+                                value={monthStart}
+                                disabledDate={(date) => date.format('YYYY-MM') > today.slice(0, 7)}
+                                onChange={(date) => {
+                                    if (date) setMonth(date.format('YYYY-MM'));
+                                }}
+                            />
                             <button
                                 type='button'
                                 aria-label='Tháng sau'
@@ -331,91 +373,169 @@ const WorkerNotebookPage = () => {
                             </div>
                         ) : monthQuery.isError ? (
                             <div className='wn-feedback'>
-                                Không tải được lịch. <Button onClick={() => void monthQuery.refetch()}>Thử lại</Button>
+                                Không tải được dữ liệu tháng. <Button onClick={() => void monthQuery.refetch()}>Thử lại</Button>
                             </div>
                         ) : (
                             <>
                                 <div className='wn-month-stats'>
                                     <div>
-                                        <strong>{monthQuery.data?.attendedDays || 0}</strong>
-                                        <span>Ngày điểm danh</span>
+                                        <strong>{number(monthQuery.data?.workDays || 0)}</strong>
+                                        <span>Công trong tháng</span>
                                     </div>
                                     <div>
-                                        <strong>{monthQuery.data?.entryCount || 0}</strong>
-                                        <span>Dòng sản lượng</span>
+                                        <strong>{number(monthQuery.data?.overtimeHours || 0)}</strong>
+                                        <span>Giờ tăng ca</span>
                                     </div>
                                 </div>
-                                <section className='wn-calendar' aria-label='Lịch ghi chép tháng'>
-                                    <div className='wn-weekdays'>
-                                        {['T2', 'T3', 'T4', 'T5', 'T6', 'T7', 'CN'].map((label) => (
-                                            <span key={label}>{label}</span>
-                                        ))}
-                                    </div>
-                                    <div className='wn-calendar-grid'>
-                                        {Array.from({ length: leadingDays }, (_, index) => (
-                                            <span key={`blank-${index}`} />
-                                        ))}
-                                        {monthDays.map((date) => {
-                                            const summary = daysByDate.get(date);
-                                            return (
-                                                <button
-                                                    type='button'
-                                                    key={date}
-                                                    disabled={date > today}
-                                                    onClick={() => selectDate(date)}
-                                                    className={[
-                                                        date === today ? 'today' : '',
-                                                        summary?.attended ? 'attended' : '',
-                                                        summary?.entryCount ? 'has-entries' : '',
-                                                    ].join(' ')}
-                                                    aria-label={`${date}, ${summary?.attended ? 'đã điểm danh' : 'chưa điểm danh'}, ${summary?.entryCount || 0} dòng ghi`}
-                                                >
-                                                    <span>{Number(date.slice(-2))}</span>
-                                                    <i />
-                                                </button>
-                                            );
-                                        })}
-                                    </div>
-                                    <div className='wn-legend'>
-                                        <span>
-                                            <i className='marked' /> Đã điểm danh
-                                        </span>
-                                        <span>
-                                            <i className='noted' /> Có ghi sản lượng
-                                        </span>
-                                    </div>
-                                </section>
-                                <section className='wn-breakdown'>
-                                    <div className='wn-section-heading'>
-                                        <div>
-                                            <h2>Sản lượng đã kê</h2>
-                                            <p>Theo mã hàng và công đoạn bạn nhập</p>
-                                        </div>
-                                    </div>
-                                    {monthQuery.data?.breakdown?.length ? (
-                                        monthQuery.data.breakdown.map((item) => (
-                                            <div
-                                                className='wn-breakdown-row'
-                                                key={`${item.itemCode}|${item.operation}|${item.unit}`}
-                                            >
-                                                <span>
-                                                    <b>{item.itemCode}</b>
-                                                    <small>{item.operation}</small>
-                                                </span>
-                                                <strong>
-                                                    {number(item.quantity)} {item.unit}
-                                                </strong>
+                                {view === 'report' && monthQuery.data ? (
+                                    <WorkerNotebookMonthReport report={monthQuery.data} onSelectDate={selectDate} />
+                                ) : (
+                                    <>
+                                        <section className='wn-calendar' aria-label='Lịch ghi chép tháng'>
+                                            <div className='wn-weekdays'>
+                                                {['T2', 'T3', 'T4', 'T5', 'T6', 'T7', 'CN'].map((label) => (
+                                                    <span key={label}>{label}</span>
+                                                ))}
                                             </div>
-                                        ))
-                                    ) : (
-                                        <p className='wn-breakdown-empty'>Tháng này chưa có sản lượng tự kê.</p>
-                                    )}
-                                </section>
+                                            <div className='wn-calendar-grid'>
+                                                {Array.from({ length: leadingDays }, (_, index) => (
+                                                    <span key={`blank-${index}`} />
+                                                ))}
+                                                {monthDays.map((date) => {
+                                                    const summary = daysByDate.get(date);
+                                                    return (
+                                                        <button
+                                                            type='button'
+                                                            key={date}
+                                                            disabled={date > today}
+                                                            onClick={() => selectDate(date)}
+                                                            className={[
+                                                                date === today ? 'today' : '',
+                                                                summary?.attended ? 'attended' : '',
+                                                                summary?.attendanceType === 'half' ? 'half-day' : '',
+                                                                summary?.entryCount ? 'has-entries' : '',
+                                                            ].join(' ')}
+                                                            aria-label={`${date}, ${summary?.attendanceType === 'full' ? 'cả ngày' : summary?.attendanceType === 'half' ? 'nửa ngày' : 'chưa ghi công / nghỉ'}, tăng ca ${summary?.overtimeHours || 0} giờ, ${summary?.entryCount || 0} dòng ghi`}
+                                                        >
+                                                            <span>{Number(date.slice(-2))}</span>
+                                                            {summary?.attendanceType === 'half' && <small>½</small>}
+                                                            <i />
+                                                        </button>
+                                                    );
+                                                })}
+                                            </div>
+                                            <div className='wn-legend'>
+                                                <span>
+                                                    <i className='marked' /> Cả ngày
+                                                </span>
+                                                <span>
+                                                    <i className='half-marked' /> Nửa ngày
+                                                </span>
+                                                <span>
+                                                    <i className='noted' /> Có ghi sản lượng
+                                                </span>
+                                            </div>
+                                        </section>
+                                        <section className='wn-breakdown'>
+                                            <div className='wn-section-heading'>
+                                                <div>
+                                                    <h2>Sản lượng đã kê</h2>
+                                                    <p>Theo mã hàng và công đoạn bạn nhập</p>
+                                                </div>
+                                            </div>
+                                            {monthQuery.data?.breakdown?.length ? (
+                                                monthQuery.data.breakdown.map((item) => (
+                                                    <div
+                                                        className='wn-breakdown-row'
+                                                        key={JSON.stringify([item.itemCode, item.operation, item.unit])}
+                                                    >
+                                                        <span>
+                                                            <b>{item.itemCode}</b>
+                                                            <small>{item.operation}</small>
+                                                        </span>
+                                                        <strong>
+                                                            {number(item.quantity)} {item.unit}
+                                                        </strong>
+                                                    </div>
+                                                ))
+                                            ) : (
+                                                <p className='wn-breakdown-empty'>Tháng này chưa có sản lượng tự kê.</p>
+                                            )}
+                                        </section>
+                                    </>
+                                )}
                             </>
                         )}
                     </>
                 )}
             </main>
+
+            <Drawer
+                title='Chấm công ngày'
+                placement='bottom'
+                height='auto'
+                open={attendanceOpen}
+                onClose={() => setAttendanceOpen(false)}
+                className='wn-drawer'
+                destroyOnHidden
+            >
+                <form
+                    onSubmit={(event) => {
+                        event.preventDefault();
+                        attendance.mutate(attendanceDraft);
+                    }}
+                >
+                    <p className='wn-form-date'>{dateLabel(selectedDate)}</p>
+                    <label>
+                        Công trong ngày
+                        <Segmented
+                            block
+                            options={[
+                                { label: 'Nghỉ', value: 'off' },
+                                { label: 'Nửa ngày', value: 'half' },
+                                { label: 'Cả ngày', value: 'full' },
+                            ]}
+                            value={attendanceDraft.attendanceType}
+                            onChange={(value) =>
+                                setAttendanceDraft({
+                                    ...attendanceDraft,
+                                    attendanceType: value as NotebookAttendanceInput['attendanceType'],
+                                })
+                            }
+                        />
+                    </label>
+                    <label>
+                        Số giờ tăng ca
+                        <InputNumber
+                            aria-label='Số giờ tăng ca'
+                            size='large'
+                            min={0}
+                            max={24}
+                            step={0.5}
+                            precision={2}
+                            value={attendanceDraft.overtimeHours}
+                            style={{ width: '100%' }}
+                            required
+                            onChange={(value) =>
+                                setAttendanceDraft({ ...attendanceDraft, overtimeHours: Number(value ?? 0) })
+                            }
+                        />
+                    </label>
+                    <div className='wn-attendance-preview'>
+                        <span>
+                            {attendanceDraft.attendanceType === 'full'
+                                ? '1 công'
+                                : attendanceDraft.attendanceType === 'half'
+                                  ? '0,5 công'
+                                  : '0 công'}
+                        </span>
+                        <span>{number(attendanceDraft.overtimeHours)} giờ tăng ca</span>
+                    </div>
+                    <Button type='primary' htmlType='submit' size='large' block loading={attendance.isPending}>
+                        Lưu chấm công
+                    </Button>
+                </form>
+            </Drawer>
 
             <Drawer
                 title={editingId ? 'Sửa công đoạn' : 'Thêm công đoạn'}
@@ -462,7 +582,7 @@ const WorkerNotebookPage = () => {
                                 {monthQuery.data.suggestions.slice(0, 6).map((item) => (
                                     <button
                                         type='button'
-                                        key={`${item.itemCode}|${item.operation}`}
+                                        key={JSON.stringify([item.itemCode, item.operation, item.unit])}
                                         onClick={() => setDraft({ ...draft, ...item })}
                                     >
                                         {item.itemCode} · {item.operation}
