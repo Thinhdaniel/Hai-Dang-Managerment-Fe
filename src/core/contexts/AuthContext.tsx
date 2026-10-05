@@ -31,6 +31,7 @@ type AuthContextValue = {
     login: (email: string, password: string) => Promise<LoginResult>;
     logout: () => Promise<void>;
     setUser: (user: User | null) => void;
+    updateProfile: (user: User) => void;
 };
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
@@ -159,6 +160,10 @@ export const AuthProvider = ({ children }: PropsWithChildren) => {
         setUserState(nextUser);
     };
 
+    const updateProfile = useCallback((nextUser: User) => {
+        setUserState((current) => (current?.id === nextUser.id ? nextUser : current));
+    }, []);
+
     const login = async (email: string, password: string) => {
         const result = await authService.login(email, password);
 
@@ -192,8 +197,9 @@ export const AuthProvider = ({ children }: PropsWithChildren) => {
             login,
             logout,
             setUser,
+            updateProfile,
         }),
-        [accessToken, clearLocalSession, user]
+        [accessToken, clearLocalSession, user, updateProfile]
     );
 
     return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

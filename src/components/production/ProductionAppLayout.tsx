@@ -39,6 +39,7 @@ import { countProductionEntryDrafts } from '../../core/lib/productionDraft';
 import { listProductionOutbox } from '../../core/lib/productionOutbox';
 import { partitionProductionNavigation } from '../../core/lib/production-navigation';
 import '../../styles/production.css';
+import ProfileAvatarModal from '../profile/ProfileAvatarModal';
 
 const { Text } = Typography;
 
@@ -54,6 +55,7 @@ const ProductionAppLayout = () => {
     const [online, setOnline] = useState(() => navigator.onLine);
     const [realtimeConnected, setRealtimeConnected] = useState(() => Boolean(socket?.connected));
     const [moreOpen, setMoreOpen] = useState(false);
+    const [profileOpen, setProfileOpen] = useState(false);
 
     useEffect(() => {
         const onOnline = () => setOnline(true);
@@ -174,6 +176,7 @@ const ProductionAppLayout = () => {
             ),
         },
         { type: 'divider' },
+        { key: 'profile', icon: <UserOutlined />, label: 'Hồ sơ cá nhân' },
         // Tổ trưởng không có quyền vào app quản lý máy/vật tư nên bỏ hẳn lối này.
         ...(operatorOnly
             ? []
@@ -185,6 +188,10 @@ const ProductionAppLayout = () => {
     ];
 
     const handleMenuClick: MenuProps['onClick'] = async ({ key }) => {
+        if (key === 'profile') {
+            setProfileOpen(true);
+            return;
+        }
         if (key === 'management') {
             navigate('/dashboard');
             return;
@@ -328,6 +335,7 @@ const ProductionAppLayout = () => {
                 <main className='pd-main'>
                     <Outlet />
                 </main>
+                {profileOpen && <ProfileAvatarModal onClose={() => setProfileOpen(false)} />}
 
                 <nav
                     className='pd-tabbar'

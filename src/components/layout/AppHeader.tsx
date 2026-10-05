@@ -40,6 +40,7 @@ import PushNotificationToggle from '../notifications/PushNotificationToggle';
 import NotificationSoundToggle from '../notifications/NotificationSoundToggle';
 import NotificationHelpGuide from '../notifications/NotificationHelpGuide';
 import InstallPrompt from '../pwa/InstallPrompt';
+import ProfileAvatarModal from '../profile/ProfileAvatarModal';
 import { pushNotificationService } from '../../core/services/push-notification.service';
 
 const { Header } = Layout;
@@ -67,6 +68,7 @@ const AppHeader: React.FC<AppHeaderProps> = ({ collapsed, isDesktop, mobileOpen,
     const [notificationOpen, setNotificationOpen] = useState(false);
     const [notificationSettingsOpen, setNotificationSettingsOpen] = useState(false);
     const [logoutOpen, setLogoutOpen] = useState(false);
+    const [profileOpen, setProfileOpen] = useState(false);
     const [logoutAction, setLogoutAction] = useState<'keep-push' | 'disable-push' | null>(null);
     const [notifFilter, setNotifFilter] = useState<'all' | 'unread'>('all');
     const visibleNotifications =
@@ -142,9 +144,7 @@ const AppHeader: React.FC<AppHeaderProps> = ({ collapsed, isDesktop, mobileOpen,
     };
 
     const handleProfile = () => {
-        if (canViewUsers) {
-            navigate('/users');
-        }
+        setProfileOpen(true);
     };
 
     const userSummaryItem: NonNullable<MenuProps['items']>[number] = {
@@ -185,8 +185,9 @@ const AppHeader: React.FC<AppHeaderProps> = ({ collapsed, isDesktop, mobileOpen,
               {
                   key: 'profile',
                   icon: <UserOutlined />,
-                  label: 'Profile',
+                  label: 'Hồ sơ cá nhân',
               },
+              { key: 'users', icon: <UserOutlined />, label: 'Quản lý người dùng' },
               notificationSettingsItem,
               ...(canOpenProduction ? [productionAppItem] : []),
               { type: 'divider' },
@@ -195,6 +196,7 @@ const AppHeader: React.FC<AppHeaderProps> = ({ collapsed, isDesktop, mobileOpen,
         : [
               userSummaryItem,
               { type: 'divider' },
+              { key: 'profile', icon: <UserOutlined />, label: 'Hồ sơ cá nhân' },
               notificationSettingsItem,
               ...(canOpenProduction ? [productionAppItem] : []),
               { type: 'divider' },
@@ -202,6 +204,10 @@ const AppHeader: React.FC<AppHeaderProps> = ({ collapsed, isDesktop, mobileOpen,
           ];
 
     const handleUserMenuClick: MenuProps['onClick'] = ({ key }) => {
+        if (key === 'users') {
+            navigate('/users');
+            return;
+        }
         if (key === 'profile') {
             handleProfile();
             return;
@@ -523,6 +529,7 @@ const AppHeader: React.FC<AppHeaderProps> = ({ collapsed, isDesktop, mobileOpen,
                         >
                             <Avatar
                                 size={32}
+                                src={user?.avatarUrl}
                                 icon={<UserOutlined />}
                                 className='shrink-0 bg-gradient-to-br from-blue-600 to-sky-400 text-white'
                             />
@@ -653,6 +660,7 @@ const AppHeader: React.FC<AppHeaderProps> = ({ collapsed, isDesktop, mobileOpen,
                     </div>
                 </div>
             </Modal>
+            {profileOpen && <ProfileAvatarModal onClose={() => setProfileOpen(false)} />}
         </Header>
     );
 };

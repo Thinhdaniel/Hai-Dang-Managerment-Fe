@@ -58,6 +58,17 @@ export const userService = {
     delete: (id: string): Promise<void> => api.delete(`/users/${id}`),
 
     getMe: (): Promise<User> => api.get<User>('/users/me'),
+
+    updateMyAvatar: (file: File): Promise<User> => {
+        const form = new FormData();
+        form.append('avatar', file);
+        return api.put<User, FormData>('/users/me/avatar', form, {
+            headers: { 'Content-Type': undefined },
+            timeout: 90000,
+        });
+    },
+
+    removeMyAvatar: (): Promise<User> => api.delete<User>('/users/me/avatar'),
 };
 
 export const notificationService = {

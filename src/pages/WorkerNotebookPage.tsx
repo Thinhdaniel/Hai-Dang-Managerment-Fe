@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { App, Button, DatePicker, Dropdown, Input, InputNumber, Segmented, Spin } from 'antd';
+import { App, Avatar, Button, DatePicker, Dropdown, Input, InputNumber, Segmented, Spin } from 'antd';
 import datePickerLocale from 'antd/es/date-picker/locale/vi_VN';
 import {
     CalendarDays,
@@ -15,6 +15,7 @@ import {
     Pencil,
     Plus,
     Trash2,
+    UserRound,
 } from 'lucide-react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import dayjs from 'dayjs';
@@ -28,6 +29,7 @@ import {
 import WorkerNotebookMonthReport from '../components/worker-notebook/WorkerNotebookMonthReport';
 import NotebookCalendar from '../components/worker-notebook/NotebookCalendar';
 import NotebookEditorShell from '../components/worker-notebook/NotebookEditorShell';
+import ProfileAvatarModal from '../components/profile/ProfileAvatarModal';
 import {
     groupNotebookEntries,
     hasNotebookAttendance,
@@ -65,6 +67,7 @@ export default function WorkerNotebookPage() {
     const [month, setMonth] = useState(today.slice(0, 7));
     const [view, setView] = useState<'day' | 'month' | 'report'>('day');
     const [previewDate, setPreviewDate] = useState(today);
+    const [profileOpen, setProfileOpen] = useState(false);
     const [attendanceOpen, setAttendanceOpen] = useState(false);
     const [attendanceDraft, setAttendanceDraft] = useState<NotebookAttendanceInput>({
         attendanceType: 'off',
@@ -267,9 +270,11 @@ export default function WorkerNotebookPage() {
                                     ),
                                 },
                                 { type: 'divider' },
+                                { key: 'profile', label: 'Hồ sơ cá nhân', icon: <UserRound size={16} /> },
                                 { key: 'logout', label: 'Đăng xuất', icon: <LogOut size={16} />, danger: true },
                             ],
                             onClick: ({ key }) => {
+                                if (key === 'profile') setProfileOpen(true);
                                 if (key === 'logout')
                                     modal.confirm({
                                         title: 'Đăng xuất khỏi sổ?',
@@ -281,9 +286,9 @@ export default function WorkerNotebookPage() {
                         }}
                     >
                         <button type='button' className='wn-account-button' aria-label='Tài khoản' title='Tài khoản'>
-                            <span className='wn-avatar'>
+                            <Avatar size={34} src={user?.avatarUrl} className='wn-avatar'>
                                 {user?.name?.trim().split(' ').at(-1)?.slice(0, 1) || 'C'}
-                            </span>
+                            </Avatar>
                             <span className='wn-account-name'>{user?.name}</span>
                             <ChevronDown size={16} />
                         </button>
@@ -637,6 +642,7 @@ export default function WorkerNotebookPage() {
                 )}
                 <footer className='wn-page-footer'>Sổ ghi chép cá nhân · Hải Đăng</footer>
             </main>
+            {profileOpen && <ProfileAvatarModal onClose={() => setProfileOpen(false)} />}
             <NotebookEditorShell
                 open={attendanceOpen}
                 title='Chấm công ngày'

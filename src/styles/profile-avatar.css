@@ -1,0 +1,92 @@
+.profile-avatar-modal {
+    font-family: 'Be Vietnam Pro', sans-serif;
+}
+.profile-avatar-modal .ant-modal-body {
+    max-height: 70dvh;
+    overflow-y: auto;
+}
+.profile-avatar-editor {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 12px;
+    padding: 20px 0;
+}
+.profile-avatar-editor .ant-avatar {
+    flex-shrink: 0;
+    background: #eaf0f8;
+    color: #3154dc;
+    font-size: 36px;
+    border: 1px solid #dce4ef;
+}
+.profile-avatar-name {
+    font-size: 18px;
+    text-align: center;
+    overflow-wrap: anywhere;
+    max-width: 100%;
+}
+.profile-avatar-picker,
+.profile-avatar-actions {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    justify-content: center;
+}
+.profile-avatar-picker {
+    flex-wrap: wrap;
+}
+.profile-avatar-picker .ant-btn {
+    height: 40px;
+    border-radius: 6px;
+}
+.profile-avatar-format,
+.profile-avatar-selected {
+    font-size: 12px;
+    color: #637185;
+    text-align: center;
+    max-width: 100%;
+    overflow-wrap: anywhere;
+}
+.profile-avatar-selected {
+    color: #9a691a;
+}
+.profile-avatar-info {
+    border-top: 1px solid #e1e6ef;
+    margin: 8px 0 16px;
+    padding-top: 12px;
+}
+.profile-avatar-info > div {
+    display: grid;
+    grid-template-columns: 110px minmax(0, 1fr);
+    gap: 12px;
+    padding: 8px 0;
+    font-size: 13px;
+}
+.profile-avatar-info dt {
+    color: #637185;
+}
+.profile-avatar-info dd {
+    margin: 0;
+    overflow-wrap: anywhere;
+}
+.profile-avatar-actions {
+    justify-content: flex-end;
+}
+.profile-avatar-actions .ant-btn {
+    min-height: 40px;
+    border-radius: 6px;
+}
+.profile-avatar-error {
+    margin-bottom: 16px;
+}
+@media (max-width: 767px) {
+    .profile-avatar-modal {
+        top: 24px;
+    }
+}
+@media (max-width: 360px) {
+    .profile-avatar-info > div {
+        grid-template-columns: 1fr;
+        gap: 3px;
+    }
+}
