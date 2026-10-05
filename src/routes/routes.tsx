@@ -5,10 +5,11 @@ import AppLayout from '../components/layout/AppLayout';
 import ProductionAppLayout from '../components/production/ProductionAppLayout';
 import ProductionAccessGate from '../components/production/ProductionAccessGate';
 import LazyBoundary from '../components/shared/LazyBoundary';
-import ProtectedRoute, { RequireAccess } from './guard';
+import { RequireAccess } from './guard';
 import { ROUTE_ACCESS } from '../core/constants/navAccess';
 import { useAuth } from '../core/contexts/AuthContext';
 import { isLineLeader, isQc } from '../core/lib/permissions';
+import { UserRole } from '../core/types';
 
 const Dashboard = lazy(() => import('../pages/Dashboard'));
 const ChatPage = lazy(() => import('../pages/ChatPage'));
@@ -75,6 +76,7 @@ const QrActivateMachinePage = lazy(() => import('../pages/QrActivateMachinePage'
 const ComingSoonPage = lazy(() => import('../pages/ComingSoonPage'));
 const NotFoundPage = lazy(() => import('../pages/NotFoundPage'));
 const RouteErrorPage = lazy(() => import('../pages/RouteErrorPage'));
+const WorkerNotebookPage = lazy(() => import('../pages/WorkerNotebookPage'));
 
 const withSuspense = (element: ReactNode) => <LazyBoundary>{element}</LazyBoundary>;
 
@@ -106,6 +108,14 @@ export const router = createBrowserRouter([
         element: withSuspense(<ResetPasswordPage />),
     },
     {
+        path: '/my-notebook',
+        element: (
+            <RequireAccess check={(user) => user?.role === UserRole.WORKER}>
+                {withSuspense(<WorkerNotebookPage />)}
+            </RequireAccess>
+        ),
+    },
+    {
         path: '/public/machines/:publicId',
         element: withSuspense(<PublicMachinePage />),
     },
@@ -116,9 +126,9 @@ export const router = createBrowserRouter([
     {
         path: '/',
         element: (
-            <ProtectedRoute>
+            <RequireAccess check={(user) => user?.role !== UserRole.WORKER}>
                 <AppLayout />
-            </ProtectedRoute>
+            </RequireAccess>
         ),
         errorElement: withSuspense(<RouteErrorPage />),
         children: [

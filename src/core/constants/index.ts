@@ -139,6 +139,7 @@ export const USER_ROLE_LABEL: Record<UserRole, string> = {
     [UserRole.DIRECTOR]: 'Giám đốc',
     [UserRole.LINE_LEADER]: 'Tổ trưởng',
     [UserRole.QC]: 'Bộ phận QC',
+    [UserRole.WORKER]: 'Công nhân',
 };
 
 export const USER_ROLE_COLOR: Record<UserRole, string> = {
@@ -148,6 +149,7 @@ export const USER_ROLE_COLOR: Record<UserRole, string> = {
     [UserRole.DIRECTOR]: 'purple',
     [UserRole.LINE_LEADER]: 'geekblue',
     [UserRole.QC]: 'cyan',
+    [UserRole.WORKER]: 'green',
 };
 
 // ===== MACHINE TYPES =====

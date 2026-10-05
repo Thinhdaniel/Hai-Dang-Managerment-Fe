@@ -24,6 +24,7 @@ const ROLE_PILL: Record<User['role'], { bg: string; text: string; label: string 
     director: { bg: 'oklch(0.95 0.06 300)', text: 'oklch(0.36 0.18 300)', label: USER_ROLE_LABEL.director },
     line_leader: { bg: 'oklch(0.95 0.05 265)', text: 'oklch(0.34 0.17 265)', label: USER_ROLE_LABEL.line_leader },
     qc: { bg: 'oklch(0.96 0.04 190)', text: 'oklch(0.32 0.12 190)', label: USER_ROLE_LABEL.qc },
+    worker: { bg: '#e4f5ec', text: '#087950', label: USER_ROLE_LABEL.worker },
 };
 
 const PAGE_ANIM = `
@@ -197,6 +198,7 @@ const UserList: React.FC = () => {
                     director: 0,
                     line_leader: 0,
                     qc: 0,
+                    worker: 0,
                 }
             ),
         [userResponse?.statsSource]
@@ -297,14 +299,14 @@ const UserList: React.FC = () => {
             render: (_value, record) => (
                 <div className='flex items-center gap-3'>
                     <Avatar size='large' style={{ backgroundColor: record.isActive ? '#1f7ae0' : '#d9d9d9' }}>
-                        {(record.name || record.email).charAt(0).toUpperCase()}
+                        {(record.name || record.username || record.email || '?').charAt(0).toUpperCase()}
                     </Avatar>
                     <div className='min-w-0'>
                         <Text strong className='block truncate text-slate-800'>
                             {record.name}
                         </Text>
                         <Text type='secondary' className='block truncate text-xs'>
-                            {record.email}
+                            {record.email || record.username}
                         </Text>
                     </div>
                 </div>
@@ -459,6 +461,7 @@ const UserList: React.FC = () => {
                         { value: 'staff', label: USER_ROLE_LABEL.staff },
                         { value: 'line_leader', label: USER_ROLE_LABEL.line_leader },
                         { value: 'qc', label: USER_ROLE_LABEL.qc },
+                        { value: 'worker', label: USER_ROLE_LABEL.worker },
                     ]}
                 />
                 <Select

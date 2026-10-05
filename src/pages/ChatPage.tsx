@@ -101,6 +101,7 @@ const roleLabel: Record<UserRole, string> = {
     staff: 'Nhân viên',
     line_leader: 'Tổ trưởng',
     qc: 'QC',
+    worker: 'Công nhân',
 };
 
 // Avatar màu + icon theo loại phiếu để phân biệt hội thoại nghiệp vụ với chat thường

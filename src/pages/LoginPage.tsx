@@ -6,6 +6,7 @@ import AuthPageShell from '../components/auth/AuthPageShell';
 import { useAuth } from '../core/contexts/AuthContext';
 import { resolveAuthErrorMessage } from '../core/lib/auth';
 import { getLandingPath } from '../core/lib/permissions';
+import { UserRole } from '../core/types';
 
 const { Text } = Typography;
 
@@ -29,7 +30,12 @@ const LoginPage: React.FC = () => {
     if (isAuthenticated) {
         // Có redirect hợp lệ thì ưu tiên; không thì về trang đích theo role
         // (tổ trưởng → màn nhập sản lượng, còn lại → dashboard).
-        return <Navigate to={safeRedirect ?? getLandingPath(role)} replace />;
+        return (
+            <Navigate
+                to={role === UserRole.WORKER ? getLandingPath(role) : (safeRedirect ?? getLandingPath(role))}
+                replace
+            />
+        );
     }
 
     const handleSubmit = async (values: { email: string; password: string }) => {
@@ -38,10 +44,15 @@ const LoginPage: React.FC = () => {
             setErrorMessage(null);
             const result = await login(values.email, values.password);
             message.success('Đăng nhập thành công');
-            navigate(safeRedirect ?? getLandingPath(result.user.role), { replace: true });
+            navigate(
+                result.user.role === UserRole.WORKER
+                    ? getLandingPath(result.user.role)
+                    : (safeRedirect ?? getLandingPath(result.user.role)),
+                { replace: true }
+            );
         } catch (error) {
             setErrorMessage(
-                resolveAuthErrorMessage(error, 'Đăng nhập thất bại. Vui lòng kiểm tra lại email và mật khẩu.')
+                resolveAuthErrorMessage(error, 'Đăng nhập thất bại. Vui lòng kiểm tra lại tài khoản và mật khẩu.')
             );
         } finally {
             setSubmitting(false);
@@ -49,11 +60,7 @@ const LoginPage: React.FC = () => {
     };
 
     return (
-        <AuthPageShell
-            eyebrow='Secure Sign In'
-            title='Đăng nhập'
-            subtitle='Sử dụng tài khoản được cấp để tiếp tục truy cập hệ thống quản lý thiết bị.'
-        >
+        <AuthPageShell eyebrow='Secure Sign In' title='Đăng nhập' subtitle='Sử dụng tài khoản được cấp để tiếp tục.'>
             {errorMessage ? (
                 <Alert
                     type='error'
@@ -65,18 +72,15 @@ const LoginPage: React.FC = () => {
 
             <Form layout='vertical' size='large' onFinish={handleSubmit} autoComplete='on' requiredMark={false}>
                 <Form.Item
-                    label={<span className='text-sm font-medium text-slate-700'>Email công việc</span>}
+                    label={<span className='text-sm font-medium text-slate-700'>Email hoặc tên đăng nhập</span>}
                     name='email'
-                    rules={[
-                        { required: true, message: 'Vui lòng nhập email' },
-                        { type: 'email', message: 'Email không hợp lệ' },
-                    ]}
+                    rules={[{ required: true, message: 'Vui lòng nhập email hoặc tên đăng nhập' }]}
                     className='mb-5'
                 >
                     <Input
                         prefix={<MailOutlined className='mr-1 text-slate-400' />}
-                        placeholder='name@company.com'
-                        autoComplete='email'
+                        placeholder='Email hoặc tên đăng nhập'
+                        autoComplete='username'
                         className='h-12 rounded-lg'
                     />
                 </Form.Item>

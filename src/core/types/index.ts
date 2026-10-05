@@ -85,6 +85,7 @@ export enum UserRole {
     LINE_LEADER = 'line_leader',
     // QC: chỉ nhập kết quả đạt/lỗi theo giờ.
     QC = 'qc',
+    WORKER = 'worker',
 }
 
 // ===== BASE =====
@@ -941,7 +942,8 @@ export interface BulkReturnBorrowingBatchResponse extends BorrowingBatchDetail {
 export interface User {
     id: string;
     name: string;
-    email: string;
+    email?: string;
+    username?: string;
     phone?: string;
     role: UserRole;
     plantId?: string;
@@ -1072,7 +1074,8 @@ export interface UserListParams {
 
 export interface CreateUserPayload {
     name: string;
-    email: string;
+    email?: string;
+    username?: string;
     password: string;
     role: UserRole;
     phone?: string;
@@ -1086,6 +1089,7 @@ export interface UpdateUserPayload {
     role: UserRole;
     isActive: boolean;
     plantId?: string;
+    password?: string;
 }
 
 // ===== DASHBOARD =====

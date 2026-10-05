@@ -1,6 +1,6 @@
 import { createContext, useContext, useEffect, useMemo, useCallback, useState, type PropsWithChildren } from 'react';
 import { authService, userService } from '../services';
-import type { User } from '../types';
+import { UserRole, type User } from '../types';
 import { useNotificationStore } from '../notificationStore';
 import { queryClient } from '../queryClient';
 import { pushNotificationService } from '../services/push-notification.service';
@@ -54,7 +54,8 @@ export const AuthProvider = ({ children }: PropsWithChildren) => {
         try {
             const currentUser = await userService.getMe();
             setUserState(currentUser);
-            void pushNotificationService.ensureCurrentDevice().catch(() => {});
+            if (currentUser.role !== UserRole.WORKER)
+                void pushNotificationService.ensureCurrentDevice().catch(() => {});
         } catch {
             clearLocalSession();
         }
@@ -73,7 +74,8 @@ export const AuthProvider = ({ children }: PropsWithChildren) => {
                 const currentUser = await userService.getMe();
                 if (!ignore) {
                     setUserState(currentUser);
-                    void pushNotificationService.ensureCurrentDevice().catch(() => {});
+                    if (currentUser.role !== UserRole.WORKER)
+                        void pushNotificationService.ensureCurrentDevice().catch(() => {});
                 }
             } catch {
                 if (!ignore) {
@@ -167,7 +169,7 @@ export const AuthProvider = ({ children }: PropsWithChildren) => {
         setStoredAccessToken(result.access_token);
         setAccessToken(result.access_token);
         setUserState(result.user);
-        void pushNotificationService.ensureCurrentDevice().catch(() => {});
+        if (result.user.role !== UserRole.WORKER) void pushNotificationService.ensureCurrentDevice().catch(() => {});
 
         return result;
     };

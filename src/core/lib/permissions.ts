@@ -124,6 +124,7 @@ const ROLE_CAPS: Record<Exclude<UserRole, UserRole.ADMIN>, Capability[]> = {
     [UserRole.LINE_LEADER]: ['production.view', 'production.write'],
     // QC chỉ đọc ngày sản xuất và ghi kết quả chất lượng, không sửa sản lượng/cấu hình.
     [UserRole.QC]: ['production.view', 'production.qc.write', 'production.qc.report'],
+    [UserRole.WORKER]: [],
 };
 
 export const isSuperAdmin = (role: Role) => role === UserRole.ADMIN;
@@ -140,6 +141,7 @@ export const isProductionOperator = (role: Role) => isLineLeader(role) || isQc(r
  * lượng theo giờ; các role khác về Dashboard quản lý máy & vật tư như cũ.
  */
 export const getLandingPath = (role: Role) => {
+    if (role === UserRole.WORKER) return '/my-notebook';
     if (role === UserRole.LINE_LEADER) return '/production';
     if (role === UserRole.QC) return '/production/qc';
     return '/dashboard';

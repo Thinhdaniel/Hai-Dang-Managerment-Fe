@@ -1,0 +1,100 @@
+.wn-page { min-height: 100vh; background: #f4f7f7; color: #183036; font-family: inherit; }
+.wn-header { background: #fff; border-bottom: 1px solid #dde7e7; }
+.wn-header-inner { max-width: 920px; margin: auto; min-height: 68px; padding: 0 24px; display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+.wn-brand { display: flex; align-items: center; gap: 10px; font-size: 17px; font-weight: 750; color: #123c3b; }
+.wn-brand-mark { width: 34px; height: 34px; display: grid; place-items: center; border-radius: 6px; background: #087f76; color: #fff; }
+.wn-header-right { display: flex; align-items: center; gap: 12px; min-width: 0; }
+.wn-user { max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
+.wn-icon-button { width: 40px; height: 40px; display: grid; place-items: center; border: 1px solid #dae4e4; border-radius: 6px; background: white; cursor: pointer; }
+.wn-main { max-width: 920px; margin: auto; padding: 28px 24px 70px; }
+.wn-intro { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 24px; }
+.wn-intro h1 { margin: 0; font-size: 25px; line-height: 1.25; font-weight: 750; }
+.wn-intro p { margin: 4px 0 0; color: #607477; }
+.wn-today-link { border: 1px solid #b8d5d2; border-radius: 6px; background: #fff; color: #087f76; padding: 9px 13px; font-weight: 650; cursor: pointer; white-space: nowrap; }
+.wn-tabs { display: flex; gap: 4px; padding: 4px; background: #e6eeee; border-radius: 7px; margin-bottom: 22px; }
+.wn-tabs button { flex: 1; min-height: 44px; border: 0; border-radius: 5px; background: transparent; color: #51676a; font-weight: 650; display: flex; justify-content: center; align-items: center; gap: 7px; cursor: pointer; }
+.wn-tabs button.active { background: white; color: #086f67; box-shadow: 0 1px 3px #173f3a19; }
+.wn-date-bar { display: flex; justify-content: space-between; align-items: center; gap: 16px; padding: 0 0 18px; }
+.wn-date-bar div { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.wn-date-bar span { font-size: 12px; color: #627579; }
+.wn-date-bar strong { font-size: 18px; text-transform: capitalize; }
+.wn-date-bar input { border: 1px solid #cddcdb; border-radius: 6px; min-height: 42px; padding: 0 8px; background: white; color: #183036; max-width: 145px; }
+.wn-attendance { display: flex; align-items: center; gap: 13px; background: #fff; border: 1px solid #dae6e4; border-left: 4px solid #087f76; border-radius: 7px; padding: 16px; margin-bottom: 26px; }
+.wn-attendance-icon { flex: none; width: 40px; height: 40px; display: grid; place-items: center; border-radius: 50%; color: #7c9695; background: #edf3f2; }
+.wn-attendance-icon.is-marked { background: #d8f3e9; color: #087950; }
+.wn-attendance-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+.wn-attendance-text strong { font-size: 16px; }
+.wn-attendance-text small { color: #667b7e; }
+.wn-attendance .ant-btn { min-height: 40px; border-radius: 5px; }
+.wn-attendance .ant-btn-primary, .wn-drawer .ant-btn-primary { background: #087f76; }
+.wn-section-heading { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 14px; }
+.wn-section-heading h2 { font-size: 18px; margin: 0; font-weight: 750; }
+.wn-section-heading p { color: #697d80; margin: 3px 0 0; font-size: 13px; }
+.wn-add-button, .wn-empty button { display: inline-flex; align-items: center; justify-content: center; gap: 7px; border: 0; background: #087f76; color: white; border-radius: 5px; min-height: 40px; padding: 0 14px; font-weight: 650; cursor: pointer; white-space: nowrap; }
+.wn-entry-list { display: grid; gap: 9px; }
+.wn-entry { background: white; border: 1px solid #dce6e6; border-radius: 7px; padding: 15px; display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; }
+.wn-entry-main { min-width: 0; }
+.wn-entry-code { font-size: 12px; font-weight: 750; color: #08776c; }
+.wn-entry h3 { font-size: 16px; margin: 3px 0 0; overflow-wrap: anywhere; }
+.wn-entry p { margin: 6px 0 0; color: #687c80; overflow-wrap: anywhere; }
+.wn-entry-side { display: flex; flex-direction: column; align-items: flex-end; gap: 10px; flex: none; }
+.wn-entry-side strong { font-size: 19px; white-space: nowrap; }
+.wn-entry-side small { font-size: 12px; color: #5c7375; }
+.wn-entry-side div { display: flex; gap: 6px; }
+.wn-entry-side button { width: 34px; height: 34px; border: 1px solid #dce6e6; background: #fff; border-radius: 5px; display: grid; place-items: center; cursor: pointer; color: #34565a; }
+.wn-entry-side button:last-child { color: #bd504c; }
+.wn-empty { border: 1px dashed #bdcecc; border-radius: 7px; background: #fff; min-height: 180px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; text-align: center; padding: 20px; color: #5d7779; }
+.wn-empty strong { color: #25484a; }
+.wn-empty span { max-width: 310px; }
+.wn-empty button { margin-top: 5px; }
+.wn-loading, .wn-feedback { min-height: 180px; display: flex; align-items: center; justify-content: center; gap: 10px; }
+.wn-month-heading { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; }
+.wn-month-heading strong { font-size: 19px; }
+.wn-month-heading button { width: 42px; height: 42px; border: 1px solid #d5e2e0; border-radius: 5px; background: white; display: grid; place-items: center; cursor: pointer; }
+.wn-month-heading button:disabled { opacity: .35; cursor: default; }
+.wn-month-stats { display: flex; gap: 16px; border-top: 1px solid #d9e6e4; border-bottom: 1px solid #d9e6e4; padding: 15px 0; margin-bottom: 19px; }
+.wn-month-stats div { flex: 1; display: flex; flex-direction: column; }
+.wn-month-stats strong { color: #087f76; font-size: 28px; line-height: 1; }
+.wn-month-stats span { color: #5f7478; font-size: 13px; margin-top: 6px; }
+.wn-calendar { background: white; border: 1px solid #dae6e4; border-radius: 7px; padding: 15px; }
+.wn-weekdays, .wn-calendar-grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 5px; }
+.wn-weekdays span { text-align: center; color: #697f80; font-size: 12px; font-weight: 650; padding-bottom: 9px; }
+.wn-calendar-grid button { aspect-ratio: 1; min-width: 0; min-height: 42px; border: 1px solid transparent; background: #f4f8f7; border-radius: 5px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; font-weight: 650; cursor: pointer; }
+.wn-calendar-grid button.attended { background: #e2f4eb; color: #087950; }
+.wn-calendar-grid button.today { border-color: #087f76; }
+.wn-calendar-grid button:disabled { opacity: .35; cursor: default; }
+.wn-calendar-grid i { width: 4px; height: 4px; border-radius: 50%; background: transparent; }
+.wn-calendar-grid .has-entries i { background: #e39231; }
+.wn-legend { display: flex; gap: 18px; flex-wrap: wrap; margin-top: 16px; color: #667b7c; font-size: 12px; }
+.wn-legend span { display: flex; align-items: center; gap: 6px; }
+.wn-legend i { width: 9px; height: 9px; border-radius: 50%; background: #59ad88; }
+.wn-legend i.noted { background: #e39231; }
+.wn-breakdown { margin-top: 27px; }
+.wn-breakdown-row { padding: 12px 0; border-bottom: 1px solid #dce6e5; display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+.wn-breakdown-row span { display: flex; flex-direction: column; min-width: 0; overflow-wrap: anywhere; }
+.wn-breakdown-row small { color: #61777a; }
+.wn-breakdown-row strong { white-space: nowrap; }
+.wn-breakdown-empty { color: #6b7d80; }
+.wn-drawer .ant-drawer-content-wrapper { max-height: 90dvh; }
+.wn-drawer .ant-drawer-content { border-radius: 8px 8px 0 0; }
+.wn-drawer .ant-drawer-body { overflow: auto; }
+.wn-drawer form { max-width: 540px; margin: auto; display: grid; gap: 15px; padding-bottom: max(12px, env(safe-area-inset-bottom)); }
+.wn-drawer label { display: grid; gap: 6px; font-weight: 650; }
+.wn-form-row { display: grid; grid-template-columns: 2fr 1fr; gap: 12px; }
+.wn-suggestions > span { display: block; color: #64777a; font-size: 12px; margin-bottom: 7px; }
+.wn-suggestions > div { display: flex; gap: 6px; overflow-x: auto; padding-bottom: 3px; }
+.wn-suggestions button { flex: none; border: 1px solid #cbdcda; border-radius: 5px; background: #f4f9f8; padding: 7px 10px; color: #27615b; cursor: pointer; }
+@media (max-width: 600px) {
+  .wn-header-inner { padding: 0 16px; min-height: 60px; }
+  .wn-user { max-width: 110px; font-size: 13px; }
+  .wn-main { padding: 22px 16px 45px; }
+  .wn-intro h1 { font-size: 22px; }
+  .wn-date-bar strong { font-size: 15px; }
+  .wn-date-bar input { max-width: 122px; font-size: 12px; }
+  .wn-attendance { gap: 9px; padding: 12px; }
+  .wn-attendance-icon { width: 34px; height: 34px; }
+  .wn-attendance-text small { font-size: 11px; }
+  .wn-attendance .ant-btn { padding: 0 9px; font-size: 12px; }
+  .wn-calendar { padding: 10px; }
+  .wn-weekdays, .wn-calendar-grid { gap: 3px; }
+}

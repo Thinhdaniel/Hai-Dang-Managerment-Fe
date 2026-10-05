@@ -6,7 +6,8 @@ import { UserRole, type CreateUserPayload, type UpdateUserPayload, type User, ty
 
 type UserFormValues = {
     name: string;
-    email: string;
+    email?: string;
+    username?: string;
     role: UserRole;
     plantId?: string;
     password?: string;
@@ -43,6 +44,7 @@ const roleOptions = [
     { value: UserRole.STAFF, label: USER_ROLE_LABEL[UserRole.STAFF] },
     { value: UserRole.LINE_LEADER, label: USER_ROLE_LABEL[UserRole.LINE_LEADER] },
     { value: UserRole.QC, label: USER_ROLE_LABEL[UserRole.QC] },
+    { value: UserRole.WORKER, label: USER_ROLE_LABEL[UserRole.WORKER] },
 ];
 
 const sanitizeValue = (value?: string | null) => (value || '').trim().replace(/\s+/g, ' ');
@@ -56,7 +58,8 @@ const UserFormModal = (props: UserFormModalProps) => {
     // Tổ trưởng bị khóa theo cơ sở và không tự đổi được (chỉ admin/giám đốc đổi
     // cơ sở), nên phải gán cơ sở ngay khi tạo — nếu không họ rơi vào cơ sở bất kỳ.
     const selectedRole = Form.useWatch('role', form);
-    const plantRequired = selectedRole === UserRole.LINE_LEADER || selectedRole === UserRole.QC;
+    const plantRequired =
+        selectedRole === UserRole.LINE_LEADER || selectedRole === UserRole.QC || selectedRole === UserRole.WORKER;
 
     useEffect(() => {
         if (!open) {
@@ -68,6 +71,7 @@ const UserFormModal = (props: UserFormModalProps) => {
             form.setFieldsValue({
                 name: initialValues.name,
                 email: initialValues.email,
+                username: initialValues.username,
                 role: initialValues.role,
                 plantId: initialValues.plantId,
                 isActive: initialValues.isActive,
@@ -90,11 +94,13 @@ const UserFormModal = (props: UserFormModalProps) => {
                 role: values.role,
                 plantId: values.plantId,
                 isActive: values.isActive !== false,
+                password: selectedRole === UserRole.WORKER && values.password ? values.password : undefined,
             });
         } else {
             await props.onSubmit({
                 name: sanitizeValue(values.name),
-                email: sanitizeValue(values.email).toLowerCase(),
+                email: selectedRole === UserRole.WORKER ? undefined : sanitizeValue(values.email).toLowerCase(),
+                username: selectedRole === UserRole.WORKER ? sanitizeValue(values.username).toLowerCase() : undefined,
                 role: values.role,
                 plantId: values.plantId,
                 password: values.password || '',
@@ -157,16 +163,34 @@ const UserFormModal = (props: UserFormModalProps) => {
                     <Input placeholder='Ví dụ: Trần Văn Quản' size='large' maxLength={120} />
                 </Form.Item>
 
-                <Form.Item
-                    name='email'
-                    label='Email'
-                    rules={[
-                        { required: true, message: 'Vui lòng nhập email' },
-                        { type: 'email', message: 'Email không hợp lệ' },
-                    ]}
-                >
-                    <Input placeholder='name@company.com' size='large' maxLength={120} disabled={isEditMode} />
-                </Form.Item>
+                {selectedRole !== UserRole.WORKER && (
+                    <Form.Item
+                        name='email'
+                        label='Email'
+                        rules={[
+                            { required: true, message: 'Vui lòng nhập email' },
+                            { type: 'email', message: 'Email không hợp lệ' },
+                        ]}
+                    >
+                        <Input placeholder='name@company.com' size='large' maxLength={120} disabled={isEditMode} />
+                    </Form.Item>
+                )}
+
+                {selectedRole === UserRole.WORKER && (
+                    <Form.Item
+                        name='username'
+                        label='Tên đăng nhập'
+                        rules={[
+                            { required: true, message: 'Nhập tên đăng nhập' },
+                            {
+                                pattern: /^[a-z0-9._-]{3,40}$/,
+                                message: 'Dùng 3-40 ký tự thường, số, dấu chấm, gạch dưới hoặc gạch ngang',
+                            },
+                        ]}
+                    >
+                        <Input placeholder='Ví dụ: cn001' size='large' autoComplete='off' disabled={isEditMode} />
+                    </Form.Item>
+                )}
 
                 <Form.Item
                     name='role'
@@ -194,6 +218,17 @@ const UserFormModal = (props: UserFormModalProps) => {
                         options={props.plants.map((p) => ({ value: p.id, label: p.name }))}
                     />
                 </Form.Item>
+
+                {isEditMode && selectedRole === UserRole.WORKER && (
+                    <Form.Item
+                        name='password'
+                        label='Mật khẩu mới'
+                        rules={[{ min: 6, message: 'Tối thiểu 6 ký tự' }]}
+                        extra='Để trống nếu không đổi mật khẩu'
+                    >
+                        <Input.Password size='large' autoComplete='new-password' />
+                    </Form.Item>
+                )}
 
                 {isEditMode ? (
                     <Form.Item
