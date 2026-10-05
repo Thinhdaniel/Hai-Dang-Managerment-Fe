@@ -1,14 +1,17 @@
-import { useMemo, useState } from 'react';
-import { App, Button, DatePicker, Drawer, Input, InputNumber, Popconfirm, Segmented, Spin } from 'antd';
+import { useEffect, useMemo, useState } from 'react';
+import { App, Button, DatePicker, Dropdown, Input, InputNumber, Segmented, Spin } from 'antd';
 import datePickerLocale from 'antd/es/date-picker/locale/vi_VN';
 import {
     CalendarDays,
     ChartNoAxesCombined,
     Check,
+    ChevronDown,
     ChevronLeft,
     ChevronRight,
     ClipboardList,
+    Clock3,
     LogOut,
+    MoreHorizontal,
     Pencil,
     Plus,
     Trash2,
@@ -23,6 +26,17 @@ import {
     type NotebookAttendanceInput,
 } from '../core/services/worker-notebook.service';
 import WorkerNotebookMonthReport from '../components/worker-notebook/WorkerNotebookMonthReport';
+import NotebookCalendar from '../components/worker-notebook/NotebookCalendar';
+import NotebookEditorShell from '../components/worker-notebook/NotebookEditorShell';
+import {
+    groupNotebookEntries,
+    hasNotebookAttendance,
+    notebookAttendanceLabel,
+    notebookDateLabel,
+    notebookNumber as number,
+    notebookQuantitySize,
+    notebookWorkDays,
+} from '../components/worker-notebook/notebook-view';
 import '../styles/worker-notebook.css';
 
 const vietnamToday = () => {
@@ -35,202 +49,321 @@ const vietnamToday = () => {
     const value = (part: string) => parts.find((item) => item.type === part)?.value || '';
     return `${value('year')}-${value('month')}-${value('day')}`;
 };
-
-const dateLabel = (date: string) =>
-    new Intl.DateTimeFormat('vi-VN', {
-        weekday: 'long',
-        day: 'numeric',
-        month: 'numeric',
-        year: 'numeric',
-        timeZone: 'UTC',
-    }).format(new Date(`${date}T00:00:00Z`));
-
 const emptyEntry: NotebookEntryInput = { itemCode: '', operation: '', quantity: 1, unit: 'SP', note: '' };
-const number = (value: number) => value.toLocaleString('vi-VN', { maximumFractionDigits: 2 });
+const tabs = [
+    { key: 'day' as const, label: 'Ghi ngày', icon: ClipboardList },
+    { key: 'month' as const, label: 'Lịch công', icon: CalendarDays },
+    { key: 'report' as const, label: 'Tổng hợp', icon: ChartNoAxesCombined },
+];
 
-const WorkerNotebookPage = () => {
+export default function WorkerNotebookPage() {
     const { user, logout } = useAuth();
-    const { message } = App.useApp();
+    const { message, modal } = App.useApp();
     const queryClient = useQueryClient();
     const today = vietnamToday();
     const [selectedDate, setSelectedDate] = useState(today);
     const [month, setMonth] = useState(today.slice(0, 7));
     const [view, setView] = useState<'day' | 'month' | 'report'>('day');
+    const [previewDate, setPreviewDate] = useState(today);
     const [attendanceOpen, setAttendanceOpen] = useState(false);
     const [attendanceDraft, setAttendanceDraft] = useState<NotebookAttendanceInput>({
         attendanceType: 'off',
         overtimeHours: 0,
     });
+    const [attendanceBaseline, setAttendanceBaseline] = useState('');
     const [editorOpen, setEditorOpen] = useState(false);
     const [editingId, setEditingId] = useState<string | null>(null);
     const [draft, setDraft] = useState<NotebookEntryInput>(emptyEntry);
+    const [entryBaseline, setEntryBaseline] = useState('');
+    const dirty =
+        (editorOpen && JSON.stringify(draft) !== entryBaseline) ||
+        (attendanceOpen && JSON.stringify(attendanceDraft) !== attendanceBaseline);
+    useEffect(() => {
+        if (!dirty) return;
+        const preventLoss = (event: BeforeUnloadEvent) => {
+            event.preventDefault();
+            event.returnValue = '';
+        };
+        window.addEventListener('beforeunload', preventLoss);
+        return () => window.removeEventListener('beforeunload', preventLoss);
+    }, [dirty]);
 
     const monthQuery = useQuery({
-        queryKey: ['worker-notebook', 'month', month],
+        queryKey: ['worker-notebook', user?.id, 'month', month],
         queryFn: () => workerNotebookService.month(month),
+        enabled: !!user?.id,
     });
     const dayQuery = useQuery({
-        queryKey: ['worker-notebook', 'day', selectedDate],
+        queryKey: ['worker-notebook', user?.id, 'day', selectedDate],
         queryFn: () => workerNotebookService.day(selectedDate),
+        enabled: !!user?.id,
     });
     const day = dayQuery.data;
-    const daysByDate = useMemo(
-        () => new Map(monthQuery.data?.days.map((item) => [item.date, item]) ?? []),
-        [monthQuery.data]
-    );
-
-    const refresh = async () => {
+    const report = monthQuery.data;
+    const entryGroups = useMemo(() => groupNotebookEntries(day?.entries ?? []), [day?.entries]);
+    const summaries = new Map(report?.days.map((item) => [item.date, item]) ?? []);
+    const weekStart = dayjs(selectedDate).subtract((dayjs(selectedDate).day() + 6) % 7, 'day');
+    const week = Array.from({ length: 7 }, (_, i) => weekStart.add(i, 'day').format('YYYY-MM-DD'));
+    const refresh = async (date: string) => {
         await Promise.all([
-            queryClient.invalidateQueries({ queryKey: ['worker-notebook', 'day', selectedDate] }),
-            queryClient.invalidateQueries({ queryKey: ['worker-notebook', 'month'] }),
+            queryClient.invalidateQueries({ queryKey: ['worker-notebook', user?.id, 'day', date] }),
+            queryClient.invalidateQueries({ queryKey: ['worker-notebook', user?.id, 'month'] }),
         ]);
     };
-
     const attendance = useMutation({
-        mutationFn: (input: NotebookAttendanceInput) => workerNotebookService.attendance(selectedDate, input),
-        onSuccess: async () => {
+        mutationFn: ({ date, input }: { date: string; input: NotebookAttendanceInput }) =>
+            workerNotebookService.attendance(date, input),
+        onSuccess: async (_, variables) => {
             setAttendanceOpen(false);
-            await refresh();
+            await refresh(variables.date);
             message.success('Đã lưu chấm công');
         },
-        onError: () => message.error('Không lưu được chấm công. Vui lòng thử lại.'),
+        onError: () => message.error('Không lưu được chấm công. Thử lại, dữ liệu nhập vẫn được giữ.'),
     });
     const saveEntry = useMutation({
-        mutationFn: () =>
-            editingId
-                ? workerNotebookService.updateEntry(selectedDate, editingId, draft)
-                : workerNotebookService.createEntry(selectedDate, draft),
-        onSuccess: async () => {
+        mutationFn: ({ date, entry, id }: { date: string; entry: NotebookEntryInput; id: string | null }) =>
+            id ? workerNotebookService.updateEntry(date, id, entry) : workerNotebookService.createEntry(date, entry),
+        onSuccess: async (_, variables) => {
             setEditorOpen(false);
-            await refresh();
+            await refresh(variables.date);
             message.success('Đã lưu công đoạn');
         },
-        onError: () => message.error('Không lưu được công đoạn. Vui lòng kiểm tra và thử lại.'),
+        onError: () => message.error('Không lưu được công đoạn. Kiểm tra dữ liệu và thử lại.'),
     });
     const removeEntry = useMutation({
-        mutationFn: (id: string) => workerNotebookService.deleteEntry(selectedDate, id),
-        onSuccess: async () => {
-            await refresh();
+        mutationFn: ({ date, id }: { date: string; id: string }) => workerNotebookService.deleteEntry(date, id),
+        onSuccess: async (_, variables) => {
+            await refresh(variables.date);
             message.success('Đã xóa dòng ghi');
         },
-        onError: () => message.error('Không xóa được. Vui lòng thử lại.'),
+        onError: () => message.error('Không xóa được công đoạn. Vui lòng thử lại.'),
     });
-
     const openEditor = (entry?: NotebookEntry) => {
+        const next = entry
+            ? {
+                  itemCode: entry.itemCode,
+                  operation: entry.operation,
+                  quantity: entry.quantity,
+                  unit: entry.unit,
+                  note: entry.note || '',
+              }
+            : { ...emptyEntry };
         setEditingId(entry?._id ?? null);
-        setDraft(
-            entry
-                ? {
-                      itemCode: entry.itemCode,
-                      operation: entry.operation,
-                      quantity: entry.quantity,
-                      unit: entry.unit,
-                      note: entry.note || '',
-                  }
-                : emptyEntry
-        );
+        setDraft(next);
+        setEntryBaseline(JSON.stringify(next));
         setEditorOpen(true);
+    };
+    const openAttendance = () => {
+        const next = { attendanceType: day?.attendanceType ?? 'off', overtimeHours: day?.overtimeHours ?? 0 };
+        setAttendanceDraft(next);
+        setAttendanceBaseline(JSON.stringify(next));
+        setAttendanceOpen(true);
+    };
+    const closeEditor = (kind: 'entry' | 'attendance') => {
+        if (saveEntry.isPending || attendance.isPending) return;
+        const close = () => (kind === 'entry' ? setEditorOpen(false) : setAttendanceOpen(false));
+        const changed =
+            kind === 'entry'
+                ? JSON.stringify(draft) !== entryBaseline
+                : JSON.stringify(attendanceDraft) !== attendanceBaseline;
+        if (!changed) return close();
+        modal.confirm({
+            title: 'Bỏ thay đổi chưa lưu?',
+            content: 'Các thay đổi vừa nhập sẽ không được lưu.',
+            okText: 'Bỏ thay đổi',
+            cancelText: 'Tiếp tục nhập',
+            okButtonProps: { danger: true },
+            onOk: close,
+        });
+    };
+    const confirmDelete = (entry: NotebookEntry) =>
+        modal.confirm({
+            title: 'Xóa công đoạn này?',
+            content: `${entry.itemCode} · ${entry.operation} · ${number(entry.quantity)} ${entry.unit}`,
+            okText: 'Xóa',
+            cancelText: 'Giữ lại',
+            okButtonProps: { danger: true },
+            onOk: () => removeEntry.mutateAsync({ date: selectedDate, id: entry._id }),
+        });
+    const switchView = (next: typeof view, date = selectedDate) => {
+        if (next === 'day') setMonth(date.slice(0, 7));
+        setView(next);
+        window.scrollTo({ top: 0, behavior: 'instant' });
     };
     const selectDate = (date: string) => {
         setSelectedDate(date);
         setMonth(date.slice(0, 7));
-        setView('day');
+        setPreviewDate(date);
+        switchView('day', date);
     };
-    const changeMonth = (offset: number) => {
-        const next = dayjs(`${month}-01`).add(offset, 'month').format('YYYY-MM');
+    const changeMonth = (next: string) => {
         if (next > today.slice(0, 7)) return;
         setMonth(next);
+        setPreviewDate(next === today.slice(0, 7) ? today : `${next}-01`);
     };
-    const monthStart = dayjs(`${month}-01`);
-    const leadingDays = (monthStart.day() + 6) % 7;
-    const monthDays = Array.from(
-        { length: monthStart.daysInMonth() },
-        (_, index) => `${month}-${String(index + 1).padStart(2, '0')}`
-    );
 
     return (
         <div className='wn-page'>
             <header className='wn-header'>
                 <div className='wn-header-inner'>
                     <div className='wn-brand'>
-                        <span className='wn-brand-mark'>
-                            <ClipboardList size={22} />
-                        </span>
-                        <span>Sổ của tôi</span>
+                        <img src='/brand/company-logo.png' alt='Hải Đăng' />
+                        <div>
+                            <small>Hải Đăng</small>
+                            <strong>Sổ của tôi</strong>
+                        </div>
                     </div>
-                    <div className='wn-header-right'>
-                        <span className='wn-user'>{user?.name}</span>
-                        <button
-                            type='button'
-                            className='wn-icon-button'
-                            title='Đăng xuất'
-                            aria-label='Đăng xuất'
-                            onClick={() => void logout()}
-                        >
-                            <LogOut size={20} />
+                    <nav
+                        className={`wn-navigation ${editorOpen || attendanceOpen ? 'editor-open' : ''}`}
+                        role='tablist'
+                        aria-label='Xem sổ'
+                        onKeyDown={(event) => {
+                            const index = tabs.findIndex((tab) => tab.key === view);
+                            const next =
+                                event.key === 'ArrowRight'
+                                    ? (index + 1) % 3
+                                    : event.key === 'ArrowLeft'
+                                      ? (index + 2) % 3
+                                      : event.key === 'Home'
+                                        ? 0
+                                        : event.key === 'End'
+                                          ? 2
+                                          : -1;
+                            if (next < 0) return;
+                            event.preventDefault();
+                            switchView(tabs[next].key);
+                            event.currentTarget.querySelectorAll<HTMLButtonElement>('button')[next]?.focus();
+                        }}
+                    >
+                        {tabs.map(({ key, label, icon: Icon }) => (
+                            <button
+                                key={key}
+                                id={`wn-tab-${key}`}
+                                type='button'
+                                role='tab'
+                                aria-controls='wn-panel'
+                                aria-selected={view === key}
+                                tabIndex={view === key ? 0 : -1}
+                                className={view === key ? 'active' : ''}
+                                onClick={() => switchView(key)}
+                            >
+                                <Icon size={20} />
+                                <span>{label}</span>
+                            </button>
+                        ))}
+                    </nav>
+                    <Dropdown
+                        trigger={['click']}
+                        menu={{
+                            items: [
+                                {
+                                    key: 'identity',
+                                    disabled: true,
+                                    label: (
+                                        <div className='wn-account-identity'>
+                                            <strong>{user?.name}</strong>
+                                            <span>{user?.plant?.name || 'Sổ cá nhân'}</span>
+                                        </div>
+                                    ),
+                                },
+                                { type: 'divider' },
+                                { key: 'logout', label: 'Đăng xuất', icon: <LogOut size={16} />, danger: true },
+                            ],
+                            onClick: ({ key }) => {
+                                if (key === 'logout')
+                                    modal.confirm({
+                                        title: 'Đăng xuất khỏi sổ?',
+                                        okText: 'Đăng xuất',
+                                        cancelText: 'Ở lại',
+                                        onOk: () => logout(),
+                                    });
+                            },
+                        }}
+                    >
+                        <button type='button' className='wn-account-button' aria-label='Tài khoản' title='Tài khoản'>
+                            <span className='wn-avatar'>
+                                {user?.name?.trim().split(' ').at(-1)?.slice(0, 1) || 'C'}
+                            </span>
+                            <span className='wn-account-name'>{user?.name}</span>
+                            <ChevronDown size={16} />
                         </button>
-                    </div>
+                    </Dropdown>
                 </div>
             </header>
-
-            <main className='wn-main'>
-                <div className='wn-intro'>
+            <main id='wn-panel' className='wn-main' role='tabpanel' aria-labelledby={`wn-tab-${view}`}>
+                <div className='wn-page-heading'>
                     <div>
-                        <h1>Chào {user?.name?.split(' ').at(-1) || 'bạn'}</h1>
-                        <p>{user?.plant?.name || 'Sổ ghi chép cá nhân'}</p>
+                        <h1>
+                            {view === 'day'
+                                ? selectedDate === today
+                                    ? 'Hôm nay'
+                                    : 'Ghi chép ngày'
+                                : view === 'month'
+                                  ? 'Lịch công của tôi'
+                                  : 'Tổng hợp tháng'}
+                        </h1>
+                        <p>{view === 'day' ? notebookDateLabel(selectedDate) : user?.plant?.name || user?.name}</p>
                     </div>
-                    <button className='wn-today-link' type='button' onClick={() => selectDate(today)}>
-                        Hôm nay
-                    </button>
+                    {view === 'day' ? (
+                        <DatePicker
+                            locale={datePickerLocale}
+                            value={dayjs(selectedDate)}
+                            format='DD/MM/YYYY'
+                            allowClear={false}
+                            inputReadOnly
+                            aria-label='Chọn ngày ghi chép'
+                            disabledDate={(date) => date.format('YYYY-MM-DD') > today}
+                            onChange={(date) => {
+                                if (date) selectDate(date.format('YYYY-MM-DD'));
+                            }}
+                        />
+                    ) : (
+                        <button type='button' className='wn-secondary-button' onClick={() => selectDate(today)}>
+                            <CalendarDays size={17} /> Hôm nay
+                        </button>
+                    )}
                 </div>
-
-                <div className='wn-tabs' role='tablist' aria-label='Xem sổ'>
-                    <button
-                        type='button'
-                        role='tab'
-                        aria-selected={view === 'day'}
-                        className={view === 'day' ? 'active' : ''}
-                        onClick={() => setView('day')}
-                    >
-                        <ClipboardList size={18} /> Ghi ngày
-                    </button>
-                    <button
-                        type='button'
-                        role='tab'
-                        aria-selected={view === 'month'}
-                        className={view === 'month' ? 'active' : ''}
-                        onClick={() => setView('month')}
-                    >
-                        <CalendarDays size={18} /> Lịch tháng
-                    </button>
-                    <button
-                        type='button'
-                        role='tab'
-                        aria-selected={view === 'report'}
-                        className={view === 'report' ? 'active' : ''}
-                        onClick={() => setView('report')}
-                    >
-                        <ChartNoAxesCombined size={18} /> Báo cáo
-                    </button>
-                </div>
-
                 {view === 'day' ? (
                     <>
-                        <div className='wn-date-bar'>
-                            <div>
-                                <span>Ngày đang xem</span>
-                                <strong>{dateLabel(selectedDate)}</strong>
+                        <div className='wn-week-bar'>
+                            <button
+                                type='button'
+                                className='wn-icon-button'
+                                aria-label='Tuần trước'
+                                onClick={() => selectDate(dayjs(selectedDate).subtract(7, 'day').format('YYYY-MM-DD'))}
+                            >
+                                <ChevronLeft size={18} />
+                            </button>
+                            <div className='wn-week-strip'>
+                                {week.map((date, i) => (
+                                    <button
+                                        key={date}
+                                        type='button'
+                                        disabled={date > today}
+                                        aria-pressed={date === selectedDate}
+                                        aria-label={notebookDateLabel(date)}
+                                        className={date === selectedDate ? 'selected' : ''}
+                                        onClick={() => selectDate(date)}
+                                    >
+                                        <span>{['T2', 'T3', 'T4', 'T5', 'T6', 'T7', 'CN'][i]}</span>
+                                        <strong>{Number(date.slice(-2))}</strong>
+                                        <i className={hasNotebookAttendance(summaries.get(date)) ? 'recorded' : ''} />
+                                    </button>
+                                ))}
                             </div>
-                            <input
-                                type='date'
-                                value={selectedDate}
-                                max={today}
-                                onChange={(event) => {
-                                    if (event.target.value && event.target.value <= today)
-                                        selectDate(event.target.value);
-                                }}
-                                aria-label='Chọn ngày ghi chép'
-                            />
+                            <button
+                                type='button'
+                                className='wn-icon-button'
+                                aria-label='Tuần sau'
+                                disabled={week[6] >= today}
+                                onClick={() =>
+                                    selectDate(
+                                        [dayjs(selectedDate).add(7, 'day').format('YYYY-MM-DD'), today].sort()[0]
+                                    )
+                                }
+                            >
+                                <ChevronRight size={18} />
+                            </button>
                         </div>
                         {dayQuery.isLoading ? (
                             <div className='wn-loading'>
@@ -238,110 +371,194 @@ const WorkerNotebookPage = () => {
                             </div>
                         ) : dayQuery.isError ? (
                             <div className='wn-feedback'>
-                                Không tải được sổ. <Button onClick={() => void dayQuery.refetch()}>Thử lại</Button>
+                                <strong>Không tải được ghi chép ngày.</strong>
+                                <Button onClick={() => void dayQuery.refetch()}>Thử lại</Button>
                             </div>
                         ) : (
-                            <>
-                                <section className='wn-attendance' aria-label='Chấm công'>
-                                    <span className={`wn-attendance-icon ${day?.attended ? 'is-marked' : ''}`}>
-                                        <Check size={24} />
-                                    </span>
-                                    <div className='wn-attendance-text'>
-                                        <strong>
-                                            {day?.attendanceType === 'full'
-                                                ? 'Cả ngày · 1 công'
-                                                : day?.attendanceType === 'half'
-                                                  ? 'Nửa ngày · 0,5 công'
-                                                  : day?.overtimeHours
-                                                    ? 'Chỉ tăng ca'
-                                                    : 'Chưa ghi công / nghỉ'}
-                                        </strong>
-                                        <small>Tăng ca: {number(day?.overtimeHours ?? 0)} giờ</small>
-                                    </div>
-                                    <Button
-                                        type={day?.attended ? 'default' : 'primary'}
-                                        loading={attendance.isPending}
-                                        onClick={() => {
-                                            setAttendanceDraft({
-                                                attendanceType: day?.attendanceType ?? 'off',
-                                                overtimeHours: day?.overtimeHours ?? 0,
-                                            });
-                                            setAttendanceOpen(true);
-                                        }}
-                                    >
-                                        <Pencil size={15} /> Chấm công
-                                    </Button>
-                                </section>
-
+                            <div className='wn-day-layout'>
+                                <aside className='wn-day-aside'>
+                                    <section className='wn-attendance' aria-label='Chấm công'>
+                                        <div className='wn-tool-heading'>
+                                            <span>
+                                                <Check size={18} /> Chấm công ngày
+                                            </span>
+                                            <button
+                                                className='wn-icon-button'
+                                                type='button'
+                                                title='Sửa chấm công'
+                                                aria-label='Sửa chấm công'
+                                                onClick={openAttendance}
+                                            >
+                                                <Pencil size={17} />
+                                            </button>
+                                        </div>
+                                        <span
+                                            className={`wn-status ${hasNotebookAttendance(day) ? day?.attendanceType : 'unmarked'}`}
+                                        >
+                                            {notebookAttendanceLabel(day)}
+                                        </span>
+                                        <div className='wn-attendance-values'>
+                                            <div>
+                                                <strong>{number(notebookWorkDays(day))}</strong>
+                                                <span>Công trong ngày</span>
+                                            </div>
+                                            <div>
+                                                <strong>{number(day?.overtimeHours ?? 0)}</strong>
+                                                <span>
+                                                    <Clock3 size={14} /> Giờ tăng ca
+                                                </span>
+                                            </div>
+                                        </div>
+                                        {!hasNotebookAttendance(day) && (
+                                            <button
+                                                className='wn-secondary-button'
+                                                type='button'
+                                                onClick={openAttendance}
+                                            >
+                                                <Pencil size={16} />{' '}
+                                                {selectedDate === today ? 'Ghi công hôm nay' : 'Ghi công ngày này'}
+                                            </button>
+                                        )}
+                                    </section>
+                                    <section className='wn-aside-month' aria-label='Tóm tắt tháng'>
+                                        <h2>Tháng {dayjs(`${month}-01`).format('MM/YYYY')}</h2>
+                                        {monthQuery.isError ? (
+                                            <Button onClick={() => void monthQuery.refetch()}>
+                                                Tải lại tổng tháng
+                                            </Button>
+                                        ) : (
+                                            <>
+                                                <div>
+                                                    <span>Tổng công</span>
+                                                    <strong>
+                                                        {monthQuery.isLoading ? '…' : number(report?.workDays ?? 0)}
+                                                    </strong>
+                                                </div>
+                                                <div>
+                                                    <span>Tăng ca</span>
+                                                    <strong>
+                                                        {monthQuery.isLoading
+                                                            ? '…'
+                                                            : `${number(report?.overtimeHours ?? 0)} giờ`}
+                                                    </strong>
+                                                </div>
+                                                <button type='button' onClick={() => switchView('report')}>
+                                                    Xem tổng hợp <ChevronRight size={16} />
+                                                </button>
+                                            </>
+                                        )}
+                                    </section>
+                                </aside>
                                 <section className='wn-entries' aria-label='Công đoạn đã làm'>
                                     <div className='wn-section-heading'>
                                         <div>
                                             <h2>Công đoạn đã làm</h2>
-                                            <p>{day?.entries?.length || 0} dòng ghi trong ngày</p>
+                                            <p>
+                                                {day?.entries.length ?? 0} công đoạn · {entryGroups.length} mã hàng
+                                            </p>
                                         </div>
-                                        <button type='button' className='wn-add-button' onClick={() => openEditor()}>
-                                            <Plus size={18} /> Thêm
-                                        </button>
+                                        <Button
+                                            className='wn-primary-button'
+                                            type='primary'
+                                            size='large'
+                                            icon={<Plus size={19} />}
+                                            onClick={() => openEditor()}
+                                        >
+                                            Ghi sản lượng
+                                        </Button>
                                     </div>
-                                    {day?.entries?.length ? (
-                                        <div className='wn-entry-list'>
-                                            {day.entries.map((entry) => (
-                                                <article className='wn-entry' key={entry._id}>
-                                                    <div className='wn-entry-main'>
-                                                        <span className='wn-entry-code'>{entry.itemCode}</span>
-                                                        <h3>{entry.operation}</h3>
-                                                        {entry.note && <p>{entry.note}</p>}
-                                                    </div>
-                                                    <div className='wn-entry-side'>
-                                                        <strong>
-                                                            {number(entry.quantity)} <small>{entry.unit}</small>
-                                                        </strong>
-                                                        <div>
+                                    {entryGroups.length ? (
+                                        <div className='wn-entry-groups'>
+                                            {entryGroups.map((group) => (
+                                                <article className='wn-entry-group' key={group.itemCode}>
+                                                    <header>
+                                                        <span>
+                                                            Mã hàng <strong>{group.itemCode}</strong>
+                                                        </span>
+                                                        <small>{group.entries.length} công đoạn</small>
+                                                    </header>
+                                                    {group.entries.map((entry) => (
+                                                        <div className='wn-entry-row' key={entry._id}>
                                                             <button
+                                                                className='wn-entry-content'
                                                                 type='button'
-                                                                title='Sửa dòng'
-                                                                aria-label={`Sửa ${entry.operation}`}
                                                                 onClick={() => openEditor(entry)}
+                                                                aria-label={`Sửa ${entry.operation}`}
                                                             >
-                                                                <Pencil size={17} />
+                                                                <span>
+                                                                    <strong>{entry.operation}</strong>
+                                                                    {entry.note && <small>{entry.note}</small>}
+                                                                </span>
+                                                                <span className='wn-entry-quantity'>
+                                                                    <strong
+                                                                        style={{
+                                                                            fontSize: notebookQuantitySize(
+                                                                                entry.quantity
+                                                                            ),
+                                                                        }}
+                                                                    >
+                                                                        {number(entry.quantity)}
+                                                                    </strong>
+                                                                    <small>{entry.unit}</small>
+                                                                </span>
                                                             </button>
-                                                            <Popconfirm
-                                                                title='Xóa dòng ghi này?'
-                                                                okText='Xóa'
-                                                                cancelText='Hủy'
-                                                                onConfirm={() => removeEntry.mutate(entry._id)}
+                                                            <Dropdown
+                                                                trigger={['click']}
+                                                                menu={{
+                                                                    items: [
+                                                                        {
+                                                                            key: 'edit',
+                                                                            label: 'Sửa',
+                                                                            icon: <Pencil size={16} />,
+                                                                        },
+                                                                        {
+                                                                            key: 'delete',
+                                                                            label: 'Xóa',
+                                                                            icon: <Trash2 size={16} />,
+                                                                            danger: true,
+                                                                        },
+                                                                    ],
+                                                                    onClick: ({ key }) =>
+                                                                        key === 'edit'
+                                                                            ? openEditor(entry)
+                                                                            : confirmDelete(entry),
+                                                                }}
                                                             >
                                                                 <button
                                                                     type='button'
-                                                                    title='Xóa dòng'
-                                                                    aria-label={`Xóa ${entry.operation}`}
+                                                                    className='wn-icon-button wn-entry-menu'
+                                                                    disabled={removeEntry.isPending}
+                                                                    title='Thao tác công đoạn'
+                                                                    aria-label={`Thao tác ${entry.operation}`}
                                                                 >
-                                                                    <Trash2 size={17} />
+                                                                    <MoreHorizontal size={20} />
                                                                 </button>
-                                                            </Popconfirm>
+                                                            </Dropdown>
                                                         </div>
-                                                    </div>
+                                                    ))}
                                                 </article>
                                             ))}
                                         </div>
                                     ) : (
                                         <div className='wn-empty'>
                                             <ClipboardList size={30} />
-                                            <strong>Chưa ghi công đoạn nào</strong>
-                                            <span>Thêm công đoạn bạn đã làm để theo dõi sản lượng của mình.</span>
-                                            <button type='button' onClick={() => openEditor()}>
-                                                <Plus size={18} /> Thêm công đoạn
-                                            </button>
+                                            <h3>Chưa có công đoạn nào</h3>
+                                            <p>Ghi lại công việc đã làm trong ngày.</p>
                                         </div>
                                     )}
                                 </section>
-                            </>
+                            </div>
                         )}
                     </>
                 ) : (
                     <>
                         <div className='wn-month-heading'>
-                            <button type='button' aria-label='Tháng trước' onClick={() => changeMonth(-1)}>
+                            <button
+                                type='button'
+                                className='wn-icon-button'
+                                aria-label='Tháng trước'
+                                onClick={() => changeMonth(dayjs(`${month}-01`).subtract(1, 'month').format('YYYY-MM'))}
+                            >
                                 <ChevronLeft size={20} />
                             </button>
                             <DatePicker
@@ -352,17 +569,18 @@ const WorkerNotebookPage = () => {
                                 inputReadOnly
                                 allowClear={false}
                                 aria-label='Chọn tháng báo cáo'
-                                value={monthStart}
+                                value={dayjs(`${month}-01`)}
                                 disabledDate={(date) => date.format('YYYY-MM') > today.slice(0, 7)}
                                 onChange={(date) => {
-                                    if (date) setMonth(date.format('YYYY-MM'));
+                                    if (date) changeMonth(date.format('YYYY-MM'));
                                 }}
                             />
                             <button
                                 type='button'
+                                className='wn-icon-button'
                                 aria-label='Tháng sau'
                                 disabled={month >= today.slice(0, 7)}
-                                onClick={() => changeMonth(1)}
+                                onClick={() => changeMonth(dayjs(`${month}-01`).add(1, 'month').format('YYYY-MM'))}
                             >
                                 <ChevronRight size={20} />
                             </button>
@@ -373,119 +591,70 @@ const WorkerNotebookPage = () => {
                             </div>
                         ) : monthQuery.isError ? (
                             <div className='wn-feedback'>
-                                Không tải được dữ liệu tháng. <Button onClick={() => void monthQuery.refetch()}>Thử lại</Button>
+                                <strong>Không tải được dữ liệu tháng.</strong>
+                                <Button onClick={() => void monthQuery.refetch()}>Thử lại</Button>
                             </div>
                         ) : (
-                            <>
-                                <div className='wn-month-stats'>
-                                    <div>
-                                        <strong>{number(monthQuery.data?.workDays || 0)}</strong>
-                                        <span>Công trong tháng</span>
+                            report && (
+                                <>
+                                    <div className='wn-month-stats'>
+                                        <div>
+                                            <span>Tổng công tháng</span>
+                                            <strong>
+                                                {number(report.workDays)} <small>công</small>
+                                            </strong>
+                                        </div>
+                                        <div>
+                                            <span>
+                                                <Clock3 size={15} /> Tăng ca
+                                            </span>
+                                            <strong>
+                                                {number(report.overtimeHours)} <small>giờ</small>
+                                            </strong>
+                                        </div>
                                     </div>
-                                    <div>
-                                        <strong>{number(monthQuery.data?.overtimeHours || 0)}</strong>
-                                        <span>Giờ tăng ca</span>
-                                    </div>
-                                </div>
-                                {view === 'report' && monthQuery.data ? (
-                                    <WorkerNotebookMonthReport report={monthQuery.data} onSelectDate={selectDate} />
-                                ) : (
-                                    <>
-                                        <section className='wn-calendar' aria-label='Lịch ghi chép tháng'>
-                                            <div className='wn-weekdays'>
-                                                {['T2', 'T3', 'T4', 'T5', 'T6', 'T7', 'CN'].map((label) => (
-                                                    <span key={label}>{label}</span>
-                                                ))}
-                                            </div>
-                                            <div className='wn-calendar-grid'>
-                                                {Array.from({ length: leadingDays }, (_, index) => (
-                                                    <span key={`blank-${index}`} />
-                                                ))}
-                                                {monthDays.map((date) => {
-                                                    const summary = daysByDate.get(date);
-                                                    return (
-                                                        <button
-                                                            type='button'
-                                                            key={date}
-                                                            disabled={date > today}
-                                                            onClick={() => selectDate(date)}
-                                                            className={[
-                                                                date === today ? 'today' : '',
-                                                                summary?.attended ? 'attended' : '',
-                                                                summary?.attendanceType === 'half' ? 'half-day' : '',
-                                                                summary?.entryCount ? 'has-entries' : '',
-                                                            ].join(' ')}
-                                                            aria-label={`${date}, ${summary?.attendanceType === 'full' ? 'cả ngày' : summary?.attendanceType === 'half' ? 'nửa ngày' : 'chưa ghi công / nghỉ'}, tăng ca ${summary?.overtimeHours || 0} giờ, ${summary?.entryCount || 0} dòng ghi`}
-                                                        >
-                                                            <span>{Number(date.slice(-2))}</span>
-                                                            {summary?.attendanceType === 'half' && <small>½</small>}
-                                                            <i />
-                                                        </button>
-                                                    );
-                                                })}
-                                            </div>
-                                            <div className='wn-legend'>
-                                                <span>
-                                                    <i className='marked' /> Cả ngày
-                                                </span>
-                                                <span>
-                                                    <i className='half-marked' /> Nửa ngày
-                                                </span>
-                                                <span>
-                                                    <i className='noted' /> Có ghi sản lượng
-                                                </span>
-                                            </div>
-                                        </section>
-                                        <section className='wn-breakdown'>
-                                            <div className='wn-section-heading'>
-                                                <div>
-                                                    <h2>Sản lượng đã kê</h2>
-                                                    <p>Theo mã hàng và công đoạn bạn nhập</p>
-                                                </div>
-                                            </div>
-                                            {monthQuery.data?.breakdown?.length ? (
-                                                monthQuery.data.breakdown.map((item) => (
-                                                    <div
-                                                        className='wn-breakdown-row'
-                                                        key={JSON.stringify([item.itemCode, item.operation, item.unit])}
-                                                    >
-                                                        <span>
-                                                            <b>{item.itemCode}</b>
-                                                            <small>{item.operation}</small>
-                                                        </span>
-                                                        <strong>
-                                                            {number(item.quantity)} {item.unit}
-                                                        </strong>
-                                                    </div>
-                                                ))
-                                            ) : (
-                                                <p className='wn-breakdown-empty'>Tháng này chưa có sản lượng tự kê.</p>
-                                            )}
-                                        </section>
-                                    </>
-                                )}
-                            </>
+                                    {view === 'report' ? (
+                                        <WorkerNotebookMonthReport
+                                            key={month}
+                                            report={report}
+                                            onSelectDate={selectDate}
+                                        />
+                                    ) : (
+                                        <NotebookCalendar
+                                            report={report}
+                                            today={today}
+                                            selectedDate={
+                                                previewDate.slice(0, 7) === month ? previewDate : `${month}-01`
+                                            }
+                                            onPreview={setPreviewDate}
+                                            onOpenDay={selectDate}
+                                        />
+                                    )}
+                                </>
+                            )
                         )}
                     </>
                 )}
+                <footer className='wn-page-footer'>Sổ ghi chép cá nhân · Hải Đăng</footer>
             </main>
-
-            <Drawer
-                title='Chấm công ngày'
-                placement='bottom'
-                height='auto'
+            <NotebookEditorShell
                 open={attendanceOpen}
-                onClose={() => setAttendanceOpen(false)}
-                className='wn-drawer'
-                destroyOnHidden
+                title='Chấm công ngày'
+                formId='wn-attendance-form'
+                saveLabel='Lưu chấm công'
+                saving={attendance.isPending}
+                onClose={() => closeEditor('attendance')}
             >
                 <form
+                    id='wn-attendance-form'
+                    className='wn-form'
                     onSubmit={(event) => {
                         event.preventDefault();
-                        attendance.mutate(attendanceDraft);
+                        if (attendance.isPending) return;
+                        attendance.mutate({ date: selectedDate, input: attendanceDraft });
                     }}
                 >
-                    <p className='wn-form-date'>{dateLabel(selectedDate)}</p>
+                    <p className='wn-form-date'>{notebookDateLabel(selectedDate)}</p>
                     <label>
                         Công trong ngày
                         <Segmented
@@ -513,8 +682,8 @@ const WorkerNotebookPage = () => {
                             max={24}
                             step={0.5}
                             precision={2}
+                            inputMode='decimal'
                             value={attendanceDraft.overtimeHours}
-                            style={{ width: '100%' }}
                             required
                             onChange={(value) =>
                                 setAttendanceDraft({ ...attendanceDraft, overtimeHours: Number(value ?? 0) })
@@ -524,62 +693,46 @@ const WorkerNotebookPage = () => {
                     <div className='wn-attendance-preview'>
                         <span>
                             {attendanceDraft.attendanceType === 'full'
-                                ? '1 công'
+                                ? '1'
                                 : attendanceDraft.attendanceType === 'half'
-                                  ? '0,5 công'
-                                  : '0 công'}
+                                  ? '0,5'
+                                  : '0'}{' '}
+                            công
                         </span>
                         <span>{number(attendanceDraft.overtimeHours)} giờ tăng ca</span>
                     </div>
-                    <Button type='primary' htmlType='submit' size='large' block loading={attendance.isPending}>
-                        Lưu chấm công
-                    </Button>
                 </form>
-            </Drawer>
-
-            <Drawer
-                title={editingId ? 'Sửa công đoạn' : 'Thêm công đoạn'}
-                placement='bottom'
-                height='auto'
+            </NotebookEditorShell>
+            <NotebookEditorShell
                 open={editorOpen}
-                onClose={() => setEditorOpen(false)}
-                className='wn-drawer'
-                destroyOnHidden
+                title={editingId ? 'Sửa công đoạn' : 'Ghi sản lượng'}
+                formId='wn-entry-form'
+                saveLabel='Lưu công đoạn'
+                saving={saveEntry.isPending}
+                onClose={() => closeEditor('entry')}
             >
                 <form
+                    id='wn-entry-form'
+                    className='wn-form'
                     onSubmit={(event) => {
                         event.preventDefault();
-                        if (draft.itemCode.trim() && draft.operation.trim() && draft.quantity > 0 && draft.unit.trim())
-                            saveEntry.mutate();
+                        if (saveEntry.isPending) return;
+                        if (
+                            draft.itemCode.trim() &&
+                            draft.operation.trim() &&
+                            draft.quantity >= 0.01 &&
+                            draft.unit.trim()
+                        )
+                            saveEntry.mutate({ date: selectedDate, entry: draft, id: editingId });
+                        else message.warning('Điền mã hàng, công đoạn, đơn vị và số lượng từ 0,01.');
                     }}
                 >
-                    <label>
-                        Mã hàng{' '}
-                        <Input
-                            size='large'
-                            maxLength={100}
-                            placeholder='Ví dụ: 416'
-                            value={draft.itemCode}
-                            onChange={(event) => setDraft({ ...draft, itemCode: event.target.value })}
-                            required
-                        />
-                    </label>
-                    <label>
-                        Công đoạn{' '}
-                        <Input
-                            size='large'
-                            maxLength={120}
-                            placeholder='Ví dụ: May túi'
-                            value={draft.operation}
-                            onChange={(event) => setDraft({ ...draft, operation: event.target.value })}
-                            required
-                        />
-                    </label>
-                    {!!monthQuery.data?.suggestions?.length && !editingId && (
+                    <p className='wn-form-date'>{notebookDateLabel(selectedDate)}</p>
+                    {!!report?.suggestions.length && !editingId && (
                         <div className='wn-suggestions'>
                             <span>Đã nhập gần đây</span>
                             <div>
-                                {monthQuery.data.suggestions.slice(0, 6).map((item) => (
+                                {report.suggestions.slice(0, 6).map((item) => (
                                     <button
                                         type='button'
                                         key={JSON.stringify([item.itemCode, item.operation, item.unit])}
@@ -591,21 +744,44 @@ const WorkerNotebookPage = () => {
                             </div>
                         </div>
                     )}
+                    <label>
+                        Mã hàng
+                        <Input
+                            size='large'
+                            maxLength={100}
+                            placeholder='Ví dụ: 416'
+                            value={draft.itemCode}
+                            onChange={(event) => setDraft({ ...draft, itemCode: event.target.value })}
+                            required
+                        />
+                    </label>
+                    <label>
+                        Công đoạn
+                        <Input
+                            size='large'
+                            maxLength={120}
+                            placeholder='Ví dụ: May túi'
+                            value={draft.operation}
+                            onChange={(event) => setDraft({ ...draft, operation: event.target.value })}
+                            required
+                        />
+                    </label>
                     <div className='wn-form-row'>
                         <label>
-                            Số lượng{' '}
+                            Số lượng
                             <InputNumber
+                                aria-label='Số lượng'
                                 size='large'
                                 min={0.01}
                                 max={10000000}
+                                inputMode='decimal'
                                 value={draft.quantity}
-                                onChange={(value) => setDraft({ ...draft, quantity: Number(value || 0) })}
-                                style={{ width: '100%' }}
+                                onChange={(value) => setDraft({ ...draft, quantity: Number(value ?? 0) })}
                                 required
                             />
                         </label>
                         <label>
-                            Đơn vị{' '}
+                            Đơn vị
                             <Input
                                 size='large'
                                 maxLength={30}
@@ -616,22 +792,16 @@ const WorkerNotebookPage = () => {
                         </label>
                     </div>
                     <label>
-                        Ghi chú{' '}
+                        Ghi chú <small>Không bắt buộc</small>
                         <Input.TextArea
                             rows={2}
                             maxLength={300}
-                            placeholder='Không bắt buộc'
                             value={draft.note}
                             onChange={(event) => setDraft({ ...draft, note: event.target.value })}
                         />
                     </label>
-                    <Button type='primary' htmlType='submit' size='large' block loading={saveEntry.isPending}>
-                        Lưu công đoạn
-                    </Button>
                 </form>
-            </Drawer>
+            </NotebookEditorShell>
         </div>
     );
-};
-
-export default WorkerNotebookPage;
+}

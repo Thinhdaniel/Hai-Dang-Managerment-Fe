@@ -16,6 +16,7 @@ export type NotebookUnitTotal = { unit: string; quantity: number };
 export type NotebookDay = NotebookAttendanceInput & {
     date: string;
     attended: boolean;
+    attendanceRecorded?: boolean;
     attendedAt?: string;
     entries: NotebookEntry[];
 };
@@ -34,6 +35,7 @@ export type NotebookMonth = {
         NotebookAttendanceInput & {
             date: string;
             attended: boolean;
+            attendanceRecorded?: boolean;
             workDays: number;
             entryCount: number;
             totalsByUnit: NotebookUnitTotal[];
