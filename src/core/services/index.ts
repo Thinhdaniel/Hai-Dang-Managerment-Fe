@@ -88,6 +88,13 @@ export const authService = {
     resetPassword: (token: string, password: string): Promise<{ access_token: string; user: User }> =>
         api.post<{ access_token: string; user: User }>('/auth/reset-password', { token, password }),
 
+    changePassword: (data: {
+        currentPassword: string;
+        newPassword: string;
+        confirmPassword: string;
+    }): Promise<{ access_token: string; user: User }> =>
+        api.post<{ access_token: string; user: User }>('/auth/change-password', data),
+
     logout: (): Promise<void> =>
         api.post('/auth/logout', undefined, {
             skipAuthRefresh: true,

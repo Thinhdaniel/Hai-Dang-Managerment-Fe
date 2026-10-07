@@ -29,6 +29,7 @@ type AuthContextValue = {
     accessToken: string | null;
     isAuthenticated: boolean;
     login: (email: string, password: string) => Promise<LoginResult>;
+    changePassword: (data: { currentPassword: string; newPassword: string; confirmPassword: string }) => Promise<void>;
     logout: () => Promise<void>;
     setUser: (user: User | null) => void;
     updateProfile: (user: User) => void;
@@ -188,6 +189,19 @@ export const AuthProvider = ({ children }: PropsWithChildren) => {
         return Promise.resolve();
     };
 
+    const changePassword = useCallback(
+        async (data: { currentPassword: string; newPassword: string; confirmPassword: string }) => {
+            if (user?.role !== UserRole.WORKER) throw new Error('Chỉ tài khoản công nhân được sử dụng chức năng này.');
+            const result = await authService.changePassword(data);
+            // The server revokes old sessions and returns a new one for this browser.
+            // Keep notebook queries intact; rotating credentials must not erase a draft.
+            setStoredAccessToken(result.access_token);
+            setAccessToken(result.access_token);
+            setUserState(result.user);
+        },
+        [user?.role]
+    );
+
     const value = useMemo<AuthContextValue>(
         () => ({
             user,
@@ -195,11 +209,12 @@ export const AuthProvider = ({ children }: PropsWithChildren) => {
             accessToken,
             isAuthenticated: Boolean(accessToken),
             login,
+            changePassword,
             logout,
             setUser,
             updateProfile,
         }),
-        [accessToken, clearLocalSession, user, updateProfile]
+        [accessToken, clearLocalSession, user, updateProfile, changePassword]
     );
 
     return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

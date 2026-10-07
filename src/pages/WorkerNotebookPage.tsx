@@ -10,6 +10,7 @@ import {
     ChevronRight,
     ClipboardList,
     Clock3,
+    LockKeyhole,
     LogOut,
     MoreHorizontal,
     Pencil,
@@ -29,6 +30,7 @@ import {
 import WorkerNotebookMonthReport from '../components/worker-notebook/WorkerNotebookMonthReport';
 import NotebookCalendar from '../components/worker-notebook/NotebookCalendar';
 import NotebookEditorShell from '../components/worker-notebook/NotebookEditorShell';
+import WorkerChangePasswordModal from '../components/worker-notebook/WorkerChangePasswordModal';
 import ProfileAvatarModal from '../components/profile/ProfileAvatarModal';
 import {
     groupNotebookEntries,
@@ -68,6 +70,7 @@ export default function WorkerNotebookPage() {
     const [view, setView] = useState<'day' | 'month' | 'report'>('day');
     const [previewDate, setPreviewDate] = useState(today);
     const [profileOpen, setProfileOpen] = useState(false);
+    const [passwordOpen, setPasswordOpen] = useState(false);
     const [attendanceOpen, setAttendanceOpen] = useState(false);
     const [attendanceDraft, setAttendanceDraft] = useState<NotebookAttendanceInput>({
         attendanceType: 'off',
@@ -271,10 +274,12 @@ export default function WorkerNotebookPage() {
                                 },
                                 { type: 'divider' },
                                 { key: 'profile', label: 'Hồ sơ cá nhân', icon: <UserRound size={16} /> },
+                                { key: 'password', label: 'Đổi mật khẩu', icon: <LockKeyhole size={16} /> },
                                 { key: 'logout', label: 'Đăng xuất', icon: <LogOut size={16} />, danger: true },
                             ],
                             onClick: ({ key }) => {
                                 if (key === 'profile') setProfileOpen(true);
+                                if (key === 'password') setPasswordOpen(true);
                                 if (key === 'logout')
                                     modal.confirm({
                                         title: 'Đăng xuất khỏi sổ?',
@@ -643,6 +648,7 @@ export default function WorkerNotebookPage() {
                 <footer className='wn-page-footer'>Sổ ghi chép cá nhân · Hải Đăng</footer>
             </main>
             {profileOpen && <ProfileAvatarModal onClose={() => setProfileOpen(false)} />}
+            {passwordOpen && <WorkerChangePasswordModal onClose={() => setPasswordOpen(false)} />}
             <NotebookEditorShell
                 open={attendanceOpen}
                 title='Chấm công ngày'
