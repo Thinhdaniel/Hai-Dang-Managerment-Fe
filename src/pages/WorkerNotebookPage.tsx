@@ -10,6 +10,7 @@ import {
     ChevronRight,
     ClipboardList,
     Clock3,
+    Flower2,
     LockKeyhole,
     LogOut,
     MoreHorizontal,
@@ -214,6 +215,9 @@ export default function WorkerNotebookPage() {
                             <small>Hải Đăng</small>
                             <strong>Sổ của tôi</strong>
                         </div>
+                        {womensDay && (
+                            <Flower2 className='wn-brand-season' size={18} strokeWidth={1.5} aria-hidden='true' />
+                        )}
                     </div>
                     <nav
                         className={`wn-navigation ${editorOpen || attendanceOpen ? 'editor-open' : ''}`}

@@ -1,9 +1,16 @@
 // A one-off campaign, not an annually recurring holiday theme.
 export const WOMENS_DAY_EVENT = {
-    id: 'women-day-2026-v1',
+    id: 'women-day-2026-v2',
     startDate: '2026-10-07',
     endDate: '2026-10-24',
     holidayDate: '2026-10-20',
+} as const;
+
+// Verbatim greeting selected by the user; do not silently rewrite the copy.
+export const WOMENS_DAY_GREETING = {
+    text: 'Chúc một ngày Phụ nữ Việt Nam 20/10 thật nhiều niềm vui, yêu thương và ngập tràn tiếng cười!',
+    source: 'https://vinhphuclogistics.com.vn/tin-tuc/chuc-mung-ngay-phu-nu-viet-nam-20-10/',
+    publisher: 'Vĩnh Phúc Logistics',
 } as const;
 
 const vietnamDateFormatter = new Intl.DateTimeFormat('en-US', {

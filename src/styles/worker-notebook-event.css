@@ -1,141 +1,384 @@
-/* Seasonal decoration only. Attendance colours and primary actions stay unchanged. */
+/* A textile-inspired greeting. Operational colours and actions remain unchanged. */
 .wn-page[data-event='women-day'] {
-    --wn-event-paper: #fff6fa;
-    --wn-event-petal: #ffe8f1;
-    --wn-event-rose: #a83d69;
+    --wn-event-canvas: #faf8fc;
+    --wn-event-paper: #fffafc;
+    --wn-event-petal: #f6dce7;
+    --wn-event-plum: #693953;
+    --wn-event-rose: #a64c74;
+    background: var(--wn-event-canvas);
+}
+.wn-page[data-event='women-day'] .wn-header {
+    border-bottom-color: #eadfe9;
+}
+.wn-page[data-event='women-day'] .wn-main {
+    padding-top: 24px;
+}
+.wn-page[data-event='women-day'] .wn-brand-season {
+    color: var(--wn-event-rose);
+    margin-left: 2px;
+}
+.wn-page[data-event='women-day'] .wn-page-heading h1 {
+    color: #493349;
+}
+.wn-page[data-event='women-day'] .wn-attendance,
+.wn-page[data-event='women-day'] .wn-calendar,
+.wn-page[data-event='women-day'] .wn-entry-group {
+    border-color: #e7dfe9;
+}
+.wn-page[data-event='women-day'] .wn-week-bar {
+    border-bottom-color: #e7dfe9;
 }
 
 .wn-page .wn-womens-day {
     position: relative;
     isolation: isolate;
-    display: flex;
-    align-items: center;
-    gap: 24px;
-    margin-bottom: 28px;
-    padding: 22px 230px 16px 24px;
     overflow: hidden;
-    border: 1px solid #f1dce5;
-    border-radius: 12px;
-    background: var(--wn-event-paper);
-}
-
-.wn-womens-day-date {
-    flex: none;
-    align-self: center;
     display: grid;
-    color: var(--wn-event-rose);
-    font-size: 35px;
-    font-weight: 750;
-    line-height: 1.05;
-    letter-spacing: -1.5px;
-    font-variant-numeric: tabular-nums;
+    grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr);
+    min-height: 286px;
+    margin-bottom: 28px;
+    padding: 30px 36px;
+    border: 1px solid #eddae6;
+    border-radius: 18px 18px 44px 18px;
+    background: var(--wn-event-paper);
+    box-shadow: 0 5px 18px #69395306;
 }
-
-.wn-womens-day-date span:first-child {
-    padding-bottom: 6px;
-    border-bottom: 1px solid #dca5bb;
+.wn-womens-day::before {
+    content: '';
+    pointer-events: none;
+    position: absolute;
+    z-index: -1;
+    inset: 10px;
+    border: 1px dashed #dfbacd;
+    border-radius: 10px 10px 35px 10px;
+    opacity: 0.7;
 }
-
-.wn-womens-day-date span:last-child {
-    padding-top: 6px;
-}
-
 .wn-womens-day-copy {
-    min-width: 0;
     position: relative;
-    z-index: 1;
+    z-index: 2;
+    align-self: start;
+    min-width: 0;
 }
-
+.wn-womens-day-occasion {
+    margin: 0 0 12px;
+    color: var(--wn-event-rose);
+    font-size: 13px;
+    font-weight: 650;
+}
 .wn-womens-day-copy h2 {
     margin: 0;
-    color: var(--wn-ink);
-    font-size: 19px;
-    font-weight: 700;
-    line-height: 1.45;
+    font-family: Georgia, 'Times New Roman', serif;
+    font-size: clamp(36px, 4vw, 48px);
+    font-weight: 400;
+    line-height: 1.15;
+    letter-spacing: -1.1px;
+    color: var(--wn-event-plum);
 }
-
-.wn-womens-day-message {
-    display: grid;
-    grid-template-rows: 1fr;
-    visibility: visible;
-    transition:
-        grid-template-rows 200ms ease,
-        visibility 200ms;
+.wn-womens-day-copy h2 span {
+    display: block;
 }
-
-.wn-womens-day-message > div {
-    min-height: 0;
-    overflow: hidden;
-}
-
-.wn-womens-day-message p {
-    margin: 8px 0 0;
-    max-width: 68ch;
-    color: #654d59;
+.wn-womens-day-recipient {
+    margin-top: 16px;
     font-size: 13px;
-    line-height: 1.75;
+    color: #745b6e;
+}
+.wn-womens-day-art {
+    position: absolute;
+    right: 36px;
+    top: 8px;
+    width: 300px;
+    height: 278px;
+    pointer-events: none;
+}
+.wn-womens-day-swatch {
+    position: absolute;
+    top: 25px;
+    left: 15px;
+    width: 252px;
+    height: 210px;
+    background-color: var(--wn-event-petal);
+    background-image:
+        repeating-linear-gradient(90deg, #ffffff38 0 1px, transparent 1px 4px),
+        repeating-linear-gradient(0deg, #ffffff38 0 1px, transparent 1px 4px);
+    border-radius: 48% 38% 43% 35%;
+    transform: rotate(-9deg);
+}
+.wn-womens-day-art img {
+    position: relative;
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+    transform: rotate(9deg);
+    filter: drop-shadow(2px 9px 5px #69395318);
+}
+.wn-womens-day-thread {
+    position: absolute;
+    z-index: 0;
+    right: 180px;
+    bottom: 18px;
+    width: 420px;
+    height: 90px;
+    color: #ca8daa;
+    pointer-events: none;
+}
+.wn-womens-day-thread path {
+    stroke: currentColor;
+    stroke-width: 1.3;
+    stroke-linecap: round;
+}
+.wn-womens-day[data-animate='true'] .wn-womens-day-thread path {
+    animation: wn-thread-draw 1400ms ease-out both;
+}
+.wn-womens-day[data-animate='true'] .wn-womens-day-art img {
+    animation: wn-bouquet-arrive 900ms ease-out both;
 }
 
+.wn-womens-day-actions {
+    position: relative;
+    z-index: 2;
+    display: flex;
+    align-items: center;
+    gap: 20px;
+    grid-column: 1 / -1;
+    margin-top: 22px;
+}
+.wn-page .wn-womens-day-open,
 .wn-page .wn-womens-day-toggle {
     display: inline-flex;
     align-items: center;
-    justify-content: flex-start;
-    gap: 5px;
+    justify-content: center;
+    gap: 8px;
     min-height: 44px;
-    margin: 2px 0 -8px;
-    padding: 0;
     border: 0;
+    font-size: 13px;
+    font-weight: 600;
+}
+.wn-page .wn-womens-day-open {
+    padding: 0 18px;
+    border-radius: 7px;
+    background: var(--wn-event-plum);
+    color: #fff;
+}
+.wn-page .wn-womens-day-open:hover {
+    background: #51263d;
+}
+.wn-page .wn-womens-day-toggle {
+    padding: 0 4px;
     background: transparent;
     color: var(--wn-event-rose);
-    font-size: 12px;
-    font-weight: 600;
-    text-align: left;
 }
-
 .wn-womens-day-toggle:hover {
     text-decoration: underline;
     text-underline-offset: 3px;
 }
-
-.wn-thread-flower {
-    pointer-events: none;
-    position: absolute;
-    z-index: 0;
-    right: 2px;
+.wn-womens-day[data-collapsed='true'] {
+    min-height: 102px;
+    padding: 18px 28px;
+    gap: 0 12px;
+    grid-template-columns: minmax(0, 1fr) auto;
+    border-radius: 12px;
+}
+.wn-womens-day[data-collapsed='true']::before {
+    border-radius: 6px;
+    inset: 6px;
+}
+.wn-womens-day[data-collapsed='true'] .wn-womens-day-occasion {
+    margin-bottom: 4px;
+    font-size: 11px;
+}
+.wn-womens-day[data-collapsed='true'] .wn-womens-day-copy h2 {
+    font-family: inherit;
+    font-size: 16px;
+    font-weight: 650;
+    letter-spacing: 0;
+    line-height: 1.5;
+}
+.wn-womens-day[data-collapsed='true'] .wn-womens-day-copy h2 span {
+    display: inline;
+}
+.wn-womens-day[data-collapsed='true'] .wn-womens-day-actions {
+    grid-column: 1;
+    margin-top: 0;
+}
+.wn-womens-day[data-collapsed='true'] .wn-womens-day-open {
+    display: none;
+}
+.wn-womens-day[data-collapsed='true'] .wn-womens-day-art {
+    width: 90px;
+    height: 90px;
     top: 50%;
-    width: 240px;
-    height: 150px;
+    right: 20px;
     transform: translateY(-50%);
-    color: var(--wn-event-rose);
 }
-
-.wn-thread-flower-wash {
-    color: var(--wn-event-petal);
+.wn-womens-day[data-collapsed='true'] .wn-womens-day-swatch {
+    inset: 12px;
+    width: auto;
+    height: auto;
 }
-
-.wn-womens-day[data-animate='true'] .wn-thread-flower-line {
-    animation: wn-thread-draw 1400ms ease-out both;
+.wn-womens-day[data-collapsed='true'] .wn-womens-day-thread {
+    display: none;
 }
-
-.wn-womens-day[data-animate='true'] .wn-thread-flower-detail {
-    animation: wn-thread-reveal 1400ms ease-out both;
-}
-
-.wn-womens-day[data-collapsed='true'] .wn-womens-day-message {
-    grid-template-rows: 0fr;
-    visibility: hidden;
-}
-
-.wn-womens-day[data-collapsed='true'] .wn-womens-day-date {
-    font-size: 24px;
-}
-
 .wn-page .wn-calendar-holiday {
     position: absolute;
     top: 4px;
     left: 4px;
     color: var(--wn-event-rose);
     pointer-events: none;
+}
+
+/* Manual greeting-card opening only. Ant Design provides focus trap and restoration. */
+.wn-wish-modal {
+    font-family: 'Be Vietnam Pro', sans-serif;
+    color: #493349;
+}
+.wn-wish-modal .ant-modal-title {
+    color: #693953;
+    font-size: 15px;
+}
+.wn-wish-modal .ant-modal-container {
+    padding: 20px;
+    border-radius: 16px;
+    background: #faf8fc;
+}
+.wn-wish-modal .ant-modal-body {
+    max-height: calc(100dvh - 130px);
+    overflow-y: auto;
+    overflow-x: hidden;
+    padding-top: 16px;
+}
+.wn-wish-book {
+    position: relative;
+    isolation: isolate;
+    display: grid;
+    grid-template-columns: 40% minmax(0, 1fr);
+    min-height: 342px;
+    perspective: 1000px;
+    border-radius: 10px;
+    background: #fffafc;
+    box-shadow: 0 9px 30px #6939530e;
+}
+.wn-wish-art {
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+    border-radius: 10px 0 0 10px;
+    background: #f6dce7;
+    border-right: 1px solid #e8c9d9;
+}
+.wn-wish-art > span {
+    position: absolute;
+    top: 20px;
+    left: 20px;
+    color: #9a5d7d;
+    font-family: Georgia, 'Times New Roman', serif;
+    font-size: 26px;
+}
+.wn-wish-art img {
+    width: 95%;
+    height: 90%;
+    object-fit: contain;
+    transform: rotate(-9deg);
+    filter: drop-shadow(2px 8px 4px #69395315);
+}
+.wn-wish-letter {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    padding: 32px;
+    min-width: 0;
+    animation: wn-letter-reveal 1100ms ease-out both;
+}
+.wn-wish-recipient {
+    margin: 0 0 18px;
+    color: #7d6277;
+    font-size: 12px;
+    line-height: 1.6;
+}
+.wn-wish-letter h3 {
+    margin: 0;
+    color: #693953;
+    font-family: Georgia, 'Times New Roman', serif;
+    font-size: 27px;
+    font-weight: 400;
+    line-height: 1.3;
+}
+.wn-wish-message {
+    margin: 20px 0 26px;
+    color: #604858;
+    font-size: 14px;
+    line-height: 1.9;
+}
+.wn-wish-sender {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 13px;
+    font-weight: 650;
+    color: #693953;
+}
+.wn-wish-sender img {
+    object-fit: contain;
+}
+.wn-wish-cover {
+    position: absolute;
+    z-index: 3;
+    inset: 0 auto 0 0;
+    width: 40%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-direction: column;
+    gap: 14px;
+    border-radius: 10px 0 0 10px;
+    background: #ead0df;
+    color: #693953;
+    backface-visibility: hidden;
+    transform-origin: left center;
+    animation: wn-card-open 1050ms cubic-bezier(0.22, 0.7, 0.2, 1) both;
+    pointer-events: none;
+}
+.wn-wish-cover::after {
+    content: '';
+    position: absolute;
+    inset: 12px;
+    border: 1px dashed #c891b0;
+    border-radius: 5px;
+}
+.wn-wish-cover > span {
+    font-family: Georgia, 'Times New Roman', serif;
+    font-size: 32px;
+}
+.wn-wish-footer {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    margin-top: 16px;
+}
+.wn-wish-footer a {
+    color: #795f73;
+    font-size: 11px;
+    text-decoration: underline;
+    text-underline-offset: 3px;
+}
+.wn-wish-footer button {
+    min-height: 44px;
+    padding: 0 14px;
+    border: 1px solid #e4d2df;
+    border-radius: 7px;
+    background: #fff;
+    color: #693953;
+    font: inherit;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+}
+.wn-wish-footer button:focus-visible,
+.wn-wish-footer a:focus-visible {
+    outline: 2px solid #3154dc;
+    outline-offset: 3px;
 }
 
 @keyframes wn-thread-draw {
@@ -148,63 +391,221 @@
         stroke-dashoffset: 0;
     }
 }
-
-@keyframes wn-thread-reveal {
-    0%,
-    70% {
+@keyframes wn-bouquet-arrive {
+    from {
         opacity: 0;
+        transform: translateY(8px) rotate(5deg);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0) rotate(9deg);
+    }
+}
+@keyframes wn-card-open {
+    0%,
+    12% {
+        transform: rotateY(0);
+    }
+    100% {
+        transform: rotateY(-125deg);
+    }
+}
+@keyframes wn-letter-reveal {
+    0%,
+    25% {
+        opacity: 0;
+        transform: translateX(8px);
     }
     100% {
         opacity: 1;
+        transform: translateX(0);
     }
 }
 
 @media (max-width: 1000px) {
     .wn-page .wn-womens-day {
-        gap: 18px;
-        padding-right: 170px;
+        padding: 26px 30px;
+        min-height: 270px;
     }
-    .wn-thread-flower {
-        width: 185px;
+    .wn-womens-day-art {
+        right: 20px;
+        top: 14px;
+        width: 260px;
+        height: 250px;
+    }
+    .wn-womens-day-swatch {
+        width: 216px;
+        height: 180px;
+    }
+    .wn-womens-day-thread {
+        right: 150px;
+        width: 300px;
     }
 }
-
 @media (max-width: 767px) {
-    .wn-page .wn-womens-day {
-        align-items: flex-start;
-        gap: 12px;
-        padding: 14px 14px 10px;
-        margin-bottom: 20px;
-        border-radius: 10px;
+    .wn-page[data-event='women-day'] .wn-main {
+        padding-top: 20px;
     }
-    .wn-womens-day-date {
-        align-self: flex-start;
-        padding-top: 2px;
-        font-size: 26px;
+    .wn-page[data-event='women-day'] .wn-brand-season {
+        width: 16px;
+        height: 16px;
+    }
+    .wn-page .wn-womens-day {
+        padding: 20px;
+        min-height: 218px;
+        grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr);
+        margin-bottom: 24px;
+        border-radius: 14px 14px 30px 14px;
     }
     .wn-womens-day-copy h2 {
-        max-width: 26ch;
-        padding-right: 24px;
-        font-size: 15px;
+        font-size: 29px;
+        line-height: 1.18;
+        letter-spacing: -0.6px;
     }
-    .wn-womens-day-message p {
+    .wn-womens-day-occasion {
+        font-size: 11px;
+        margin-bottom: 10px;
+    }
+    .wn-womens-day-recipient {
+        font-size: 11px;
+        line-height: 1.6;
+        margin-top: 12px;
+        max-width: 19ch;
+    }
+    .wn-womens-day-art {
+        top: 25px;
+        right: 4px;
+        width: 143px;
+        height: 145px;
+    }
+    .wn-womens-day-swatch {
+        top: 14px;
+        left: 12px;
+        width: 120px;
+        height: 104px;
+    }
+    .wn-womens-day-thread {
+        bottom: 30px;
+        right: 8px;
+        width: 150px;
+        height: 38px;
+    }
+    .wn-womens-day-actions {
+        margin-top: 18px;
+        gap: 16px;
+    }
+    .wn-page .wn-womens-day-open {
+        padding: 0 13px;
         font-size: 12px;
     }
-    .wn-thread-flower {
-        top: 6px;
-        right: 0;
-        width: 76px;
-        height: 52px;
-        transform: none;
+    .wn-page .wn-womens-day-toggle {
+        font-size: 12px;
+    }
+    .wn-womens-day[data-collapsed='true'] {
+        min-height: 96px;
+        padding: 14px 18px;
+        grid-template-columns: minmax(0, 1fr) 66px;
+    }
+    .wn-womens-day[data-collapsed='true'] .wn-womens-day-art {
+        width: 72px;
+        height: 72px;
+        right: 8px;
+    }
+    .wn-womens-day[data-collapsed='true'] .wn-womens-day-copy h2 {
+        font-size: 14px;
+    }
+    .wn-womens-day[data-collapsed='true'] .wn-womens-day-actions {
+        margin-top: 0;
+    }
+    .wn-wish-modal {
+        max-width: calc(100vw - 24px);
+        padding-bottom: 16px;
+    }
+    .wn-wish-modal .ant-modal-container {
+        padding: 18px 14px;
+    }
+    .wn-wish-book {
+        min-height: 0;
+        grid-template-columns: 1fr;
+    }
+    .wn-wish-art {
+        height: 144px;
+        border-radius: 10px 10px 0 0;
+        border-right: 0;
+        border-bottom: 1px solid #e8c9d9;
+    }
+    .wn-wish-art > span {
+        font-size: 23px;
+        top: 18px;
+        left: 20px;
+    }
+    .wn-wish-art img {
+        width: 158px;
+        height: 144px;
+        transform: rotate(9deg);
+    }
+    .wn-wish-letter {
+        padding: 24px;
+    }
+    .wn-wish-recipient {
+        font-size: 11px;
+        margin-bottom: 12px;
+    }
+    .wn-wish-letter h3 {
+        font-size: 25px;
+    }
+    .wn-wish-message {
+        margin: 16px 0 22px;
+        font-size: 13px;
+        line-height: 1.8;
+    }
+    .wn-wish-cover {
+        width: 100%;
+        height: 144px;
+        border-radius: 10px 10px 0 0;
+        transform-origin: center top;
+        animation-name: wn-card-open-mobile;
+    }
+    .wn-wish-cover > span {
+        font-size: 25px;
     }
 }
-
-@media (prefers-reduced-motion: reduce) {
-    .wn-womens-day .wn-womens-day-message {
-        transition: none;
+@media (max-width: 360px) {
+    .wn-page .wn-womens-day {
+        padding: 18px;
     }
-    .wn-womens-day[data-animate='true'] .wn-thread-flower-line,
-    .wn-womens-day[data-animate='true'] .wn-thread-flower-detail {
+    .wn-womens-day-copy h2 {
+        font-size: 26px;
+    }
+    .wn-womens-day-art {
+        width: 120px;
+        height: 130px;
+        right: 2px;
+        top: 29px;
+    }
+    .wn-womens-day-swatch {
+        width: 100px;
+        height: 95px;
+        left: 7px;
+    }
+}
+@keyframes wn-card-open-mobile {
+    0%,
+    12% {
+        transform: rotateX(0);
+    }
+    100% {
+        transform: rotateX(125deg);
+    }
+}
+@media (prefers-reduced-motion: reduce) {
+    .wn-womens-day[data-animate='true'] .wn-womens-day-thread path,
+    .wn-womens-day[data-animate='true'] .wn-womens-day-art img,
+    .wn-wish-cover,
+    .wn-wish-letter {
         animation: none;
+    }
+    .wn-wish-cover {
+        display: none;
     }
 }

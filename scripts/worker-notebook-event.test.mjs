@@ -5,6 +5,7 @@ import {
     notebookEventStorageKey,
     notebookVietnamDate,
     WOMENS_DAY_EVENT,
+    WOMENS_DAY_GREETING,
 } from '../src/components/worker-notebook/notebook-event.ts';
 
 test('campaign dates are fixed to 7–24 October 2026, inclusive', () => {
@@ -34,5 +35,14 @@ test('start and end boundaries use Vietnamese time, not UTC or computer timezone
 test('preferences are scoped to campaign version, user and preference', () => {
     assert.notEqual(notebookEventStorageKey('worker-a', 'collapsed'), notebookEventStorageKey('worker-b', 'collapsed'));
     assert.notEqual(notebookEventStorageKey('worker-a', 'collapsed'), notebookEventStorageKey('worker-a', 'seen'));
-    assert.match(notebookEventStorageKey('worker:a', 'collapsed'), /women-day-2026-v1:worker%3Aa:collapsed$/);
+    assert.match(notebookEventStorageKey('worker:a', 'collapsed'), /women-day-2026-v2:worker%3Aa:collapsed$/);
+});
+
+test('greeting stays verbatim with its original source', () => {
+    assert.equal(
+        WOMENS_DAY_GREETING.text,
+        'Chúc một ngày Phụ nữ Việt Nam 20/10 thật nhiều niềm vui, yêu thương và ngập tràn tiếng cười!'
+    );
+    assert.equal(WOMENS_DAY_GREETING.publisher, 'Vĩnh Phúc Logistics');
+    assert.equal(new URL(WOMENS_DAY_GREETING.source).hostname, 'vinhphuclogistics.com.vn');
 });
