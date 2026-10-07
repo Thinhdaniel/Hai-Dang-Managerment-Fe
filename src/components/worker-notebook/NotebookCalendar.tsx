@@ -1,9 +1,11 @@
-import { CalendarDays, ChevronRight, Clock3 } from 'lucide-react';
+import { CalendarDays, ChevronRight, Clock3, Flower2 } from 'lucide-react';
+import { WOMENS_DAY_EVENT } from './notebook-event';
 import dayjs from 'dayjs';
 import type { NotebookMonth } from '../../core/services/worker-notebook.service';
 import { hasNotebookAttendance, notebookAttendanceLabel, notebookDateLabel, notebookNumber } from './notebook-view';
 
 type Props = {
+    womensDay?: boolean;
     report: NotebookMonth;
     today: string;
     selectedDate: string;
@@ -11,7 +13,14 @@ type Props = {
     onOpenDay: (date: string) => void;
 };
 
-export default function NotebookCalendar({ report, today, selectedDate, onPreview, onOpenDay }: Props) {
+export default function NotebookCalendar({
+    report,
+    today,
+    selectedDate,
+    onPreview,
+    onOpenDay,
+    womensDay = false,
+}: Props) {
     const monthStart = dayjs(`${report.month}-01`);
     const leading = (monthStart.day() + 6) % 7;
     const daysByDate = new Map(report.days.map((day) => [day.date, day]));
@@ -35,6 +44,7 @@ export default function NotebookCalendar({ report, today, selectedDate, onPrevie
                     {days.map((date) => {
                         const day = daysByDate.get(date);
                         const recorded = hasNotebookAttendance(day);
+                        const holiday = womensDay && date === WOMENS_DAY_EVENT.holidayDate;
                         return (
                             <button
                                 type='button'
@@ -42,7 +52,7 @@ export default function NotebookCalendar({ report, today, selectedDate, onPrevie
                                 disabled={date > today}
                                 onClick={() => onPreview(date)}
                                 aria-pressed={date === selectedDate}
-                                aria-label={`${notebookDateLabel(date)}, ${notebookAttendanceLabel(day)}, tăng ca ${day?.overtimeHours || 0} giờ`}
+                                aria-label={`${notebookDateLabel(date)}, ${notebookAttendanceLabel(day)}, tăng ca ${day?.overtimeHours || 0} giờ${holiday ? ', ngày Phụ nữ Việt Nam' : ''}`}
                                 className={[
                                     date === today ? 'today' : '',
                                     date === selectedDate ? 'selected' : '',
@@ -50,6 +60,7 @@ export default function NotebookCalendar({ report, today, selectedDate, onPrevie
                                     day?.entryCount ? 'has-entries' : '',
                                 ].join(' ')}
                             >
+                                {holiday && <Flower2 className='wn-calendar-holiday' size={12} aria-hidden='true' />}
                                 <span>{Number(date.slice(-2))}</span>
                                 <small>
                                     {recorded

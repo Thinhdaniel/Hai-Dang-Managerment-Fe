@@ -1,0 +1,210 @@
+/* Seasonal decoration only. Attendance colours and primary actions stay unchanged. */
+.wn-page[data-event='women-day'] {
+    --wn-event-paper: #fff6fa;
+    --wn-event-petal: #ffe8f1;
+    --wn-event-rose: #a83d69;
+}
+
+.wn-page .wn-womens-day {
+    position: relative;
+    isolation: isolate;
+    display: flex;
+    align-items: center;
+    gap: 24px;
+    margin-bottom: 28px;
+    padding: 22px 230px 16px 24px;
+    overflow: hidden;
+    border: 1px solid #f1dce5;
+    border-radius: 12px;
+    background: var(--wn-event-paper);
+}
+
+.wn-womens-day-date {
+    flex: none;
+    align-self: center;
+    display: grid;
+    color: var(--wn-event-rose);
+    font-size: 35px;
+    font-weight: 750;
+    line-height: 1.05;
+    letter-spacing: -1.5px;
+    font-variant-numeric: tabular-nums;
+}
+
+.wn-womens-day-date span:first-child {
+    padding-bottom: 6px;
+    border-bottom: 1px solid #dca5bb;
+}
+
+.wn-womens-day-date span:last-child {
+    padding-top: 6px;
+}
+
+.wn-womens-day-copy {
+    min-width: 0;
+    position: relative;
+    z-index: 1;
+}
+
+.wn-womens-day-copy h2 {
+    margin: 0;
+    color: var(--wn-ink);
+    font-size: 19px;
+    font-weight: 700;
+    line-height: 1.45;
+}
+
+.wn-womens-day-message {
+    display: grid;
+    grid-template-rows: 1fr;
+    visibility: visible;
+    transition:
+        grid-template-rows 200ms ease,
+        visibility 200ms;
+}
+
+.wn-womens-day-message > div {
+    min-height: 0;
+    overflow: hidden;
+}
+
+.wn-womens-day-message p {
+    margin: 8px 0 0;
+    max-width: 68ch;
+    color: #654d59;
+    font-size: 13px;
+    line-height: 1.75;
+}
+
+.wn-page .wn-womens-day-toggle {
+    display: inline-flex;
+    align-items: center;
+    justify-content: flex-start;
+    gap: 5px;
+    min-height: 44px;
+    margin: 2px 0 -8px;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    color: var(--wn-event-rose);
+    font-size: 12px;
+    font-weight: 600;
+    text-align: left;
+}
+
+.wn-womens-day-toggle:hover {
+    text-decoration: underline;
+    text-underline-offset: 3px;
+}
+
+.wn-thread-flower {
+    pointer-events: none;
+    position: absolute;
+    z-index: 0;
+    right: 2px;
+    top: 50%;
+    width: 240px;
+    height: 150px;
+    transform: translateY(-50%);
+    color: var(--wn-event-rose);
+}
+
+.wn-thread-flower-wash {
+    color: var(--wn-event-petal);
+}
+
+.wn-womens-day[data-animate='true'] .wn-thread-flower-line {
+    animation: wn-thread-draw 1400ms ease-out both;
+}
+
+.wn-womens-day[data-animate='true'] .wn-thread-flower-detail {
+    animation: wn-thread-reveal 1400ms ease-out both;
+}
+
+.wn-womens-day[data-collapsed='true'] .wn-womens-day-message {
+    grid-template-rows: 0fr;
+    visibility: hidden;
+}
+
+.wn-womens-day[data-collapsed='true'] .wn-womens-day-date {
+    font-size: 24px;
+}
+
+.wn-page .wn-calendar-holiday {
+    position: absolute;
+    top: 4px;
+    left: 4px;
+    color: var(--wn-event-rose);
+    pointer-events: none;
+}
+
+@keyframes wn-thread-draw {
+    from {
+        stroke-dasharray: 1;
+        stroke-dashoffset: 1;
+    }
+    to {
+        stroke-dasharray: 1;
+        stroke-dashoffset: 0;
+    }
+}
+
+@keyframes wn-thread-reveal {
+    0%,
+    70% {
+        opacity: 0;
+    }
+    100% {
+        opacity: 1;
+    }
+}
+
+@media (max-width: 1000px) {
+    .wn-page .wn-womens-day {
+        gap: 18px;
+        padding-right: 170px;
+    }
+    .wn-thread-flower {
+        width: 185px;
+    }
+}
+
+@media (max-width: 767px) {
+    .wn-page .wn-womens-day {
+        align-items: flex-start;
+        gap: 12px;
+        padding: 14px 14px 10px;
+        margin-bottom: 20px;
+        border-radius: 10px;
+    }
+    .wn-womens-day-date {
+        align-self: flex-start;
+        padding-top: 2px;
+        font-size: 26px;
+    }
+    .wn-womens-day-copy h2 {
+        max-width: 26ch;
+        padding-right: 24px;
+        font-size: 15px;
+    }
+    .wn-womens-day-message p {
+        font-size: 12px;
+    }
+    .wn-thread-flower {
+        top: 6px;
+        right: 0;
+        width: 76px;
+        height: 52px;
+        transform: none;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .wn-womens-day .wn-womens-day-message {
+        transition: none;
+    }
+    .wn-womens-day[data-animate='true'] .wn-thread-flower-line,
+    .wn-womens-day[data-animate='true'] .wn-thread-flower-detail {
+        animation: none;
+    }
+}

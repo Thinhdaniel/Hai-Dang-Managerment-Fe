@@ -7,6 +7,7 @@
     "dev": "vite --configLoader runner",
     "build": "tsc -b && vite build --configLoader runner",
     "lint": "eslint .",
+    "test:worker-event": "node --test scripts/worker-notebook-event.test.mjs",
     "format": "prettier --write .",
     "preview": "vite preview --configLoader runner"
   },

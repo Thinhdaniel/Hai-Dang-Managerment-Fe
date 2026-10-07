@@ -21,6 +21,7 @@ import {
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import dayjs from 'dayjs';
 import { useAuth } from '../core/contexts/AuthContext';
+import { UserRole } from '../core/types';
 import {
     workerNotebookService,
     type NotebookEntry,
@@ -29,6 +30,9 @@ import {
 } from '../core/services/worker-notebook.service';
 import WorkerNotebookMonthReport from '../components/worker-notebook/WorkerNotebookMonthReport';
 import NotebookCalendar from '../components/worker-notebook/NotebookCalendar';
+import NotebookWomensDay from '../components/worker-notebook/NotebookWomensDay';
+import useNotebookEvent from '../components/worker-notebook/useNotebookEvent';
+import { notebookVietnamDate } from '../components/worker-notebook/notebook-event';
 import NotebookEditorShell from '../components/worker-notebook/NotebookEditorShell';
 import WorkerChangePasswordModal from '../components/worker-notebook/WorkerChangePasswordModal';
 import ProfileAvatarModal from '../components/profile/ProfileAvatarModal';
@@ -42,17 +46,7 @@ import {
     notebookWorkDays,
 } from '../components/worker-notebook/notebook-view';
 import '../styles/worker-notebook.css';
-
-const vietnamToday = () => {
-    const parts = new Intl.DateTimeFormat('en-US', {
-        timeZone: 'Asia/Ho_Chi_Minh',
-        year: 'numeric',
-        month: '2-digit',
-        day: '2-digit',
-    }).formatToParts(new Date());
-    const value = (part: string) => parts.find((item) => item.type === part)?.value || '';
-    return `${value('year')}-${value('month')}-${value('day')}`;
-};
+import '../styles/worker-notebook-event.css';
 const emptyEntry: NotebookEntryInput = { itemCode: '', operation: '', quantity: 1, unit: 'SP', note: '' };
 const tabs = [
     { key: 'day' as const, label: 'Ghi ngày', icon: ClipboardList },
@@ -62,9 +56,11 @@ const tabs = [
 
 export default function WorkerNotebookPage() {
     const { user, logout } = useAuth();
+    const eventActive = useNotebookEvent();
+    const womensDay = user?.role === UserRole.WORKER && eventActive;
     const { message, modal } = App.useApp();
     const queryClient = useQueryClient();
-    const today = vietnamToday();
+    const today = notebookVietnamDate();
     const [selectedDate, setSelectedDate] = useState(today);
     const [month, setMonth] = useState(today.slice(0, 7));
     const [view, setView] = useState<'day' | 'month' | 'report'>('day');
@@ -209,7 +205,7 @@ export default function WorkerNotebookPage() {
     };
 
     return (
-        <div className='wn-page'>
+        <div className='wn-page' data-event={womensDay ? 'women-day' : undefined}>
             <header className='wn-header'>
                 <div className='wn-header-inner'>
                     <div className='wn-brand'>
@@ -301,6 +297,7 @@ export default function WorkerNotebookPage() {
                 </div>
             </header>
             <main id='wn-panel' className='wn-main' role='tabpanel' aria-labelledby={`wn-tab-${view}`}>
+                {womensDay && user && <NotebookWomensDay key={user.id} userId={user.id} />}
                 <div className='wn-page-heading'>
                     <div>
                         <h1>
@@ -631,6 +628,7 @@ export default function WorkerNotebookPage() {
                                         />
                                     ) : (
                                         <NotebookCalendar
+                                            womensDay={womensDay}
                                             report={report}
                                             today={today}
                                             selectedDate={
