@@ -5,8 +5,8 @@ quyền truy cập, dữ liệu ghi công, sản lượng, báo cáo hay chức 
 
 ## Lịch hiển thị
 
-- Từ 00:00 ngày 18/10/2026 đến hết ngày 20/10/2026, múi giờ `Asia/Ho_Chi_Minh`.
-- Tự tắt từ 00:00 ngày 21/10/2026; không tự lặp lại năm sau.
+- Từ 00:00 ngày 07/10/2026 đến hết ngày 24/10/2026, múi giờ `Asia/Ho_Chi_Minh`.
+- Tự tắt từ 00:00 ngày 25/10/2026; không tự lặp lại năm sau.
 - Kiểm tra lại ngày mỗi 30 giây và khi tab được mở lại. Đồng hồ máy người dùng cần đúng.
 - Cấu hình nằm trong `src/components/worker-notebook/notebook-event.ts`.
 

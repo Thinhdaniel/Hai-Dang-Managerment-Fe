@@ -1,8 +1,8 @@
 // A one-off campaign, not an annually recurring holiday theme.
 export const WOMENS_DAY_EVENT = {
     id: 'women-day-2026-v1',
-    startDate: '2026-10-18',
-    endDate: '2026-10-20',
+    startDate: '2026-10-07',
+    endDate: '2026-10-24',
     holidayDate: '2026-10-20',
 } as const;
 
